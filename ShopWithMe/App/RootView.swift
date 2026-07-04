@@ -11,7 +11,7 @@ struct RootView: View {
                 ArtikelListView()
             }
             Tab("Geschäfte", systemImage: "cart.fill") {
-                PlatzhalterView(titel: "Geschäfte", geplantAb: "v0.3")
+                GeschaeftListView()
             }
             Tab("Einkaufen", systemImage: "checklist") {
                 PlatzhalterView(titel: "Einkaufen", geplantAb: "v0.4")

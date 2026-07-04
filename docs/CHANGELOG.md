@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.3 — Geschäfte-Verwaltung
+
+- `Views/Geschaefte/GeschaeftListView.swift`: Geschäfte anlegen, bearbeiten, löschen.
+- `Views/Geschaefte/GeschaeftStammdatenEditView.swift`: Name/Typ/Adresse-Formular.
+- `Views/Geschaefte/GeschaeftDetailView.swift`: Regal-Verwaltung pro Geschäft
+  (hinzufügen, umbenennen über Regal-Detail, löschen, manuelle Reihenfolge per
+  Drag & Drop im Bearbeiten-Modus).
+- `Views/Geschaefte/RegalDetailView.swift`: Kategorie-zu-Regal-Zuordnung — bestimmt
+  automatisch die beim Einkaufen in diesem Geschäft verfügbaren Kategorien.
+- Geschäfte-Tab in `RootView` verdrahtet.
+
 ## v0.2 — Artikel-Verwaltung
 
 - `DesignSystem/GlassStyles.swift`: `glassCard`-Modifier und `GlassSymbolBadge` als

@@ -9,7 +9,7 @@ Jeder Checkpoint ist ein Git-Commit, der die Version (`VERSION`-Datei + `project
   SwiftData-Datenmodell inkl. Seed-Daten, leere App die kompiliert.
 - [x] **v0.2** — Artikel-Verwaltung: Liste/Anlegen/Bearbeiten inkl. Symbol-/Farb-Picker,
   Liquid-Glass-Designsystem-Basis.
-- [ ] **v0.3** — Geschäfte-Verwaltung: Liste/Anlegen/Bearbeiten, Regal-Verwaltung pro
+- [x] **v0.3** — Geschäfte-Verwaltung: Liste/Anlegen/Bearbeiten, Regal-Verwaltung pro
   Geschäft, Kategorie-zu-Regal-Zuordnung.
 - [ ] **v0.4** — Einkaufen-Flow: Einkaufsliste pro Geschäft (nur zugeordnete
   Kategorien, gruppiert nach Regal), Einkaufsvorgang starten/abschließen, manuelle
