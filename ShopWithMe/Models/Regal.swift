@@ -29,4 +29,22 @@ final class Regal {
         self.sortIndex = sortIndex
         self.geschaeft = geschaeft
     }
+
+    /// Kategorien aus `alle`, die diesem Regal zugeordnet werden können.
+    ///
+    /// Das sind die bereits diesem Regal zugeordneten Kategorien sowie alle
+    /// Kategorien, die noch keinem anderen Regal desselben Geschäfts zugeordnet
+    /// sind — jede Kategorie soll innerhalb eines Geschäfts genau einem Regal
+    /// angehören.
+    func auswaehlbareKategorien(aus alle: [ArtikelKategorie]) -> [ArtikelKategorie] {
+        let anderweitigVerwendet = Set(
+            (geschaeft?.regale ?? [])
+                .filter { $0.persistentModelID != persistentModelID }
+                .flatMap(\.kategorien)
+                .map(\.persistentModelID)
+        )
+        return alle.filter {
+            kategorien.contains($0) || !anderweitigVerwendet.contains($0.persistentModelID)
+        }
+    }
 }

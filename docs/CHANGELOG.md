@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.1 (Build 21) — Kategorien-Konfiguration pro Regal
+
+- `Models/Regal.swift`: neue Methode `auswaehlbareKategorien(aus:)` liefert die
+  Kategorien, die einem Regal zugeordnet werden können — bereits diesem Regal
+  zugeordnete sowie alle, die noch keinem anderen Regal desselben Geschäfts
+  zugeordnet sind. Jede Kategorie soll innerhalb eines Geschäfts genau einem
+  Regal angehören.
+- `Views/Geschaefte/RegalDetailView.swift`: die Kategorienauswahl eines Regals
+  nutzt jetzt `auswaehlbareKategorien(aus:)` statt aller Kategorien — bereits
+  einem anderen Regal desselben Geschäfts zugeordnete Kategorien werden nicht
+  mehr angeboten. Neu: „Neue Kategorie anlegen“ öffnet ein Sheet (Name, Symbol
+  & Farbe wie bei Artikeln) und ordnet die neu angelegte Kategorie direkt dem
+  aktuellen Regal zu.
+- Neuer Unit-Test `auswaehlbareKategorienSchliessenAnderweitigVerwendeteAus` in
+  `ModelTests.swift` deckt die Ausschluss-Logik ab.
+
 ## v0.1 (Build 20) — Belegscan: Einkaufsdatum & produktgenaue Preishistorie
 
 - `Services/ReceiptScanService.swift`: `BelegErgebnis` erkennt jetzt zusätzlich das

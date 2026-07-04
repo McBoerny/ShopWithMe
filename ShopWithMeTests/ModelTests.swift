@@ -46,6 +46,37 @@ struct ModelTests {
     }
 
     @Test
+    func auswaehlbareKategorienSchliessenAnderweitigVerwendeteAus() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        let drogerie = ArtikelKategorie(name: "Drogerie", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
+        let getraenke = ArtikelKategorie(name: "Getränke", standardSymbol: "waterbottle.fill", standardFarbeHex: "#5AC8FA")
+        context.insert(obst)
+        context.insert(drogerie)
+        context.insert(getraenke)
+
+        let geschaeft = Geschaeft(name: "Testladen", typ: .lebensmittel)
+        context.insert(geschaeft)
+
+        let regal1 = Regal(name: "Regal 1", geschaeft: geschaeft)
+        regal1.kategorien = [obst]
+        context.insert(regal1)
+
+        let regal2 = Regal(name: "Regal 2", geschaeft: geschaeft)
+        regal2.kategorien = [drogerie]
+        context.insert(regal2)
+
+        let alle = [obst, drogerie, getraenke]
+
+        // Regal 1 darf seine eigene Kategorie ("Obst") weiterhin sehen (um sie
+        // abwählen zu können), nicht aber die von Regal 2 ("Drogerie") verwendete.
+        #expect(Set(regal1.auswaehlbareKategorien(aus: alle).map(\.name)) == ["Obst", "Getränke"])
+        #expect(Set(regal2.auswaehlbareKategorien(aus: alle).map(\.name)) == ["Drogerie", "Getränke"])
+    }
+
+    @Test
     func sonstigeKategorieWirdBeiBedarfAngelegtUndWiederverwendet() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
