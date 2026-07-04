@@ -40,8 +40,10 @@ name: String              name: String                name: String
 standardSymbol: String    sortIndex: Int              typ: GeschaeftTyp
 standardFarbeHex: String  ┌─geschaeft: Geschaeft?      adresse: String?
 sortIndex: Int            │ kategorien: [ArtikelKategorie]  breitengrad/laengengrad: Double?
-                          │                            regale: [Regal] ──┘
-                          └── (many-to-many mit Kategorie)
+┌─regale: [Regal] ────────┘                            regale: [Regal] ──┘
+└─geschaefte: [Geschaeft] ─────────────────────────────kategorien: [ArtikelKategorie]
+  (many-to-many, direkt —                              regalSortierModusRaw: String?
+   ohne Regal nötig)                                    artikelFilterModusRaw: String?
 
 Artikel                              Einkaufsvorgang            KaufEintrag
 ───────                              ───────────────            ───────────
@@ -50,24 +52,28 @@ name: String                         geschaeft: Geschaeft?      artikel: Artikel
 symbolName: String                   startZeit: Date            einkaufsvorgang: Einkaufsvorgang?
 farbeHex: String                     endZeit: Date?             geschaeft: Geschaeft?  (denormalisiert)
 kategorie: ArtikelKategorie?         kaufEintraege: [KaufEintrag]  datum: Date
-  (nach Anlage UI-seitig fixiert)                                preis: Decimal
-istAufEinkaufsliste: Bool                                        menge: Double
-erstelltAm: Date                                                 regalBesuchsIndex: Int?
+istAufEinkaufsliste: Bool                                        preis: Decimal?
+erstelltAm: Date                                                 menge: Double
+                                                                  produktName: String?
+                                                                  kategorieBesuchsIndex: Int?
 
-RegalBesuchsStatistik
-─────────────────────
+KategorieBesuchsStatistik
+─────────────────────────
 id: UUID
 geschaeft: Geschaeft?
-regal: Regal?
+kategorie: ArtikelKategorie?
 besucheAnzahl: Int
 summeSequenzPosition: Double
 → durchschnittlichePosition (computed = summe/anzahl)
 ```
 
-Design-Entscheidung: **Kein separates Zuordnungsmodell "Kategorie ↔ Geschäft"**. Die
-Menge der in einem Geschäft verfügbaren Kategorien ergibt sich aus der Vereinigung aller
-`kategorien`, die den `Regal`-Objekten dieses Geschäfts zugeordnet sind. Das vermeidet
-Dateninkonsistenzen (Kategorie am Regal, aber nicht als "verfügbar" markiert o.ä.).
+Design-Entscheidung (aktualisiert, siehe `docs/DECISIONS.md`): **Kategorien sind
+wichtiger als Regale, Regale sind optional.** Ein `Geschaeft` kann `ArtikelKategorie`n
+direkt zugeordnet bekommen (`Geschaeft.kategorien`), ganz ohne ein `Regal` anzulegen.
+`Geschaeft.verfuegbareKategorien` ist die Vereinigung dieser direkten Zuordnung und der
+Kategorien, die über `Regal.kategorien` zugeordnet sind — ein Regal organisiert damit
+nur noch die Reihenfolge beim Einkaufen, ist aber keine Voraussetzung für
+Verfügbarkeit.
 
 ## Services
 
@@ -80,8 +86,13 @@ Dateninkonsistenzen (Kategorie am Regal, aber nicht als "verfügbar" markiert o.
   eine spätere, spezifischere On-Device-API (z.B. eine künftige System-Beleg-Scan-API)
   ohne UI-Änderungen eingesetzt werden kann.
 - **ShelfOrderLearningService**: aktualisiert nach jedem abgeschlossenen
-  `Einkaufsvorgang` die `RegalBesuchsStatistik` und liefert ab einer Mindestanzahl
-  Einkäufe eine vorgeschlagene automatische Regal-Reihenfolge.
+  `Einkaufsvorgang` die `KategorieBesuchsStatistik` und leitet daraus sowohl eine
+  vorgeschlagene automatische Regal-Reihenfolge als auch (für Geschäfte ohne Regale
+  bzw. für Kategorien ohne Regal-Zuordnung) eine reine Kategorie-Reihenfolge ab.
+- **ArtikelVerfuegbarkeitService**: bestimmt, ob ein `Artikel` in einem `Geschaeft`
+  verfügbar ist — über `Geschaeft.verfuegbareKategorien`, oder (besitzt das Geschäft
+  keine eigenen Kategorien) gelernt aus der Kaufhistorie (`KaufEintrag`). Grundlage für
+  den Filter `ArtikelFilterModus.nurVerfuegbare` beim Einkaufen.
 - **DatabaseLocationService**: verwaltet Security-Scoped-Bookmarks für einen vom Nutzer
   gewählten Speicherort außerhalb des App-Containers und das Verschieben der
   SwiftData-Store-Dateien dorthin.

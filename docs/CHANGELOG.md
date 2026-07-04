@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.2 (Build 25) — Kategorien wichtiger als Regale: Versions-Checkpoint
+
+- Minor-Version auf `0.2` angehoben (Nutzervorgabe) — der bisherige `v0.1`-Zyklus
+  (Build 17–24) ist damit abgeschlossen. Alle Änderungen dieses Zyklus sind zusätzlich
+  konsolidiert in `docs/CHANGELOG_v0.2.md` festgehalten.
+- `docs/ARCHITECTURE.md` aktualisiert: veraltete Verweise auf `RegalBesuchsStatistik`/
+  `regalBesuchsIndex` (in v1.2 zu `KategorieBesuchsStatistik`/`kategorieBesuchsIndex`
+  umbenannt) korrigiert; Datenmodell-Diagramm und Service-Liste um `Geschaeft.kategorien`,
+  `ArtikelFilterModus`, `ArtikelVerfuegbarkeitService`, `KaufEintrag.produktName` ergänzt.
+- Korrektur in diesem Changelog: der Build-24-Eintrag (reine Testabdeckung, siehe unten)
+  fehlte — der Pre-Commit-Hook hatte die Build-Nummer mangels neuem Eintrag stattdessen
+  fälschlich in die alte `v1.6`-Überschrift eingetragen. Beides korrigiert.
+
+## v0.1 (Build 24) — Testabdeckung für direkte Geschäft-Kategorie-Zuordnung ohne Regal
+
+- Neue Unit-Tests in `ArtikelVerfuegbarkeitServiceTests.swift` und `ModelTests.swift`
+  belegen, dass Geschäfte ganz ohne Regal auskommen: direktes Zuordnen/Entfernen einer
+  Kategorie am Geschäft sowie Deduplizierung, wenn eine Kategorie sowohl direkt als
+  auch über ein Regal zugeordnet ist.
+
 ## v0.1 (Build 23) — Regale optional für Kategorie-Verfügbarkeit & Artikel-Filter beim Einkaufen
 
 - `Models/Geschaeft.swift` / `Models/ArtikelKategorie.swift`: neue direkte
@@ -156,7 +176,7 @@
 - Version mit diesem Commit auf `0.1` zurückgesetzt (Nutzervorgabe); die
   Build-Nummer knüpft an die bisherige Commit-Historie an.
 
-## v1.6 (Build 24) — Explizite SwiftData-Migrationslogik (`SchemaMigrationPlan`)
+## v1.6 — Explizite SwiftData-Migrationslogik (`SchemaMigrationPlan`)
 
 - `Models/SchemaDefinition.swift`: neue `SchemaV1` (``VersionedSchema``, aktueller
   Modellstand) und `ShopWithMeMigrationPlan` (``SchemaMigrationPlan``, aktuell mit
