@@ -68,6 +68,72 @@ struct ShelfOrderLearningServiceTests {
     }
 
     @Test
+    func automatischerModusUeberschreibtManuelleReihenfolgeNicht() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        let drogerie = ArtikelKategorie(name: "Drogerie", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
+        context.insert(obst)
+        context.insert(drogerie)
+
+        let geschaeft = Geschaeft(name: "Testladen", typ: .lebensmittel)
+        context.insert(geschaeft)
+
+        // Manuelle Reihenfolge (bewusst "falsch" gewählt): Drogerie vor Obst.
+        let drogerieregal = Regal(name: "Drogerieregal", sortIndex: 0, geschaeft: geschaeft)
+        drogerieregal.kategorien = [drogerie]
+        let obstregal = Regal(name: "Obstregal", sortIndex: 1, geschaeft: geschaeft)
+        obstregal.kategorien = [obst]
+        context.insert(drogerieregal)
+        context.insert(obstregal)
+
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorie: obst)
+        let shampoo = Artikel(name: "Shampoo", symbolName: "sparkles", farbeHex: "#AF52DE", kategorie: drogerie)
+        context.insert(apfel)
+        context.insert(shampoo)
+
+        for _ in 0..<ShelfOrderLearningService.mindestEinkaeufeFuerVorschlag {
+            apfel.istAufEinkaufsliste = true
+            shampoo.istAufEinkaufsliste = true
+            let einkauf = Einkaufsvorgang(geschaeft: geschaeft)
+            context.insert(einkauf)
+            einkauf.artikelAbhaken(apfel, context: context)
+            einkauf.artikelAbhaken(shampoo, context: context)
+            einkauf.abschliessen()
+            ShelfOrderLearningService.lernenAus(einkauf, context: context)
+        }
+
+        #expect(ShelfOrderLearningService.automatischeReihenfolgeVerfuegbar(fuer: geschaeft, context: context))
+
+        // Standardmäßig (manuell) bleibt die manuelle Reihenfolge maßgeblich, obwohl
+        // eine automatische Reihenfolge verfügbar wäre.
+        #expect(geschaeft.regalSortierModus == .manuell)
+        #expect(
+            ShelfOrderLearningService.effektiveReihenfolge(fuer: geschaeft, context: context).map(\.name)
+                == ["Drogerieregal", "Obstregal"]
+        )
+
+        // Umschalten auf automatisch liefert die gelernte Reihenfolge, ohne
+        // sortIndex zu verändern.
+        geschaeft.regalSortierModus = .automatisch
+        #expect(
+            ShelfOrderLearningService.effektiveReihenfolge(fuer: geschaeft, context: context).map(\.name)
+                == ["Obstregal", "Drogerieregal"]
+        )
+        #expect(drogerieregal.sortIndex == 0)
+        #expect(obstregal.sortIndex == 1)
+
+        // Zurück zu manuell stellt wieder exakt die ursprüngliche manuelle
+        // Reihenfolge her.
+        geschaeft.regalSortierModus = .manuell
+        #expect(
+            ShelfOrderLearningService.effektiveReihenfolge(fuer: geschaeft, context: context).map(\.name)
+                == ["Drogerieregal", "Obstregal"]
+        )
+    }
+
+    @Test
     func liefertKategorieReihenfolgeFuerLadenOhneRegal() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container

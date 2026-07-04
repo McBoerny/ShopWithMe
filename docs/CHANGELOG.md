@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.4 — Manuelle und automatische Regal-Reihenfolge als gleichberechtigte Alternativen
+
+- `Models/Geschaeft.swift`: neues `RegalSortierModus`-Enum (`manuell`/`automatisch`)
+  und neue Property `regalSortierModus` (Default `.manuell`) legen pro Geschäft fest,
+  welche Regal-Reihenfolge tatsächlich verwendet wird.
+- `Services/ShelfOrderLearningService.swift`: neue
+  `automatischeReihenfolgeVerfuegbar(fuer:context:)` und
+  `effektiveReihenfolge(fuer:context:)` — Letztere liefert je nach
+  `regalSortierModus` entweder die manuelle (`Regal/sortIndex`) oder die gelernte
+  Reihenfolge, ohne dass ein Moduswechsel die jeweils andere überschreibt.
+- `Views/Geschaefte/GeschaeftDetailView.swift`: die bisherige einmalige
+  „Automatische Reihenfolge übernehmen“-Aktion ist einem Segmented-Picker
+  gewichen, mit dem der Anwender jederzeit zwischen „Manuell“ (Drag & Drop im
+  Bearbeiten-Modus) und „Automatisch“ wechselt, sobald genug Einkäufe gelernt
+  wurden. Der Picker erscheint nur, wenn genügend Statistiken vorliegen.
+- `Views/Einkaufen/EinkaufenView.swift`: die Gruppierung der Einkaufsliste nach
+  Regal folgt jetzt ebenfalls `effektiveReihenfolge(fuer:context:)` statt starr
+  `Regal/sortIndex`.
+- Neuer Unit-Test `automatischerModusUeberschreibtManuelleReihenfolgeNicht`
+  (`ShelfOrderLearningServiceTests`) prüft, dass Hin- und Herschalten zwischen den
+  Modi die manuelle Reihenfolge unangetastet lässt.
+
 ## v1.3 — Unkategorisierte Artikel fallen automatisch unter „Sonstiges“
 
 - `Models/ArtikelKategorie.swift`: neue statische Methode `sonstige(context:)`

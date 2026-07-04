@@ -3,9 +3,12 @@ import SwiftData
 
 /// Detailansicht eines ``Geschaeft``s: Stammdaten und Regal-Verwaltung.
 ///
-/// Die Reihenfolge der Regale in dieser Liste ist die manuelle
-/// Einkaufs-Reihenfolge (``Regal/sortIndex``), die der Anwender per Drag-Handle
-/// (Bearbeiten-Modus) selbst festlegen kann.
+/// Die Reihenfolge der Regale in dieser Liste hängt vom gewählten
+/// ``RegalSortierModus`` ab: manuell (``Regal/sortIndex``, per Drag-Handle im
+/// Bearbeiten-Modus änderbar) oder automatisch anhand der gelernten Einkaufs-
+/// Reihenfolge (``ShelfOrderLearningService``). Der Wechsel zwischen beiden Modi
+/// überschreibt die jeweils andere Reihenfolge nicht — beide bleiben unabhängig
+/// voneinander erhalten.
 struct GeschaeftDetailView: View {
     @Bindable var geschaeft: Geschaeft
     @Environment(\.modelContext) private var modelContext
@@ -21,39 +24,33 @@ struct GeschaeftDetailView: View {
         )
     }
 
-    private var regaleSortiert: [Regal] {
-        geschaeft.regale.sorted { $0.sortIndex < $1.sortIndex }
+    private var regaleAnzeigen: [Regal] {
+        ShelfOrderLearningService.effektiveReihenfolge(fuer: geschaeft, context: modelContext)
     }
 
-    private var abgeschlosseneEinkaeufe: Int {
-        ShelfOrderLearningService.abgeschlosseneEinkaeufe(fuer: geschaeft, context: modelContext)
+    private var automatischeReihenfolgeVerfuegbar: Bool {
+        ShelfOrderLearningService.automatischeReihenfolgeVerfuegbar(fuer: geschaeft, context: modelContext)
     }
 
-    private var vorgeschlageneReihenfolge: [Regal] {
-        ShelfOrderLearningService.vorgeschlageneReihenfolge(fuer: geschaeft, context: modelContext)
-    }
-
-    private var vorschlagWeichtVonManuellerReihenfolgeAb: Bool {
-        vorgeschlageneReihenfolge.map(\.persistentModelID) != regaleSortiert.map(\.persistentModelID)
+    private var verschiebenAktion: ((IndexSet, Int) -> Void)? {
+        guard geschaeft.regalSortierModus == .manuell else { return nil }
+        return regalVerschieben
     }
 
     var body: some View {
         List {
-            if abgeschlosseneEinkaeufe >= ShelfOrderLearningService.mindestEinkaeufeFuerVorschlag,
-               vorschlagWeichtVonManuellerReihenfolgeAb {
+            if automatischeReihenfolgeVerfuegbar {
                 Section {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label("Automatische Reihenfolge verfügbar", systemImage: "wand.and.stars")
-                            .font(.headline)
-                        Text("Basierend auf \(abgeschlosseneEinkaeufe) abgeschlossenen Einkäufen kennt ShopWithMe eine Reihenfolge, in der du die Regale hier typischerweise abläufst.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                        Button("Automatische Reihenfolge übernehmen") {
-                            ShelfOrderLearningService.vorgeschlageneReihenfolgeUebernehmen(fuer: geschaeft, context: modelContext)
+                    Picker("Reihenfolge", selection: $geschaeft.regalSortierModus) {
+                        ForEach(RegalSortierModus.allCases) { modus in
+                            Text(modus.anzeigename).tag(modus)
                         }
-                        .buttonStyle(.glass)
                     }
-                    .padding(.vertical, 4)
+                    .pickerStyle(.segmented)
+                } footer: {
+                    Text(geschaeft.regalSortierModus == .automatisch
+                         ? "ShopWithMe sortiert die Regale automatisch anhand deiner bisherigen Einkäufe. Deine manuelle Reihenfolge bleibt dabei erhalten und lässt sich jederzeit wieder auswählen."
+                         : "Du legst die Reihenfolge selbst fest. ShopWithMe hat außerdem genug Einkäufe gelernt, um stattdessen automatisch zu sortieren.")
                 }
             }
 
@@ -84,13 +81,13 @@ struct GeschaeftDetailView: View {
             }
 
             Section {
-                ForEach(regaleSortiert) { regal in
+                ForEach(regaleAnzeigen) { regal in
                     NavigationLink(value: regal) {
                         RegalZeile(regal: regal)
                     }
                 }
                 .onDelete(perform: regalLoeschen)
-                .onMove(perform: regalVerschieben)
+                .onMove(perform: verschiebenAktion)
 
                 Button {
                     regalHinzufuegen()
@@ -100,7 +97,9 @@ struct GeschaeftDetailView: View {
             } header: {
                 Text("Regale")
             } footer: {
-                Text("Ziehe die Regale (über „Bearbeiten“) in die Reihenfolge, in der du sie beim Einkaufen ablaufen möchtest.")
+                Text(geschaeft.regalSortierModus == .manuell
+                     ? "Ziehe die Regale (über „Bearbeiten“) in die Reihenfolge, in der du sie beim Einkaufen ablaufen möchtest."
+                     : "Diese Reihenfolge wird automatisch gelernt. Wechsle oben zu „Manuell“, um sie selbst festzulegen.")
             }
 
             if !kaufHistorie.isEmpty {
@@ -130,14 +129,14 @@ struct GeschaeftDetailView: View {
     }
 
     private func regalLoeschen(at offsets: IndexSet) {
-        let sortiert = regaleSortiert
+        let sortiert = regaleAnzeigen
         for index in offsets {
             modelContext.delete(sortiert[index])
         }
     }
 
     private func regalVerschieben(from source: IndexSet, to destination: Int) {
-        var sortiert = regaleSortiert
+        var sortiert = regaleAnzeigen
         sortiert.move(fromOffsets: source, toOffset: destination)
         for (index, regal) in sortiert.enumerated() {
             regal.sortIndex = index

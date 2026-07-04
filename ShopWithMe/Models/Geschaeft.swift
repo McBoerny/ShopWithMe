@@ -50,6 +50,26 @@ enum GeschaeftTyp: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+/// Legt fest, ob die Regal-Reihenfolge eines ``Geschaeft``s manuell (``Regal/sortIndex``)
+/// oder automatisch anhand der gelernten Einkaufs-Reihenfolge
+/// (``ShelfOrderLearningService``) bestimmt wird.
+///
+/// Der Wechsel zwischen beiden Modi verändert ``Regal/sortIndex`` nicht — die
+/// automatische Reihenfolge ist eine Alternative zur manuellen, keine Überschreibung.
+enum RegalSortierModus: String, Codable, CaseIterable, Identifiable {
+    case manuell
+    case automatisch
+
+    var id: String { rawValue }
+
+    var anzeigename: String {
+        switch self {
+        case .manuell: return "Manuell"
+        case .automatisch: return "Automatisch"
+        }
+    }
+}
+
 /// Ein Geschäft, das der Anwender zum Einkaufen aufsucht.
 ///
 /// Ein Geschäft besitzt eigene ``Regal``e; die Menge der in diesem Geschäft
@@ -71,6 +91,9 @@ final class Geschaeft {
     /// Längengrad — für die zukünftige, standortbasierte Ladenerkennung vorbereitet,
     /// aktuell ungenutzt.
     var laengengrad: Double?
+    /// Ob die Regal-Reihenfolge manuell oder automatisch (``ShelfOrderLearningService``)
+    /// bestimmt wird.
+    var regalSortierModus: RegalSortierModus = RegalSortierModus.manuell
     /// Regale dieses Geschäfts. Wird ein Geschäft gelöscht, werden auch seine Regale
     /// gelöscht.
     @Relationship(deleteRule: .cascade, inverse: \Regal.geschaeft)

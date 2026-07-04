@@ -7,9 +7,13 @@ import SwiftData
 /// keine Regale, dient die gelernte Kategorie-Reihenfolge selbst als
 /// Sortiergrundlage (siehe ``kategoriePositionen(fuer:context:)``).
 ///
-/// Die manuelle Reihenfolge (``Regal/sortIndex``) bleibt dabei unangetastet, bis der
-/// Anwender den Vorschlag explizit über
-/// ``vorgeschlageneReihenfolgeUebernehmen(fuer:context:)`` übernimmt.
+/// Die manuelle Reihenfolge (``Regal/sortIndex``) bleibt davon unberührt: Über
+/// ``Geschaeft/regalSortierModus`` wählt der Anwender, ob die manuelle oder die
+/// gelernte Reihenfolge tatsächlich verwendet wird (siehe
+/// ``effektiveReihenfolge(fuer:context:)``) — beide bestehen unabhängig
+/// nebeneinander. ``vorgeschlageneReihenfolgeUebernehmen(fuer:context:)`` erlaubt es
+/// zusätzlich, die gelernte Reihenfolge einmalig als neue manuelle Reihenfolge zu
+/// übernehmen.
 enum ShelfOrderLearningService {
     /// Ab wie vielen abgeschlossenen Einkäufen in einem Geschäft ein automatischer
     /// Reihenfolge-Vorschlag angeboten wird.
@@ -63,6 +67,25 @@ enum ShelfOrderLearningService {
         for (index, regal) in vorgeschlageneReihenfolge(fuer: geschaeft, context: context).enumerated() {
             regal.sortIndex = index
         }
+    }
+
+    /// Ob für dieses Geschäft genügend abgeschlossene Einkäufe vorliegen, um eine
+    /// automatische Reihenfolge anzubieten.
+    static func automatischeReihenfolgeVerfuegbar(fuer geschaeft: Geschaeft, context: ModelContext) -> Bool {
+        abgeschlosseneEinkaeufe(fuer: geschaeft, context: context) >= mindestEinkaeufeFuerVorschlag
+    }
+
+    /// Die tatsächlich anzuwendende Regal-Reihenfolge: die gelernte Reihenfolge, wenn
+    /// ``Geschaeft/regalSortierModus`` auf ``RegalSortierModus/automatisch`` steht und
+    /// genügend Beobachtungen vorliegen — sonst die manuelle Reihenfolge
+    /// (``Regal/sortIndex``). Der Modus-Wechsel verändert ``Regal/sortIndex`` dabei
+    /// nicht; die automatische Reihenfolge ist eine Alternative, keine Überschreibung.
+    static func effektiveReihenfolge(fuer geschaeft: Geschaeft, context: ModelContext) -> [Regal] {
+        guard geschaeft.regalSortierModus == .automatisch,
+              automatischeReihenfolgeVerfuegbar(fuer: geschaeft, context: context) else {
+            return geschaeft.regale.sorted { $0.sortIndex < $1.sortIndex }
+        }
+        return vorgeschlageneReihenfolge(fuer: geschaeft, context: context)
     }
 
     /// Die gelernten durchschnittlichen Besuchspositionen aller Artikelkategorien

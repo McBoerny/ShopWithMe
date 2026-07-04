@@ -120,7 +120,11 @@ private struct EinkaufslisteView: View {
             guard let regal = geschaeft.regal(fuer: effektiveKategorie(fuer: artikel)) else { continue }
             nachRegal[regal.persistentModelID, default: Gruppe(regal: regal, artikel: [])].artikel.append(artikel)
         }
-        return nachRegal.values.sorted { $0.regal.sortIndex < $1.regal.sortIndex }
+        let reihenfolge = ShelfOrderLearningService.effektiveReihenfolge(fuer: geschaeft, context: modelContext)
+        let position = Dictionary(uniqueKeysWithValues: reihenfolge.enumerated().map { ($1.persistentModelID, $0) })
+        return nachRegal.values.sorted {
+            (position[$0.regal.persistentModelID] ?? .max) < (position[$1.regal.persistentModelID] ?? .max)
+        }
     }
 
     /// ``sonstigeArtikel``, gruppiert nach Artikelkategorie und sortiert nach der für
