@@ -1,0 +1,24 @@
+# XcodeGen generates the project — do not version it, project.yml is the source of truth
+*.xcodeproj/
+*.xcworkspace/
+
+# Xcode / Swift build artifacts
+.build/
+DerivedData/
+build/
+*.hmap
+*.ipa
+
+# User-specific Xcode state
+xcuserdata/
+*.xccheckout
+*.xcscmblueprint
+
+# SwiftPM
+.swiftpm/
+
+# macOS
+.DS_Store
+
+# Simulator / test artifacts
+*.xcresult

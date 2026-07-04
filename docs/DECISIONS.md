@@ -1,0 +1,54 @@
+# ShopWithMe — Entscheidungen
+
+## Persistenz: SwiftData statt Core Data
+
+SwiftData passt nativ zu SwiftUI (`@Model`, `@Query`), unterstützt benutzerdefinierte
+`ModelConfiguration(url:)` — wichtig für die Anforderung, den Datenbank-Speicherort zu
+wechseln — ohne den Overhead von Core Data + NSPersistentCloudKitContainer, den wir
+aktuell (kein iCloud-Sync) ohnehin nicht brauchen.
+
+## Projekt-Tooling: XcodeGen statt handgepflegtem `.xcodeproj`
+
+Ein `.xcodeproj` ist eine fehleranfällige XML-Struktur, die außerhalb von Xcode schwer
+korrekt von Hand zu pflegen ist. `project.yml` ist textuell diffbar, wird versioniert;
+das generierte `.xcodeproj` wird bewusst **nicht** committet (`.gitignore`) und per
+`xcodegen generate` reproduziert.
+
+## Bundle-ID & Ziel-OS
+
+- Bundle-ID: `com.made4me.ShopWithMe` (Nutzervorgabe).
+- Min. Deployment-Target iOS 26.0 — das ist die erste Version mit Liquid Glass und dem
+  FoundationModels-Framework, beides zentrale Anforderungen. Kein macOS-Target.
+- Build-Umgebung: Xcode 26.6 / iOS-SDK 26.5, angesteuert über die Umgebungsvariable
+  `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` statt einer systemweiten
+  `xcode-select -s`-Umstellung (vermeidet sudo/Passwort-Interaktion, kein Nebeneffekt
+  außerhalb dieses Projekts).
+
+## Kein separates "Kategorie pro Geschäft verfügbar"-Modell
+
+Die Zuordnung Kategorie → Regal (pro Geschäft) impliziert bereits die Verfügbarkeit der
+Kategorie in diesem Geschäft. Ein zusätzliches Zuordnungsmodell hätte zu Inkonsistenzen
+führen können (z.B. Kategorie am Regal, aber nicht separat als "verfügbar" markiert).
+
+## "iOS 27"-Funktionen
+
+Zum Zeitpunkt der Umsetzung (Juli 2026) ist kein iOS-27-SDK auf der Entwicklungsmaschine
+installiert, und es liegen keine verifizierten API-Namen für eine mögliche künftige,
+spezialisierte On-Device-Beleg-Scan-API vor. Der Belegscan wird daher auf bekannten,
+realen iOS-26-APIs (Vision + FoundationModels) gebaut, gekapselt hinter dem
+`ReceiptScanService`-Protokoll, damit ein Austausch später ohne UI-Änderungen möglich
+ist.
+
+## Git-Checkpoint-Workflow
+
+Siehe [ROADMAP.md](ROADMAP.md) für die Checkpoint-Liste. Regel: bei jedem inhaltlich
+größeren Commit wird die erste Nachkommastelle der Version erhöht (0.1 → 0.2 → …),
+`docs/CHANGELOG.md` bekommt einen Eintrag, und alle neuen öffentlichen Swift-APIs
+erhalten `///`-DocC-Kommentare, bevor committet wird. `.xcodeproj` wird nie committet
+(siehe oben).
+
+## Git-Autor (lokal, nur dieses Repo)
+
+`user.name`/`user.email` wurden nur lokal für dieses Repo gesetzt (nicht global), da
+kein globaler Git-Autor konfiguriert war. Bei Bedarf mit `git config user.name/email`
+anpassen.
