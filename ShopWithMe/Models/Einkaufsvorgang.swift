@@ -60,6 +60,19 @@ final class Einkaufsvorgang {
         artikel.istAufEinkaufsliste = true
     }
 
+    /// Entfernt einen bereits abgehakten Artikel dauerhaft aus der Einkaufsliste-Ansicht
+    /// dieses Einkaufsvorgangs: anders als ``artikelAbwaehlen(_:context:)`` wird der
+    /// Artikel dabei NICHT wieder auf die Einkaufsliste zurückgesetzt (er bleibt, was er
+    /// nach ``artikelAbhaken(_:context:)`` bereits war). Nur der zugehörige
+    /// ``KaufEintrag`` wird gelöscht, damit der Artikel auch aus der
+    /// "abgehakt"-Ansicht dieses Einkaufs verschwindet, statt versehentlich per Tipp
+    /// wieder zurückgeholt werden zu können.
+    func artikelDauerhaftEntfernen(_ artikel: Artikel, context: ModelContext) {
+        guard let index = kaufEintraege.firstIndex(where: { $0.artikel == artikel }) else { return }
+        let eintrag = kaufEintraege.remove(at: index)
+        context.delete(eintrag)
+    }
+
     private func naechsterKategorieBesuchsIndex(fuer kategorie: ArtikelKategorie) -> Int {
         if let vorhandenerIndex = kaufEintraege.first(where: { $0.kategorie == kategorie })?.kategorieBesuchsIndex {
             return vorhandenerIndex

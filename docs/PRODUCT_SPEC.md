@@ -42,6 +42,15 @@ manuelle Anlage bleibt immer möglich.
   gruppiert wird. Artikel ohne Kategorie oder ohne Regal-Zuordnung im gewählten Geschäft
   (bzw. alle Artikel, wenn kein Geschäft gewählt ist) erscheinen dennoch, in einer
   eigenen „Sonstige“-Sektion.
+- Während eines laufenden Einkaufs kann der Anwender per Anzeige-Umschalter wählen, ob
+  nur die noch offenen Artikel oder zusätzlich die in diesem Einkauf bereits abgehakten
+  Artikel angezeigt werden. Abgehakte Artikel bleiben dadurch sichtbar (durchgestrichen)
+  und lassen sich per Antippen wieder zurückholen, falls versehentlich abgehakt.
+- Per Wischgeste kann ein bereits abgehakter Artikel dauerhaft aus der Ansicht dieses
+  Einkaufs entfernt werden — anders als das normale Rückgängigmachen landet er dabei
+  nicht wieder auf der offenen Liste.
+- Ein Einkauf lässt sich jederzeit abschließen, auch wenn nicht alle Artikel abgehakt
+  wurden — nicht gekaufte Artikel bleiben einfach auf der globalen Einkaufsliste.
 
 ## Standortbezug (zukünftig)
 

@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.1 (Build 19) — Anzeige-Umschalter & dauerhaftes Entfernen abgehakter Artikel
+
+- `Models/Einkaufsvorgang.swift`: neue Methode `artikelDauerhaftEntfernen(_:context:)` —
+  löscht den `KaufEintrag` eines bereits abgehakten Artikels, ohne ihn (anders als
+  `artikelAbwaehlen`) wieder auf die Einkaufsliste zurückzusetzen.
+- `Views/Einkaufen/EinkaufenView.swift`: Während eines laufenden Einkaufs kann per
+  Menü-Picker („Nur offene“ / „Alle“) umgeschaltet werden, ob bereits abgehakte Artikel
+  zusätzlich zu den offenen angezeigt werden. Abgehakte Artikel bleiben so sichtbar
+  (durchgestrichen) und lassen sich durch erneutes Antippen zurückholen. Eine
+  Wisch-Aktion („Dauerhaft entfernen“) auf abgehakten Artikeln entfernt sie endgültig aus
+  dieser Ansicht.
+- Dafür wurde die zugrunde liegende Artikel-Query von einer gefilterten
+  (`istAufEinkaufsliste`) auf eine ungefilterte Abfrage umgestellt; offene/abgehakte
+  Artikel werden jetzt in der View berechnet.
+- `docs/PRODUCT_SPEC.md` entsprechend ergänzt.
+- Klargestellt (kein Code-Fix nötig): Ein Einkauf konnte schon zuvor jederzeit
+  abgeschlossen werden, auch ohne dass alle Artikel abgehakt sind.
+
 ## v0.1 (Build 18) — Kaufbeleg-Scan für Geschäfte & Einzelpreis-Erkennung
 
 - `Services/ReceiptScanService.swift`: `BelegPosition` erkennt jetzt zusätzlich die

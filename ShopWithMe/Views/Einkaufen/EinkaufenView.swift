@@ -76,13 +76,35 @@ private struct EinkaufslisteView: View {
     let geschaeft: Geschaeft?
     let einkaufsvorgang: Einkaufsvorgang
 
-    @Query(filter: #Predicate<Artikel> { $0.istAufEinkaufsliste }, sort: \Artikel.name)
-    private var artikelAufListe: [Artikel]
+    @Query(sort: \Artikel.name) private var alleArtikel: [Artikel]
     @Environment(\.modelContext) private var modelContext
 
     @State private var zeigeBelegScanAngebot = false
     @State private var zeigeBelegScan = false
     @State private var zeigeArtikelHinzufuegen = false
+    /// Ob bereits abgehakte Artikel dieses Einkaufs zusätzlich zu den noch offenen
+    /// angezeigt werden sollen.
+    @State private var zeigeAbgehakte = false
+
+    private var abgehakteArtikelIDs: Set<PersistentIdentifier> {
+        Set(einkaufsvorgang.kaufEintraege.compactMap { $0.artikel?.persistentModelID })
+    }
+
+    /// Artikel, die noch auf der globalen Einkaufsliste stehen.
+    private var offeneArtikel: [Artikel] {
+        alleArtikel.filter(\.istAufEinkaufsliste)
+    }
+
+    /// Artikel, die in diesem Einkaufsvorgang bereits abgehakt wurden.
+    private var abgehakteArtikel: [Artikel] {
+        alleArtikel.filter { abgehakteArtikelIDs.contains($0.persistentModelID) }
+    }
+
+    /// Die aktuell darzustellenden Artikel: offene Artikel, plus — wenn
+    /// ``zeigeAbgehakte`` aktiv ist — die bereits abgehakten Artikel dieses Einkaufs.
+    private var artikelAufListe: [Artikel] {
+        zeigeAbgehakte ? offeneArtikel + abgehakteArtikel : offeneArtikel
+    }
 
     private struct Gruppe: Identifiable {
         let regal: Regal
@@ -156,7 +178,8 @@ private struct EinkaufslisteView: View {
                         ArtikelAbhakZeile(
                             artikel: artikel,
                             istAbgehakt: istAbgehakt(artikel),
-                            umschalten: { umschalten(artikel) }
+                            umschalten: { umschalten(artikel) },
+                            dauerhaftEntfernen: istAbgehakt(artikel) ? { entferneDauerhaft(artikel) } : nil
                         )
                     }
                 }
@@ -168,18 +191,27 @@ private struct EinkaufslisteView: View {
                         ArtikelAbhakZeile(
                             artikel: artikel,
                             istAbgehakt: istAbgehakt(artikel),
-                            umschalten: { umschalten(artikel) }
+                            umschalten: { umschalten(artikel) },
+                            dauerhaftEntfernen: istAbgehakt(artikel) ? { entferneDauerhaft(artikel) } : nil
                         )
                     }
                 }
             }
 
             if artikelAufListe.isEmpty {
-                ContentUnavailableView(
-                    "Einkaufsliste ist leer",
-                    systemImage: "checklist",
-                    description: Text("Markiere Artikel im Artikel-Tab als „Auf Einkaufsliste“.")
-                )
+                if abgehakteArtikel.isEmpty {
+                    ContentUnavailableView(
+                        "Einkaufsliste ist leer",
+                        systemImage: "checklist",
+                        description: Text("Markiere Artikel im Artikel-Tab als „Auf Einkaufsliste“.")
+                    )
+                } else {
+                    ContentUnavailableView(
+                        "Alles erledigt",
+                        systemImage: "checkmark.circle.fill",
+                        description: Text("Aktiviere „Alle“ oben, um bereits abgehakte Artikel zu sehen.")
+                    )
+                }
             }
         }
         .safeAreaInset(edge: .bottom) {
@@ -193,6 +225,15 @@ private struct EinkaufslisteView: View {
         }
         .navigationTitle(geschaeft?.name ?? "Einkaufsliste")
         .toolbar {
+            if !abgehakteArtikel.isEmpty {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Picker("Anzeige", selection: $zeigeAbgehakte) {
+                        Text("Nur offene").tag(false)
+                        Text("Alle").tag(true)
+                    }
+                    .pickerStyle(.menu)
+                }
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     zeigeArtikelHinzufuegen = true
@@ -230,13 +271,20 @@ private struct EinkaufslisteView: View {
             einkaufsvorgang.artikelAbhaken(artikel, context: modelContext)
         }
     }
+
+    private func entferneDauerhaft(_ artikel: Artikel) {
+        einkaufsvorgang.artikelDauerhaftEntfernen(artikel, context: modelContext)
+    }
 }
 
-/// Eine antippbare Zeile zum Abhaken eines Artikels beim Einkaufen.
+/// Eine antippbare Zeile zum Abhaken eines Artikels beim Einkaufen. Ist der Artikel
+/// bereits abgehakt, bietet eine Swipe-Aktion an, ihn dauerhaft aus dieser Ansicht zu
+/// entfernen (``dauerhaftEntfernen``, `nil` bei noch offenen Artikeln).
 private struct ArtikelAbhakZeile: View {
     let artikel: Artikel
     let istAbgehakt: Bool
     let umschalten: () -> Void
+    var dauerhaftEntfernen: (() -> Void)?
 
     var body: some View {
         Button(action: umschalten) {
@@ -251,6 +299,13 @@ private struct ArtikelAbhakZeile: View {
             }
         }
         .buttonStyle(.plain)
+        .swipeActions(edge: .trailing) {
+            if let dauerhaftEntfernen {
+                Button(role: .destructive, action: dauerhaftEntfernen) {
+                    Label("Dauerhaft entfernen", systemImage: "trash")
+                }
+            }
+        }
     }
 }
 
