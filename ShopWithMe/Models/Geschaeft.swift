@@ -96,4 +96,11 @@ final class Geschaeft {
             .filter { gesehen.insert($0.persistentModelID).inserted }
             .sorted { $0.sortIndex < $1.sortIndex }
     }
+
+    /// Das Regal dieses Geschäfts, dem die übergebene Kategorie zugeordnet ist —
+    /// `nil`, wenn die Kategorie in diesem Geschäft keinem Regal zugeordnet und damit
+    /// nicht verfügbar ist.
+    func regal(fuer kategorie: ArtikelKategorie) -> Regal? {
+        regale.first { $0.kategorien.contains(kategorie) }
+    }
 }

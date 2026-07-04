@@ -11,7 +11,7 @@ Jeder Checkpoint ist ein Git-Commit, der die Version (`VERSION`-Datei + `project
   Liquid-Glass-Designsystem-Basis.
 - [x] **v0.3** — Geschäfte-Verwaltung: Liste/Anlegen/Bearbeiten, Regal-Verwaltung pro
   Geschäft, Kategorie-zu-Regal-Zuordnung.
-- [ ] **v0.4** — Einkaufen-Flow: Einkaufsliste pro Geschäft (nur zugeordnete
+- [x] **v0.4** — Einkaufen-Flow: Einkaufsliste pro Geschäft (nur zugeordnete
   Kategorien, gruppiert nach Regal), Einkaufsvorgang starten/abschließen, manuelle
   Regal-Reihenfolge editierbar.
 - [ ] **v0.5** — Lern-Algorithmus für automatische Regal-Reihenfolge

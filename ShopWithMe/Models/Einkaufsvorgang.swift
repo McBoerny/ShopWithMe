@@ -33,4 +33,36 @@ final class Einkaufsvorgang {
     func abschliessen(am zeitpunkt: Date = Date()) {
         endZeit = zeitpunkt
     }
+
+    /// Markiert einen Artikel als gekauft: legt einen ``KaufEintrag`` (zunächst ohne
+    /// Preis) in diesem Einkaufsvorgang an und nimmt den Artikel von der
+    /// Einkaufsliste. Artikel aus demselben Regal erhalten denselben
+    /// ``KaufEintrag/regalBesuchsIndex``, neue Regale den jeweils nächsten Index —
+    /// das ist die Rohdatenbasis für ``ShelfOrderLearningService``.
+    func artikelAbhaken(_ artikel: Artikel, regal: Regal?, context: ModelContext) {
+        let index = naechsterRegalBesuchsIndex(fuer: regal)
+        let eintrag = KaufEintrag(artikel: artikel, geschaeft: geschaeft, regal: regal, regalBesuchsIndex: index)
+        context.insert(eintrag)
+        eintrag.einkaufsvorgang = self
+        artikel.istAufEinkaufsliste = false
+    }
+
+    /// Macht ``artikelAbhaken(_:regal:context:)`` rückgängig: löscht den zugehörigen
+    /// ``KaufEintrag`` und setzt den Artikel zurück auf die Einkaufsliste.
+    func artikelAbwaehlen(_ artikel: Artikel, context: ModelContext) {
+        guard let index = kaufEintraege.firstIndex(where: { $0.artikel == artikel }) else { return }
+        let eintrag = kaufEintraege.remove(at: index)
+        context.delete(eintrag)
+        artikel.istAufEinkaufsliste = true
+    }
+
+    private func naechsterRegalBesuchsIndex(fuer regal: Regal?) -> Int {
+        guard let regal else {
+            return (kaufEintraege.compactMap(\.regalBesuchsIndex).max() ?? -1) + 1
+        }
+        if let vorhandenerIndex = kaufEintraege.first(where: { $0.regal == regal })?.regalBesuchsIndex {
+            return vorhandenerIndex
+        }
+        return (kaufEintraege.compactMap(\.regalBesuchsIndex).max() ?? -1) + 1
+    }
 }

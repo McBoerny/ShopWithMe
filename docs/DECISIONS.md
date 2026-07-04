@@ -47,6 +47,16 @@ größeren Commit wird die erste Nachkommastelle der Version erhöht (0.1 → 0.
 erhalten `///`-DocC-Kommentare, bevor committet wird. `.xcodeproj` wird nie committet
 (siehe oben).
 
+## `KaufEintrag.preis` ist optional
+
+Ursprünglich (v0.1) war `preis: Decimal` ein Pflichtfeld. Beim Bau des
+Einkaufen-Flows (v0.4) wurde klar: Ein `KaufEintrag` entsteht bereits beim Abhaken auf
+der Einkaufsliste — der Preis ist an dieser Stelle noch unbekannt und wird erst durch
+den späteren Belegscan (v0.7) nachgetragen. `preis` wurde daher auf `Decimal?`
+geändert. Zusätzlich wurde `KaufEintrag.regal` ergänzt, damit die Regal-Zuordnung zum
+Kaufzeitpunkt dauerhaft festgehalten wird (unabhängig von späteren Änderungen der
+Regal-Kategorie-Zuordnung) — Grundlage für den Lern-Algorithmus (v0.5).
+
 ## Git-Autor (lokal, nur dieses Repo)
 
 `user.name`/`user.email` wurden nur lokal für dieses Repo gesetzt (nicht global), da

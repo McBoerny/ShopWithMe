@@ -14,7 +14,7 @@ struct RootView: View {
                 GeschaeftListView()
             }
             Tab("Einkaufen", systemImage: "checklist") {
-                PlatzhalterView(titel: "Einkaufen", geplantAb: "v0.4")
+                EinkaufenView()
             }
             Tab("Einstellungen", systemImage: "gearshape.fill") {
                 PlatzhalterView(titel: "Einstellungen", geplantAb: "v0.6")
