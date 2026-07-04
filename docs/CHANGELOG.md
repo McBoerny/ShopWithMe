@@ -1,5 +1,23 @@
 # Changelog
 
+## v1.0 — Globale Einkaufsliste & frei änderbare Kategorie
+
+- `Views/Einkaufen/EinkaufenView.swift`: Die Einkaufsliste ist jetzt global und nicht
+  mehr von einer Geschäftsauswahl abhängig. Der Geschäft-Picker bekommt eine „Kein
+  Geschäft“-Option; ohne Geschäftsauswahl ist die Liste flach, mit Geschäftsauswahl
+  weiterhin nach Regal gruppiert. Artikel ohne Kategorie oder ohne Regal-Zuordnung im
+  gewählten Geschäft wurden bisher ausgeblendet — sie erscheinen jetzt in einer
+  eigenen „Sonstige“-Sektion statt nur als Hinweistext gezählt zu werden.
+- `Models/Artikel.swift` / `Views/Artikel/ArtikelEditView.swift`: die Kategorie eines
+  Artikels ist nun auch nach dem Anlegen jederzeit änderbar (vorher nach dem ersten
+  Speichern schreibgeschützt).
+- `docs/PRODUCT_SPEC.md` entsprechend angepasst.
+- Das in v0.9 vermerkte offene Problem behoben: `ShopWithMeTests` bekommt über
+  `GENERATE_INFOPLIST_FILE: YES` (`project.yml`) ein automatisch generiertes
+  Info.plist, wodurch Code-Signing für das Test-Target wieder funktioniert.
+- Verifiziert: `xcodegen generate` + `xcodebuild build` + `xcodebuild test`
+  (`iPhone 17` Simulator) laufen fehlerfrei durch, alle 7 Unit-Tests bestehen.
+
 ## v0.9 — Kamera-Funktion reaktiviert
 
 - `NSCameraUsageDescription` wieder ergänzt (jetzt über `info.properties` in

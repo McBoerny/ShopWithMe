@@ -3,10 +3,8 @@ import SwiftData
 
 /// Ein einkaufbarer Artikel (z.B. "Vollmilch").
 ///
-/// Jeder Artikel gehört zu genau einer ``ArtikelKategorie``. Die Kategorie wird beim
-/// Anlegen festgelegt und ändert sich danach fachlich nicht mehr — diese Regel wird in
-/// den Bearbeiten-Bildschirmen (nicht im Datenmodell) durchgesetzt, indem das
-/// Kategorie-Feld nach dem ersten Speichern schreibgeschützt dargestellt wird.
+/// Jeder Artikel gehört zu genau einer ``ArtikelKategorie``. Die Kategorie kann jederzeit
+/// über die Bearbeiten-Bildschirme geändert werden.
 @Model
 final class Artikel {
     /// Eindeutige Kennung.
@@ -17,7 +15,7 @@ final class Artikel {
     var symbolName: String
     /// Farbe als Hex-String (z.B. `"#34C759"`).
     var farbeHex: String
-    /// Die (nach Anlage unveränderliche) Kategorie dieses Artikels.
+    /// Die Kategorie dieses Artikels.
     var kategorie: ArtikelKategorie?
     /// Ob der Artikel aktuell auf der Einkaufsliste steht.
     var istAufEinkaufsliste: Bool

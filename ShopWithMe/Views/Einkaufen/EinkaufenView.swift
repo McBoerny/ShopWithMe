@@ -1,8 +1,8 @@
 import SwiftUI
 import SwiftData
 
-/// Einstiegspunkt zum Einkaufen: Geschäft wählen, Einkauf starten und die
-/// Einkaufsliste (gruppiert nach Regal) abarbeiten.
+/// Einstiegspunkt zum Einkaufen: die globale Einkaufsliste abarbeiten, optional
+/// gruppiert nach Regal eines gewählten Geschäfts.
 struct EinkaufenView: View {
     @Query(sort: \Geschaeft.name) private var geschaefte: [Geschaeft]
     @Query(filter: #Predicate<Einkaufsvorgang> { $0.endZeit == nil })
@@ -18,27 +18,20 @@ struct EinkaufenView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if geschaefte.isEmpty {
-                    ContentUnavailableView(
-                        "Keine Geschäfte",
-                        systemImage: "cart.fill",
-                        description: Text("Lege zuerst ein Geschäft im Geschäfte-Tab an.")
-                    )
-                } else if let geschaeft = ausgewaehltesGeschaeft {
-                    if let einkauf = aktuellerEinkauf {
-                        EinkaufslisteView(geschaeft: geschaeft, einkaufsvorgang: einkauf)
-                    } else {
-                        EinkaufStartenView(geschaeft: geschaeft) {
-                            einkaufStarten(fuer: geschaeft)
-                        }
+                if let einkauf = aktuellerEinkauf {
+                    EinkaufslisteView(geschaeft: ausgewaehltesGeschaeft, einkaufsvorgang: einkauf)
+                } else {
+                    EinkaufStartenView(geschaeft: ausgewaehltesGeschaeft) {
+                        einkaufStarten(fuer: ausgewaehltesGeschaeft)
                     }
                 }
             }
             .navigationTitle("Einkaufen")
             .toolbar {
-                if geschaefte.count > 1 {
+                if !geschaefte.isEmpty {
                     ToolbarItem(placement: .principal) {
                         Picker("Geschäft", selection: $ausgewaehltesGeschaeft) {
+                            Text("Kein Geschäft").tag(Optional<Geschaeft>.none)
                             ForEach(geschaefte) { geschaeft in
                                 Text(geschaeft.name).tag(Optional(geschaeft))
                             }
@@ -48,29 +41,28 @@ struct EinkaufenView: View {
                 }
             }
         }
-        .onAppear {
-            if ausgewaehltesGeschaeft == nil {
-                ausgewaehltesGeschaeft = geschaefte.first
-            }
-        }
     }
 
-    private func einkaufStarten(fuer geschaeft: Geschaeft) {
+    private func einkaufStarten(fuer geschaeft: Geschaeft?) {
         let vorgang = Einkaufsvorgang(geschaeft: geschaeft)
         modelContext.insert(vorgang)
     }
 }
 
-/// Aufforderung, den Einkauf für ein Geschäft zu starten.
+/// Aufforderung, den Einkauf zu starten — optional für ein bestimmtes Geschäft.
 private struct EinkaufStartenView: View {
-    let geschaeft: Geschaeft
+    let geschaeft: Geschaeft?
     let start: () -> Void
 
     var body: some View {
         ContentUnavailableView {
-            Label(geschaeft.name, systemImage: geschaeft.typ.symbolName)
+            if let geschaeft {
+                Label(geschaeft.name, systemImage: geschaeft.typ.symbolName)
+            } else {
+                Label("Einkaufsliste", systemImage: "cart.fill")
+            }
         } description: {
-            Text("Starte den Einkauf, um deine Einkaufsliste für dieses Geschäft abzuarbeiten.")
+            Text("Starte den Einkauf, um deine Einkaufsliste abzuarbeiten.")
         } actions: {
             Button("Einkauf starten", action: start)
                 .buttonStyle(.glass)
@@ -78,9 +70,10 @@ private struct EinkaufStartenView: View {
     }
 }
 
-/// Die nach Regal gruppierte Einkaufsliste für einen laufenden Einkaufsvorgang.
+/// Die global gültige Einkaufsliste für einen laufenden Einkaufsvorgang — bei
+/// gewähltem Geschäft nach Regal gruppiert, sonst flach.
 private struct EinkaufslisteView: View {
-    let geschaeft: Geschaeft
+    let geschaeft: Geschaeft?
     let einkaufsvorgang: Einkaufsvorgang
 
     @Query(filter: #Predicate<Artikel> { $0.istAufEinkaufsliste }, sort: \Artikel.name)
@@ -96,7 +89,19 @@ private struct EinkaufslisteView: View {
         var id: PersistentIdentifier { regal.persistentModelID }
     }
 
+    /// Artikel, die sich keinem Regal zuordnen lassen (kein Geschäft gewählt,
+    /// keine Kategorie oder Kategorie ohne Regal im gewählten Geschäft) — werden
+    /// dennoch angezeigt, nur eben in der Sonstige-Sektion.
+    private var sonstigeArtikel: [Artikel] {
+        guard let geschaeft else { return artikelAufListe }
+        return artikelAufListe.filter { artikel in
+            guard let kategorie = artikel.kategorie else { return true }
+            return geschaeft.regal(fuer: kategorie) == nil
+        }
+    }
+
     private var gruppen: [Gruppe] {
+        guard let geschaeft else { return [] }
         var nachRegal: [PersistentIdentifier: Gruppe] = [:]
         for artikel in artikelAufListe {
             guard let kategorie = artikel.kategorie,
@@ -104,10 +109,6 @@ private struct EinkaufslisteView: View {
             nachRegal[regal.persistentModelID, default: Gruppe(regal: regal, artikel: [])].artikel.append(artikel)
         }
         return nachRegal.values.sorted { $0.regal.sortIndex < $1.regal.sortIndex }
-    }
-
-    private var nichtVerfuegbareAnzahl: Int {
-        artikelAufListe.count - gruppen.reduce(0) { $0 + $1.artikel.count }
     }
 
     var body: some View {
@@ -124,15 +125,19 @@ private struct EinkaufslisteView: View {
                 }
             }
 
-            if nichtVerfuegbareAnzahl > 0 {
-                Section {
-                    Text("\(nichtVerfuegbareAnzahl) Artikel auf deiner Liste sind in „\(geschaeft.name)“ keinem Regal zugeordnet und werden hier nicht angezeigt.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+            if !sonstigeArtikel.isEmpty {
+                Section(gruppen.isEmpty ? "Einkaufsliste" : "Sonstige") {
+                    ForEach(sonstigeArtikel) { artikel in
+                        ArtikelAbhakZeile(
+                            artikel: artikel,
+                            istAbgehakt: istAbgehakt(artikel),
+                            umschalten: { umschalten(artikel, regal: nil) }
+                        )
+                    }
                 }
             }
 
-            if gruppen.isEmpty && nichtVerfuegbareAnzahl == 0 {
+            if artikelAufListe.isEmpty {
                 ContentUnavailableView(
                     "Einkaufsliste ist leer",
                     systemImage: "checklist",
@@ -149,7 +154,7 @@ private struct EinkaufslisteView: View {
             .buttonStyle(.glass)
             .padding()
         }
-        .navigationTitle(geschaeft.name)
+        .navigationTitle(geschaeft?.name ?? "Einkaufsliste")
         .confirmationDialog(
             "Einkauf abgeschlossen",
             isPresented: $zeigeBelegScanAngebot,
@@ -169,7 +174,7 @@ private struct EinkaufslisteView: View {
         einkaufsvorgang.kaufEintraege.contains { $0.artikel == artikel }
     }
 
-    private func umschalten(_ artikel: Artikel, regal: Regal) {
+    private func umschalten(_ artikel: Artikel, regal: Regal?) {
         if istAbgehakt(artikel) {
             einkaufsvorgang.artikelAbwaehlen(artikel, context: modelContext)
         } else {

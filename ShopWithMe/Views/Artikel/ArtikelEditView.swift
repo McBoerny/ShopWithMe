@@ -4,10 +4,9 @@ import UIKit
 
 /// Anlegen/Bearbeiten eines ``Artikel``s.
 ///
-/// Bei einem neuen Artikel (`istNeu == true`) ist die Kategorie frei wählbar und wird
-/// erst beim Sichern in den Model-Context eingefügt (Abbrechen verwirft ihn
-/// folgenlos). Bei einem bestehenden Artikel ist die Kategorie schreibgeschützt, da
-/// sie sich nach Anlage fachlich nicht mehr ändert.
+/// Bei einem neuen Artikel (`istNeu == true`) wird er erst beim Sichern in den
+/// Model-Context eingefügt (Abbrechen verwirft ihn folgenlos). Die Kategorie ist
+/// sowohl beim Anlegen als auch danach frei wählbar.
 struct ArtikelEditView: View {
     @Bindable var artikel: Artikel
     let istNeu: Bool
@@ -74,24 +73,12 @@ struct ArtikelEditView: View {
                 }
 
                 Section("Kategorie") {
-                    if istNeu {
-                        Picker("Kategorie", selection: $artikel.kategorie) {
-                            Text("Keine Auswahl").tag(ArtikelKategorie?.none)
-                            ForEach(kategorien) { kategorie in
-                                Label(kategorie.name, systemImage: kategorie.standardSymbol)
-                                    .tag(Optional(kategorie))
-                            }
+                    Picker("Kategorie", selection: $artikel.kategorie) {
+                        Text("Keine Auswahl").tag(ArtikelKategorie?.none)
+                        ForEach(kategorien) { kategorie in
+                            Label(kategorie.name, systemImage: kategorie.standardSymbol)
+                                .tag(Optional(kategorie))
                         }
-                    } else {
-                        HStack {
-                            Text("Kategorie")
-                            Spacer()
-                            Text(artikel.kategorie?.name ?? "–")
-                                .foregroundStyle(.secondary)
-                        }
-                        Text("Die Kategorie kann nach dem Anlegen nicht mehr geändert werden.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
                     }
                 }
 

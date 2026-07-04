@@ -37,8 +37,11 @@ manuelle Anlage bleibt immer möglich.
   typischerweise besucht werden, und schlägt nach ausreichend Trainingsdurchläufen eine
   automatische Reihenfolge vor. Die manuelle Reihenfolge bleibt bestehen, bis der
   Anwender die automatische explizit übernimmt.
-- Die Einkaufsliste pro Geschäft zeigt nur Artikel aus Kategorien, die diesem Geschäft
-  zugeordnet sind, gruppiert nach Regal in der gültigen Reihenfolge.
+- Die Einkaufsliste ist global und nicht von einem Geschäft abhängig. Optional kann der
+  Anwender ein Geschäft wählen, wonach die Liste nach Regal in der gültigen Reihenfolge
+  gruppiert wird. Artikel ohne Kategorie oder ohne Regal-Zuordnung im gewählten Geschäft
+  (bzw. alle Artikel, wenn kein Geschäft gewählt ist) erscheinen dennoch, in einer
+  eigenen „Sonstige“-Sektion.
 
 ## Standortbezug (zukünftig)
 
