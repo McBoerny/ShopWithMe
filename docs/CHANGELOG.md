@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.7 — Belegscan & Preishistorie
+
+- `Services/ReceiptScanService.swift`: Protokoll + `VisionFoundationModelsReceiptScanner`
+  (Vision-OCR + FoundationModels-Strukturextraktion) erkennt Artikel und Preise auf
+  einem fotografierten Kassenbon.
+- `Views/Einkaufen/BelegScanView.swift`: Foto aufnehmen (Kamera, falls verfügbar)
+  oder aus der Fotomediathek wählen, erkannte Positionen prüfen/korrigieren und
+  übernehmen. Nach „Einkauf abschließen“ bietet `EinkaufenView` den Scan aktiv an.
+  Erkannte Positionen werden bestehenden `KaufEintrag`en zugeordnet (Namensabgleich)
+  oder als eigenständiger Eintrag ohne Artikel-Verknüpfung gespeichert, damit keine
+  erfassten Preise verloren gehen.
+- `Views/Historie/PreisHistorieZeile.swift`: gemeinsame Zeilen-Ansicht für die
+  Preishistorie, eingebunden in `ArtikelEditView` (pro Artikel) und
+  `GeschaeftDetailView` (pro Geschäft).
+- `NSCameraUsageDescription` in `project.yml` ergänzt.
+- Hilfe-Eintrag „Belegscan & Preishistorie“ in `HelpView` ergänzt.
+
 ## v0.6 — KI-Vorschlag, Einstellungen & Datenbank-Speicherort
 
 - `Services/AISuggestionService.swift`: FoundationModels-basierter Vorschlag

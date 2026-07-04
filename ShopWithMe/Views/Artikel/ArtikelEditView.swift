@@ -16,10 +16,21 @@ struct ArtikelEditView: View {
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \ArtikelKategorie.sortIndex) private var kategorien: [ArtikelKategorie]
     @Query private var alleRegale: [Regal]
+    @Query private var kaufHistorie: [KaufEintrag]
 
     @State private var kiVorschlagLaeuft = false
     @State private var kiFehlermeldung: String?
     @State private var kiRegalHinweis: String?
+
+    init(artikel: Artikel, istNeu: Bool) {
+        self.artikel = artikel
+        self.istNeu = istNeu
+        let artikelID = artikel.persistentModelID
+        _kaufHistorie = Query(
+            filter: #Predicate<KaufEintrag> { $0.artikel?.persistentModelID == artikelID },
+            sort: [SortDescriptor(\.datum, order: .reverse)]
+        )
+    }
 
     var body: some View {
         NavigationStack {
@@ -97,6 +108,14 @@ struct ArtikelEditView: View {
 
                 Section {
                     Toggle("Auf Einkaufsliste", isOn: $artikel.istAufEinkaufsliste)
+                }
+
+                if !istNeu && !kaufHistorie.isEmpty {
+                    Section("Preishistorie") {
+                        ForEach(kaufHistorie) { eintrag in
+                            PreisHistorieZeile(eintrag: eintrag, zeigeArtikel: false)
+                        }
+                    }
                 }
             }
             .navigationTitle(istNeu ? "Neuer Artikel" : artikel.name)

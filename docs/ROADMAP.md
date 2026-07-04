@@ -3,7 +3,7 @@
 Jeder Checkpoint ist ein Git-Commit, der die Version (`VERSION`-Datei + `project.yml`
 `MARKETING_VERSION`) um `0.1` erhöht. Format: `vX.Y: <Kurzbeschreibung>`.
 
-## Umgesetzt / in Arbeit
+## Umgesetzt
 
 - [x] **v0.1** — Projekt-Scaffold: XcodeGen-Setup, Doku-Grundgerüst, komplettes
   SwiftData-Datenmodell inkl. Seed-Daten, leere App die kompiliert.
@@ -18,7 +18,11 @@ Jeder Checkpoint ist ein Git-Commit, der die Version (`VERSION`-Datei + `project
   (`ShelfOrderLearningService`) + Vorschlag in der UI.
 - [x] **v0.6** — KI-Artikelvorschlag (`AISuggestionService`) +
   Einstellungen/Hilfe-Bildschirme + Datenbank-Speicherort-Funktion.
-- [ ] **v0.7** — Belegscan (`ReceiptScanService`) + Preishistorie-Ansicht.
+- [x] **v0.7** — Belegscan (`ReceiptScanService`) + Preishistorie-Ansicht (in
+  Artikel- und Geschäfts-Detailansicht).
+
+Damit ist die in der Kickoff-Unterhaltung beschriebene Kernfunktionalität
+vollständig umgesetzt; weitere Ideen siehe „Zukünftig“ unten.
 
 ## Zukünftig (nicht terminiert)
 

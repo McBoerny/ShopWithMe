@@ -62,6 +62,18 @@ private struct HilfeThema: Identifiable {
             """
         ),
         HilfeThema(
+            titel: "Belegscan & Preishistorie",
+            text: """
+            Nach dem Abschließen eines Einkaufs bietet dir die App an, den \
+            Kassenbon zu scannen (Foto aufnehmen oder aus der Mediathek wählen). \
+            Lokale KI erkennt Artikel und Preise auf dem Beleg und trägt sie in \
+            die passenden Positionen deines Einkaufs ein — Positionen, die sich \
+            keinem Artikel zuordnen lassen, werden trotzdem mit Namen und Preis \
+            gespeichert. Die erfassten Preise findest du als Preishistorie in der \
+            Artikel- bzw. Geschäfts-Detailansicht.
+            """
+        ),
+        HilfeThema(
             titel: "Datenbank-Speicherort ändern",
             text: """
             In den Einstellungen unter „Datenbank & Speicherort“ kannst du einen \

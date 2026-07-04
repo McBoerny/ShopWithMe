@@ -87,6 +87,9 @@ private struct EinkaufslisteView: View {
     private var artikelAufListe: [Artikel]
     @Environment(\.modelContext) private var modelContext
 
+    @State private var zeigeBelegScanAngebot = false
+    @State private var zeigeBelegScan = false
+
     private struct Gruppe: Identifiable {
         let regal: Regal
         var artikel: [Artikel]
@@ -141,11 +144,25 @@ private struct EinkaufslisteView: View {
             Button("Einkauf abschließen") {
                 einkaufsvorgang.abschliessen()
                 ShelfOrderLearningService.lernenAus(einkaufsvorgang, context: modelContext)
+                zeigeBelegScanAngebot = true
             }
             .buttonStyle(.glass)
             .padding()
         }
         .navigationTitle(geschaeft.name)
+        .confirmationDialog(
+            "Einkauf abgeschlossen",
+            isPresented: $zeigeBelegScanAngebot,
+            titleVisibility: .visible
+        ) {
+            Button("Beleg jetzt scannen") { zeigeBelegScan = true }
+            Button("Später", role: .cancel) {}
+        } message: {
+            Text("Möchtest du den Kassenbon scannen, um die Preise für diesen Einkauf zu erfassen?")
+        }
+        .sheet(isPresented: $zeigeBelegScan) {
+            BelegScanView(einkaufsvorgang: einkaufsvorgang)
+        }
     }
 
     private func istAbgehakt(_ artikel: Artikel) -> Bool {

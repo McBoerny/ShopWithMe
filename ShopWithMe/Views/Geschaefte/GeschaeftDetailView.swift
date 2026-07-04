@@ -10,6 +10,16 @@ struct GeschaeftDetailView: View {
     @Bindable var geschaeft: Geschaeft
     @Environment(\.modelContext) private var modelContext
     @State private var zeigeStammdatenEdit = false
+    @Query private var kaufHistorie: [KaufEintrag]
+
+    init(geschaeft: Geschaeft) {
+        self.geschaeft = geschaeft
+        let geschaeftID = geschaeft.persistentModelID
+        _kaufHistorie = Query(
+            filter: #Predicate<KaufEintrag> { $0.geschaeft?.persistentModelID == geschaeftID },
+            sort: [SortDescriptor(\.datum, order: .reverse)]
+        )
+    }
 
     private var regaleSortiert: [Regal] {
         geschaeft.regale.sorted { $0.sortIndex < $1.sortIndex }
@@ -91,6 +101,14 @@ struct GeschaeftDetailView: View {
                 Text("Regale")
             } footer: {
                 Text("Ziehe die Regale (über „Bearbeiten“) in die Reihenfolge, in der du sie beim Einkaufen ablaufen möchtest.")
+            }
+
+            if !kaufHistorie.isEmpty {
+                Section("Preishistorie") {
+                    ForEach(kaufHistorie) { eintrag in
+                        PreisHistorieZeile(eintrag: eintrag, zeigeArtikel: true)
+                    }
+                }
             }
         }
         .navigationTitle(geschaeft.name.isEmpty ? "Geschäft" : geschaeft.name)
