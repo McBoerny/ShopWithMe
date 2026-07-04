@@ -70,11 +70,36 @@ enum RegalSortierModus: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+/// Legt fest, welche Artikel der globalen Einkaufsliste beim Einkaufen in einem
+/// bestimmten ``Geschaeft`` angezeigt werden.
+///
+/// ``nurVerfuegbare`` blendet Artikel aus, die (noch) nicht als in diesem Geschäft
+/// verfügbar gelten (siehe ``ArtikelVerfuegbarkeitService``). Besitzt das Geschäft
+/// eigene Kategorien (``Geschaeft/verfuegbareKategorien``, direkt oder über ein
+/// Regal zugeordnet), ergibt sich die Verfügbarkeit daraus; besitzt es keine, lernt
+/// die App die Verfügbarkeit erst durch Abhaken der Artikel — ``alle`` ist dort
+/// nötig, um bislang unbekannte Artikel überhaupt abhaken zu können.
+enum ArtikelFilterModus: String, Codable, CaseIterable, Identifiable {
+    case nurVerfuegbare
+    case alle
+
+    var id: String { rawValue }
+
+    var anzeigename: String {
+        switch self {
+        case .nurVerfuegbare: return "Nur verfügbare"
+        case .alle: return "Alle"
+        }
+    }
+}
+
 /// Ein Geschäft, das der Anwender zum Einkaufen aufsucht.
 ///
-/// Ein Geschäft besitzt eigene ``Regal``e; die Menge der in diesem Geschäft
-/// verfügbaren ``ArtikelKategorie``n ergibt sich automatisch aus den Kategorien, die
-/// diesen Regalen zugeordnet sind (siehe ``verfuegbareKategorien``).
+/// Kategorien sind wichtiger als Regale: Ein Geschäft kann ``ArtikelKategorie``n
+/// direkt zugeordnet bekommen (``kategorien``), ganz ohne ein Regal anzulegen. Regale
+/// sind rein optional und dienen ausschließlich dazu, die bereits verfügbaren
+/// Kategorien für die Reihenfolge beim Einkaufen in Gruppen zu organisieren — siehe
+/// ``verfuegbareKategorien``, die Vereinigung aus beiden Wegen.
 @Model
 final class Geschaeft {
     /// Eindeutige Kennung.
@@ -102,10 +127,26 @@ final class Geschaeft {
         get { regalSortierModusRaw.flatMap(RegalSortierModus.init(rawValue:)) ?? .manuell }
         set { regalSortierModusRaw = newValue.rawValue }
     }
+    /// Rohwert für ``artikelFilterModus``. Optional gespeichert, damit vor Einführung
+    /// dieses Attributs angelegte Geschäfte beim automatischen Laden nicht abstürzen —
+    /// ein `nil`-Rohwert wird als ``ArtikelFilterModus/nurVerfuegbare`` interpretiert.
+    private var artikelFilterModusRaw: String?
+    /// Welche Artikel der Einkaufsliste beim Einkaufen in diesem Geschäft angezeigt
+    /// werden — siehe ``ArtikelFilterModus``.
+    var artikelFilterModus: ArtikelFilterModus {
+        get { artikelFilterModusRaw.flatMap(ArtikelFilterModus.init(rawValue:)) ?? .nurVerfuegbare }
+        set { artikelFilterModusRaw = newValue.rawValue }
+    }
     /// Regale dieses Geschäfts. Wird ein Geschäft gelöscht, werden auch seine Regale
     /// gelöscht.
     @Relationship(deleteRule: .cascade, inverse: \Regal.geschaeft)
     var regale: [Regal] = []
+    /// Artikelkategorien, die diesem Geschäft direkt zugeordnet sind — unabhängig
+    /// davon, ob sie zusätzlich einem ``Regal`` zugeordnet sind. Das ist der primäre
+    /// Weg, eine Kategorie in einem Geschäft verfügbar zu machen; ein Regal ist dafür
+    /// nicht erforderlich (siehe ``verfuegbareKategorien``).
+    @Relationship(inverse: \ArtikelKategorie.geschaefte)
+    var kategorien: [ArtikelKategorie] = []
 
     init(name: String, typ: GeschaeftTyp, adresse: String? = nil) {
         self.id = UUID()
@@ -116,21 +157,22 @@ final class Geschaeft {
 
     /// Alle Artikelkategorien, die in diesem Geschäft verfügbar sind.
     ///
-    /// Leitet sich aus der Vereinigung der Kategorien ab, die den Regalen dieses
-    /// Geschäfts zugeordnet sind (dedupliziert, sortiert nach
+    /// Leitet sich aus der Vereinigung zweier Wege ab: direkt diesem Geschäft
+    /// zugeordnete Kategorien (``kategorien``) sowie Kategorien, die einem seiner
+    /// Regale zugeordnet sind (dedupliziert, sortiert nach
     /// ``ArtikelKategorie/sortIndex``). Beim Einkaufen werden für dieses Geschäft nur
     /// diese Kategorien angezeigt.
     var verfuegbareKategorien: [ArtikelKategorie] {
         var gesehen = Set<PersistentIdentifier>()
-        return regale
-            .flatMap(\.kategorien)
+        return (kategorien + regale.flatMap(\.kategorien))
             .filter { gesehen.insert($0.persistentModelID).inserted }
             .sorted { $0.sortIndex < $1.sortIndex }
     }
 
     /// Das Regal dieses Geschäfts, dem die übergebene Kategorie zugeordnet ist —
-    /// `nil`, wenn die Kategorie in diesem Geschäft keinem Regal zugeordnet und damit
-    /// nicht verfügbar ist.
+    /// `nil`, wenn die Kategorie keinem Regal zugeordnet ist. Das bedeutet nicht
+    /// zwangsläufig, dass sie nicht verfügbar ist: sie kann stattdessen direkt über
+    /// ``kategorien`` verfügbar sein.
     func regal(fuer kategorie: ArtikelKategorie) -> Regal? {
         regale.first { $0.kategorien.contains(kategorie) }
     }

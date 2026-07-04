@@ -24,11 +24,22 @@ das generierte `.xcodeproj` wird bewusst **nicht** committet (`.gitignore`) und 
   `xcode-select -s`-Umstellung (vermeidet sudo/Passwort-Interaktion, kein Nebeneffekt
   außerhalb dieses Projekts).
 
-## Kein separates "Kategorie pro Geschäft verfügbar"-Modell
+## Kategorien wichtiger als Regale: direkte Geschäft-Kategorie-Zuordnung (ab v0.1, Build 23)
 
-Die Zuordnung Kategorie → Regal (pro Geschäft) impliziert bereits die Verfügbarkeit der
-Kategorie in diesem Geschäft. Ein zusätzliches Zuordnungsmodell hätte zu Inkonsistenzen
-führen können (z.B. Kategorie am Regal, aber nicht separat als "verfügbar" markiert).
+**Ursprüngliche Entscheidung (bis Build 22):** Kein separates "Kategorie pro Geschäft
+verfügbar"-Modell — die Zuordnung Kategorie → Regal (pro Geschäft) implizierte bereits
+die Verfügbarkeit der Kategorie in diesem Geschäft, um Inkonsistenzen zu vermeiden
+(z.B. Kategorie am Regal, aber nicht separat als "verfügbar" markiert).
+
+**Korrektur (Nutzervorgabe):** Regale sind optional, Kategorien nicht. Ein Geschäft
+kann Kategorien jetzt direkt zugeordnet bekommen (`Geschaeft.kategorien`), unabhängig
+davon, ob überhaupt ein Regal existiert. `Geschaeft.verfuegbareKategorien` ist die
+Vereinigung aus dieser direkten Zuordnung und den über Regale zugeordneten Kategorien
+(`Regal.kategorien`). Ein Regal organisiert damit nur noch, in welcher Reihenfolge
+bereits verfügbare Kategorien beim Einkaufen abgelaufen werden — es ist keine
+Voraussetzung mehr für Verfügbarkeit. Die eingangs befürchtete Inkonsistenz
+(Kategorie doppelt als verfügbar markiert, direkt und über ein Regal) ist unkritisch,
+da `verfuegbareKategorien` dedupliziert.
 
 ## "iOS 27"-Funktionen
 

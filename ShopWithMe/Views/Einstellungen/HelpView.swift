@@ -30,11 +30,13 @@ private struct HilfeThema: Identifiable {
         HilfeThema(
             titel: "Kategorien & Regale pro Geschäft",
             text: """
-            Jedes Regal in einem Geschäft kann eine oder mehrere Artikelkategorien \
-            enthalten (Geschäfte-Tab → Geschäft auswählen → Regal antippen). Nur \
-            Kategorien, die einem Regal zugeordnet sind, gelten in diesem Geschäft \
-            als verfügbar und tauchen beim Einkaufen dort auf. So zeigt dir die App \
-            im Baumarkt keine Milchprodukte an.
+            Im Geschäfte-Tab kannst du einem Geschäft direkt Kategorien zuordnen \
+            („Kategorien“-Abschnitt → „Kategorie hinzufügen“) — ganz ohne ein Regal \
+            anzulegen. Nur zugeordnete Kategorien gelten in diesem Geschäft als \
+            verfügbar und tauchen beim Einkaufen dort auf. So zeigt dir die App im \
+            Baumarkt keine Milchprodukte an. Regale sind optional und dienen nur \
+            dazu, die Reihenfolge beim Einkaufen zu organisieren — du kannst ihnen \
+            zusätzlich Kategorien zuordnen (Regal antippen), musst es aber nicht.
             """
         ),
         HilfeThema(

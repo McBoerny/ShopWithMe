@@ -4,10 +4,11 @@ import SwiftData
 /// Sheet zum Hinzufügen einer ``ArtikelKategorie`` zu einem ``Geschaeft``, aufrufbar
 /// aus dem „Kategorien“-Abschnitt von ``GeschaeftDetailView``.
 ///
-/// Da die Verfügbarkeit einer Kategorie in einem Geschäft ausschließlich über die
-/// Zuordnung zu einem ``Regal`` entsteht (siehe ``Geschaeft/verfuegbareKategorien``),
-/// muss beim Hinzufügen ein Ziel-Regal gewählt werden. Existiert noch kein Regal,
-/// wird das erklärt statt eine Auswahl anzubieten.
+/// Kategorien sind wichtiger als Regale: Eine Kategorie wird beim Antippen direkt
+/// diesem Geschäft zugeordnet (``Geschaeft/kategorien``) und damit sofort verfügbar —
+/// ganz ohne Regal. Besitzt das Geschäft bereits Regale, kann zusätzlich optional
+/// eines gewählt werden, um die Kategorie zugleich für die Einkaufs-Reihenfolge
+/// einzusortieren; das bleibt aber jederzeit nachholbar und ist nie Voraussetzung.
 struct KategorieHinzufuegenSheet: View {
     let geschaeft: Geschaeft
 
@@ -20,7 +21,7 @@ struct KategorieHinzufuegenSheet: View {
         geschaeft.regale.sorted { $0.sortIndex < $1.sortIndex }
     }
 
-    /// Kategorien, die in diesem Geschäft noch keinem Regal zugeordnet sind.
+    /// Kategorien, die in diesem Geschäft noch nicht verfügbar sind.
     private var nichtVerfuegbareKategorien: [ArtikelKategorie] {
         let verfuegbareIDs = Set(geschaeft.verfuegbareKategorien.map(\.persistentModelID))
         return alleKategorien.filter { !verfuegbareIDs.contains($0.persistentModelID) }
@@ -29,40 +30,38 @@ struct KategorieHinzufuegenSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                if regaleSortiert.isEmpty {
+                if !regaleSortiert.isEmpty {
                     Section {
-                        Text("Lege zuerst ein Regal an, um Kategorien zuzuordnen.")
-                            .foregroundStyle(.secondary)
-                    }
-                } else {
-                    Section("Regal") {
-                        Picker("Regal", selection: $ausgewaehltesRegal) {
+                        Picker("Regal (optional)", selection: $ausgewaehltesRegal) {
+                            Text("Kein Regal").tag(Optional<Regal>.none)
                             ForEach(regaleSortiert) { regal in
                                 Text(regal.name.isEmpty ? "Unbenannt" : regal.name).tag(Optional(regal))
                             }
                         }
-                    }
-
-                    Section {
-                        ForEach(nichtVerfuegbareKategorien) { kategorie in
-                            Button {
-                                kategorieHinzufuegen(kategorie)
-                            } label: {
-                                Label(kategorie.name, systemImage: kategorie.standardSymbol)
-                                    .foregroundStyle(.primary)
-                            }
-                        }
-
-                        Button {
-                            zeigeNeueKategorie = true
-                        } label: {
-                            Label("Neue Kategorie anlegen", systemImage: "plus")
-                        }
-                    } header: {
-                        Text("Verfügbare Kategorien")
                     } footer: {
-                        Text("Kategorien, die bereits einem Regal dieses Geschäfts zugeordnet sind, werden hier nicht angeboten.")
+                        Text("Nur zur Sortierung beim Einkaufen — die Kategorie ist auch ohne Regal sofort verfügbar.")
                     }
+                }
+
+                Section {
+                    ForEach(nichtVerfuegbareKategorien) { kategorie in
+                        Button {
+                            kategorieHinzufuegen(kategorie)
+                        } label: {
+                            Label(kategorie.name, systemImage: kategorie.standardSymbol)
+                                .foregroundStyle(.primary)
+                        }
+                    }
+
+                    Button {
+                        zeigeNeueKategorie = true
+                    } label: {
+                        Label("Neue Kategorie anlegen", systemImage: "plus")
+                    }
+                } header: {
+                    Text("Verfügbare Kategorien")
+                } footer: {
+                    Text("Bereits in diesem Geschäft verfügbare Kategorien werden hier nicht angeboten.")
                 }
             }
             .navigationTitle("Kategorie hinzufügen")
@@ -70,11 +69,6 @@ struct KategorieHinzufuegenSheet: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Fertig") { dismiss() }
-                }
-            }
-            .onAppear {
-                if ausgewaehltesRegal == nil {
-                    ausgewaehltesRegal = regaleSortiert.first
                 }
             }
             .sheet(isPresented: $zeigeNeueKategorie) {
@@ -86,8 +80,8 @@ struct KategorieHinzufuegenSheet: View {
     }
 
     private func kategorieHinzufuegen(_ kategorie: ArtikelKategorie) {
-        guard let regal = ausgewaehltesRegal else { return }
-        regal.kategorien.append(kategorie)
+        geschaeft.kategorien.append(kategorie)
+        ausgewaehltesRegal?.kategorien.append(kategorie)
     }
 }
 

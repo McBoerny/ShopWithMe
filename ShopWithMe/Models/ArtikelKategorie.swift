@@ -4,9 +4,11 @@ import SwiftData
 /// Eine Artikelkategorie fasst gleichartige Artikel zusammen, z.B. „Obst & Gemüse“.
 ///
 /// Kategorien sind global und geschäftsunabhängig. Ob eine Kategorie in einem
-/// bestimmten Geschäft überhaupt vorkommt, ergibt sich ausschließlich daraus, ob sie
-/// einem ``Regal`` dieses Geschäfts zugeordnet ist — es gibt bewusst kein separates
-/// Verfügbarkeits-Modell (siehe `docs/DECISIONS.md`).
+/// bestimmten Geschäft verfügbar ist, ergibt sich aus zwei unabhängigen Wegen:
+/// direkt über ``geschaefte`` (``Geschaeft/kategorien``) oder indirekt darüber, dass
+/// sie einem ``Regal`` dieses Geschäfts zugeordnet ist. Regale sind dabei rein
+/// optional — sie dienen nur der Sortierung beim Einkaufen, nicht der
+/// Verfügbarkeit (siehe `docs/DECISIONS.md`).
 @Model
 final class ArtikelKategorie {
     /// Eindeutige Kennung.
@@ -27,6 +29,10 @@ final class ArtikelKategorie {
 
     /// Regale (über alle Geschäfte hinweg), denen diese Kategorie zugeordnet ist.
     var regale: [Regal] = []
+
+    /// Geschäfte, in denen diese Kategorie direkt (ohne Regal-Zuordnung) verfügbar
+    /// ist — siehe ``Geschaeft/kategorien``.
+    var geschaefte: [Geschaeft] = []
 
     init(name: String, standardSymbol: String, standardFarbeHex: String, sortIndex: Int = 0) {
         self.id = UUID()

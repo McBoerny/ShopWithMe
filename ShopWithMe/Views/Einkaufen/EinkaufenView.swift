@@ -1,8 +1,11 @@
 import SwiftUI
 import SwiftData
 
-/// Einstiegspunkt zum Einkaufen: die globale Einkaufsliste abarbeiten, optional
-/// gruppiert nach Regal eines gewählten Geschäfts.
+/// Einstiegspunkt zum Einkaufen: zeigt sofort beim Öffnen die aktuelle globale
+/// Einkaufsliste an — optional gruppiert nach Regal eines gewählten Geschäfts. Ein
+/// passender ``Einkaufsvorgang`` (für das gewählte Geschäft, oder ohne Geschäft) wird
+/// dafür automatisch angelegt, sobald keiner läuft; ein manueller "Start" ist nicht
+/// nötig, Artikel lassen sich jederzeit abhaken.
 struct EinkaufenView: View {
     @Query(sort: \Geschaeft.name) private var geschaefte: [Geschaeft]
     @Query(filter: #Predicate<Einkaufsvorgang> { $0.endZeit == nil })
@@ -21,9 +24,7 @@ struct EinkaufenView: View {
                 if let einkauf = aktuellerEinkauf {
                     EinkaufslisteView(geschaeft: ausgewaehltesGeschaeft, einkaufsvorgang: einkauf)
                 } else {
-                    EinkaufStartenView(geschaeft: ausgewaehltesGeschaeft) {
-                        einkaufStarten(fuer: ausgewaehltesGeschaeft)
-                    }
+                    ProgressView()
                 }
             }
             .navigationTitle("Einkaufen")
@@ -41,31 +42,40 @@ struct EinkaufenView: View {
                 }
             }
         }
+        .onAppear(perform: einkaufSicherstellen)
+        .onChange(of: ausgewaehltesGeschaeft) { _, _ in einkaufSicherstellen() }
     }
 
-    private func einkaufStarten(fuer geschaeft: Geschaeft?) {
-        let vorgang = Einkaufsvorgang(geschaeft: geschaeft)
+    /// Legt bei Bedarf einen neuen ``Einkaufsvorgang`` für das aktuell gewählte
+    /// Geschäft (bzw. ohne Geschäft) an, damit die Einkaufsliste immer sofort
+    /// angezeigt wird.
+    private func einkaufSicherstellen() {
+        guard aktuellerEinkauf == nil else { return }
+        let vorgang = Einkaufsvorgang(geschaeft: ausgewaehltesGeschaeft)
         modelContext.insert(vorgang)
     }
 }
 
-/// Aufforderung, den Einkauf zu starten — optional für ein bestimmtes Geschäft.
-private struct EinkaufStartenView: View {
-    let geschaeft: Geschaeft?
-    let start: () -> Void
+/// Wie die Einkaufsliste eines laufenden Einkaufsvorgangs angezeigt wird.
+private enum EinkaufsAnzeigeModus: String, CaseIterable, Identifiable {
+    /// Nur noch offene, für das gewählte Geschäft verfügbare Artikel (Standard).
+    case offene
+    /// Zusätzlich die in diesem Einkauf bereits abgehakten Artikel.
+    case mitAbgehakten
+    /// Lernmodus: zeigt alle auf der globalen Einkaufsliste gespeicherten Artikel,
+    /// unabhängig vom Verfügbarkeitsfilter des Geschäfts
+    /// (``Geschaeft/artikelFilterModus``) — zum Entdecken und Abhaken bislang
+    /// unbekannter Artikel, die dadurch für dieses Geschäft als verfügbar gelernt
+    /// werden (siehe ``ArtikelVerfuegbarkeitService``).
+    case lernmodus
 
-    var body: some View {
-        ContentUnavailableView {
-            if let geschaeft {
-                Label(geschaeft.name, systemImage: geschaeft.typ.symbolName)
-            } else {
-                Label("Einkaufsliste", systemImage: "cart.fill")
-            }
-        } description: {
-            Text("Starte den Einkauf, um deine Einkaufsliste abzuarbeiten.")
-        } actions: {
-            Button("Einkauf starten", action: start)
-                .buttonStyle(.glass)
+    var id: String { rawValue }
+
+    var anzeigename: String {
+        switch self {
+        case .offene: return "Nur offene"
+        case .mitAbgehakten: return "Auch abgehakte Artikel"
+        case .lernmodus: return "Lernmodus (alle Artikel)"
         }
     }
 }
@@ -82,9 +92,9 @@ private struct EinkaufslisteView: View {
     @State private var zeigeBelegScanAngebot = false
     @State private var zeigeBelegScan = false
     @State private var zeigeArtikelHinzufuegen = false
-    /// Ob bereits abgehakte Artikel dieses Einkaufs zusätzlich zu den noch offenen
-    /// angezeigt werden sollen.
-    @State private var zeigeAbgehakte = false
+    /// Wie die Einkaufsliste dieses Einkaufsvorgangs gerade angezeigt wird — siehe
+    /// ``EinkaufsAnzeigeModus``.
+    @State private var anzeigeModus: EinkaufsAnzeigeModus = .offene
 
     private var abgehakteArtikelIDs: Set<PersistentIdentifier> {
         Set(einkaufsvorgang.kaufEintraege.compactMap { $0.artikel?.persistentModelID })
@@ -100,10 +110,26 @@ private struct EinkaufslisteView: View {
         alleArtikel.filter { abgehakteArtikelIDs.contains($0.persistentModelID) }
     }
 
-    /// Die aktuell darzustellenden Artikel: offene Artikel, plus — wenn
-    /// ``zeigeAbgehakte`` aktiv ist — die bereits abgehakten Artikel dieses Einkaufs.
+    /// Ist ein Geschäft gewählt und dessen ``Geschaeft/artikelFilterModus`` auf
+    /// ``ArtikelFilterModus/nurVerfuegbare`` gestellt (Standard), blendet dies Artikel
+    /// aus, die in diesem Geschäft (noch) nicht als verfügbar gelten (siehe
+    /// ``ArtikelVerfuegbarkeitService``). Im ``EinkaufsAnzeigeModus/lernmodus`` wird
+    /// dieser Filter für diesen Einkauf übergangen.
+    private func verfuegbarkeitsgefiltert(_ artikel: [Artikel]) -> [Artikel] {
+        guard let geschaeft, geschaeft.artikelFilterModus == .nurVerfuegbare else { return artikel }
+        return artikel.filter { ArtikelVerfuegbarkeitService.istVerfuegbar($0, in: geschaeft, context: modelContext) }
+    }
+
+    /// Die aktuell darzustellenden Artikel — abhängig von ``anzeigeModus``.
     private var artikelAufListe: [Artikel] {
-        zeigeAbgehakte ? offeneArtikel + abgehakteArtikel : offeneArtikel
+        switch anzeigeModus {
+        case .offene:
+            return verfuegbarkeitsgefiltert(offeneArtikel)
+        case .mitAbgehakten:
+            return verfuegbarkeitsgefiltert(offeneArtikel + abgehakteArtikel)
+        case .lernmodus:
+            return offeneArtikel
+        }
     }
 
     private struct Gruppe: Identifiable {
@@ -199,7 +225,13 @@ private struct EinkaufslisteView: View {
             }
 
             if artikelAufListe.isEmpty {
-                if abgehakteArtikel.isEmpty {
+                if anzeigeModus != .lernmodus, !offeneArtikel.isEmpty {
+                    ContentUnavailableView(
+                        "Keine verfügbaren Artikel",
+                        systemImage: "checklist",
+                        description: Text("Wähle oben unter „Anzeige“ den „Lernmodus“, um bislang unbekannte Artikel abzuhaken.")
+                    )
+                } else if abgehakteArtikel.isEmpty {
                     ContentUnavailableView(
                         "Einkaufsliste ist leer",
                         systemImage: "checklist",
@@ -209,7 +241,7 @@ private struct EinkaufslisteView: View {
                     ContentUnavailableView(
                         "Alles erledigt",
                         systemImage: "checkmark.circle.fill",
-                        description: Text("Aktiviere „Alle“ oben, um bereits abgehakte Artikel zu sehen.")
+                        description: Text("Wähle oben unter „Anzeige“ „Auch abgehakte Artikel“, um sie zu sehen.")
                     )
                 }
             }
@@ -225,11 +257,12 @@ private struct EinkaufslisteView: View {
         }
         .navigationTitle(geschaeft?.name ?? "Einkaufsliste")
         .toolbar {
-            if !abgehakteArtikel.isEmpty {
+            if !abgehakteArtikel.isEmpty || geschaeft?.artikelFilterModus == .nurVerfuegbare {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Picker("Anzeige", selection: $zeigeAbgehakte) {
-                        Text("Nur offene").tag(false)
-                        Text("Alle").tag(true)
+                    Picker("Anzeige", selection: $anzeigeModus) {
+                        ForEach(EinkaufsAnzeigeModus.allCases) { modus in
+                            Text(modus.anzeigename).tag(modus)
+                        }
                     }
                     .pickerStyle(.menu)
                 }

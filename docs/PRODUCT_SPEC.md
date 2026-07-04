@@ -14,12 +14,16 @@ Geschäfte und den Einkaufsvorgang selbst intelligent unterstützt.
   Anlage festgelegt wird und sich danach nicht mehr ändert.
 - **Artikelkategorie**: z.B. Obst, Milchprodukte, Drogerieartikel. Kategorien sind global,
   nicht pro Geschäft.
-- **Geschäft**: hat einen Typ (Lebensmittel, Drogerie, Baumarkt, Apotheke, …) und eigene
-  **Regale**.
-- **Regal**: gehört zu genau einem Geschäft. Jedem Regal sind eine oder mehrere
-  Artikelkategorien zugeordnet. Aus dieser Zuordnung ergibt sich automatisch, welche
-  Kategorien in diesem Geschäft überhaupt verfügbar sind — beim Einkaufen werden pro
-  Geschäft nur die dort tatsächlich zugeordneten Kategorien angezeigt.
+- **Geschäft**: hat einen Typ (Lebensmittel, Drogerie, Baumarkt, Apotheke, …) sowie
+  eigene **Kategorien** und (optional) eigene **Regale**. Kategorien sind wichtiger
+  als Regale: ein Geschäft kann Kategorien direkt zugeordnet bekommen, ganz ohne ein
+  Regal anzulegen — nur diese (bzw. über ein Regal zugeordneten) Kategorien werden
+  beim Einkaufen für dieses Geschäft angezeigt.
+- **Regal**: gehört zu genau einem Geschäft und ist rein optional. Jedem Regal können
+  eine oder mehrere Artikelkategorien zugeordnet werden, die dadurch (falls nicht
+  schon direkt zugeordnet) ebenfalls in diesem Geschäft verfügbar werden. Ein Regal
+  dient in erster Linie dazu, die Reihenfolge beim Einkaufen zu organisieren — nicht
+  der Verfügbarkeit an sich.
 
 ## Artikel-Anlage mit KI-Unterstützung
 
@@ -42,10 +46,21 @@ manuelle Anlage bleibt immer möglich.
   gruppiert wird. Artikel ohne Kategorie oder ohne Regal-Zuordnung im gewählten Geschäft
   (bzw. alle Artikel, wenn kein Geschäft gewählt ist) erscheinen dennoch, in einer
   eigenen „Sonstige“-Sektion.
-- Während eines laufenden Einkaufs kann der Anwender per Anzeige-Umschalter wählen, ob
-  nur die noch offenen Artikel oder zusätzlich die in diesem Einkauf bereits abgehakten
-  Artikel angezeigt werden. Abgehakte Artikel bleiben dadurch sichtbar (durchgestrichen)
-  und lassen sich per Antippen wieder zurückholen, falls versehentlich abgehakt.
+- Ein Einkauf startet automatisch beim Öffnen des Einkaufen-Tabs (für das gewählte
+  Geschäft, bzw. ohne Geschäft) — kein manueller „Start“ nötig.
+- Pro Geschäft legt ``ArtikelFilterModus`` fest, ob beim Einkaufen nur dort verfügbare
+  Artikel angezeigt werden (Standard) oder alle Artikel der Einkaufsliste unabhängig
+  von der Verfügbarkeit. Verfügbarkeit ergibt sich entweder aus den Kategorien des
+  Geschäfts oder — besitzt es keine eigenen Kategorien — aus der Kaufhistorie
+  (``ArtikelVerfuegbarkeitService``): ein Artikel gilt als verfügbar, sobald er dort
+  einmal gekauft wurde.
+- Während eines laufenden Einkaufs kann der Anwender per Anzeige-Umschalter zwischen
+  „Nur offene“, „Auch abgehakte Artikel“ und einem „Lernmodus“ (zeigt alle Artikel der
+  Einkaufsliste, auch nicht als verfügbar geltende — zum Entdecken/Abhaken bislang
+  unbekannter Artikel, wodurch sie für dieses Geschäft als verfügbar gelernt werden)
+  wählen. Abgehakte Artikel bleiben im Modus „Auch abgehakte Artikel“ sichtbar
+  (durchgestrichen) und lassen sich per Antippen wieder zurückholen, falls versehentlich
+  abgehakt.
 - Per Wischgeste kann ein bereits abgehakter Artikel dauerhaft aus der Ansicht dieses
   Einkaufs entfernt werden — anders als das normale Rückgängigmachen landet er dabei
   nicht wieder auf der offenen Liste.

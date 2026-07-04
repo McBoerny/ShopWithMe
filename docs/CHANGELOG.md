@@ -1,5 +1,38 @@
 # Changelog
 
+## v0.1 (Build 23) — Regale optional für Kategorie-Verfügbarkeit & Artikel-Filter beim Einkaufen
+
+- `Models/Geschaeft.swift` / `Models/ArtikelKategorie.swift`: neue direkte
+  Zuordnung `Geschaeft.kategorien` (Inverse: `ArtikelKategorie.geschaefte`) — ein
+  Geschäft kann Kategorien jetzt direkt verfügbar machen, ganz ohne Regal.
+  `Geschaeft.verfuegbareKategorien` ist die Vereinigung aus dieser direkten
+  Zuordnung und den über Regale zugeordneten Kategorien; ein Regal ist damit nur
+  noch für die Einkaufs-Reihenfolge relevant, nicht mehr Voraussetzung für
+  Verfügbarkeit (Korrektur der ursprünglichen v0.3-Entscheidung, siehe
+  `docs/DECISIONS.md`).
+- Neues `ArtikelFilterModus`-Attribut an `Geschaeft` (`nurVerfuegbare`/`alle`,
+  optionaler Rohwert nach dem etablierten Fallback-Pattern) + neuer
+  `Services/ArtikelVerfuegbarkeitService.swift`: bestimmt, ob ein Artikel in einem
+  Geschäft verfügbar ist — über die Kategorien des Geschäfts, oder (besitzt es
+  keine eigenen Kategorien) gelernt aus der Kaufhistorie, sobald der Artikel dort
+  einmal gekauft wurde.
+- `Views/Einkaufen/EinkaufenView.swift`: der Einkauf startet jetzt automatisch beim
+  Öffnen des Tabs (kein manueller „Start“ mehr). Der bisherige Zwei-Werte-Umschalter
+  („Nur offene“/„Alle“) ist einem dritten „Lernmodus“ gewichen, der den
+  Verfügbarkeitsfilter für diesen Einkauf übergeht — zum Abhaken bislang unbekannter
+  Artikel, die dadurch für dieses Geschäft als verfügbar gelernt werden.
+- `Views/Geschaefte/KategorieHinzufuegenSheet.swift`: Regal-Auswahl ist jetzt
+  optional („Kein Regal“); eine Kategorie wird beim Hinzufügen immer direkt dem
+  Geschäft zugeordnet, ein Regal zusätzlich nur zur Sortierung.
+- `Views/Geschaefte/GeschaeftDetailView.swift`: neuer Segmented-Picker
+  „Artikel beim Einkaufen“ für `ArtikelFilterModus`; „Kategorie hinzufügen“ ist
+  nicht mehr auf Geschäfte mit mindestens einem Regal beschränkt.
+- `docs/DECISIONS.md`, `docs/PRODUCT_SPEC.md`, `HelpView` entsprechend angepasst.
+- Neue Unit-Tests `ArtikelVerfuegbarkeitServiceTests` (Kategorie- und
+  Kaufhistorie-basierte Verfügbarkeit, geschäftsübergreifende Isolation).
+- Verifiziert: `xcodegen generate` + `xcodebuild build` + `xcodebuild test`
+  (`iPhone 17` Simulator) laufen fehlerfrei durch, alle 19 Unit-Tests bestehen.
+
 ## v0.1 (Build 22) — Kategorien-Abschnitt in der Geschäft-Konfiguration
 
 - `Views/Geschaefte/GeschaeftDetailView.swift`: neuer Abschnitt „Kategorien“

@@ -1,7 +1,12 @@
 import SwiftUI
 import SwiftData
 
-/// Detailansicht eines ``Geschaeft``s: Stammdaten, Regal-Verwaltung und Kaufbeleg-Scan.
+/// Detailansicht eines ``Geschaeft``s: Stammdaten, Kategorien- und Regal-Verwaltung
+/// sowie Kaufbeleg-Scan.
+///
+/// Der „Kategorien“-Abschnitt zeigt ``Geschaeft/verfuegbareKategorien`` — Kategorien
+/// sind dabei auch ohne Regal sofort verfügbar (siehe ``Geschaeft/kategorien``);
+/// Regale sind optional und dienen nur der Sortierung beim Einkaufen.
 ///
 /// Die Reihenfolge der Regale in dieser Liste hängt vom gewählten
 /// ``RegalSortierModus`` ab: manuell (``Regal/sortIndex``, per Drag-Handle im
@@ -58,6 +63,19 @@ struct GeschaeftDetailView: View {
                          ? "ShopWithMe sortiert die Regale automatisch anhand deiner bisherigen Einkäufe. Deine manuelle Reihenfolge bleibt dabei erhalten und lässt sich jederzeit wieder auswählen."
                          : "Du legst die Reihenfolge selbst fest. ShopWithMe hat außerdem genug Einkäufe gelernt, um stattdessen automatisch zu sortieren.")
                 }
+            }
+
+            Section {
+                Picker("Artikel beim Einkaufen", selection: $geschaeft.artikelFilterModus) {
+                    ForEach(ArtikelFilterModus.allCases) { modus in
+                        Text(modus.anzeigename).tag(modus)
+                    }
+                }
+                .pickerStyle(.segmented)
+            } footer: {
+                Text(geschaeft.artikelFilterModus == .nurVerfuegbare
+                     ? "Nur Artikel, die in diesem Geschäft verfügbar sind, werden beim Einkaufen angezeigt."
+                     : "Alle Artikel der Einkaufsliste werden beim Einkaufen angezeigt, unabhängig von der Verfügbarkeit in diesem Geschäft.")
             }
 
             Section {
@@ -127,13 +145,10 @@ struct GeschaeftDetailView: View {
                 } label: {
                     Label("Kategorie hinzufügen", systemImage: "plus")
                 }
-                .disabled(geschaeft.regale.isEmpty)
             } header: {
                 Text("Kategorien")
             } footer: {
-                Text(geschaeft.regale.isEmpty
-                     ? "Lege zuerst ein Regal an, um Kategorien zuzuordnen."
-                     : "Kategorien werden einem Regal dieses Geschäfts zugeordnet. Zum Entfernen nach links wischen.")
+                Text("Kategorien sind auch ohne Regal sofort verfügbar. Regale sind optional und dienen nur der Sortierung beim Einkaufen. Zum Entfernen nach links wischen.")
             }
 
             Section {
@@ -176,6 +191,7 @@ struct GeschaeftDetailView: View {
         let kategorien = geschaeft.verfuegbareKategorien
         for index in offsets {
             let kategorie = kategorien[index]
+            geschaeft.kategorien.removeAll { $0 == kategorie }
             geschaeft.regal(fuer: kategorie)?.kategorien.removeAll { $0 == kategorie }
         }
     }

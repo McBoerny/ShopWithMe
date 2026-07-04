@@ -3,13 +3,15 @@ import SwiftData
 
 /// Bearbeiten eines ``Regal``s: Name und Zuordnung von ``ArtikelKategorie``n.
 ///
-/// Die hier gewählten Kategorien bestimmen zugleich, welche Kategorien beim
-/// Einkaufen in diesem Geschäft überhaupt angezeigt werden (siehe
-/// ``Geschaeft/verfuegbareKategorien``).
+/// Die hier gewählten Kategorien werden dadurch auch in diesem Geschäft verfügbar
+/// (siehe ``Geschaeft/verfuegbareKategorien``), falls sie es nicht schon direkt
+/// (ohne Regal, siehe ``Geschaeft/kategorien``) sind — ein Regal ist für die
+/// Verfügbarkeit einer Kategorie nie erforderlich, sondern dient nur ihrer
+/// Einsortierung in die Einkaufs-Reihenfolge.
 ///
 /// Zur Auswahl stehen nur Kategorien, die nicht bereits einem anderen Regal
 /// desselben Geschäfts zugeordnet sind — jede Kategorie soll innerhalb eines
-/// Geschäfts genau einem Regal angehören. Existiert die gewünschte Kategorie
+/// Geschäfts höchstens einem Regal angehören. Existiert die gewünschte Kategorie
 /// noch nicht, kann sie direkt hier neu angelegt werden.
 struct RegalDetailView: View {
     @Bindable var regal: Regal
