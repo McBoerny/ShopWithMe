@@ -16,6 +16,7 @@ struct BelegScanView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var ausgewaehltesFoto: PhotosPickerItem?
+    @State private var zeigeKamera = false
     @State private var laeuft = false
     @State private var fehlermeldung: String?
     @State private var bearbeitbarePositionen: [BearbeitbarePosition]?
@@ -38,7 +39,8 @@ struct BelegScanView: View {
                         laeuft: laeuft,
                         fehlermeldung: fehlermeldung,
                         geschaeftName: einkaufsvorgang.geschaeft?.name ?? "",
-                        ausgewaehltesFoto: $ausgewaehltesFoto
+                        ausgewaehltesFoto: $ausgewaehltesFoto,
+                        kameraOeffnen: { zeigeKamera = true }
                     )
                 }
             }
@@ -48,6 +50,12 @@ struct BelegScanView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Fertig") { dismiss() }
                 }
+            }
+        }
+        .sheet(isPresented: $zeigeKamera) {
+            KameraAufnahmeView { bild in
+                zeigeKamera = false
+                verarbeite(bild: bild)
             }
         }
         .onChange(of: ausgewaehltesFoto) { _, neuesFoto in
@@ -116,12 +124,13 @@ private struct BearbeitbarePosition: Identifiable {
     var preisText: String
 }
 
-/// Aufforderung, ein Beleg-Foto aus der Mediathek zu wählen.
+/// Aufforderung, ein Beleg-Foto aufzunehmen oder aus der Mediathek zu wählen.
 private struct AufnahmeAnsicht: View {
     let laeuft: Bool
     let fehlermeldung: String?
     let geschaeftName: String
     @Binding var ausgewaehltesFoto: PhotosPickerItem?
+    let kameraOeffnen: () -> Void
 
     var body: some View {
         VStack(spacing: 16) {
@@ -131,10 +140,16 @@ private struct AufnahmeAnsicht: View {
                 ContentUnavailableView {
                     Label("Beleg scannen", systemImage: "doc.text.viewfinder")
                 } description: {
-                    Text("Wähle ein Foto des Kassenbons von „\(geschaeftName)“ aus deiner Mediathek.")
+                    Text("Fotografiere den Kassenbon von „\(geschaeftName)“ oder wähle ein Foto aus deiner Mediathek.")
                 } actions: {
-                    PhotosPicker("Aus Fotomediathek wählen", selection: $ausgewaehltesFoto, matching: .images)
-                        .buttonStyle(.glass)
+                    VStack(spacing: 12) {
+                        if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                            Button("Foto aufnehmen", action: kameraOeffnen)
+                                .buttonStyle(.glass)
+                        }
+                        PhotosPicker("Aus Fotomediathek wählen", selection: $ausgewaehltesFoto, matching: .images)
+                            .buttonStyle(.glass)
+                    }
                 }
                 if let fehlermeldung {
                     Text(fehlermeldung)
@@ -144,6 +159,35 @@ private struct AufnahmeAnsicht: View {
             }
         }
         .padding()
+    }
+}
+
+/// UIKit-Brücke für die Kamera-Aufnahme eines Belegfotos.
+private struct KameraAufnahmeView: UIViewControllerRepresentable {
+    let onImage: (UIImage) -> Void
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onImage: onImage)
+    }
+
+    final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let onImage: (UIImage) -> Void
+        init(onImage: @escaping (UIImage) -> Void) { self.onImage = onImage }
+
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            if let bild = info[.originalImage] as? UIImage {
+                onImage(bild)
+            }
+        }
     }
 }
 

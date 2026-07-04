@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.9 — Kamera-Funktion reaktiviert
+
+- `NSCameraUsageDescription` wieder ergänzt (jetzt über `info.properties` in
+  `project.yml`, da die App auf ein explizites `ShopWithMe/Info.plist` umgestellt
+  wurde und nun mit `DEVELOPMENT_TEAM` code-signed wird).
+- `Views/Einkaufen/BelegScanView.swift`: Kamera-Aufnahme (`KameraAufnahmeView`,
+  `UIImagePickerController`) und der „Foto aufnehmen“-Button wieder hergestellt;
+  Fotomediathek bleibt als Alternative bestehen.
+- Hilfe-Eintrag in `HelpView` entsprechend zurückgesetzt.
+- Verifiziert: Simulator-Build (`xcodegen generate` + `xcodebuild build`,
+  `generic/platform=iOS Simulator`) läuft mit reaktivierter Kamera fehlerfrei durch.
+- Verifiziert: echter code-signierter Geräte-Build (`generic/platform=iOS`,
+  Team `CBYLYH36PT`) baut und signiert erfolgreich; das entstandene `.app`
+  enthält gültige Entitlements (`application-identifier`,
+  `com.apple.developer.team-identifier`). Ein vorheriger Versuch mit Team
+  `BB7HRC29RE` scheiterte mit „No Account for Team“/fehlendem
+  Provisioning-Profil, weil für diesen Team kein Account in Xcode hinterlegt
+  war — kein Camera-spezifisches Problem, sondern ein Account-/Team-Mismatch,
+  der sich mit dem Wechsel auf `CBYLYH36PT` erledigt hat.
+- Separat aufgefallen (nicht durch diese Änderung verursacht): das
+  `ShopWithMeTests`-Target hat inzwischen `CODE_SIGN_STYLE`/`DEVELOPMENT_TEAM`
+  gesetzt, aber kein Info.plist-Setup, wodurch `xcodebuild test` aktuell mit
+  „Cannot code sign because the target does not have an Info.plist file“
+  fehlschlägt.
+
 ## v0.8 — Kamera-Funktion deaktiviert
 
 - Das Camera-Entitlement (`NSCameraUsageDescription`) wird vom Apple-Developer-Account
