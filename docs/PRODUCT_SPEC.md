@@ -63,14 +63,23 @@ Standort-Logik/Berechtigung.
 
 Ein Kassenbon lässt sich an zwei Stellen scannen: nach einem Einkauf (Preise werden
 den abgehakten Positionen zugeordnet) oder unabhängig davon direkt in der
-Geschäfts-Detailansicht (jede erkannte Position wird als eigenständiger Eintrag mit
-dem heutigen Datum gespeichert — nützlich für ältere oder nachträglich gefundene
-Bons). Lokale KI (Vision-OCR + FoundationModels; vorbereitet für zukünftige,
-speziellere On-Device-APIs) extrahiert Artikel und Preise und speichert sie als
-historische Preisübersicht (Datum, Kosten pro Artikel, Geschäft). Kassenbons weisen
-bei mehreren Stück oft nur einen Gesamtpreis aus — übernommen wird stets der von der
-KI berechnete Einzelpreis, nicht die Menge. Vor der Übernahme kann der Anwender jede
-erkannte Position prüfen, korrigieren oder löschen.
+Geschäfts-Detailansicht (jede erkannte Position wird als eigenständiger Eintrag
+gespeichert — nützlich für ältere oder nachträglich gefundene Bons). Lokale KI
+(Vision-OCR + FoundationModels; vorbereitet für zukünftige, speziellere
+On-Device-APIs) extrahiert Geschäft, Einkaufsdatum, Artikel und Preise. Das erkannte
+Datum ist vorbelegt, lässt sich vor der Übernahme aber jederzeit manuell korrigieren,
+falls der Bon kein Datum erkennen ließ oder die Erkennung danebenlag. Kassenbons
+weisen bei mehreren Stück oft nur einen Gesamtpreis aus — übernommen wird stets der
+von der KI berechnete Einzelpreis, nicht die Menge. Vor der Übernahme kann der
+Anwender jede erkannte Position prüfen, korrigieren oder löschen.
+
+Ein generischer Artikel (z.B. "Zahnpasta") kann für unterschiedliche Marken/Produkte
+stehen (Colgate, Elmex, Meridol, …). Benennt der Anwender eine erkannte Position auf
+den Namen eines solchen generischen Artikels um, damit sie diesem zugeordnet wird,
+bleibt der ursprünglich erkannte Produktname trotzdem erhalten — die Preishistorie
+zeigt weiterhin den genauen Produktnamen an, nicht nur den generischen Artikelnamen,
+sodass sich die Preise der einzelnen Produkte pro Geschäft getrennt nachverfolgen
+lassen.
 
 ## Einstellungen
 

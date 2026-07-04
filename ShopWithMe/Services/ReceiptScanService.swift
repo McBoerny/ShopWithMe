@@ -25,8 +25,25 @@ struct BelegPosition {
 struct BelegErgebnis {
     @Guide(description: "Name des Geschäfts, falls auf dem Bon erkennbar, sonst ein leerer String")
     var geschaeftName: String
+    @Guide(description: "Datum des Einkaufs im Format JJJJ-MM-TT (z.B. 2026-03-24), falls auf dem Bon erkennbar, sonst ein leerer String")
+    var datum: String
     @Guide(description: "Alle erkannten Artikelpositionen mit Menge und Einzelpreis, ohne Zwischensummen/Pfand/MwSt.-Zeilen")
     var positionen: [BelegPosition]
+}
+
+extension BelegErgebnis {
+    private static let datumsParser: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+
+    /// Das erkannte ``datum`` als geparstes ``Date``, oder `nil`, falls der Bon kein
+    /// Datum erkennen ließ oder die KI kein gültiges `JJJJ-MM-TT`-Format geliefert hat.
+    var erkanntesDatum: Date? {
+        Self.datumsParser.date(from: datum)
+    }
 }
 
 /// Fehler beim Scannen/Auswerten eines Kassenbons.
@@ -85,10 +102,12 @@ struct VisionFoundationModelsReceiptScanner: ReceiptScanService {
         let anweisungen = """
         Du extrahierst Kassenbon-Daten aus rohem OCR-Text einer deutschen \
         Einkaufs-App. Ignoriere Zwischensummen, Pfand-Sammel-Zeilen, \
-        MwSt.-Hinweise und Zahlungsart. Erkenne pro Artikelzeile Name, Menge und \
-        Einzelpreis in Euro. Weist eine Zeile nur einen Gesamtpreis für mehrere \
-        Stück aus, berechne daraus den Einzelpreis (Gesamtpreis geteilt durch \
-        die Menge) statt den Gesamtpreis zu übernehmen.
+        MwSt.-Hinweise und Zahlungsart. Erkenne das Datum des Einkaufs und gib es \
+        im Format JJJJ-MM-TT zurück (z.B. „24.03.26“ auf dem Bon → „2026-03-24“). \
+        Erkenne pro Artikelzeile Name, Menge und Einzelpreis in Euro. Weist eine \
+        Zeile nur einen Gesamtpreis für mehrere Stück aus, berechne daraus den \
+        Einzelpreis (Gesamtpreis geteilt durch die Menge) statt den Gesamtpreis zu \
+        übernehmen.
         """
         let session = LanguageModelSession(instructions: anweisungen)
         let antwort = try await session.respond(to: text, generating: BelegErgebnis.self)

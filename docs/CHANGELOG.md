@@ -1,5 +1,36 @@
 # Changelog
 
+## v0.1 (Build 20) — Belegscan: Einkaufsdatum & produktgenaue Preishistorie
+
+- `Services/ReceiptScanService.swift`: `BelegErgebnis` erkennt jetzt zusätzlich das
+  Einkaufsdatum (`datum`, KI-Format `JJJJ-MM-TT`) und liefert es über die neue
+  Computed-Property `erkanntesDatum: Date?` geparst (`nil` bei leerem/ungültigem
+  Text). Neuer Unit-Test `ReceiptScanServiceTests` deckt beide Fälle ab.
+- `Views/Einkaufen/BelegScanView.swift`: die Ergebnisliste zeigt jetzt einen
+  `DatePicker` für das (von der KI vorbelegte) Einkaufsdatum, das der Anwender vor
+  der Übernahme korrigieren kann — angewendet auf alle übernommenen/aktualisierten
+  `KaufEintrag`e in beiden Scan-Kontexten.
+- `Models/KaufEintrag.swift`: neues optionales Attribut `produktName` hält den
+  ursprünglich vom Beleg erkannten Produkt-/Markennamen fest (z.B. „Colgate Total“),
+  auch wenn der Anwender die Position in `BelegScanView` zwecks Zuordnung auf einen
+  bestehenden, generischeren `Artikel` umbenennt (z.B. „Zahnpasta“). So bleiben
+  unterschiedliche Marken desselben generischen Artikels in der Preishistorie pro
+  Geschäft unterscheidbar, statt beim Umbenennen verlorenzugehen.
+- `Views/Historie/PreisHistorieZeile.swift`: zeigt bevorzugt `produktName`, fällt
+  ansonsten wie bisher auf den (ggf. generischen) Artikelnamen zurück.
+- `docs/PRODUCT_SPEC.md` entsprechend angepasst.
+- **SwiftData-Migrationslücke gefunden und korrigiert:** Der ursprüngliche Versuch,
+  gemäß der bestehenden Regel in `Models/SchemaDefinition.swift` eine neue `SchemaV2`
+  für dieses additive, optionale Attribut anzulegen, crashte reproduzierbar beim
+  Öffnen des Stores (`NSInvalidArgumentException: Duplicate version checksums
+  detected`) — weil `SchemaV1` und `SchemaV2` in diesem Projekt (flache Modell-Klassen
+  ohne Versions-Verschachtelung) auf denselben lebenden Modell-Typ zeigen und damit
+  identisch gehasht werden. Korrektur: für rein additive optionale Attribute bleibt
+  es bei der einzigen `SchemaV1` (klassische automatische Lightweight-Migration);
+  Details und Kriterien für echte `SchemaVN`-Bumps in `docs/DECISIONS.md` ergänzt.
+- Verifiziert: `xcodegen generate` + `xcodebuild build` + `xcodebuild test`
+  (`iPhone 17` Simulator) laufen fehlerfrei durch, alle 14 Unit-Tests bestehen.
+
 ## v0.1 (Build 19) — Anzeige-Umschalter & dauerhaftes Entfernen abgehakter Artikel
 
 - `Models/Einkaufsvorgang.swift`: neue Methode `artikelDauerhaftEntfernen(_:context:)` —

@@ -120,6 +120,23 @@ optionalen Rohwert speichern und über ein Computed-Property mit sicherem Fallba
 kapseln (siehe `Geschaeft.regalSortierModus`) — das fängt auch Fälle ab, die die
 Migrationsstufe selbst nicht abdeckt.
 
+**Korrektur (Kaufbeleg-Datum/Produktname-Feature):** Die Regel oben ist unvollständig
+für dieses Projekt. Modelle werden hier als flache, einzige Klassen gepflegt (z.B.
+`Models/KaufEintrag.swift`), nicht pro Schema-Version eingefroren/verschachtelt. Eine
+zusätzliche `SchemaV2`, die dieselben lebenden Modell-Typen wie `SchemaV1`
+referenziert, hat deshalb exakt denselben Prüfsummen-Hash — beim Testlauf crashte die
+App reproduzierbar beim Öffnen des Stores mit
+`NSInvalidArgumentException: Duplicate version checksums detected`, weil zwei
+unterschiedlich deklarierte Versionen auf ein identisches Schema abbilden. Für rein
+additive, optionale neue Attribute (wie `KaufEintrag.produktName`) bleibt es daher bei
+der **einzigen** `SchemaV1` + der defensiven Optional-Regel — SwiftDatas klassische
+automatische Lightweight-Migration (ohne expliziten Migrationsplan-Stage) übernimmt
+die neue Spalte zuverlässig. Eine echte zusätzliche `SchemaVN` samt `MigrationStage`
+ist erst gerechtfertigt, wenn bestehende Daten tatsächlich transformiert werden müssen
+(`.custom`) — und würde dann zusätzlich verlangen, die betroffenen Modelltypen pro
+Version einzufrieren/zu verschachteln, statt (wie hier vermieden) dieselbe lebende
+Klasse mehrfach in verschiedenen `VersionedSchema`s zu referenzieren.
+
 ## Git-Autor (lokal, nur dieses Repo)
 
 `user.name`/`user.email` wurden nur lokal für dieses Repo gesetzt (nicht global), da

@@ -7,7 +7,8 @@ import PhotosUI
 /// Während eines laufenden ``Einkaufsvorgang``s werden erkannte Preise bereits
 /// abgehakten ``KaufEintrag``en zugeordnet (Namensabgleich). Unabhängig davon lässt
 /// sich ein Beleg auch direkt für ein ``Geschaeft`` scannen — dort entsteht für jede
-/// erkannte Position ein neuer, eigenständiger ``KaufEintrag`` mit dem heutigen Datum.
+/// erkannte Position ein neuer, eigenständiger ``KaufEintrag``, standardmäßig mit dem
+/// heutigen Datum (vom Anwender bei Bedarf überschreibbar, siehe ``BelegScanView``).
 enum BelegScanKontext {
     case einkaufsvorgang(Einkaufsvorgang)
     case geschaeft(Geschaeft)
@@ -29,6 +30,14 @@ enum BelegScanKontext {
 /// Preishistorie lesbar. Kassenbons weisen bei mehreren Stück oft nur einen
 /// Gesamtpreis aus; übernommen wird ausschließlich der von der KI berechnete
 /// Einzelpreis (siehe ``BelegPosition``), keine Mengenangabe.
+///
+/// Das Einkaufsdatum wird von der KI aus dem Beleg erkannt (Vorbelegung), lässt sich
+/// vor dem Übernehmen aber jederzeit manuell korrigieren (``ErgebnisListe``). Benennt
+/// der Anwender eine Position zwecks Zuordnung auf einen bestehenden, ggf.
+/// generischen ``Artikel`` um (z.B. „Colgate Total“ → „Zahnpasta“), bleibt der
+/// ursprünglich erkannte Produktname über ``KaufEintrag/produktName`` erhalten —
+/// so lassen sich verschiedene Marken desselben generischen Artikels weiterhin
+/// getrennt in der Preishistorie nachverfolgen.
 struct BelegScanView: View {
     let kontext: BelegScanKontext
 
@@ -40,15 +49,18 @@ struct BelegScanView: View {
     @State private var laeuft = false
     @State private var fehlermeldung: String?
     @State private var bearbeitbarePositionen: [BearbeitbarePosition]?
+    @State private var belegDatum: Date
 
     private let scanner: ReceiptScanService = VisionFoundationModelsReceiptScanner()
 
     init(einkaufsvorgang: Einkaufsvorgang) {
         self.kontext = .einkaufsvorgang(einkaufsvorgang)
+        _belegDatum = State(initialValue: einkaufsvorgang.startZeit)
     }
 
     init(geschaeft: Geschaeft) {
         self.kontext = .geschaeft(geschaeft)
+        _belegDatum = State(initialValue: .now)
     }
 
     var body: some View {
@@ -60,6 +72,7 @@ struct BelegScanView: View {
                             get: { bearbeitbarePositionen },
                             set: { self.bearbeitbarePositionen = $0 }
                         ),
+                        belegDatum: $belegDatum,
                         uebernehmen: uebernehmen
                     )
                 } else {
@@ -104,8 +117,11 @@ struct BelegScanView: View {
             defer { laeuft = false }
             do {
                 let ergebnis = try await scanner.auswerten(bild: bild)
+                if let erkanntesDatum = ergebnis.erkanntesDatum {
+                    belegDatum = erkanntesDatum
+                }
                 bearbeitbarePositionen = ergebnis.positionen.map {
-                    BearbeitbarePosition(artikelName: $0.artikelName, preisText: "\($0.einzelpreis)")
+                    BearbeitbarePosition(erkannterName: $0.artikelName, artikelName: $0.artikelName, preisText: "\($0.einzelpreis)")
                 }
             } catch {
                 fehlermeldung = error.localizedDescription
@@ -116,6 +132,8 @@ struct BelegScanView: View {
     private func uebernehmen() {
         for position in bearbeitbarePositionen ?? [] {
             let name = position.artikelName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let erkannterName = position.erkannterName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let produktName: String? = erkannterName.isEmpty ? nil : erkannterName
             guard !name.isEmpty,
                   let preis = Decimal(string: position.preisText.replacingOccurrences(of: ",", with: "."))
             else { continue }
@@ -124,14 +142,17 @@ struct BelegScanView: View {
             case .einkaufsvorgang(let einkaufsvorgang):
                 if let vorhandenerEintrag = einkaufsvorgang.kaufEintraege.first(where: { passtZu(name: name, eintrag: $0) }) {
                     vorhandenerEintrag.preis = preis
+                    vorhandenerEintrag.datum = belegDatum
+                    vorhandenerEintrag.produktName = produktName
                 } else {
                     let neuerEintrag = KaufEintrag(
                         artikel: nil,
                         geschaeft: einkaufsvorgang.geschaeft,
                         preis: preis,
-                        datum: einkaufsvorgang.startZeit
+                        datum: belegDatum
                     )
                     neuerEintrag.artikelNameSnapshot = name
+                    neuerEintrag.produktName = produktName
                     modelContext.insert(neuerEintrag)
                     neuerEintrag.einkaufsvorgang = einkaufsvorgang
                 }
@@ -142,9 +163,10 @@ struct BelegScanView: View {
                     geschaeft: geschaeft,
                     kategorie: artikel?.kategorie,
                     preis: preis,
-                    datum: .now
+                    datum: belegDatum
                 )
                 neuerEintrag.artikelNameSnapshot = name
+                neuerEintrag.produktName = produktName
                 modelContext.insert(neuerEintrag)
             }
         }
@@ -171,8 +193,15 @@ struct BelegScanView: View {
 
 /// Eine editierbare Kopie einer erkannten Belegposition, solange der Anwender sie
 /// noch prüfen/korrigieren kann.
+///
+/// `artikelName` ist editierbar, damit der Anwender die Position zwecks Zuordnung
+/// auf einen bestehenden (ggf. generischen) ``Artikel`` umbenennen kann — z.B.
+/// „Colgate Total“ → „Zahnpasta“. `erkannterName` bleibt dabei unverändert der
+/// ursprünglich erkannte Produktname und wird als ``KaufEintrag/produktName``
+/// übernommen, damit die Preishistorie weiterhin nach Marke/Produkt unterscheidet.
 private struct BearbeitbarePosition: Identifiable {
     let id = UUID()
+    let erkannterName: String
     var artikelName: String
     var preisText: String
 }
@@ -247,10 +276,17 @@ private struct KameraAufnahmeView: UIViewControllerRepresentable {
 /// Editierbare Liste der erkannten Positionen zur Kontrolle vor dem Übernehmen.
 private struct ErgebnisListe: View {
     @Binding var positionen: [BearbeitbarePosition]
+    @Binding var belegDatum: Date
     let uebernehmen: () -> Void
 
     var body: some View {
         List {
+            Section {
+                DatePicker("Einkaufsdatum", selection: $belegDatum, displayedComponents: .date)
+            } footer: {
+                Text("Von der KI erkannt, falls auf dem Bon vorhanden — bei Bedarf korrigieren.")
+            }
+
             Section {
                 ForEach($positionen) { $position in
                     HStack {

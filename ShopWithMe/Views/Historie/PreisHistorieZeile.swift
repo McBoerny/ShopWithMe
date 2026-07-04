@@ -29,8 +29,12 @@ struct PreisHistorieZeile: View {
         }
     }
 
+    /// Zeigt den genauen Produktnamen (z.B. „Colgate Total“), falls beim Belegscan
+    /// erfasst — sonst den (ggf. generischen) Artikelnamen. So bleiben unterschiedliche
+    /// Marken desselben generischen ``Artikel``s (z.B. „Zahnpasta“) in der
+    /// Preishistorie unterscheidbar, siehe ``KaufEintrag/produktName``.
     private var artikelName: String {
-        let name = eintrag.artikel?.name ?? eintrag.artikelNameSnapshot
+        let name = eintrag.produktName ?? eintrag.artikel?.name ?? eintrag.artikelNameSnapshot
         return name.isEmpty ? "Unbekannter Artikel" : name
     }
 

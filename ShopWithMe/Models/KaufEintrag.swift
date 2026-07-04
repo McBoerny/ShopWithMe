@@ -29,6 +29,14 @@ final class KaufEintrag {
     var artikelNameSnapshot: String
     /// Name des Geschäfts zum Kaufzeitpunkt (dauerhafter Schnappschuss).
     var geschaeftNameSnapshot: String
+    /// Genauer Produkt-/Markenname vom Kassenbon, falls er sich vom (ggf.
+    /// generischen) ``artikel`` unterscheidet — z.B. „Colgate Total“ bei einem auf
+    /// „Zahnpasta“ verlinkten ``Artikel``. Wird beim Belegscan gesetzt, damit
+    /// unterschiedliche Marken desselben generischen Artikels in der Preishistorie
+    /// unterscheidbar bleiben (siehe ``BelegScanView``), statt beim Umbenennen zwecks
+    /// Zuordnung verlorenzugehen. `nil` für normale Einkaufslisten-Käufe ohne
+    /// Belegscan.
+    var produktName: String?
     /// Datum des Kaufs.
     var datum: Date
     /// Bezahlter Preis — `nil`, solange noch kein Beleg dazu gescannt/erfasst wurde.
