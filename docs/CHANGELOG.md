@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.1 (Build 18) — Kaufbeleg-Scan für Geschäfte & Einzelpreis-Erkennung
+
+- `Services/ReceiptScanService.swift`: `BelegPosition` erkennt jetzt zusätzlich die
+  auf dem Bon angegebene `menge` und liefert `einzelpreis` statt eines
+  mehrdeutigen `preis`-Felds. Der FoundationModels-Prompt weist die KI explizit an,
+  bei Mehrfachpositionen (z.B. „3 x 1.50 = 4.50“) den Gesamtpreis durch die Menge zu
+  teilen, statt ihn unverändert zu übernehmen — übernommen wird ausschließlich der
+  Einzelpreis, keine Mengenangabe.
+- `Views/Einkaufen/BelegScanView.swift`: neuer `BelegScanKontext` (`.einkaufsvorgang`
+  oder `.geschaeft`) — Beleg-Scan funktioniert jetzt auch unabhängig von einem
+  laufenden Einkauf direkt für ein Geschäft. Im Geschäft-Kontext wird für jede
+  erkannte Position ein eigenständiger `KaufEintrag` mit heutigem Datum angelegt;
+  ein passender bestehender `Artikel` wird per Namensabgleich verknüpft, damit der
+  Preis in dessen Preishistorie auftaucht.
+- `Views/Geschaefte/GeschaeftDetailView.swift`: neuer Abschnitt „Kaufbeleg scannen“
+  öffnet `BelegScanView` im Geschäft-Kontext — auch für Geschäfte ohne bisherige
+  Preishistorie sichtbar.
+- Die bestehende Prüfen/Korrigieren/Löschen-Liste vor der Preisübernahme
+  (`ErgebnisListe`) gilt unverändert für beide Kontexte.
+- Kamera-Unterstützung war bereits aktiv (`NSCameraUsageDescription`,
+  `KameraAufnahmeView`) und wurde für diesen Checkpoint nicht verändert.
+- `docs/PRODUCT_SPEC.md` entsprechend angepasst.
+- Verifiziert: `xcodegen generate` + `xcodebuild build` + `xcodebuild test`
+  (`iPhone 17` Simulator) laufen fehlerfrei durch, alle 12 Unit-Tests bestehen.
+
 ## v0.1 (Build 17) — Neues Versionsschema: manuelle Major/Minor-Version, automatische Build-Nummer
 
 - Ab sofort wird die Version als `vMajor.Minor (Build N)` geführt. `Major.Minor`

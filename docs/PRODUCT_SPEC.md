@@ -52,10 +52,16 @@ Standort-Logik/Berechtigung.
 
 ## Belegscan / Preishistorie
 
-Nach einem Einkauf kann der Anwender einen Kassenbon scannen. Lokale KI (Vision-OCR +
-FoundationModels; vorbereitet für zukünftige, speziellere On-Device-APIs) extrahiert
-Artikel und Preise und speichert sie als historische Preisübersicht (Datum, Kosten pro
-Artikel, Geschäft).
+Ein Kassenbon lässt sich an zwei Stellen scannen: nach einem Einkauf (Preise werden
+den abgehakten Positionen zugeordnet) oder unabhängig davon direkt in der
+Geschäfts-Detailansicht (jede erkannte Position wird als eigenständiger Eintrag mit
+dem heutigen Datum gespeichert — nützlich für ältere oder nachträglich gefundene
+Bons). Lokale KI (Vision-OCR + FoundationModels; vorbereitet für zukünftige,
+speziellere On-Device-APIs) extrahiert Artikel und Preise und speichert sie als
+historische Preisübersicht (Datum, Kosten pro Artikel, Geschäft). Kassenbons weisen
+bei mehreren Stück oft nur einen Gesamtpreis aus — übernommen wird stets der von der
+KI berechnete Einzelpreis, nicht die Menge. Vor der Übernahme kann der Anwender jede
+erkannte Position prüfen, korrigieren oder löschen.
 
 ## Einstellungen
 

@@ -1,7 +1,7 @@
 import SwiftUI
 import SwiftData
 
-/// Detailansicht eines ``Geschaeft``s: Stammdaten und Regal-Verwaltung.
+/// Detailansicht eines ``Geschaeft``s: Stammdaten, Regal-Verwaltung und Kaufbeleg-Scan.
 ///
 /// Die Reihenfolge der Regale in dieser Liste hängt vom gewählten
 /// ``RegalSortierModus`` ab: manuell (``Regal/sortIndex``, per Drag-Handle im
@@ -9,10 +9,15 @@ import SwiftData
 /// Reihenfolge (``ShelfOrderLearningService``). Der Wechsel zwischen beiden Modi
 /// überschreibt die jeweils andere Reihenfolge nicht — beide bleiben unabhängig
 /// voneinander erhalten.
+///
+/// „Kaufbeleg scannen“ öffnet ``BelegScanView`` im ``BelegScanKontext/geschaeft(_:)``-
+/// Kontext — unabhängig von einem laufenden ``Einkaufsvorgang``, z.B. um Preise für
+/// einen älteren oder nachträglich gefundenen Kassenbon zu erfassen.
 struct GeschaeftDetailView: View {
     @Bindable var geschaeft: Geschaeft
     @Environment(\.modelContext) private var modelContext
     @State private var zeigeStammdatenEdit = false
+    @State private var zeigeBelegScan = false
     @Query private var kaufHistorie: [KaufEintrag]
 
     init(geschaeft: Geschaeft) {
@@ -102,6 +107,16 @@ struct GeschaeftDetailView: View {
                      : "Diese Reihenfolge wird automatisch gelernt. Wechsle oben zu „Manuell“, um sie selbst festzulegen.")
             }
 
+            Section {
+                Button {
+                    zeigeBelegScan = true
+                } label: {
+                    Label("Kaufbeleg scannen", systemImage: "doc.text.viewfinder")
+                }
+            } footer: {
+                Text("Erfasse Preise für dieses Geschäft direkt von einem Kassenbon, auch ohne laufenden Einkauf.")
+            }
+
             if !kaufHistorie.isEmpty {
                 Section("Preishistorie") {
                     ForEach(kaufHistorie) { eintrag in
@@ -119,6 +134,9 @@ struct GeschaeftDetailView: View {
         }
         .sheet(isPresented: $zeigeStammdatenEdit) {
             GeschaeftStammdatenEditView(geschaeft: geschaeft, istNeu: false)
+        }
+        .sheet(isPresented: $zeigeBelegScan) {
+            BelegScanView(geschaeft: geschaeft)
         }
     }
 

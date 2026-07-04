@@ -4,12 +4,20 @@ import FoundationModels
 import UIKit
 
 /// Eine einzelne, aus einem Kassenbon extrahierte Position.
+///
+/// Kassenbons weisen bei mehreren Stück oft nur den Gesamtpreis der Zeile aus (z.B.
+/// „3 x 1.50 = 4.50“). Da ``BelegScanView`` nur den ``einzelpreis`` in die
+/// Preishistorie übernimmt, hält dieser Typ ``menge`` separat, damit das Modell die
+/// Rechnung (Gesamtpreis ÷ Menge) nachvollziehbar in einem eigenen Feld ablegt statt
+/// sie unsichtbar in einem einzelnen Preisfeld zu vermischen.
 @Generable
 struct BelegPosition {
     @Guide(description: "Artikelname wie auf dem Kassenbon, ohne Mengenangabe oder Artikelnummer")
     var artikelName: String
-    @Guide(description: "Bezahlter Preis dieser Position in Euro, z.B. 2.49")
-    var preis: Decimal
+    @Guide(description: "Auf dem Kassenbon angegebene Menge dieser Position, z.B. 3 bei „3 x Milch“ oder 0.5 bei „0,5 kg Äpfel“. Steht keine Menge auf dem Bon, hier 1 angeben.")
+    var menge: Double
+    @Guide(description: "Einzelpreis (Preis pro Stück/Einheit) dieser Position in Euro, z.B. 2.49. Weist der Bon nur einen Gesamtpreis für mehrere Stück aus (z.B. „3 x 1.50 = 4.50“), hier den Gesamtpreis geteilt durch die Menge angeben — niemals den Gesamtpreis selbst.")
+    var einzelpreis: Decimal
 }
 
 /// Ergebnis der Belegauswertung.
@@ -17,7 +25,7 @@ struct BelegPosition {
 struct BelegErgebnis {
     @Guide(description: "Name des Geschäfts, falls auf dem Bon erkennbar, sonst ein leerer String")
     var geschaeftName: String
-    @Guide(description: "Alle erkannten Artikelpositionen mit Preis, ohne Zwischensummen/Pfand/MwSt.-Zeilen")
+    @Guide(description: "Alle erkannten Artikelpositionen mit Menge und Einzelpreis, ohne Zwischensummen/Pfand/MwSt.-Zeilen")
     var positionen: [BelegPosition]
 }
 
@@ -77,8 +85,10 @@ struct VisionFoundationModelsReceiptScanner: ReceiptScanService {
         let anweisungen = """
         Du extrahierst Kassenbon-Daten aus rohem OCR-Text einer deutschen \
         Einkaufs-App. Ignoriere Zwischensummen, Pfand-Sammel-Zeilen, \
-        MwSt.-Hinweise und Zahlungsart. Erkenne pro Artikelzeile Name und Preis \
-        in Euro.
+        MwSt.-Hinweise und Zahlungsart. Erkenne pro Artikelzeile Name, Menge und \
+        Einzelpreis in Euro. Weist eine Zeile nur einen Gesamtpreis für mehrere \
+        Stück aus, berechne daraus den Einzelpreis (Gesamtpreis geteilt durch \
+        die Menge) statt den Gesamtpreis zu übernehmen.
         """
         let session = LanguageModelSession(instructions: anweisungen)
         let antwort = try await session.respond(to: text, generating: BelegErgebnis.self)

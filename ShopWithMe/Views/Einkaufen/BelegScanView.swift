@@ -2,15 +2,35 @@ import SwiftUI
 import SwiftData
 import PhotosUI
 
-/// Scannt den Kassenbon eines abgeschlossenen ``Einkaufsvorgang``s und trägt die
-/// erkannten Preise in die zugehörigen ``KaufEintrag``e ein.
+/// Kontext, in dem ein Kassenbon gescannt wird.
 ///
-/// Erkannte Positionen, die sich keinem bestehenden ``KaufEintrag`` zuordnen lassen
-/// (z.B. weil der Artikel nicht auf der Einkaufsliste war), werden als eigenständiger
-/// ``KaufEintrag`` ohne ``Artikel``-Verknüpfung gespeichert — der Artikelname bleibt
-/// über `artikelNameSnapshot` trotzdem in der Preishistorie lesbar.
+/// Während eines laufenden ``Einkaufsvorgang``s werden erkannte Preise bereits
+/// abgehakten ``KaufEintrag``en zugeordnet (Namensabgleich). Unabhängig davon lässt
+/// sich ein Beleg auch direkt für ein ``Geschaeft`` scannen — dort entsteht für jede
+/// erkannte Position ein neuer, eigenständiger ``KaufEintrag`` mit dem heutigen Datum.
+enum BelegScanKontext {
+    case einkaufsvorgang(Einkaufsvorgang)
+    case geschaeft(Geschaeft)
+
+    var geschaeft: Geschaeft? {
+        switch self {
+        case .einkaufsvorgang(let einkaufsvorgang): einkaufsvorgang.geschaeft
+        case .geschaeft(let geschaeft): geschaeft
+        }
+    }
+}
+
+/// Scannt einen Kassenbon und trägt die erkannten Einzelpreise als ``KaufEintrag``e
+/// ein — siehe ``BelegScanKontext`` für die beiden möglichen Aufrufsituationen.
+///
+/// Erkannte Positionen, die sich keinem bestehenden ``Artikel`` zuordnen lassen,
+/// werden trotzdem als eigenständiger ``KaufEintrag`` ohne ``Artikel``-Verknüpfung
+/// gespeichert — der Artikelname bleibt über `artikelNameSnapshot` trotzdem in der
+/// Preishistorie lesbar. Kassenbons weisen bei mehreren Stück oft nur einen
+/// Gesamtpreis aus; übernommen wird ausschließlich der von der KI berechnete
+/// Einzelpreis (siehe ``BelegPosition``), keine Mengenangabe.
 struct BelegScanView: View {
-    let einkaufsvorgang: Einkaufsvorgang
+    let kontext: BelegScanKontext
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -22,6 +42,14 @@ struct BelegScanView: View {
     @State private var bearbeitbarePositionen: [BearbeitbarePosition]?
 
     private let scanner: ReceiptScanService = VisionFoundationModelsReceiptScanner()
+
+    init(einkaufsvorgang: Einkaufsvorgang) {
+        self.kontext = .einkaufsvorgang(einkaufsvorgang)
+    }
+
+    init(geschaeft: Geschaeft) {
+        self.kontext = .geschaeft(geschaeft)
+    }
 
     var body: some View {
         NavigationStack {
@@ -38,7 +66,7 @@ struct BelegScanView: View {
                     AufnahmeAnsicht(
                         laeuft: laeuft,
                         fehlermeldung: fehlermeldung,
-                        geschaeftName: einkaufsvorgang.geschaeft?.name ?? "",
+                        geschaeftName: kontext.geschaeft?.name ?? "",
                         ausgewaehltesFoto: $ausgewaehltesFoto,
                         kameraOeffnen: { zeigeKamera = true }
                     )
@@ -77,7 +105,7 @@ struct BelegScanView: View {
             do {
                 let ergebnis = try await scanner.auswerten(bild: bild)
                 bearbeitbarePositionen = ergebnis.positionen.map {
-                    BearbeitbarePosition(artikelName: $0.artikelName, preisText: "\($0.preis)")
+                    BearbeitbarePosition(artikelName: $0.artikelName, preisText: "\($0.einzelpreis)")
                 }
             } catch {
                 fehlermeldung = error.localizedDescription
@@ -92,18 +120,32 @@ struct BelegScanView: View {
                   let preis = Decimal(string: position.preisText.replacingOccurrences(of: ",", with: "."))
             else { continue }
 
-            if let vorhandenerEintrag = einkaufsvorgang.kaufEintraege.first(where: { passtZu(name: name, eintrag: $0) }) {
-                vorhandenerEintrag.preis = preis
-            } else {
+            switch kontext {
+            case .einkaufsvorgang(let einkaufsvorgang):
+                if let vorhandenerEintrag = einkaufsvorgang.kaufEintraege.first(where: { passtZu(name: name, eintrag: $0) }) {
+                    vorhandenerEintrag.preis = preis
+                } else {
+                    let neuerEintrag = KaufEintrag(
+                        artikel: nil,
+                        geschaeft: einkaufsvorgang.geschaeft,
+                        preis: preis,
+                        datum: einkaufsvorgang.startZeit
+                    )
+                    neuerEintrag.artikelNameSnapshot = name
+                    modelContext.insert(neuerEintrag)
+                    neuerEintrag.einkaufsvorgang = einkaufsvorgang
+                }
+            case .geschaeft(let geschaeft):
+                let artikel = passendesArtikel(fuer: name)
                 let neuerEintrag = KaufEintrag(
-                    artikel: nil,
-                    geschaeft: einkaufsvorgang.geschaeft,
+                    artikel: artikel,
+                    geschaeft: geschaeft,
+                    kategorie: artikel?.kategorie,
                     preis: preis,
-                    datum: einkaufsvorgang.startZeit
+                    datum: .now
                 )
                 neuerEintrag.artikelNameSnapshot = name
                 modelContext.insert(neuerEintrag)
-                neuerEintrag.einkaufsvorgang = einkaufsvorgang
             }
         }
         dismiss()
@@ -113,6 +155,17 @@ struct BelegScanView: View {
         let artikelName = eintrag.artikel?.name ?? eintrag.artikelNameSnapshot
         guard !artikelName.isEmpty else { return false }
         return artikelName.localizedCaseInsensitiveContains(name) || name.localizedCaseInsensitiveContains(artikelName)
+    }
+
+    /// Sucht unter allen vorhandenen Artikeln einen, dessen Name zum erkannten
+    /// Belegtext passt, damit ein beim Geschäft-Scan (ohne laufenden Einkauf) neu
+    /// angelegter ``KaufEintrag`` in der Preishistorie dieses ``Artikel``s auftaucht
+    /// statt nur als Namens-Schnappschuss zu existieren.
+    private func passendesArtikel(fuer name: String) -> Artikel? {
+        let alleArtikel = (try? modelContext.fetch(FetchDescriptor<Artikel>())) ?? []
+        return alleArtikel.first {
+            $0.name.localizedCaseInsensitiveContains(name) || name.localizedCaseInsensitiveContains($0.name)
+        }
     }
 }
 
