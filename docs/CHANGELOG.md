@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.1 (Build 22) — Kategorien-Abschnitt in der Geschäft-Konfiguration
+
+- `Views/Geschaefte/GeschaeftDetailView.swift`: neuer Abschnitt „Kategorien“
+  neben „Regale“ — listet alle in diesem Geschäft verfügbaren Kategorien
+  (`Geschaeft.verfuegbareKategorien`) mit dem Regal, dem sie zugeordnet sind.
+  Wischen (bzw. „Bearbeiten“) entfernt eine Kategorie wieder aus ihrem Regal.
+- Neu: `Views/Geschaefte/KategorieHinzufuegenSheet.swift` — Sheet zum
+  Hinzufügen einer Kategorie zum Geschäft. Da Verfügbarkeit ausschließlich über
+  die Regal-Zuordnung entsteht (siehe `docs/DECISIONS.md`), muss dabei ein
+  Ziel-Regal gewählt werden; ohne Regal wird das erklärt statt eine (nutzlose)
+  Auswahl anzubieten. Bietet ebenfalls „Neue Kategorie anlegen“ an.
+- `Views/Geschaefte/NeueKategorieSheet.swift`: aus `RegalDetailView.swift`
+  herausgelöst, damit sowohl die Regal-Bearbeitung als auch das neue
+  Kategorie-Sheet dieselbe Erstellungs-UI (Name, Symbol & Farbe) nutzen.
+- Neuer Unit-Test `kategorieEntfernenAusRegalMachtSieWiederNichtVerfuegbar` in
+  `ModelTests.swift` deckt die Entfernen-Semantik ab.
+
 ## v0.1 (Build 21) — Kategorien-Konfiguration pro Regal
 
 - `Models/Regal.swift`: neue Methode `auswaehlbareKategorien(aus:)` liefert die

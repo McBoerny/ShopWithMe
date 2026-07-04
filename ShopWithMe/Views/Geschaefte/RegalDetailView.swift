@@ -69,57 +69,6 @@ struct RegalDetailView: View {
     }
 }
 
-/// Sheet zum Anlegen einer neuen ``ArtikelKategorie`` direkt aus der
-/// Regal-Bearbeitung heraus. Die neue Kategorie wird beim Sichern in den
-/// Model-Context eingefügt und über ``onErstellt`` an den Aufrufer gemeldet,
-/// der sie üblicherweise sofort dem aktuellen Regal zuordnet.
-private struct NeueKategorieSheet: View {
-    let naechsterSortIndex: Int
-    let onErstellt: (ArtikelKategorie) -> Void
-
-    @Environment(\.modelContext) private var modelContext
-    @Environment(\.dismiss) private var dismiss
-    @State private var name = ""
-    @State private var symbolName = "shippingbox.fill"
-    @State private var farbeHex = Color.artikelPalette[0]
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    HStack(spacing: 16) {
-                        GlassSymbolBadge(symbolName: symbolName, farbe: Color(hex: farbeHex), groesse: 56)
-                        TextField("Name", text: $name)
-                            .font(.title3)
-                    }
-                    SymbolFarbAuswahlZeile(symbolName: $symbolName, farbeHex: $farbeHex)
-                }
-            }
-            .navigationTitle("Neue Kategorie")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Abbrechen") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Sichern") {
-                        let kategorie = ArtikelKategorie(
-                            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-                            standardSymbol: symbolName,
-                            standardFarbeHex: farbeHex,
-                            sortIndex: naechsterSortIndex
-                        )
-                        modelContext.insert(kategorie)
-                        onErstellt(kategorie)
-                        dismiss()
-                    }
-                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            }
-        }
-    }
-}
-
 #Preview {
     NavigationStack {
         RegalDetailView(regal: Regal(name: "Kühlregal"))

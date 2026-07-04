@@ -18,6 +18,7 @@ struct GeschaeftDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var zeigeStammdatenEdit = false
     @State private var zeigeBelegScan = false
+    @State private var zeigeKategorieHinzufuegen = false
     @Query private var kaufHistorie: [KaufEintrag]
 
     init(geschaeft: Geschaeft) {
@@ -108,6 +109,34 @@ struct GeschaeftDetailView: View {
             }
 
             Section {
+                ForEach(geschaeft.verfuegbareKategorien) { kategorie in
+                    HStack {
+                        Label(kategorie.name, systemImage: kategorie.standardSymbol)
+                        Spacer()
+                        if let regal = geschaeft.regal(fuer: kategorie) {
+                            Text(regal.name)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .onDelete(perform: kategorieEntfernen)
+
+                Button {
+                    zeigeKategorieHinzufuegen = true
+                } label: {
+                    Label("Kategorie hinzufügen", systemImage: "plus")
+                }
+                .disabled(geschaeft.regale.isEmpty)
+            } header: {
+                Text("Kategorien")
+            } footer: {
+                Text(geschaeft.regale.isEmpty
+                     ? "Lege zuerst ein Regal an, um Kategorien zuzuordnen."
+                     : "Kategorien werden einem Regal dieses Geschäfts zugeordnet. Zum Entfernen nach links wischen.")
+            }
+
+            Section {
                 Button {
                     zeigeBelegScan = true
                 } label: {
@@ -137,6 +166,17 @@ struct GeschaeftDetailView: View {
         }
         .sheet(isPresented: $zeigeBelegScan) {
             BelegScanView(geschaeft: geschaeft)
+        }
+        .sheet(isPresented: $zeigeKategorieHinzufuegen) {
+            KategorieHinzufuegenSheet(geschaeft: geschaeft)
+        }
+    }
+
+    private func kategorieEntfernen(at offsets: IndexSet) {
+        let kategorien = geschaeft.verfuegbareKategorien
+        for index in offsets {
+            let kategorie = kategorien[index]
+            geschaeft.regal(fuer: kategorie)?.kategorien.removeAll { $0 == kategorie }
         }
     }
 

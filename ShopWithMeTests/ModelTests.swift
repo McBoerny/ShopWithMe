@@ -46,6 +46,30 @@ struct ModelTests {
     }
 
     @Test
+    func kategorieEntfernenAusRegalMachtSieWiederNichtVerfuegbar() throws {
+        // Spiegelt die Entfernen-Aktion im „Kategorien“-Abschnitt von
+        // `GeschaeftDetailView`: die Kategorie wird über ihr zuständiges Regal
+        // (`Geschaeft.regal(fuer:)`) entfernt, nicht direkt am Geschäft.
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        context.insert(obst)
+
+        let geschaeft = Geschaeft(name: "Testladen", typ: .lebensmittel)
+        context.insert(geschaeft)
+
+        let regal = Regal(name: "Regal 1", geschaeft: geschaeft)
+        regal.kategorien = [obst]
+        context.insert(regal)
+
+        #expect(geschaeft.verfuegbareKategorien.map(\.name) == ["Obst"])
+
+        geschaeft.regal(fuer: obst)?.kategorien.removeAll { $0 == obst }
+
+        #expect(geschaeft.verfuegbareKategorien.isEmpty)
+    }
+
+    @Test
     func auswaehlbareKategorienSchliessenAnderweitigVerwendeteAus() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
