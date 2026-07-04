@@ -72,7 +72,7 @@ struct ArtikelEditView: View {
                     }
                 }
 
-                Section("Kategorie") {
+                Section {
                     Picker("Kategorie", selection: $artikel.kategorie) {
                         Text("Keine Auswahl").tag(ArtikelKategorie?.none)
                         ForEach(kategorien) { kategorie in
@@ -80,6 +80,8 @@ struct ArtikelEditView: View {
                                 .tag(Optional(kategorie))
                         }
                     }
+                } footer: {
+                    Text("Ohne Auswahl landet der Artikel automatisch in „Sonstiges“.")
                 }
 
                 Section("Notiz") {
@@ -118,10 +120,7 @@ struct ArtikelEditView: View {
                         }
                         dismiss()
                     }
-                    .disabled(
-                        artikel.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                            || artikel.kategorie == nil
-                    )
+                    .disabled(artikel.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }

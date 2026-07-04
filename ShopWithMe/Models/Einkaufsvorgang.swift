@@ -39,9 +39,11 @@ final class Einkaufsvorgang {
     /// Preis) in diesem Einkaufsvorgang an und nimmt den Artikel von der
     /// Einkaufsliste. Artikel derselben ``ArtikelKategorie`` erhalten denselben
     /// ``KaufEintrag/kategorieBesuchsIndex``, neue Kategorien den jeweils nächsten
-    /// Index — das ist die Rohdatenbasis für ``ShelfOrderLearningService``.
+    /// Index — das ist die Rohdatenbasis für ``ShelfOrderLearningService``. Artikel
+    /// ohne eigene Kategorie fallen dabei automatisch unter "Sonstiges" (siehe
+    /// ``Artikel/effektiveKategorie(context:)``).
     func artikelAbhaken(_ artikel: Artikel, context: ModelContext) {
-        let kategorie = artikel.kategorie
+        let kategorie = artikel.effektiveKategorie(context: context)
         let index = naechsterKategorieBesuchsIndex(fuer: kategorie)
         let eintrag = KaufEintrag(artikel: artikel, geschaeft: geschaeft, kategorie: kategorie, kategorieBesuchsIndex: index)
         context.insert(eintrag)
@@ -58,10 +60,7 @@ final class Einkaufsvorgang {
         artikel.istAufEinkaufsliste = true
     }
 
-    private func naechsterKategorieBesuchsIndex(fuer kategorie: ArtikelKategorie?) -> Int {
-        guard let kategorie else {
-            return (kaufEintraege.compactMap(\.kategorieBesuchsIndex).max() ?? -1) + 1
-        }
+    private func naechsterKategorieBesuchsIndex(fuer kategorie: ArtikelKategorie) -> Int {
         if let vorhandenerIndex = kaufEintraege.first(where: { $0.kategorie == kategorie })?.kategorieBesuchsIndex {
             return vorhandenerIndex
         }

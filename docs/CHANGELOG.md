@@ -1,5 +1,31 @@
 # Changelog
 
+## v1.3 — Unkategorisierte Artikel fallen automatisch unter „Sonstiges“
+
+- `Models/ArtikelKategorie.swift`: neue statische Methode `sonstige(context:)`
+  findet die "Sonstiges"-Kategorie (normalerweise über `SeedData` angelegt) oder
+  erzeugt sie defensiv, falls sie ausnahmsweise fehlt.
+- `Models/Artikel.swift`: neue `effektiveKategorie(context:)` liefert `kategorie`,
+  oder — falls keine gesetzt ist — automatisch "Sonstiges". Wird jetzt überall
+  verwendet, wo bisher zwischen "hat Kategorie" und "hat keine Kategorie"
+  unterschieden wurde.
+- `Models/Einkaufsvorgang.swift`: `artikelAbhaken(_:context:)` nutzt
+  `effektiveKategorie(context:)` — unkategorisierte Artikel teilen sich jetzt den
+  `kategorieBesuchsIndex` mit explizit als "Sonstiges" kategorisierten Artikeln,
+  statt separat gezählt zu werden. `naechsterKategorieBesuchsIndex` braucht damit
+  keinen Sonderfall für `nil` mehr.
+- `Views/Einkaufen/EinkaufenView.swift`: die bisherige separate „Ohne Kategorie“-
+  Sektion entfällt; unkategorisierte Artikel landen jetzt in derselben Sektion wie
+  Artikel mit expliziter "Sonstiges"-Kategorie, inklusive gelernter Sortierung.
+- `Views/Artikel/ArtikelEditView.swift`: Kategorie-Auswahl ist beim Anlegen/
+  Bearbeiten eines Artikels nicht mehr Pflicht — ohne Auswahl greift automatisch
+  "Sonstiges" (Hinweistext in der Fußzeile ergänzt).
+- Neue Unit-Tests: `unkategorisierterArtikelFaelltUnterSonstigesUndTeiltSichDenIndex`
+  (`EinkaufsvorgangTests`) und `sonstigeKategorieWirdBeiBedarfAngelegtUndWiederverwendet`
+  (`ModelTests`).
+- Verifiziert: `xcodegen generate` + `xcodebuild build` + `xcodebuild test`
+  (`iPhone 17` Simulator) laufen fehlerfrei durch, alle 10 Unit-Tests bestehen.
+
 ## v1.2 — Lern-Algorithmus auf Artikelkategorie umgestellt
 
 - `Models/KategorieBesuchsStatistik.swift` (neu) ersetzt `RegalBesuchsStatistik`:

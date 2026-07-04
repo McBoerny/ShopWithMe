@@ -85,6 +85,35 @@ struct EinkaufsvorgangTests {
     }
 
     @Test
+    func unkategorisierterArtikelFaelltUnterSonstigesUndTeiltSichDenIndex() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let sonstiges = ArtikelKategorie(name: "Sonstiges", standardSymbol: "shippingbox.fill", standardFarbeHex: "#8E8E93")
+        context.insert(sonstiges)
+        let geschaeft = Geschaeft(name: "Testladen", typ: .lebensmittel)
+        context.insert(geschaeft)
+        let ohneKategorie = Artikel(name: "Mysteriöses Ding", symbolName: "questionmark", farbeHex: "#8E8E93", istAufEinkaufsliste: true)
+        let explizitSonstiges = Artikel(name: "Kerzen", symbolName: "flame.fill", farbeHex: "#8E8E93", kategorie: sonstiges, istAufEinkaufsliste: true)
+        context.insert(ohneKategorie)
+        context.insert(explizitSonstiges)
+
+        let einkauf = Einkaufsvorgang(geschaeft: geschaeft)
+        context.insert(einkauf)
+
+        einkauf.artikelAbhaken(ohneKategorie, context: context)
+        einkauf.artikelAbhaken(explizitSonstiges, context: context)
+
+        let ohneKategorieEintrag = einkauf.kaufEintraege.first { $0.artikel == ohneKategorie }
+        let sonstigesEintrag = einkauf.kaufEintraege.first { $0.artikel == explizitSonstiges }
+
+        #expect(ohneKategorieEintrag?.kategorie == sonstiges)
+        #expect(ohneKategorieEintrag?.kategorieBesuchsIndex == 0)
+        #expect(sonstigesEintrag?.kategorieBesuchsIndex == 0)
+        #expect(try context.fetchCount(FetchDescriptor<ArtikelKategorie>()) == 1)
+    }
+
+    @Test
     func abwaehlenMachtAbhakenRueckgaengig() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container

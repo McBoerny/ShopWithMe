@@ -36,3 +36,25 @@ final class ArtikelKategorie {
         self.sortIndex = sortIndex
     }
 }
+
+extension ArtikelKategorie {
+    /// Name der Kategorie, in die unkategorisierte Artikel automatisch fallen
+    /// (siehe ``Artikel/effektiveKategorie(context:)``).
+    static let sonstigesName = "Sonstiges"
+
+    /// Findet die "Sonstiges"-Kategorie (wird normalerweise über
+    /// ``SeedData`` angelegt) oder legt sie an, falls sie ausnahmsweise noch nicht
+    /// existiert.
+    static func sonstige(context: ModelContext) -> ArtikelKategorie {
+        let name = sonstigesName
+        var deskriptor = FetchDescriptor<ArtikelKategorie>(predicate: #Predicate { $0.name == name })
+        deskriptor.fetchLimit = 1
+        if let bestehende = try? context.fetch(deskriptor).first {
+            return bestehende
+        }
+        let naechsterIndex = ((try? context.fetch(FetchDescriptor<ArtikelKategorie>()))?.map(\.sortIndex).max() ?? -1) + 1
+        let neue = ArtikelKategorie(name: name, standardSymbol: "shippingbox.fill", standardFarbeHex: "#8E8E93", sortIndex: naechsterIndex)
+        context.insert(neue)
+        return neue
+    }
+}

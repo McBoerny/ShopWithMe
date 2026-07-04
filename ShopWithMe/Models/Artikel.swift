@@ -42,3 +42,12 @@ final class Artikel {
         self.notiz = notiz
     }
 }
+
+extension Artikel {
+    /// Die für Gruppierung, Regal-Zuordnung und Lernalgorithmus tatsächlich
+    /// wirksame Kategorie: ``kategorie``, oder — falls keine gesetzt ist —
+    /// automatisch "Sonstiges" (siehe ``ArtikelKategorie/sonstige(context:)``).
+    func effektiveKategorie(context: ModelContext) -> ArtikelKategorie {
+        kategorie ?? ArtikelKategorie.sonstige(context: context)
+    }
+}

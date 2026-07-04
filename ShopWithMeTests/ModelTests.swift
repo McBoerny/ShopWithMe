@@ -46,6 +46,20 @@ struct ModelTests {
     }
 
     @Test
+    func sonstigeKategorieWirdBeiBedarfAngelegtUndWiederverwendet() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let angelegt = ArtikelKategorie.sonstige(context: context)
+        #expect(angelegt.name == "Sonstiges")
+        #expect(try context.fetchCount(FetchDescriptor<ArtikelKategorie>()) == 1)
+
+        let wiederverwendet = ArtikelKategorie.sonstige(context: context)
+        #expect(wiederverwendet.persistentModelID == angelegt.persistentModelID)
+        #expect(try context.fetchCount(FetchDescriptor<ArtikelKategorie>()) == 1)
+    }
+
+    @Test
     func kategorieBesuchsStatistikBerechnetDurchschnitt() {
         let statistik = KategorieBesuchsStatistik(geschaeft: nil, kategorie: nil)
         #expect(statistik.durchschnittlichePosition == .infinity)

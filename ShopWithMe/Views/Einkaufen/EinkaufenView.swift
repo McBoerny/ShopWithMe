@@ -1,11 +1,6 @@
 import SwiftUI
 import SwiftData
 
-/// Sentinel-ID für die Gruppe der Artikel ganz ohne Artikelkategorie, damit
-/// ``EinkaufenView``s Kategorie-Gruppen trotz optionaler ``ArtikelKategorie`` als
-/// `Identifiable` funktionieren.
-private let ohneKategorieGruppenID = UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
-
 /// Einstiegspunkt zum Einkaufen: die globale Einkaufsliste abarbeiten, optional
 /// gruppiert nach Regal eines gewählten Geschäfts.
 struct EinkaufenView: View {
@@ -95,32 +90,34 @@ private struct EinkaufslisteView: View {
         var id: PersistentIdentifier { regal.persistentModelID }
     }
 
-    /// Eine Gruppe von Artikeln derselben Artikelkategorie (oder ganz ohne Kategorie),
-    /// die sich keinem Regal zuordnen lässt — z.B. weil das Geschäft keine Regale
-    /// besitzt oder die Kategorie darin keinem Regal zugeordnet ist.
+    /// Eine Gruppe von Artikeln derselben Artikelkategorie, die sich keinem Regal
+    /// zuordnen lässt — z.B. weil das Geschäft keine Regale besitzt oder die
+    /// Kategorie darin keinem Regal zugeordnet ist. Artikel ohne eigene Kategorie
+    /// fallen dabei automatisch in die Kategorie "Sonstiges" (siehe
+    /// ``Artikel/effektiveKategorie(context:)``).
     private struct KategorieGruppe: Identifiable {
-        let kategorie: ArtikelKategorie?
+        let kategorie: ArtikelKategorie
         var artikel: [Artikel]
-        var id: UUID { kategorie?.id ?? ohneKategorieGruppenID }
+        var id: PersistentIdentifier { kategorie.persistentModelID }
     }
 
-    /// Artikel, die sich keinem Regal zuordnen lassen (kein Geschäft gewählt,
-    /// keine Kategorie oder Kategorie ohne Regal im gewählten Geschäft) — werden
-    /// dennoch angezeigt, nur eben in nach Kategorie gruppierten Sektionen.
+    private func effektiveKategorie(fuer artikel: Artikel) -> ArtikelKategorie {
+        artikel.effektiveKategorie(context: modelContext)
+    }
+
+    /// Artikel, die sich keinem Regal zuordnen lassen (kein Geschäft gewählt oder
+    /// die Kategorie darin keinem Regal zugeordnet) — werden dennoch angezeigt, nur
+    /// eben in nach Kategorie gruppierten Sektionen.
     private var sonstigeArtikel: [Artikel] {
         guard let geschaeft else { return artikelAufListe }
-        return artikelAufListe.filter { artikel in
-            guard let kategorie = artikel.kategorie else { return true }
-            return geschaeft.regal(fuer: kategorie) == nil
-        }
+        return artikelAufListe.filter { geschaeft.regal(fuer: effektiveKategorie(fuer: $0)) == nil }
     }
 
     private var gruppen: [Gruppe] {
         guard let geschaeft else { return [] }
         var nachRegal: [PersistentIdentifier: Gruppe] = [:]
         for artikel in artikelAufListe {
-            guard let kategorie = artikel.kategorie,
-                  let regal = geschaeft.regal(fuer: kategorie) else { continue }
+            guard let regal = geschaeft.regal(fuer: effektiveKategorie(fuer: artikel)) else { continue }
             nachRegal[regal.persistentModelID, default: Gruppe(regal: regal, artikel: [])].artikel.append(artikel)
         }
         return nachRegal.values.sorted { $0.regal.sortIndex < $1.regal.sortIndex }
@@ -129,28 +126,22 @@ private struct EinkaufslisteView: View {
     /// ``sonstigeArtikel``, gruppiert nach Artikelkategorie und sortiert nach der für
     /// dieses Geschäft gelernten Kategorie-Reihenfolge (``ShelfOrderLearningService``).
     /// Das ist insbesondere für Geschäfte ohne Regale die alleinige Sortiergrundlage.
-    /// Kategorien ohne Beobachtung landen (alphabetisch sortiert) dahinter, Artikel
-    /// ganz ohne Kategorie immer am Ende.
+    /// Kategorien ohne Beobachtung landen (alphabetisch sortiert) dahinter.
     private var sonstigeGruppen: [KategorieGruppe] {
-        var nachKategorie: [UUID: KategorieGruppe] = [:]
+        var nachKategorie: [PersistentIdentifier: KategorieGruppe] = [:]
         for artikel in sonstigeArtikel {
-            let schluessel = artikel.kategorie?.id ?? ohneKategorieGruppenID
-            nachKategorie[schluessel, default: KategorieGruppe(kategorie: artikel.kategorie, artikel: [])].artikel.append(artikel)
+            let kategorie = effektiveKategorie(fuer: artikel)
+            nachKategorie[kategorie.persistentModelID, default: KategorieGruppe(kategorie: kategorie, artikel: [])].artikel.append(artikel)
         }
         let positionen = geschaeft.map { ShelfOrderLearningService.kategoriePositionen(fuer: $0, context: modelContext) } ?? [:]
         return nachKategorie.values.sorted { istVor($0, $1, positionen: positionen) }
     }
 
     private func istVor(_ a: KategorieGruppe, _ b: KategorieGruppe, positionen: [PersistentIdentifier: Double]) -> Bool {
-        switch (a.kategorie, b.kategorie) {
-        case (nil, _): return false
-        case (_, nil): return true
-        case let (kategorieA?, kategorieB?):
-            let posA = positionen[kategorieA.persistentModelID] ?? .infinity
-            let posB = positionen[kategorieB.persistentModelID] ?? .infinity
-            if posA == posB { return kategorieA.name < kategorieB.name }
-            return posA < posB
-        }
+        let posA = positionen[a.kategorie.persistentModelID] ?? .infinity
+        let posB = positionen[b.kategorie.persistentModelID] ?? .infinity
+        if posA == posB { return a.kategorie.name < b.kategorie.name }
+        return posA < posB
     }
 
     var body: some View {
@@ -168,7 +159,7 @@ private struct EinkaufslisteView: View {
             }
 
             ForEach(sonstigeGruppen) { gruppe in
-                Section(gruppe.kategorie?.name ?? "Ohne Kategorie") {
+                Section(gruppe.kategorie.name) {
                     ForEach(gruppe.artikel) { artikel in
                         ArtikelAbhakZeile(
                             artikel: artikel,
