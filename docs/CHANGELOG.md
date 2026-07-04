@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.8 — Kamera-Funktion deaktiviert
+
+- Das Camera-Entitlement (`NSCameraUsageDescription`) wird vom Apple-Developer-Account
+  aktuell nicht unterstützt und wurde daher wieder entfernt (`project.yml`).
+- `Views/Einkaufen/BelegScanView.swift`: Beleg-Erfassung nur noch über die
+  Fotomediathek (`PhotosPicker`); die Kamera-Aufnahme (`UIImagePickerController`,
+  `KameraAufnahmeView`) wurde entfernt.
+- Hilfe-Eintrag „Belegscan & Preishistorie“ in `HelpView` an den Wegfall der
+  Kamera-Option angepasst.
+
 ## v0.7 — Belegscan & Preishistorie
 
 - `Services/ReceiptScanService.swift`: Protokoll + `VisionFoundationModelsReceiptScanner`
