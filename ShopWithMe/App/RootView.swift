@@ -8,7 +8,7 @@ struct RootView: View {
     var body: some View {
         TabView {
             Tab("Artikel", systemImage: "carrot.fill") {
-                PlatzhalterView(titel: "Artikel", geplantAb: "v0.2")
+                ArtikelListView()
             }
             Tab("Geschäfte", systemImage: "cart.fill") {
                 PlatzhalterView(titel: "Geschäfte", geplantAb: "v0.3")

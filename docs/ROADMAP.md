@@ -7,7 +7,7 @@ Jeder Checkpoint ist ein Git-Commit, der die Version (`VERSION`-Datei + `project
 
 - [x] **v0.1** — Projekt-Scaffold: XcodeGen-Setup, Doku-Grundgerüst, komplettes
   SwiftData-Datenmodell inkl. Seed-Daten, leere App die kompiliert.
-- [ ] **v0.2** — Artikel-Verwaltung: Liste/Anlegen/Bearbeiten inkl. Symbol-/Farb-Picker,
+- [x] **v0.2** — Artikel-Verwaltung: Liste/Anlegen/Bearbeiten inkl. Symbol-/Farb-Picker,
   Liquid-Glass-Designsystem-Basis.
 - [ ] **v0.3** — Geschäfte-Verwaltung: Liste/Anlegen/Bearbeiten, Regal-Verwaltung pro
   Geschäft, Kategorie-zu-Regal-Zuordnung.

@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.2 — Artikel-Verwaltung
+
+- `DesignSystem/GlassStyles.swift`: `glassCard`-Modifier und `GlassSymbolBadge` als
+  wiederverwendbare Liquid-Glass-Bausteine.
+- `DesignSystem/Color+Hex.swift`: Hex-String-Farbkonvertierung + Standardpalette.
+- `DesignSystem/SymbolColorPicker.swift`: kuratierte SF-Symbol-Auswahl, Farbpalette und
+  Freitext-Eingabe für eigene SF-Symbole.
+- `Views/Artikel/ArtikelListView.swift` + `ArtikelEditView.swift`: Artikel anlegen,
+  bearbeiten, löschen. Kategorie ist nach Anlage schreibgeschützt.
+- Artikel-Tab in `RootView` verdrahtet.
+
 ## v0.1 — Projekt-Scaffold
 
 - XcodeGen-Setup (`project.yml`), iOS-26-Target, Bundle-ID `com.made4me.ShopWithMe`.
