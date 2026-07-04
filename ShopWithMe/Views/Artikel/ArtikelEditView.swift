@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UIKit
 
 /// Anlegen/Bearbeiten eines ``Artikel``s.
 ///
@@ -14,6 +15,11 @@ struct ArtikelEditView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \ArtikelKategorie.sortIndex) private var kategorien: [ArtikelKategorie]
+    @Query private var alleRegale: [Regal]
+
+    @State private var kiVorschlagLaeuft = false
+    @State private var kiFehlermeldung: String?
+    @State private var kiRegalHinweis: String?
 
     var body: some View {
         NavigationStack {
@@ -25,6 +31,35 @@ struct ArtikelEditView: View {
                             .font(.title3)
                     }
                     SymbolFarbAuswahlZeile(symbolName: $artikel.symbolName, farbeHex: $artikel.farbeHex)
+                }
+
+                if istNeu && AISuggestionService.istVerfuegbar {
+                    Section {
+                        Button {
+                            kiVorschlagAnfordern()
+                        } label: {
+                            if kiVorschlagLaeuft {
+                                HStack {
+                                    ProgressView()
+                                    Text("Apple Intelligence denkt nach…")
+                                }
+                            } else {
+                                Label("Mit Apple Intelligence vorschlagen", systemImage: "sparkles")
+                            }
+                        }
+                        .disabled(kiVorschlagLaeuft || artikel.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                        if let kiRegalHinweis {
+                            Text(kiRegalHinweis)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                        if let kiFehlermeldung {
+                            Text(kiFehlermeldung)
+                                .font(.footnote)
+                                .foregroundStyle(.orange)
+                        }
+                    }
                 }
 
                 Section("Kategorie") {
@@ -82,6 +117,43 @@ struct ArtikelEditView: View {
                             || artikel.kategorie == nil
                     )
                 }
+            }
+        }
+    }
+
+    private func kiVorschlagAnfordern() {
+        kiVorschlagLaeuft = true
+        kiFehlermeldung = nil
+        kiRegalHinweis = nil
+        let name = artikel.name
+        let bekannteKategorien = kategorien.map(\.name)
+        let bekannteRegale = Set(alleRegale.map(\.name)).sorted()
+
+        Task {
+            defer { kiVorschlagLaeuft = false }
+            do {
+                let vorschlag = try await AISuggestionService.vorschlag(
+                    fuerArtikelName: name,
+                    bekannteKategorien: bekannteKategorien,
+                    bekannteRegale: bekannteRegale
+                )
+
+                if UIImage(systemName: vorschlag.symbolName) != nil {
+                    artikel.symbolName = vorschlag.symbolName
+                }
+                if vorschlag.farbeHex.count == 7, vorschlag.farbeHex.hasPrefix("#") {
+                    artikel.farbeHex = vorschlag.farbeHex
+                }
+                if let passendeKategorie = kategorien.first(where: {
+                    $0.name.localizedCaseInsensitiveCompare(vorschlag.kategorieName) == .orderedSame
+                }) {
+                    artikel.kategorie = passendeKategorie
+                }
+                if !vorschlag.regalName.isEmpty {
+                    kiRegalHinweis = "Vorschlag: Regal „\(vorschlag.regalName)“ — bitte in den Geschäften prüfen/zuordnen."
+                }
+            } catch {
+                kiFehlermeldung = "KI-Vorschlag nicht verfügbar: \(error.localizedDescription)"
             }
         }
     }

@@ -3,23 +3,23 @@ import SwiftData
 
 /// Einstiegspunkt der App.
 ///
-/// Baut den ``ModelContainer`` mit dem vollständigen Datenmodell-Schema auf und sät
-/// beim ersten Start die Standardkategorien via ``SeedData``.
+/// Baut den ``ModelContainer`` mit dem vollständigen Datenmodell-Schema auf — am vom
+/// Anwender gewählten Speicherort (siehe ``DatabaseLocationService``), falls einer
+/// hinterlegt ist, sonst am SwiftData-Standardpfad — und sät beim ersten Start die
+/// Standardkategorien via ``SeedData``.
 @main
 struct ShopWithMeApp: App {
     let modelContainer: ModelContainer
 
     init() {
-        let schema = Schema([
-            Artikel.self,
-            ArtikelKategorie.self,
-            Regal.self,
-            Geschaeft.self,
-            Einkaufsvorgang.self,
-            KaufEintrag.self,
-            RegalBesuchsStatistik.self,
-        ])
-        let konfiguration = ModelConfiguration(schema: schema)
+        let schema = SchemaDefinition.schema
+        let konfiguration: ModelConfiguration
+        if let ordner = DatabaseLocationService.gewaehlterOrdner(), ordner.startAccessingSecurityScopedResource() {
+            konfiguration = ModelConfiguration(schema: schema, url: DatabaseLocationService.storeURL(inOrdner: ordner))
+        } else {
+            konfiguration = ModelConfiguration(schema: schema)
+        }
+
         do {
             modelContainer = try ModelContainer(for: schema, configurations: [konfiguration])
         } catch {

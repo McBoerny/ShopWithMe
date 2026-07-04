@@ -16,7 +16,7 @@ Jeder Checkpoint ist ein Git-Commit, der die Version (`VERSION`-Datei + `project
   Regal-Reihenfolge editierbar.
 - [x] **v0.5** — Lern-Algorithmus für automatische Regal-Reihenfolge
   (`ShelfOrderLearningService`) + Vorschlag in der UI.
-- [ ] **v0.6** — KI-Artikelvorschlag (`AISuggestionService`) +
+- [x] **v0.6** — KI-Artikelvorschlag (`AISuggestionService`) +
   Einstellungen/Hilfe-Bildschirme + Datenbank-Speicherort-Funktion.
 - [ ] **v0.7** — Belegscan (`ReceiptScanService`) + Preishistorie-Ansicht.
 

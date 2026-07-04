@@ -57,6 +57,25 @@ geändert. Zusätzlich wurde `KaufEintrag.regal` ergänzt, damit die Regal-Zuord
 Kaufzeitpunkt dauerhaft festgehalten wird (unabhängig von späteren Änderungen der
 Regal-Kategorie-Zuordnung) — Grundlage für den Lern-Algorithmus (v0.5).
 
+## KI-Regalvorschlag ist rein informativ
+
+`ArtikelVorschlag.regalName` (FoundationModels-Ausgabe) wird nicht automatisch in ein
+Datenmodell geschrieben, weil ``Regal`` immer zu genau einem ``Geschaeft`` gehört —
+ein neu angelegter, noch keinem Geschäft zugeordneter Artikel kann kein konkretes
+Regal referenzieren. Der Hinweis wird daher nur als Text angezeigt, den der Anwender
+später in der Geschäfte-Verwaltung selbst umsetzen kann.
+
+## Datenbank-Speicherort: reine Dateiverlagerung, kein Hot-Swap
+
+Ein Wechsel des Speicherorts kopiert die SwiftData-Store-Dateien in den gewählten
+Ordner und hinterlegt ein Security-Scoped-Bookmark; wirksam wird das erst beim
+nächsten App-Start (`ShopWithMeApp.init()` liest das Bookmark und baut den
+`ModelContainer` mit der neuen `ModelConfiguration(url:)` auf). Ein Hot-Swap des
+laufenden `ModelContainer` wurde bewusst nicht umgesetzt — das SwiftUI-Setup bindet
+den Container einmalig über `.modelContainer(_:)` an die Scene, ein Laufzeitwechsel
+wäre unverhältnismäßig riskant (offene `ModelContext`-Referenzen, laufende Queries)
+für den Nutzen gegenüber einem einfachen Neustart-Hinweis.
+
 ## Git-Autor (lokal, nur dieses Repo)
 
 `user.name`/`user.email` wurden nur lokal für dieses Repo gesetzt (nicht global), da

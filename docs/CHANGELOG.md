@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.6 — KI-Vorschlag, Einstellungen & Datenbank-Speicherort
+
+- `Services/AISuggestionService.swift`: FoundationModels-basierter Vorschlag
+  (Symbol, Farbe, Kategorie, informativer Regal-Hinweis) beim Anlegen eines
+  Artikels; blendet sich aus, wenn Apple Intelligence auf dem Gerät nicht
+  verfügbar ist (`SystemLanguageModel.default.isAvailable`).
+- `ArtikelEditView` bekommt einen „Mit Apple Intelligence vorschlagen“-Button
+  (nur bei neuen Artikeln, nur wenn verfügbar).
+- `Views/Einstellungen/SettingsView.swift` + `HelpView.swift`: Einstellungsmenü mit
+  ausklappbaren Anleitungen zu Regal-Zuordnung, Lern-Algorithmus,
+  KI-Vorschlägen und Datenbank-Speicherort.
+- `Services/DatabaseLocationService.swift` + `DatabaseLocationSettingsView.swift`:
+  erlaubt, die SwiftData-Datenbank in einen selbst gewählten Ordner zu verlegen
+  (Security-Scoped-Bookmark, reine Dateiverlagerung, kein iCloud-Sync). Wirksam
+  nach Neustart der App.
+- `Models/SchemaDefinition.swift`: zentrale Schema-Definition, damit App-Start und
+  Datenbank-Speicherort-Logik dieselbe Modell-Liste verwenden.
+- Toter Platzhalter-Code in `RootView` entfernt, da alle vier Tabs jetzt echte
+  Views zeigen.
+
 ## v0.5 — Lern-Algorithmus für Regal-Reihenfolge
 
 - `Services/ShelfOrderLearningService.swift`: wertet abgeschlossene
