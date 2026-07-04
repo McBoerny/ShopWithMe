@@ -42,10 +42,29 @@ ist.
 ## Git-Checkpoint-Workflow
 
 Siehe [ROADMAP.md](ROADMAP.md) für die Checkpoint-Liste. Regel: bei jedem inhaltlich
-größeren Commit wird die erste Nachkommastelle der Version erhöht (0.1 → 0.2 → …),
-`docs/CHANGELOG.md` bekommt einen Eintrag, und alle neuen öffentlichen Swift-APIs
-erhalten `///`-DocC-Kommentare, bevor committet wird. `.xcodeproj` wird nie committet
-(siehe oben).
+größeren Commit bekommt `docs/CHANGELOG.md` einen Eintrag, und alle neuen
+öffentlichen Swift-APIs erhalten `///`-DocC-Kommentare, bevor committet wird.
+`.xcodeproj` wird nie committet (siehe oben).
+
+## Versionsschema: manuelle Major/Minor-Version, automatische Build-Nummer (ab v0.1)
+
+Bis v1.6 wurde die Version als einzelner Zähler geführt, der pro Checkpoint um `0.1`
+erhöht wurde (0.1 → 0.2 → … → 1.6). Ab sofort (Nutzervorgabe) gilt ein
+zweigeteiltes Schema, Format `vMajor.Minor (Build N)`:
+
+- **Major.Minor** (`MARKETING_VERSION` in `project.yml`, gespiegelt in der
+  `VERSION`-Datei) wird ausschließlich manuell vom Nutzer festgelegt — keine
+  Automatik erhöht diese Zahl mehr.
+- **Build N** (`CURRENT_PROJECT_VERSION` in `project.yml`) wird automatisch bei
+  jedem Commit um 1 erhöht, über den Git-Hook `.githooks/pre-commit`. Der Hook
+  trägt die neue Build-Nummer zusätzlich in die oberste Überschrift von
+  `docs/CHANGELOG.md` ein (`## vX.Y (Build N) — Titel`), damit jeder Commit über
+  seine Build-Nummer eindeutig einem Changelog-Eintrag zuzuordnen ist.
+- Aktivierung ist lokal pro Klon nötig (Git versioniert `core.hooksPath` nicht):
+  `git config core.hooksPath .githooks`.
+- Mit der Umstellung wurde die Version einmalig auf `0.1` zurückgesetzt; die
+  Build-Nummer knüpft an die Anzahl bisheriger Commits an, statt bei 1 neu zu
+  beginnen.
 
 ## `KaufEintrag.preis` ist optional
 

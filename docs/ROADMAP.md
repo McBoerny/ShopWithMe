@@ -1,7 +1,12 @@
 # ShopWithMe — Roadmap / Checkpoints
 
-Jeder Checkpoint ist ein Git-Commit, der die Version (`VERSION`-Datei + `project.yml`
-`MARKETING_VERSION`) um `0.1` erhöht. Format: `vX.Y: <Kurzbeschreibung>`.
+Jeder Checkpoint ist ein Git-Commit mit einem `docs/CHANGELOG.md`-Eintrag. Format:
+`vX.Y (Build N): <Kurzbeschreibung>`. `X.Y` (Major.Minor, `MARKETING_VERSION` in
+`project.yml` + `VERSION`-Datei) wird manuell vom Nutzer festgelegt; `N`
+(`CURRENT_PROJECT_VERSION`) ist die Build-Nummer und wird automatisch bei jedem
+Commit über `.githooks/pre-commit` erhöht (siehe `docs/DECISIONS.md`). Die
+Checkpoints unten aus der Zeit vor diesem Schema (bis v1.6) verwendeten `X.Y` noch
+als reinen Inkrement-Zähler ohne separate Build-Nummer.
 
 ## Umgesetzt
 

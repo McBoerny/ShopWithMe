@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.1 (Build 17) — Neues Versionsschema: manuelle Major/Minor-Version, automatische Build-Nummer
+
+- Ab sofort wird die Version als `vMajor.Minor (Build N)` geführt. `Major.Minor`
+  (`MARKETING_VERSION` in `project.yml`, `VERSION`-Datei) wird nur noch manuell vom
+  Nutzer festgelegt — die bisherige Automatik, die pro Checkpoint die erste
+  Nachkommastelle erhöht hat, entfällt. `N` (`CURRENT_PROJECT_VERSION` in
+  `project.yml`) ist die Build-Nummer und wird automatisch bei jedem Commit um 1
+  erhöht.
+- Neuer Git-Hook `.githooks/pre-commit`: erhöht `CURRENT_PROJECT_VERSION` in
+  `project.yml` und trägt die neue Build-Nummer in die oberste Überschrift von
+  `docs/CHANGELOG.md` ein (`## vX.Y (Build N) — ...`), damit jeder Commit
+  nachvollziehbar auf seinen Changelog-Eintrag verweist. Aktiviert lokal über
+  `git config core.hooksPath .githooks` (siehe `docs/DECISIONS.md`).
+- Version mit diesem Commit auf `0.1` zurückgesetzt (Nutzervorgabe); die
+  Build-Nummer knüpft an die bisherige Commit-Historie an.
+
 ## v1.6 — Explizite SwiftData-Migrationslogik (`SchemaMigrationPlan`)
 
 - `Models/SchemaDefinition.swift`: neue `SchemaV1` (``VersionedSchema``, aktueller

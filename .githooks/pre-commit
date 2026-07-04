@@ -1,0 +1,38 @@
+#!/bin/sh
+# Erhöht CURRENT_PROJECT_VERSION (Build-Nummer) in project.yml bei jedem Commit
+# um 1 und trägt die neue Build-Nummer in die oberste docs/CHANGELOG.md-Überschrift
+# ein. MARKETING_VERSION (Major.Minor) wird bewusst NICHT angefasst — die wird
+# manuell vom Nutzer festgelegt. Aktivierung: `git config core.hooksPath .githooks`
+# (siehe docs/DECISIONS.md).
+set -e
+
+PROJECT_YML="project.yml"
+CHANGELOG="docs/CHANGELOG.md"
+
+if [ ! -f "$PROJECT_YML" ]; then
+  exit 0
+fi
+
+current=$(grep -m1 'CURRENT_PROJECT_VERSION:' "$PROJECT_YML" | sed -E 's/.*"([0-9]+)".*/\1/')
+if [ -z "$current" ]; then
+  echo "pre-commit: CURRENT_PROJECT_VERSION nicht in $PROJECT_YML gefunden, überspringe Build-Nummer-Update." >&2
+  exit 0
+fi
+next=$((current + 1))
+
+sed -E -i '' "s/(CURRENT_PROJECT_VERSION: )\"[0-9]+\"/\1\"$next\"/" "$PROJECT_YML"
+git add "$PROJECT_YML"
+
+if [ -f "$CHANGELOG" ]; then
+  awk -v build="$next" '
+    !done && /^## v/ && $0 !~ /\(Build [0-9]+\)/ {
+      sep = index($0, " — ")
+      if (sep > 0) {
+        $0 = substr($0, 1, sep - 1) " (Build " build ")" substr($0, sep)
+        done = 1
+      }
+    }
+    { print }
+  ' "$CHANGELOG" > "$CHANGELOG.tmp" && mv "$CHANGELOG.tmp" "$CHANGELOG"
+  git add "$CHANGELOG"
+fi
