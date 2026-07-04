@@ -76,6 +76,31 @@ den Container einmalig über `.modelContainer(_:)` an die Scene, ein Laufzeitwec
 wäre unverhältnismäßig riskant (offene `ModelContext`-Referenzen, laufende Queries)
 für den Nutzen gegenüber einem einfachen Neustart-Hinweis.
 
+## Explizite SwiftData-Migrationslogik (`SchemaMigrationPlan`) ab v1.5
+
+Auslöser: In v1.4 crashte die App beim Öffnen eines vor v1.4 angelegten Geschäfts,
+weil ein neues nicht-optionales Attribut (`Geschaeft.regalSortierModus`) auf einem
+bestehenden Modell ergänzt wurde und SwiftDatas automatische Lightweight-Migration
+den fehlenden Spaltenwert bestehender Datensätze nicht sauber auf das Enum casten
+konnte (`Could not cast value of type 'Swift.Optional<Any>' to 'RegalSortierModus'`).
+Reproduziert über ein eigenständiges Migrationsexperiment außerhalb der (immer
+frischen, In-Memory-)Unit-Tests.
+
+Statt uns weiterhin auf implizites Lightweight-Migrationsverhalten zu verlassen,
+gibt es ab jetzt einen expliziten `SchemaMigrationPlan` (`Models/SchemaDefinition.swift`:
+`SchemaV1`, `ShopWithMeMigrationPlan`), über den der `ModelContainer` in
+`ShopWithMeApp.swift` aufgebaut wird.
+
+**Regel: Jede künftige Datenmodell-Änderung (neues Attribut, neues Modell, geänderter
+Typ, Umbenennung, …) bekommt eine neue `SchemaVN` samt `MigrationStage`** —
+Vorgehen und Kriterien (wann `.lightweight` reicht vs. wann `.custom` mit explizitem
+Daten-Backfill nötig ist) sind ausführlich in der DocC-Dokumentation von
+`ShopWithMeMigrationPlan` beschrieben. Zusätzlich bleibt die defensive Regel aus dem
+v1.4-Vorfall bestehen: neue gespeicherte Attribute auf bestehenden Modellen als
+optionalen Rohwert speichern und über ein Computed-Property mit sicherem Fallback
+kapseln (siehe `Geschaeft.regalSortierModus`) — das fängt auch Fälle ab, die die
+Migrationsstufe selbst nicht abdeckt.
+
 ## Git-Autor (lokal, nur dieses Repo)
 
 `user.name`/`user.email` wurden nur lokal für dieses Repo gesetzt (nicht global), da

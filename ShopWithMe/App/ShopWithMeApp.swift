@@ -3,10 +3,10 @@ import SwiftData
 
 /// Einstiegspunkt der App.
 ///
-/// Baut den ``ModelContainer`` mit dem vollständigen Datenmodell-Schema auf — am vom
-/// Anwender gewählten Speicherort (siehe ``DatabaseLocationService``), falls einer
-/// hinterlegt ist, sonst am SwiftData-Standardpfad — und sät beim ersten Start die
-/// Standardkategorien via ``SeedData``.
+/// Baut den ``ModelContainer`` mit dem vollständigen Datenmodell-Schema und dem
+/// ``ShopWithMeMigrationPlan`` auf — am vom Anwender gewählten Speicherort (siehe
+/// ``DatabaseLocationService``), falls einer hinterlegt ist, sonst am SwiftData-
+/// Standardpfad — und sät beim ersten Start die Standardkategorien via ``SeedData``.
 @main
 struct ShopWithMeApp: App {
     let modelContainer: ModelContainer
@@ -21,7 +21,11 @@ struct ShopWithMeApp: App {
         }
 
         do {
-            modelContainer = try ModelContainer(for: schema, configurations: [konfiguration])
+            modelContainer = try ModelContainer(
+                for: schema,
+                migrationPlan: SchemaDefinition.migrationPlan,
+                configurations: [konfiguration]
+            )
         } catch {
             fatalError("ModelContainer konnte nicht erstellt werden: \(error)")
         }

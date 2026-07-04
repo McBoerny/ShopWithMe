@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.6 — Explizite SwiftData-Migrationslogik (`SchemaMigrationPlan`)
+
+- `Models/SchemaDefinition.swift`: neue `SchemaV1` (``VersionedSchema``, aktueller
+  Modellstand) und `ShopWithMeMigrationPlan` (``SchemaMigrationPlan``, aktuell mit
+  einer Version und ohne Stages). `SchemaDefinition.schema`/`.migrationPlan` liefern
+  beides zentral für App-Start und `DatabaseLocationService`.
+- `App/ShopWithMeApp.swift`: `ModelContainer` wird jetzt mit `migrationPlan:
+  SchemaDefinition.migrationPlan` aufgebaut statt sich implizit auf SwiftDatas
+  automatische Lightweight-Migration zu verlassen.
+- Ausführliche DocC-Dokumentation an `ShopWithMeMigrationPlan` legt das Vorgehen für
+  jede künftige Datenmodell-Änderung fest (neue `SchemaVN` + passende
+  `MigrationStage`, `.lightweight` vs. `.custom`) — Hintergrund und Auslöser
+  (v1.4→v1.5-Absturz) in `docs/DECISIONS.md` festgehalten.
+
 ## v1.5 — Absturz beim Öffnen eines Geschäfts nach v1.4-Update behoben
 
 - `Models/Geschaeft.swift`: `regalSortierModus` (neu in v1.4) crashte für vor
