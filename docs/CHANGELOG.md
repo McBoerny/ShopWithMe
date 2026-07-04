@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.5 — Lern-Algorithmus für Regal-Reihenfolge
+
+- `Services/ShelfOrderLearningService.swift`: wertet abgeschlossene
+  Einkaufsvorgänge aus, pflegt `RegalBesuchsStatistik` je Regal und leitet daraus
+  eine vorgeschlagene Regal-Reihenfolge ab (ab 5 abgeschlossenen Einkäufen in einem
+  Geschäft).
+- `GeschaeftDetailView` zeigt den Vorschlag als Banner an, wenn er von der
+  aktuellen manuellen Reihenfolge abweicht; der Anwender übernimmt ihn explizit
+  über einen Button — die manuelle Reihenfolge wird nie automatisch überschrieben.
+- `EinkaufenView` ruft `ShelfOrderLearningService.lernenAus(...)` beim Abschließen
+  eines Einkaufs auf.
+- Neuer Unit-Test `ShelfOrderLearningServiceTests` verifiziert, dass die gelernte
+  Reihenfolge von einer bewusst falsch gewählten manuellen Reihenfolge abweichen
+  und korrekt übernommen werden kann.
+
 ## v0.4 — Einkaufen-Flow
 
 - `Views/Einkaufen/EinkaufenView.swift`: Geschäft wählen, Einkauf starten, nach Regal

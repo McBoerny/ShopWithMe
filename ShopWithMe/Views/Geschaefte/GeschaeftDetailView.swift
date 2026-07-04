@@ -15,8 +15,38 @@ struct GeschaeftDetailView: View {
         geschaeft.regale.sorted { $0.sortIndex < $1.sortIndex }
     }
 
+    private var abgeschlosseneEinkaeufe: Int {
+        ShelfOrderLearningService.abgeschlosseneEinkaeufe(fuer: geschaeft, context: modelContext)
+    }
+
+    private var vorgeschlageneReihenfolge: [Regal] {
+        ShelfOrderLearningService.vorgeschlageneReihenfolge(fuer: geschaeft, context: modelContext)
+    }
+
+    private var vorschlagWeichtVonManuellerReihenfolgeAb: Bool {
+        vorgeschlageneReihenfolge.map(\.persistentModelID) != regaleSortiert.map(\.persistentModelID)
+    }
+
     var body: some View {
         List {
+            if abgeschlosseneEinkaeufe >= ShelfOrderLearningService.mindestEinkaeufeFuerVorschlag,
+               vorschlagWeichtVonManuellerReihenfolgeAb {
+                Section {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Automatische Reihenfolge verfügbar", systemImage: "wand.and.stars")
+                            .font(.headline)
+                        Text("Basierend auf \(abgeschlosseneEinkaeufe) abgeschlossenen Einkäufen kennt ShopWithMe eine Reihenfolge, in der du die Regale hier typischerweise abläufst.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        Button("Automatische Reihenfolge übernehmen") {
+                            ShelfOrderLearningService.vorgeschlageneReihenfolgeUebernehmen(fuer: geschaeft, context: modelContext)
+                        }
+                        .buttonStyle(.glass)
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+
             Section {
                 Button {
                     zeigeStammdatenEdit = true

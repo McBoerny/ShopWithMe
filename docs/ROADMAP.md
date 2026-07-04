@@ -14,7 +14,7 @@ Jeder Checkpoint ist ein Git-Commit, der die Version (`VERSION`-Datei + `project
 - [x] **v0.4** — Einkaufen-Flow: Einkaufsliste pro Geschäft (nur zugeordnete
   Kategorien, gruppiert nach Regal), Einkaufsvorgang starten/abschließen, manuelle
   Regal-Reihenfolge editierbar.
-- [ ] **v0.5** — Lern-Algorithmus für automatische Regal-Reihenfolge
+- [x] **v0.5** — Lern-Algorithmus für automatische Regal-Reihenfolge
   (`ShelfOrderLearningService`) + Vorschlag in der UI.
 - [ ] **v0.6** — KI-Artikelvorschlag (`AISuggestionService`) +
   Einstellungen/Hilfe-Bildschirme + Datenbank-Speicherort-Funktion.

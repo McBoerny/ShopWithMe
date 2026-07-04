@@ -140,6 +140,7 @@ private struct EinkaufslisteView: View {
         .safeAreaInset(edge: .bottom) {
             Button("Einkauf abschließen") {
                 einkaufsvorgang.abschliessen()
+                ShelfOrderLearningService.lernenAus(einkaufsvorgang, context: modelContext)
             }
             .buttonStyle(.glass)
             .padding()
