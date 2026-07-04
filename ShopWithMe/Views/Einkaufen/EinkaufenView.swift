@@ -82,6 +82,7 @@ private struct EinkaufslisteView: View {
 
     @State private var zeigeBelegScanAngebot = false
     @State private var zeigeBelegScan = false
+    @State private var zeigeArtikelHinzufuegen = false
 
     private struct Gruppe: Identifiable {
         let regal: Regal
@@ -155,6 +156,18 @@ private struct EinkaufslisteView: View {
             .padding()
         }
         .navigationTitle(geschaeft?.name ?? "Einkaufsliste")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    zeigeArtikelHinzufuegen = true
+                } label: {
+                    Label("Artikel hinzufügen", systemImage: "plus")
+                }
+            }
+        }
+        .sheet(isPresented: $zeigeArtikelHinzufuegen) {
+            ArtikelHinzufuegenView()
+        }
         .confirmationDialog(
             "Einkauf abgeschlossen",
             isPresented: $zeigeBelegScanAngebot,

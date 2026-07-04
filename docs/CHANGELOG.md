@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.1 — Artikel direkt aus der Einkaufsliste hinzufügen
+
+- Neu: `Views/Einkaufen/ArtikelHinzufuegenView.swift` — Sheet mit Suchfeld über alle
+  bereits angelegten Artikel, aufrufbar über den neuen „+“-Button in der
+  Einkaufsliste (`Views/Einkaufen/EinkaufenView.swift`). Antippen eines
+  Suchtreffers setzt den Artikel direkt auf die Einkaufsliste.
+- Findet die Suche keinen exakten Namenstreffer, kann der Artikel per „„…“ neu
+  anlegen“ sofort über die bestehende `ArtikelEditView` angelegt werden
+  (inkl. Kategorie-Auswahl) und landet danach automatisch auf der Einkaufsliste.
+
 ## v1.0 — Globale Einkaufsliste & frei änderbare Kategorie
 
 - `Views/Einkaufen/EinkaufenView.swift`: Die Einkaufsliste ist jetzt global und nicht
