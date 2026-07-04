@@ -8,7 +8,7 @@ struct ShelfOrderLearningServiceTests {
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {
         let schema = Schema([
             Artikel.self, ArtikelKategorie.self, Regal.self, Geschaeft.self,
-            Einkaufsvorgang.self, KaufEintrag.self, RegalBesuchsStatistik.self,
+            Einkaufsvorgang.self, KaufEintrag.self, KategorieBesuchsStatistik.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
@@ -16,7 +16,7 @@ struct ShelfOrderLearningServiceTests {
     }
 
     @Test
-    func lerntReihenfolgeAusWiederholtenEinkaeufen() throws {
+    func lerntRegalReihenfolgeAusWiederholtenEinkaeufen() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
@@ -48,8 +48,8 @@ struct ShelfOrderLearningServiceTests {
             shampoo.istAufEinkaufsliste = true
             let einkauf = Einkaufsvorgang(geschaeft: geschaeft)
             context.insert(einkauf)
-            einkauf.artikelAbhaken(apfel, regal: obstregal, context: context)
-            einkauf.artikelAbhaken(shampoo, regal: drogerieregal, context: context)
+            einkauf.artikelAbhaken(apfel, context: context)
+            einkauf.artikelAbhaken(shampoo, context: context)
             einkauf.abschliessen()
             ShelfOrderLearningService.lernenAus(einkauf, context: context)
         }
@@ -65,5 +65,37 @@ struct ShelfOrderLearningServiceTests {
         ShelfOrderLearningService.vorgeschlageneReihenfolgeUebernehmen(fuer: geschaeft, context: context)
         #expect(obstregal.sortIndex == 0)
         #expect(drogerieregal.sortIndex == 1)
+    }
+
+    @Test
+    func liefertKategorieReihenfolgeFuerLadenOhneRegal() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        let drogerie = ArtikelKategorie(name: "Drogerie", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
+        context.insert(obst)
+        context.insert(drogerie)
+
+        // Dieses Geschäft hat bewusst keine Regale.
+        let geschaeft = Geschaeft(name: "Kiosk", typ: .sonstiges)
+        context.insert(geschaeft)
+
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorie: obst)
+        let shampoo = Artikel(name: "Shampoo", symbolName: "sparkles", farbeHex: "#AF52DE", kategorie: drogerie)
+        context.insert(apfel)
+        context.insert(shampoo)
+
+        let einkauf = Einkaufsvorgang(geschaeft: geschaeft)
+        context.insert(einkauf)
+        einkauf.artikelAbhaken(apfel, context: context)
+        einkauf.artikelAbhaken(shampoo, context: context)
+        einkauf.abschliessen()
+        ShelfOrderLearningService.lernenAus(einkauf, context: context)
+
+        let positionen = ShelfOrderLearningService.kategoriePositionen(fuer: geschaeft, context: context)
+        #expect(positionen[obst.persistentModelID] == 0)
+        #expect(positionen[drogerie.persistentModelID] == 1)
+        #expect(ShelfOrderLearningService.vorgeschlageneReihenfolge(fuer: geschaeft, context: context).isEmpty)
     }
 }

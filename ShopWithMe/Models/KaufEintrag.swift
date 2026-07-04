@@ -5,7 +5,7 @@ import SwiftData
 /// Preisübersicht.
 ///
 /// `preis` ist bewusst optional: Beim Abhaken auf der Einkaufsliste (siehe
-/// ``Einkaufsvorgang/artikelAbhaken(_:regal:context:)``) entsteht der Eintrag zunächst
+/// ``Einkaufsvorgang/artikelAbhaken(_:context:)``) entsteht der Eintrag zunächst
 /// ohne Preis; erst der spätere Belegscan trägt den tatsächlich bezahlten Preis nach.
 ///
 /// `artikelNameSnapshot`/`geschaeftNameSnapshot` speichern den Namen zum Kaufzeitpunkt
@@ -21,10 +21,10 @@ final class KaufEintrag {
     var einkaufsvorgang: Einkaufsvorgang?
     /// Das Geschäft, in dem der Kauf stattfand.
     var geschaeft: Geschaeft?
-    /// Das Regal, aus dem der Artikel beim Einkaufen entnommen wurde — Grundlage für
+    /// Die Kategorie des Artikels zum Kaufzeitpunkt — Grundlage für
     /// ``ShelfOrderLearningService``, unabhängig von einer späteren Änderung der
-    /// Regal-Kategorie-Zuordnung.
-    var regal: Regal?
+    /// Artikel-Kategorie-Zuordnung.
+    var kategorie: ArtikelKategorie?
     /// Name des Artikels zum Kaufzeitpunkt (dauerhafter Schnappschuss).
     var artikelNameSnapshot: String
     /// Name des Geschäfts zum Kaufzeitpunkt (dauerhafter Schnappschuss).
@@ -35,28 +35,28 @@ final class KaufEintrag {
     var preis: Decimal?
     /// Gekaufte Menge (Standard: 1).
     var menge: Double
-    /// Position in der chronologischen Regal-Besuchsreihenfolge dieses
+    /// Position in der chronologischen Kategorie-Besuchsreihenfolge dieses
     /// Einkaufsvorgangs — Grundlage für ``ShelfOrderLearningService``.
-    var regalBesuchsIndex: Int?
+    var kategorieBesuchsIndex: Int?
 
     init(
         artikel: Artikel?,
         geschaeft: Geschaeft?,
-        regal: Regal? = nil,
+        kategorie: ArtikelKategorie? = nil,
         preis: Decimal? = nil,
         menge: Double = 1,
         datum: Date = Date(),
-        regalBesuchsIndex: Int? = nil
+        kategorieBesuchsIndex: Int? = nil
     ) {
         self.id = UUID()
         self.artikel = artikel
         self.geschaeft = geschaeft
-        self.regal = regal
+        self.kategorie = kategorie
         self.artikelNameSnapshot = artikel?.name ?? ""
         self.geschaeftNameSnapshot = geschaeft?.name ?? ""
         self.datum = datum
         self.preis = preis
         self.menge = menge
-        self.regalBesuchsIndex = regalBesuchsIndex
+        self.kategorieBesuchsIndex = kategorieBesuchsIndex
     }
 }

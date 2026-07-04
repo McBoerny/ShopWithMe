@@ -8,7 +8,7 @@ struct EinkaufsvorgangTests {
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {
         let schema = Schema([
             Artikel.self, ArtikelKategorie.self, Regal.self, Geschaeft.self,
-            Einkaufsvorgang.self, KaufEintrag.self, RegalBesuchsStatistik.self,
+            Einkaufsvorgang.self, KaufEintrag.self, KategorieBesuchsStatistik.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
@@ -33,16 +33,17 @@ struct EinkaufsvorgangTests {
         let einkauf = Einkaufsvorgang(geschaeft: geschaeft)
         context.insert(einkauf)
 
-        einkauf.artikelAbhaken(apfel, regal: regal, context: context)
+        einkauf.artikelAbhaken(apfel, context: context)
 
         #expect(apfel.istAufEinkaufsliste == false)
         #expect(einkauf.kaufEintraege.count == 1)
-        #expect(einkauf.kaufEintraege.first?.regalBesuchsIndex == 0)
+        #expect(einkauf.kaufEintraege.first?.kategorie == obst)
+        #expect(einkauf.kaufEintraege.first?.kategorieBesuchsIndex == 0)
         #expect(einkauf.kaufEintraege.first?.preis == nil)
     }
 
     @Test
-    func gleichesRegalTeiltSichDenBesuchsIndex() throws {
+    func gleicheKategorieTeiltSichDenBesuchsIndex() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
@@ -70,17 +71,17 @@ struct EinkaufsvorgangTests {
         let einkauf = Einkaufsvorgang(geschaeft: geschaeft)
         context.insert(einkauf)
 
-        einkauf.artikelAbhaken(apfel, regal: obstregal, context: context)
-        einkauf.artikelAbhaken(birne, regal: obstregal, context: context)
-        einkauf.artikelAbhaken(shampoo, regal: drogerieregal, context: context)
+        einkauf.artikelAbhaken(apfel, context: context)
+        einkauf.artikelAbhaken(birne, context: context)
+        einkauf.artikelAbhaken(shampoo, context: context)
 
         let apfelEintrag = einkauf.kaufEintraege.first { $0.artikel == apfel }
         let birneEintrag = einkauf.kaufEintraege.first { $0.artikel == birne }
         let shampooEintrag = einkauf.kaufEintraege.first { $0.artikel == shampoo }
 
-        #expect(apfelEintrag?.regalBesuchsIndex == 0)
-        #expect(birneEintrag?.regalBesuchsIndex == 0)
-        #expect(shampooEintrag?.regalBesuchsIndex == 1)
+        #expect(apfelEintrag?.kategorieBesuchsIndex == 0)
+        #expect(birneEintrag?.kategorieBesuchsIndex == 0)
+        #expect(shampooEintrag?.kategorieBesuchsIndex == 1)
     }
 
     @Test
@@ -101,7 +102,7 @@ struct EinkaufsvorgangTests {
         let einkauf = Einkaufsvorgang(geschaeft: geschaeft)
         context.insert(einkauf)
 
-        einkauf.artikelAbhaken(apfel, regal: regal, context: context)
+        einkauf.artikelAbhaken(apfel, context: context)
         einkauf.artikelAbwaehlen(apfel, context: context)
 
         #expect(apfel.istAufEinkaufsliste == true)

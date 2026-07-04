@@ -1,36 +1,37 @@
 import Foundation
 import SwiftData
 
-/// Gelernte Statistik, an welcher Position ein ``Regal`` in einem ``Geschaeft``
-/// typischerweise besucht wird.
+/// Gelernte Statistik, an welcher Position eine ``ArtikelKategorie`` in einem
+/// ``Geschaeft`` typischerweise besucht wird.
 ///
 /// Wird von ``ShelfOrderLearningService`` nach jedem abgeschlossenen
 /// ``Einkaufsvorgang`` aktualisiert. Aus ``durchschnittlichePosition`` über alle
-/// Regale eines Geschäfts ergibt sich die vorgeschlagene automatische
-/// Regal-Reihenfolge.
+/// Kategorien eines Geschäfts leitet der Service sowohl eine vorgeschlagene
+/// automatische Regal-Reihenfolge (Aggregation über ``Regal/kategorien``) als auch —
+/// für Geschäfte ohne Regale — direkt eine Kategorie-Reihenfolge ab.
 @Model
-final class RegalBesuchsStatistik {
+final class KategorieBesuchsStatistik {
     /// Eindeutige Kennung.
     var id: UUID
     /// Das Geschäft, für das diese Statistik gilt.
     var geschaeft: Geschaeft?
-    /// Das Regal, für das diese Statistik gilt.
-    var regal: Regal?
+    /// Die Artikelkategorie, für die diese Statistik gilt.
+    var kategorie: ArtikelKategorie?
     /// Anzahl der Einkaufsvorgänge, die in diese Statistik eingeflossen sind.
     var besucheAnzahl: Int
     /// Summe aller beobachteten Sequenzpositionen (Basis für den Durchschnitt).
     var summeSequenzPosition: Double
 
-    init(geschaeft: Geschaeft?, regal: Regal?) {
+    init(geschaeft: Geschaeft?, kategorie: ArtikelKategorie?) {
         self.id = UUID()
         self.geschaeft = geschaeft
-        self.regal = regal
+        self.kategorie = kategorie
         self.besucheAnzahl = 0
         self.summeSequenzPosition = 0
     }
 
     /// Durchschnittliche Besuchsposition. `.infinity`, solange noch keine Beobachtung
-    /// vorliegt, damit unbeobachtete Regale ans Ende einer vorgeschlagenen
+    /// vorliegt, damit unbeobachtete Kategorien ans Ende einer vorgeschlagenen
     /// Reihenfolge sortiert werden.
     var durchschnittlichePosition: Double {
         besucheAnzahl > 0 ? summeSequenzPosition / Double(besucheAnzahl) : .infinity

@@ -10,7 +10,7 @@ struct ModelTests {
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {
         let schema = Schema([
             Artikel.self, ArtikelKategorie.self, Regal.self, Geschaeft.self,
-            Einkaufsvorgang.self, KaufEintrag.self, RegalBesuchsStatistik.self,
+            Einkaufsvorgang.self, KaufEintrag.self, KategorieBesuchsStatistik.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
@@ -46,8 +46,8 @@ struct ModelTests {
     }
 
     @Test
-    func regalBesuchsStatistikBerechnetDurchschnitt() {
-        let statistik = RegalBesuchsStatistik(geschaeft: nil, regal: nil)
+    func kategorieBesuchsStatistikBerechnetDurchschnitt() {
+        let statistik = KategorieBesuchsStatistik(geschaeft: nil, kategorie: nil)
         #expect(statistik.durchschnittlichePosition == .infinity)
 
         statistik.erfassen(sequenzPosition: 1)

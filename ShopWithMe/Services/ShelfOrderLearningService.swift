@@ -2,8 +2,10 @@ import Foundation
 import SwiftData
 
 /// Lernt aus abgeschlossenen ``Einkaufsvorgang``en, in welcher Reihenfolge der
-/// Anwender die Regale eines Geschäfts typischerweise abläuft, und leitet daraus eine
-/// vorgeschlagene automatische Regal-Reihenfolge ab.
+/// Anwender die Artikelkategorien eines Geschäfts typischerweise abläuft, und leitet
+/// daraus eine vorgeschlagene automatische Regal-Reihenfolge ab. Besitzt ein Geschäft
+/// keine Regale, dient die gelernte Kategorie-Reihenfolge selbst als
+/// Sortiergrundlage (siehe ``kategoriePositionen(fuer:context:)``).
 ///
 /// Die manuelle Reihenfolge (``Regal/sortIndex``) bleibt dabei unangetastet, bis der
 /// Anwender den Vorschlag explizit über
@@ -14,18 +16,18 @@ enum ShelfOrderLearningService {
     static let mindestEinkaeufeFuerVorschlag = 5
 
     /// Wertet einen gerade abgeschlossenen Einkaufsvorgang aus und aktualisiert die
-    /// ``RegalBesuchsStatistik`` der darin besuchten Regale.
+    /// ``KategorieBesuchsStatistik`` der darin besuchten Artikelkategorien.
     static func lernenAus(_ einkaufsvorgang: Einkaufsvorgang, context: ModelContext) {
         guard let geschaeft = einkaufsvorgang.geschaeft else { return }
 
-        var besuchteRegaleNachIndex: [PersistentIdentifier: (regal: Regal, index: Int)] = [:]
+        var besuchteKategorienNachIndex: [PersistentIdentifier: (kategorie: ArtikelKategorie, index: Int)] = [:]
         for eintrag in einkaufsvorgang.kaufEintraege {
-            guard let regal = eintrag.regal, let index = eintrag.regalBesuchsIndex else { continue }
-            besuchteRegaleNachIndex[regal.persistentModelID] = (regal, index)
+            guard let kategorie = eintrag.kategorie, let index = eintrag.kategorieBesuchsIndex else { continue }
+            besuchteKategorienNachIndex[kategorie.persistentModelID] = (kategorie, index)
         }
 
-        for (regal, index) in besuchteRegaleNachIndex.values {
-            let statistik = statistik(fuer: regal, in: geschaeft, context: context)
+        for (kategorie, index) in besuchteKategorienNachIndex.values {
+            let statistik = statistik(fuer: kategorie, in: geschaeft, context: context)
             statistik.erfassen(sequenzPosition: index)
         }
     }
@@ -40,12 +42,14 @@ enum ShelfOrderLearningService {
     }
 
     /// Die anhand der bisherigen Einkäufe gelernte Regal-Reihenfolge für dieses
-    /// Geschäft. Regale ohne Beobachtungen werden ans Ende sortiert.
+    /// Geschäft. Die Position eines Regals ergibt sich aus dem Durchschnitt der
+    /// gelernten Positionen seiner ``Regal/kategorien``; Regale ohne Kategorien mit
+    /// Beobachtungen werden ans Ende sortiert.
     static func vorgeschlageneReihenfolge(fuer geschaeft: Geschaeft, context: ModelContext) -> [Regal] {
-        let statistikenNachRegal = statistiken(fuer: geschaeft, context: context)
+        let positionen = kategoriePositionen(fuer: geschaeft, context: context)
         return geschaeft.regale.sorted { a, b in
-            let posA = statistikenNachRegal[a.persistentModelID]?.durchschnittlichePosition ?? .infinity
-            let posB = statistikenNachRegal[b.persistentModelID]?.durchschnittlichePosition ?? .infinity
+            let posA = position(fuer: a, kategoriePositionen: positionen)
+            let posB = position(fuer: b, kategoriePositionen: positionen)
             if posA == posB {
                 return a.sortIndex < b.sortIndex
             }
@@ -61,29 +65,41 @@ enum ShelfOrderLearningService {
         }
     }
 
-    private static func statistik(fuer regal: Regal, in geschaeft: Geschaeft, context: ModelContext) -> RegalBesuchsStatistik {
-        let regalID = regal.persistentModelID
-        var deskriptor = FetchDescriptor<RegalBesuchsStatistik>(
-            predicate: #Predicate { $0.regal?.persistentModelID == regalID }
+    /// Die gelernten durchschnittlichen Besuchspositionen aller Artikelkategorien
+    /// dieses Geschäfts, indiziert nach Kategorie. Enthält nur Kategorien, für die
+    /// bereits mindestens eine Beobachtung vorliegt. Wird sowohl zur Regal-Aggregation
+    /// (``vorgeschlageneReihenfolge(fuer:context:)``) als auch direkt von der
+    /// Einkaufsliste genutzt, um Artikel ohne zugeordnetes Regal (z.B. in Geschäften
+    /// ohne Regale) sinnvoll zu sortieren.
+    static func kategoriePositionen(fuer geschaeft: Geschaeft, context: ModelContext) -> [PersistentIdentifier: Double] {
+        let geschaeftID = geschaeft.persistentModelID
+        let deskriptor = FetchDescriptor<KategorieBesuchsStatistik>(
+            predicate: #Predicate { $0.geschaeft?.persistentModelID == geschaeftID }
+        )
+        let ergebnisse = (try? context.fetch(deskriptor)) ?? []
+        return Dictionary(uniqueKeysWithValues: ergebnisse.compactMap { statistik -> (PersistentIdentifier, Double)? in
+            guard let kategorie = statistik.kategorie else { return nil }
+            return (kategorie.persistentModelID, statistik.durchschnittlichePosition)
+        })
+    }
+
+    private static func position(fuer regal: Regal, kategoriePositionen: [PersistentIdentifier: Double]) -> Double {
+        let beobachtetePositionen = regal.kategorien.compactMap { kategoriePositionen[$0.persistentModelID] }
+        guard !beobachtetePositionen.isEmpty else { return .infinity }
+        return beobachtetePositionen.reduce(0, +) / Double(beobachtetePositionen.count)
+    }
+
+    private static func statistik(fuer kategorie: ArtikelKategorie, in geschaeft: Geschaeft, context: ModelContext) -> KategorieBesuchsStatistik {
+        let kategorieID = kategorie.persistentModelID
+        var deskriptor = FetchDescriptor<KategorieBesuchsStatistik>(
+            predicate: #Predicate { $0.kategorie?.persistentModelID == kategorieID }
         )
         deskriptor.fetchLimit = 1
         if let bestehende = try? context.fetch(deskriptor).first {
             return bestehende
         }
-        let neue = RegalBesuchsStatistik(geschaeft: geschaeft, regal: regal)
+        let neue = KategorieBesuchsStatistik(geschaeft: geschaeft, kategorie: kategorie)
         context.insert(neue)
         return neue
-    }
-
-    private static func statistiken(fuer geschaeft: Geschaeft, context: ModelContext) -> [PersistentIdentifier: RegalBesuchsStatistik] {
-        let geschaeftID = geschaeft.persistentModelID
-        let deskriptor = FetchDescriptor<RegalBesuchsStatistik>(
-            predicate: #Predicate { $0.geschaeft?.persistentModelID == geschaeftID }
-        )
-        let ergebnisse = (try? context.fetch(deskriptor)) ?? []
-        return Dictionary(uniqueKeysWithValues: ergebnisse.compactMap { statistik in
-            guard let regal = statistik.regal else { return nil }
-            return (regal.persistentModelID, statistik)
-        })
     }
 }

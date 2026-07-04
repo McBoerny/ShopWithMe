@@ -1,5 +1,25 @@
 # Changelog
 
+## v1.2 — Lern-Algorithmus auf Artikelkategorie umgestellt
+
+- `Models/KategorieBesuchsStatistik.swift` (neu) ersetzt `RegalBesuchsStatistik`:
+  die gelernte Besuchsstatistik hängt jetzt an der ``ArtikelKategorie`` eines
+  Artikels statt am ``Regal`` — Grundlage dafür, dass auch Geschäfte ohne Regale
+  (seit v1.0 möglich) eine sinnvolle Sortierung bekommen.
+- `Models/KaufEintrag.swift` / `Models/Einkaufsvorgang.swift`: `regal`/
+  `regalBesuchsIndex` durch `kategorie`/`kategorieBesuchsIndex` ersetzt;
+  `artikelAbhaken(_:context:)` leitet die Kategorie jetzt selbst vom Artikel ab
+  (kein `regal`-Parameter mehr nötig).
+- `Services/ShelfOrderLearningService.swift`: neue
+  `kategoriePositionen(fuer:context:)` liefert die gelernten Kategorie-Positionen
+  eines Geschäfts direkt — genutzt sowohl zur Regal-Reihenfolge (Durchschnitt über
+  `Regal/kategorien`) als auch von `EinkaufenView` zur Sortierung der „Sonstige“-
+  Sektion in Geschäften ohne Regal.
+- Neuer Unit-Test `liefertKategorieReihenfolgeFuerLadenOhneRegal` verifiziert die
+  Kategorie-Reihenfolge für ein Geschäft ganz ohne Regale.
+- Verifiziert: `xcodegen generate` + `xcodebuild build` + `xcodebuild test`
+  (`iPhone 17` Simulator) laufen fehlerfrei durch, alle 8 Unit-Tests bestehen.
+
 ## v1.1 — Artikel direkt aus der Einkaufsliste hinzufügen
 
 - Neu: `Views/Einkaufen/ArtikelHinzufuegenView.swift` — Sheet mit Suchfeld über alle

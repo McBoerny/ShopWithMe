@@ -10,6 +10,6 @@ enum SchemaDefinition {
         Geschaeft.self,
         Einkaufsvorgang.self,
         KaufEintrag.self,
-        RegalBesuchsStatistik.self,
+        KategorieBesuchsStatistik.self,
     ])
 }

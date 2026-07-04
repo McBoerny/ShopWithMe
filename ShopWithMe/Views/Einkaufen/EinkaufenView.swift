@@ -1,6 +1,11 @@
 import SwiftUI
 import SwiftData
 
+/// Sentinel-ID für die Gruppe der Artikel ganz ohne Artikelkategorie, damit
+/// ``EinkaufenView``s Kategorie-Gruppen trotz optionaler ``ArtikelKategorie`` als
+/// `Identifiable` funktionieren.
+private let ohneKategorieGruppenID = UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
+
 /// Einstiegspunkt zum Einkaufen: die globale Einkaufsliste abarbeiten, optional
 /// gruppiert nach Regal eines gewählten Geschäfts.
 struct EinkaufenView: View {
@@ -90,9 +95,18 @@ private struct EinkaufslisteView: View {
         var id: PersistentIdentifier { regal.persistentModelID }
     }
 
+    /// Eine Gruppe von Artikeln derselben Artikelkategorie (oder ganz ohne Kategorie),
+    /// die sich keinem Regal zuordnen lässt — z.B. weil das Geschäft keine Regale
+    /// besitzt oder die Kategorie darin keinem Regal zugeordnet ist.
+    private struct KategorieGruppe: Identifiable {
+        let kategorie: ArtikelKategorie?
+        var artikel: [Artikel]
+        var id: UUID { kategorie?.id ?? ohneKategorieGruppenID }
+    }
+
     /// Artikel, die sich keinem Regal zuordnen lassen (kein Geschäft gewählt,
     /// keine Kategorie oder Kategorie ohne Regal im gewählten Geschäft) — werden
-    /// dennoch angezeigt, nur eben in der Sonstige-Sektion.
+    /// dennoch angezeigt, nur eben in nach Kategorie gruppierten Sektionen.
     private var sonstigeArtikel: [Artikel] {
         guard let geschaeft else { return artikelAufListe }
         return artikelAufListe.filter { artikel in
@@ -112,6 +126,33 @@ private struct EinkaufslisteView: View {
         return nachRegal.values.sorted { $0.regal.sortIndex < $1.regal.sortIndex }
     }
 
+    /// ``sonstigeArtikel``, gruppiert nach Artikelkategorie und sortiert nach der für
+    /// dieses Geschäft gelernten Kategorie-Reihenfolge (``ShelfOrderLearningService``).
+    /// Das ist insbesondere für Geschäfte ohne Regale die alleinige Sortiergrundlage.
+    /// Kategorien ohne Beobachtung landen (alphabetisch sortiert) dahinter, Artikel
+    /// ganz ohne Kategorie immer am Ende.
+    private var sonstigeGruppen: [KategorieGruppe] {
+        var nachKategorie: [UUID: KategorieGruppe] = [:]
+        for artikel in sonstigeArtikel {
+            let schluessel = artikel.kategorie?.id ?? ohneKategorieGruppenID
+            nachKategorie[schluessel, default: KategorieGruppe(kategorie: artikel.kategorie, artikel: [])].artikel.append(artikel)
+        }
+        let positionen = geschaeft.map { ShelfOrderLearningService.kategoriePositionen(fuer: $0, context: modelContext) } ?? [:]
+        return nachKategorie.values.sorted { istVor($0, $1, positionen: positionen) }
+    }
+
+    private func istVor(_ a: KategorieGruppe, _ b: KategorieGruppe, positionen: [PersistentIdentifier: Double]) -> Bool {
+        switch (a.kategorie, b.kategorie) {
+        case (nil, _): return false
+        case (_, nil): return true
+        case let (kategorieA?, kategorieB?):
+            let posA = positionen[kategorieA.persistentModelID] ?? .infinity
+            let posB = positionen[kategorieB.persistentModelID] ?? .infinity
+            if posA == posB { return kategorieA.name < kategorieB.name }
+            return posA < posB
+        }
+    }
+
     var body: some View {
         List {
             ForEach(gruppen) { gruppe in
@@ -120,19 +161,19 @@ private struct EinkaufslisteView: View {
                         ArtikelAbhakZeile(
                             artikel: artikel,
                             istAbgehakt: istAbgehakt(artikel),
-                            umschalten: { umschalten(artikel, regal: gruppe.regal) }
+                            umschalten: { umschalten(artikel) }
                         )
                     }
                 }
             }
 
-            if !sonstigeArtikel.isEmpty {
-                Section(gruppen.isEmpty ? "Einkaufsliste" : "Sonstige") {
-                    ForEach(sonstigeArtikel) { artikel in
+            ForEach(sonstigeGruppen) { gruppe in
+                Section(gruppe.kategorie?.name ?? "Ohne Kategorie") {
+                    ForEach(gruppe.artikel) { artikel in
                         ArtikelAbhakZeile(
                             artikel: artikel,
                             istAbgehakt: istAbgehakt(artikel),
-                            umschalten: { umschalten(artikel, regal: nil) }
+                            umschalten: { umschalten(artikel) }
                         )
                     }
                 }
@@ -187,11 +228,11 @@ private struct EinkaufslisteView: View {
         einkaufsvorgang.kaufEintraege.contains { $0.artikel == artikel }
     }
 
-    private func umschalten(_ artikel: Artikel, regal: Regal?) {
+    private func umschalten(_ artikel: Artikel) {
         if istAbgehakt(artikel) {
             einkaufsvorgang.artikelAbwaehlen(artikel, context: modelContext)
         } else {
-            einkaufsvorgang.artikelAbhaken(artikel, regal: regal, context: modelContext)
+            einkaufsvorgang.artikelAbhaken(artikel, context: modelContext)
         }
     }
 }

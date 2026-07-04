@@ -5,7 +5,8 @@ import SwiftData
 ///
 /// Während eines Einkaufsvorgangs entstehen ``KaufEintrag``e, aus deren
 /// Reihenfolge der ``ShelfOrderLearningService`` lernt, in welcher Reihenfolge der
-/// Anwender die Regale typischerweise abläuft.
+/// Anwender die Artikelkategorien (und damit die zugehörigen Regale) typischerweise
+/// abläuft.
 @Model
 final class Einkaufsvorgang {
     /// Eindeutige Kennung.
@@ -36,18 +37,19 @@ final class Einkaufsvorgang {
 
     /// Markiert einen Artikel als gekauft: legt einen ``KaufEintrag`` (zunächst ohne
     /// Preis) in diesem Einkaufsvorgang an und nimmt den Artikel von der
-    /// Einkaufsliste. Artikel aus demselben Regal erhalten denselben
-    /// ``KaufEintrag/regalBesuchsIndex``, neue Regale den jeweils nächsten Index —
-    /// das ist die Rohdatenbasis für ``ShelfOrderLearningService``.
-    func artikelAbhaken(_ artikel: Artikel, regal: Regal?, context: ModelContext) {
-        let index = naechsterRegalBesuchsIndex(fuer: regal)
-        let eintrag = KaufEintrag(artikel: artikel, geschaeft: geschaeft, regal: regal, regalBesuchsIndex: index)
+    /// Einkaufsliste. Artikel derselben ``ArtikelKategorie`` erhalten denselben
+    /// ``KaufEintrag/kategorieBesuchsIndex``, neue Kategorien den jeweils nächsten
+    /// Index — das ist die Rohdatenbasis für ``ShelfOrderLearningService``.
+    func artikelAbhaken(_ artikel: Artikel, context: ModelContext) {
+        let kategorie = artikel.kategorie
+        let index = naechsterKategorieBesuchsIndex(fuer: kategorie)
+        let eintrag = KaufEintrag(artikel: artikel, geschaeft: geschaeft, kategorie: kategorie, kategorieBesuchsIndex: index)
         context.insert(eintrag)
         eintrag.einkaufsvorgang = self
         artikel.istAufEinkaufsliste = false
     }
 
-    /// Macht ``artikelAbhaken(_:regal:context:)`` rückgängig: löscht den zugehörigen
+    /// Macht ``artikelAbhaken(_:context:)`` rückgängig: löscht den zugehörigen
     /// ``KaufEintrag`` und setzt den Artikel zurück auf die Einkaufsliste.
     func artikelAbwaehlen(_ artikel: Artikel, context: ModelContext) {
         guard let index = kaufEintraege.firstIndex(where: { $0.artikel == artikel }) else { return }
@@ -56,13 +58,13 @@ final class Einkaufsvorgang {
         artikel.istAufEinkaufsliste = true
     }
 
-    private func naechsterRegalBesuchsIndex(fuer regal: Regal?) -> Int {
-        guard let regal else {
-            return (kaufEintraege.compactMap(\.regalBesuchsIndex).max() ?? -1) + 1
+    private func naechsterKategorieBesuchsIndex(fuer kategorie: ArtikelKategorie?) -> Int {
+        guard let kategorie else {
+            return (kaufEintraege.compactMap(\.kategorieBesuchsIndex).max() ?? -1) + 1
         }
-        if let vorhandenerIndex = kaufEintraege.first(where: { $0.regal == regal })?.regalBesuchsIndex {
+        if let vorhandenerIndex = kaufEintraege.first(where: { $0.kategorie == kategorie })?.kategorieBesuchsIndex {
             return vorhandenerIndex
         }
-        return (kaufEintraege.compactMap(\.regalBesuchsIndex).max() ?? -1) + 1
+        return (kaufEintraege.compactMap(\.kategorieBesuchsIndex).max() ?? -1) + 1
     }
 }
