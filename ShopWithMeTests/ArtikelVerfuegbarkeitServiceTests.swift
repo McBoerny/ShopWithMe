@@ -41,6 +41,32 @@ struct ArtikelVerfuegbarkeitServiceTests {
     }
 
     @Test
+    func geschaeftMitDirektZugeordneterKategorieOhneRegal() throws {
+        // Kategorien sind wichtiger als Regale: Verfügbarkeit funktioniert auch ganz
+        // ohne ein einziges Regal.
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        let drogerie = ArtikelKategorie(name: "Drogerie", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
+        context.insert(obst)
+        context.insert(drogerie)
+
+        let geschaeft = Geschaeft(name: "Rewe", typ: .lebensmittel)
+        context.insert(geschaeft)
+        geschaeft.kategorien = [obst]
+
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorie: obst)
+        let shampoo = Artikel(name: "Shampoo", symbolName: "sparkles", farbeHex: "#AF52DE", kategorie: drogerie)
+        context.insert(apfel)
+        context.insert(shampoo)
+
+        #expect(geschaeft.regale.isEmpty)
+        #expect(ArtikelVerfuegbarkeitService.istVerfuegbar(apfel, in: geschaeft, context: context))
+        #expect(!ArtikelVerfuegbarkeitService.istVerfuegbar(shampoo, in: geschaeft, context: context))
+    }
+
+    @Test
     func geschaeftOhneRegaleLerntAusAbhaken() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container

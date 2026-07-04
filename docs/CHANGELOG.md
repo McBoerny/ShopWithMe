@@ -156,7 +156,7 @@
 - Version mit diesem Commit auf `0.1` zurückgesetzt (Nutzervorgabe); die
   Build-Nummer knüpft an die bisherige Commit-Historie an.
 
-## v1.6 — Explizite SwiftData-Migrationslogik (`SchemaMigrationPlan`)
+## v1.6 (Build 24) — Explizite SwiftData-Migrationslogik (`SchemaMigrationPlan`)
 
 - `Models/SchemaDefinition.swift`: neue `SchemaV1` (``VersionedSchema``, aktueller
   Modellstand) und `ShopWithMeMigrationPlan` (``SchemaMigrationPlan``, aktuell mit

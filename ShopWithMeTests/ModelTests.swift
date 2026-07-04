@@ -46,6 +46,62 @@ struct ModelTests {
     }
 
     @Test
+    func verfuegbareKategorienEnthaeltDirektZugeordneteKategorienOhneRegal() throws {
+        // Kategorien sind wichtiger als Regale: ein Geschäft ohne ein einziges Regal
+        // kann trotzdem Kategorien direkt zugeordnet bekommen und damit verfügbar
+        // machen.
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        context.insert(obst)
+
+        let geschaeft = Geschaeft(name: "Testladen", typ: .lebensmittel)
+        context.insert(geschaeft)
+        geschaeft.kategorien = [obst]
+
+        #expect(geschaeft.regale.isEmpty)
+        #expect(geschaeft.verfuegbareKategorien.map(\.name) == ["Obst"])
+    }
+
+    @Test
+    func verfuegbareKategorienDedupliziertDirekteUndRegalZuordnung() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        context.insert(obst)
+
+        let geschaeft = Geschaeft(name: "Testladen", typ: .lebensmittel)
+        context.insert(geschaeft)
+        geschaeft.kategorien = [obst]
+
+        let regal = Regal(name: "Regal 1", geschaeft: geschaeft)
+        regal.kategorien = [obst]
+        context.insert(regal)
+
+        #expect(geschaeft.verfuegbareKategorien.map(\.name) == ["Obst"])
+    }
+
+    @Test
+    func kategorieDirektEntferntMachtSieNichtMehrVerfuegbar() throws {
+        // Spiegelt `GeschaeftDetailView.kategorieEntfernen`: eine direkt (ohne Regal)
+        // zugeordnete Kategorie wird über `Geschaeft.kategorien` entfernt.
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        context.insert(obst)
+
+        let geschaeft = Geschaeft(name: "Testladen", typ: .lebensmittel)
+        context.insert(geschaeft)
+        geschaeft.kategorien = [obst]
+
+        #expect(geschaeft.verfuegbareKategorien.map(\.name) == ["Obst"])
+
+        geschaeft.kategorien.removeAll { $0 == obst }
+
+        #expect(geschaeft.verfuegbareKategorien.isEmpty)
+    }
+
+    @Test
     func kategorieEntfernenAusRegalMachtSieWiederNichtVerfuegbar() throws {
         // Spiegelt die Entfernen-Aktion im „Kategorien“-Abschnitt von
         // `GeschaeftDetailView`: die Kategorie wird über ihr zuständiges Regal
