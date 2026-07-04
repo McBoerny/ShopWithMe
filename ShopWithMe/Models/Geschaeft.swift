@@ -91,9 +91,17 @@ final class Geschaeft {
     /// Längengrad — für die zukünftige, standortbasierte Ladenerkennung vorbereitet,
     /// aktuell ungenutzt.
     var laengengrad: Double?
+    /// Rohwert für ``regalSortierModus``. Optional gespeichert, damit vor v1.4
+    /// angelegte Geschäfte (deren Datensatz diese Spalte noch nicht kennt) beim
+    /// automatischen Laden nicht abstürzen — ein `nil`-Rohwert wird als `.manuell`
+    /// interpretiert.
+    private var regalSortierModusRaw: String?
     /// Ob die Regal-Reihenfolge manuell oder automatisch (``ShelfOrderLearningService``)
     /// bestimmt wird.
-    var regalSortierModus: RegalSortierModus = RegalSortierModus.manuell
+    var regalSortierModus: RegalSortierModus {
+        get { regalSortierModusRaw.flatMap(RegalSortierModus.init(rawValue:)) ?? .manuell }
+        set { regalSortierModusRaw = newValue.rawValue }
+    }
     /// Regale dieses Geschäfts. Wird ein Geschäft gelöscht, werden auch seine Regale
     /// gelöscht.
     @Relationship(deleteRule: .cascade, inverse: \Regal.geschaeft)

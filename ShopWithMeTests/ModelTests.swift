@@ -60,6 +60,25 @@ struct ModelTests {
     }
 
     @Test
+    func regalSortierModusFaelltOhneGespeichertenRohwertAufManuellZurueck() throws {
+        // Vor v1.4 angelegte Geschäfte kennen die Spalte für `regalSortierModus`
+        // nicht — nach der automatischen Migration bleibt ihr Rohwert `nil`. Der
+        // Zugriff auf `regalSortierModus` darf dabei nicht abstürzen (siehe
+        // v1.4-Crash: Zuordnung von `nil` auf ein nicht-optionales Enum-Attribut),
+        // sondern muss auf `.manuell` zurückfallen.
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let geschaeft = Geschaeft(name: "Testladen", typ: .lebensmittel)
+        context.insert(geschaeft)
+
+        #expect(geschaeft.regalSortierModus == .manuell)
+
+        geschaeft.regalSortierModus = .automatisch
+        #expect(geschaeft.regalSortierModus == .automatisch)
+    }
+
+    @Test
     func kategorieBesuchsStatistikBerechnetDurchschnitt() {
         let statistik = KategorieBesuchsStatistik(geschaeft: nil, kategorie: nil)
         #expect(statistik.durchschnittlichePosition == .infinity)

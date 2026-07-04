@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.5 — Absturz beim Öffnen eines Geschäfts nach v1.4-Update behoben
+
+- `Models/Geschaeft.swift`: `regalSortierModus` (neu in v1.4) crashte für vor
+  v1.4 angelegte Geschäfte, sobald die Detailansicht geöffnet wurde — SwiftData
+  konnte den fehlenden Spaltenwert bestehender Datensätze nicht auf das
+  nicht-optionale `RegalSortierModus`-Enum casten
+  (`Could not cast value of type 'Swift.Optional<Any>' to 'RegalSortierModus'`).
+  Reproduziert über ein eigenständiges Migrationsexperiment: Store mit altem
+  Schema (ohne die Spalte) anlegen, mit neuem Schema erneut öffnen und den
+  bestehenden Datensatz lesen — das löste den exakt gemeldeten Absturz aus.
+  Behoben, indem der Rohwert jetzt optional (`regalSortierModusRaw: String?`)
+  gespeichert wird; `regalSortierModus` ist ein Computed-Property darüber, das
+  bei fehlendem/ungültigem Rohwert sicher auf `.manuell` zurückfällt.
+- Neuer Unit-Test `regalSortierModusFaelltOhneGespeichertenRohwertAufManuellZurueck`
+  (`ModelTests`) hält dieses Verhalten fest.
+
 ## v1.4 — Manuelle und automatische Regal-Reihenfolge als gleichberechtigte Alternativen
 
 - `Models/Geschaeft.swift`: neues `RegalSortierModus`-Enum (`manuell`/`automatisch`)
