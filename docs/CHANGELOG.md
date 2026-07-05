@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.2 (Build 35) — Einkaufsliste: Kategorie-Icon/Farbe, Sektions-Zähler, Menge vor der Checkbox
+
+- **Kategorie-Icon/Farbe wieder sichtbar, jetzt in der Einkaufsliste** (`EinkaufenView`):
+  jede Zeile zeigt ein `GlassSymbolBadge` mit `ArtikelKategorie.standardSymbol`/
+  `standardFarbeHex` der effektiven Kategorie des Artikels (``Artikel/effektiveKategorie(context:)``) —
+  die Felder existierten bereits am Modell, waren zuletzt aber in keiner Ansicht mehr
+  zu sehen.
+- **Sektions-Titel mit Zähler**: neue `EinkaufslistenSektionHeader`-Kopfzeile zeigt
+  bei Regal- wie Kategorie-Sektionen `abgehakt/gesamt` an; bei Kategorie-Sektionen
+  zusätzlich das Kategorie-Icon (Regal-Sektionen bleiben ohne Icon, da ein Regal
+  mehrere Kategorien bündeln kann).
+- **Zeilen-Layout überarbeitet**: unter dem Artikelnamen steht nur noch die
+  optionale `einkaufslistenNotiz` des Nutzers (keine Mengenangabe mehr); Menge +
+  Einheit stehen jetzt rechts direkt vor der Abhak-Checkbox.
+- **Automatischer Wechsel zum nächsten Einkauf**: `EinkaufenView` reagiert jetzt per
+  `onChange` auf die Anzahl offener `Einkaufsvorgang`e und legt sofort einen neuen
+  an, sobald der aktuelle abgeschlossen wird — die abgehakten Artikel des beendeten
+  Einkaufs verschwinden dadurch unmittelbar aus der Ansicht, statt bis zum nächsten
+  Tab-Wechsel als leere `ProgressView` hängen zu bleiben.
+
 ## v0.2 (Build 33) — Artikel: automatische KI-Kategorie, Menge & Einheit, kein Icon/Farbe mehr
 
 - **KI-Kategorie automatisch statt Button**: `ArtikelEditView` bestimmt die Kategorie

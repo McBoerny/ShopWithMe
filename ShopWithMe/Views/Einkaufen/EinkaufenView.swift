@@ -44,6 +44,11 @@ struct EinkaufenView: View {
         }
         .onAppear { Task { await einkaufSicherstellen() } }
         .onChange(of: ausgewaehltesGeschaeft) { _, _ in Task { await einkaufSicherstellen() } }
+        // Reagiert darauf, dass ein Einkaufsvorgang abgeschlossen wurde (verschwindet
+        // dadurch aus `offeneEinkaufsvorgaenge`): legt sofort den nächsten an, damit die
+        // gerade abgehakten Artikel des beendeten Einkaufs aus der Ansicht verschwinden,
+        // statt bis zum nächsten Tab-Wechsel als "ProgressView" hängen zu bleiben.
+        .onChange(of: offeneEinkaufsvorgaenge.count) { _, _ in Task { await einkaufSicherstellen() } }
     }
 
     /// Legt bei Bedarf einen neuen ``Einkaufsvorgang`` für das aktuell gewählte
@@ -202,10 +207,11 @@ private struct EinkaufslisteView: View {
     var body: some View {
         List {
             ForEach(gruppen) { gruppe in
-                Section(gruppe.regal.name) {
+                Section {
                     ForEach(gruppe.artikel) { artikel in
                         ArtikelAbhakZeile(
                             artikel: artikel,
+                            kategorie: effektiveKategorie(fuer: artikel),
                             istAbgehakt: istAbgehakt(artikel),
                             abhaken: { umschalten(artikel) },
                             mengeErhoehen: { mengeErhoehen(artikel) },
@@ -213,14 +219,22 @@ private struct EinkaufslisteView: View {
                             dauerhaftEntfernen: istAbgehakt(artikel) ? { entferneDauerhaft(artikel) } : nil
                         )
                     }
+                } header: {
+                    EinkaufslistenSektionHeader(
+                        titel: gruppe.regal.name,
+                        kategorie: nil,
+                        gesamt: gruppe.artikel.count,
+                        abgehakt: gruppe.artikel.filter(istAbgehakt).count
+                    )
                 }
             }
 
             ForEach(sonstigeGruppen) { gruppe in
-                Section(gruppe.kategorie.name) {
+                Section {
                     ForEach(gruppe.artikel) { artikel in
                         ArtikelAbhakZeile(
                             artikel: artikel,
+                            kategorie: gruppe.kategorie,
                             istAbgehakt: istAbgehakt(artikel),
                             abhaken: { umschalten(artikel) },
                             mengeErhoehen: { mengeErhoehen(artikel) },
@@ -228,6 +242,13 @@ private struct EinkaufslisteView: View {
                             dauerhaftEntfernen: istAbgehakt(artikel) ? { entferneDauerhaft(artikel) } : nil
                         )
                     }
+                } header: {
+                    EinkaufslistenSektionHeader(
+                        titel: gruppe.kategorie.name,
+                        kategorie: gruppe.kategorie,
+                        gesamt: gruppe.artikel.count,
+                        abgehakt: gruppe.artikel.filter(istAbgehakt).count
+                    )
                 }
             }
 
@@ -352,6 +373,30 @@ private struct EinkaufslisteView: View {
     }
 }
 
+/// Kopfzeile einer Einkaufslisten-Sektion (Regal oder Kategorie): zeigt neben dem
+/// Titel, wie viele der enthaltenen Artikel bereits abgehakt sind. Bei
+/// Kategorie-Sektionen (``kategorie`` gesetzt) wird zusätzlich deren Icon/Farbe
+/// (``ArtikelKategorie/standardSymbol``/``standardFarbeHex``) angezeigt — Regal-
+/// Sektionen bleiben ohne Icon, da ein Regal mehrere Kategorien bündeln kann.
+private struct EinkaufslistenSektionHeader: View {
+    let titel: String
+    let kategorie: ArtikelKategorie?
+    let gesamt: Int
+    let abgehakt: Int
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if let kategorie {
+                Image(systemName: kategorie.standardSymbol)
+                    .foregroundStyle(Color(hex: kategorie.standardFarbeHex))
+            }
+            Text(titel)
+            Spacer()
+            Text("\(abgehakt)/\(gesamt)")
+        }
+    }
+}
+
 /// Eine Zeile zum Erhöhen/Verringern der Menge eines Artikels beim Einkaufen — Abhaken
 /// geschieht über die eigenständige Checkbox am Zeilenende, nicht mehr über einen Tap
 /// auf die ganze Zeile:
@@ -363,6 +408,9 @@ private struct EinkaufslisteView: View {
 /// dieser Ansicht zu entfernen (``dauerhaftEntfernen``, `nil` bei noch offenen Artikeln).
 private struct ArtikelAbhakZeile: View {
     let artikel: Artikel
+    /// Die für die Icon/Farb-Anzeige wirksame Kategorie (siehe
+    /// ``Artikel/effektiveKategorie(context:)``).
+    let kategorie: ArtikelKategorie
     let istAbgehakt: Bool
     let abhaken: () -> Void
     let mengeErhoehen: () -> Void
@@ -372,21 +420,22 @@ private struct ArtikelAbhakZeile: View {
     @State private var zeigeMengenSheet = false
 
     var body: some View {
-        HStack {
+        HStack(spacing: 12) {
+            GlassSymbolBadge(symbolName: kategorie.standardSymbol, farbe: Color(hex: kategorie.standardFarbeHex), groesse: 32)
             VStack(alignment: .leading, spacing: 2) {
                 Text(artikel.name)
                     .strikethrough(istAbgehakt)
                     .foregroundStyle(istAbgehakt ? .secondary : .primary)
-                HStack(spacing: 4) {
-                    Text("\(artikel.menge.formatted()) \(artikel.einheit.kurzform)")
-                    if let notiz = artikel.einkaufslistenNotiz, !notiz.isEmpty {
-                        Text("· \(notiz)")
-                    }
+                if let notiz = artikel.einkaufslistenNotiz, !notiz.isEmpty {
+                    Text(notiz)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
             }
             Spacer()
+            Text("\(artikel.menge.formatted()) \(artikel.einheit.kurzform)")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
             Button(action: abhaken) {
                 Image(systemName: istAbgehakt ? "checkmark.circle.fill" : "circle")
                     .font(.title3)
