@@ -2,17 +2,24 @@
 
 Der Belegscan fotografiert/lädt einen Kassenbon, erkennt Positionen (Name, Menge,
 Einzelpreis) per On-Device-KI und trägt daraus Preise in die Preishistorie ein. Dieses
-Dokument beschreibt den gesamten Ablauf inkl. Datenmodell sowie den vom Nutzer
-vergebbaren alternativen Anzeigenamen pro Position.
+Dokument beschreibt den gesamten Ablauf inkl. Datenmodell, die Alias-/Artikel-Zuordnung
+pro Position, die Preisübersicht eines Geschäfts sowie das Mitlernen über mehrere
+Belegscans hinweg.
 
 ## Beteiligte Dateien
 
 - `ShopWithMe/Services/ReceiptScanService.swift` — OCR + KI-Extraktion.
 - `ShopWithMe/Views/Einkaufen/BelegScanView.swift` — Aufnahme, Prüf-/Korrektur-UI,
-  Übernahme in `KaufEintrag`e.
-- `ShopWithMe/Models/KaufEintrag.swift` — persistentes Ziel-Model.
-- `ShopWithMe/Views/Historie/PreisHistorieZeile.swift` — Anzeige in der Preishistorie
-  + Umbenennen-UI für den alternativen Namen.
+  Übernahme in `KaufEintrag`e, Mitlern-Vorbelegung.
+- `ShopWithMe/Models/KaufEintrag.swift` — persistentes Ziel-Model, `anzeigeName`,
+  `gelernteZuordnung(fuerErkannterName:in:)`.
+- `ShopWithMe/Models/ArtikelPreisSpanne.swift` — Gruppierung nach Artikel + Preisspanne.
+- `ShopWithMe/Views/Historie/PreisHistorieZeile.swift` — einzelne Zeile, öffnet die
+  Zuordnen-Sheet.
+- `ShopWithMe/Views/Historie/KaufEintragZuordnenSheet.swift` — Alias vergeben +
+  Artikel zuordnen/neu anlegen.
+- `ShopWithMe/Views/Geschaefte/GeschaeftDetailView.swift` — Preisübersicht-Sektion +
+  `ArtikelPreisSpanneZeile`/`ArtikelPreisVerlaufView` (Drill-down).
 - `ShopWithMeTests/ReceiptScanServiceTests.swift`, `ShopWithMeTests/ModelTests.swift`.
 
 ## Ablauf
@@ -32,22 +39,34 @@ vergebbaren alternativen Anzeigenamen pro Position.
      `erkanntesDatum: Date?`), `positionen: [BelegPosition]`.
    - Beide Typen sind reine, flüchtige KI-Transfertypen — **kein** eigenes
      SwiftData-Model für Belegpositionen.
-4. **Prüfen/Korrigieren** (`ErgebnisListe` in `BelegScanView.swift`): editierbare Kopie
+4. **Mitlern-Vorbelegung** (`BelegScanView.verarbeite(bild:)`): für jede erkannte
+   Position sucht `KaufEintrag.gelernteZuordnung(fuerErkannterName:in:)` unter allen
+   vorhandenen `KaufEintrag`en nach dem jüngsten, dessen erkannter Name
+   (`produktName`/`artikelNameSnapshot`) zum aktuell erkannten Text passt und der
+   bereits einen `alternativerName` (Alias) trägt. Treffer liefert Alias + den ggf.
+   verknüpften `Artikel` — siehe „Mitlernen“ unten.
+5. **Prüfen/Korrigieren** (`ErgebnisListe` in `BelegScanView.swift`): editierbare Kopie
    jeder Position (`BearbeitbarePosition`: `erkannterName` unveränderlich,
-   `artikelName`/`preisText` editierbar) plus editierbares `belegDatum`
-   (vorbelegt aus `erkanntesDatum`, sonst Startzeit des Einkaufsvorgangs bzw. heute).
-   Der Nutzer kann hier eine Position umbenennen, um sie einem bestehenden,
-   ggf. generischeren `Artikel` zuzuordnen (z.B. „Colgate Total“ → „Zahnpasta“) — der
-   ursprünglich erkannte Name geht dabei nicht verloren, siehe `produktName` unten.
-5. **Übernahme** (`BelegScanView.uebernehmen()`): abhängig vom `BelegScanKontext`:
+   `artikelName`/`preisText` editierbar, `gelernterArtikel` aus Schritt 4) plus
+   editierbares `belegDatum` (vorbelegt aus `erkanntesDatum`, sonst Startzeit des
+   Einkaufsvorgangs bzw. heute). War eine Position bereits bekannt, zeigt das
+   Namensfeld direkt den Alias (statt „COL-ZAH“ z.B. „Colgate“) und ein Hinweis
+   „Wird verknüpft mit „Zahnpasta““ erscheint darunter. Der Nutzer kann den Namen
+   weiterhin frei korrigieren (z.B. OCR-Tippfehler).
+6. **Übernahme** (`BelegScanView.uebernehmen()`): abhängig vom `BelegScanKontext`:
    - `.einkaufsvorgang(Einkaufsvorgang)`: Preise werden nach Namensabgleich
      (`passtZu`) bereits abgehakten `KaufEintrag`en dieses Einkaufsvorgangs
-     zugeordnet; ohne Treffer entsteht ein neuer, eigenständiger `KaufEintrag`
-     **ohne** `Artikel`-Verknüpfung.
+     zugeordnet (dort bleibt eine bestehende `Artikel`-Verknüpfung unverändert,
+     nur Preis/Datum/Alias werden aktualisiert). Ohne Treffer entsteht ein neuer,
+     eigenständiger `KaufEintrag`, direkt verknüpft mit `position.gelernterArtikel`
+     (aus Schritt 4), falls vorhanden.
    - `.geschaeft(Geschaeft)`: unabhängig von einem laufenden Einkauf, direkt aus der
-     Geschäfts-Detailansicht. Jede Position wird als neuer `KaufEintrag` angelegt;
-     `passendesArtikel(fuer:)` sucht per Namensabgleich unter allen `Artikel`n einen
-     Treffer und verknüpft ihn, falls gefunden (inkl. dessen `kategorie`).
+     Geschäfts-Detailansicht. Jede Position wird als neuer `KaufEintrag` angelegt,
+     verknüpft mit `position.gelernterArtikel` — ansonsten sucht `passendesArtikel(fuer:)`
+     per Namensabgleich unter allen `Artikel`n einen Treffer als Fallback.
+   - In beiden Fällen: weicht der (ggf. korrigierte) Anzeigetext vom rohen erkannten
+     Namen ab, wird er als `alternativerName` übernommen (`leiteAlternativenNamenAb`)
+     — das ist zugleich die Quelle für das Mitlernen beim nächsten Scan.
 
 ## Datenmodell: `KaufEintrag`
 
@@ -56,14 +75,14 @@ Es gibt kein eigenes „Belegposition“-Model — erkannte Positionen landen di
 
 | Feld | Bedeutung |
 | --- | --- |
-| `artikel: Artikel?` | Verknüpfter, übergreifender Artikel — optional, heuristisch per Namensabgleich gesetzt, `nil` falls kein Treffer oder der Artikel später gelöscht wurde. |
+| `artikel: Artikel?` | Verknüpfter, übergreifender Artikel — gesetzt aus einer gelernten Zuordnung, per Namensabgleich, oder manuell über `KaufEintragZuordnenSheet`. `nil`, solange keine Zuordnung existiert oder der Artikel später gelöscht wurde. |
 | `artikelNameSnapshot: String` | Name zum Kaufzeitpunkt, dauerhaft — Fallback, falls `artikel` fehlt/gelöscht ist. |
-| `produktName: String?` | Genauer, vom Kassenbon erkannter Marken-/Produktname, falls er vom (ggf. generischen) `artikel` abweicht (z.B. „Colgate Total“ bei `artikel.name == "Zahnpasta"`). Bleibt beim Umbenennen zwecks Zuordnung erhalten, damit unterschiedliche Marken desselben generischen Artikels in der Preishistorie unterscheidbar bleiben. `nil` bei normalen Einkaufslisten-Käufen ohne Belegscan. |
-| `alternativerName: String?` | Vom Nutzer frei vergebener, dauerhafter Anzeigename für **genau diese eine Position** — siehe unten. Verändert `artikelNameSnapshot`/`produktName` nicht. |
+| `produktName: String?` | Genauer, vom Kassenbon erkannter Marken-/Produktname, falls er vom (ggf. generischen) `artikel` abweicht (z.B. „COL-ZAH“ bei `artikel.name == "Zahnpasta"`). Bleibt beim Umbenennen zwecks Zuordnung erhalten, damit unterschiedliche Marken desselben generischen Artikels in der Preishistorie unterscheidbar bleiben. `nil` bei normalen Einkaufslisten-Käufen ohne Belegscan. |
+| `alternativerName: String?` | Alias für **genau diese eine Position** (z.B. „Colgate“) — vom Nutzer vergeben (`KaufEintragZuordnenSheet`) oder beim Belegscan aus einem korrigierten Namensfeld übernommen. Verändert `artikelNameSnapshot`/`produktName` nicht. Zentrale Grundlage für das Mitlernen (siehe unten). |
 | `preis: Decimal?` | Bezahlter Einzelpreis; `nil`, solange noch kein Beleg dazu erfasst wurde. |
-| `menge: Double` | Gekaufte Menge (Standard 1) — vom Belegscan nicht verändert, siehe Schritt 3. |
+| `menge: Double` | Gekaufte Menge (Standard 1) — vom Belegscan nicht verändert. |
 | `datum: Date` | Kaufdatum, aus dem Beleg erkannt oder manuell gesetzt. |
-| `kategorie: ArtikelKategorie?` | Snapshot der Artikel-Kategorie zum Kaufzeitpunkt. |
+| `kategorie: ArtikelKategorie?` | Snapshot der Artikel-Kategorie zum Kaufzeitpunkt — wird bei Artikel-Zuordnung (Scan oder `KaufEintragZuordnenSheet`) auf `artikel?.kategorie` gesetzt. |
 
 Alle Felder außer `id`, `artikelNameSnapshot`, `datum`, `preis`, `menge` sind optional;
 `alternativerName` und `produktName` wurden beide additiv zu einem bereits
@@ -85,52 +104,105 @@ var anzeigeName: String {
 }
 ```
 
-Priorität: **`alternativerName`** (falls gesetzt, nicht nur Leerzeichen) → `produktName`
-(Original vom Kassenbon) → `artikel?.name` → `artikelNameSnapshot`.
+Priorität: **`alternativerName`** (Alias, falls gesetzt) → `produktName` (Original vom
+Kassenbon) → `artikel?.name` → `artikelNameSnapshot`.
 
 Verwendet in `PreisHistorieZeile`, angezeigt in:
 
-- `GeschaeftDetailView` (Preishistorie-Sektion eines Geschäfts, `zeigeArtikel: true`)
+- `GeschaeftDetailView` — sowohl in der „Preisübersicht“ (aggregiert pro Artikel, siehe
+  unten) als auch im Drill-down `ArtikelPreisVerlaufView` und im Abschnitt
+  „Ohne Artikel-Zuordnung“ (`zeigeArtikel: true`)
 - `ArtikelEditView` (Preishistorie-Sektion eines Artikels, `zeigeArtikel: false` — zeigt
   dort den Geschäftsnamen statt des Artikelnamens; `alternativerName` bleibt trotzdem
   am `KaufEintrag` gesetzt, ist dort nur nicht die sichtbare Spalte)
 
-Der Matching-Abgleich beim Übernehmen neuer Belegpositionen
-(`BelegScanView.passtZu`/`passendesArtikel`) bleibt bewusst auf
-`artikel?.name`/`artikelNameSnapshot` bezogen — der alternative Anzeigename
-beeinflusst nur die Darstellung, nicht die Zuordnungslogik beim Scannen.
+## Alias vergeben + Artikel zuordnen (UI): `KaufEintragZuordnenSheet`
 
-## Alternativen Namen vergeben (UI)
+`PreisHistorieZeile` bietet überall eine Wisch-Aktion „Zuordnen“ (führende Kante,
+Tag-Symbol), die `KaufEintragZuordnenSheet` öffnet:
 
-`PreisHistorieZeile` bietet in der Artikel-Ansicht (`zeigeArtikel == true`) eine
-Wisch-Aktion „Umbenennen“ (führende Kante, Stift-Symbol), die einen Alert mit
-Texteingabe öffnet:
+- **Alias-Textfeld**, vorbelegt mit `eintrag.alternativerName`. Leeres Feld beim
+  Speichern → `alternativerName = nil` (fällt auf `produktName`/`artikel?.name`/
+  `artikelNameSnapshot` zurück).
+- **Artikel-Auswahl**: „Keine Zuordnung“, durchsuchbare Liste aller `Artikel` (analog
+  `ArtikelHinzufuegenView`), oder „„<Suchtext>“ neu anlegen“, falls kein exakter Treffer
+  existiert — öffnet `ArtikelEditView(artikel:istNeu:true)` und übernimmt den neu
+  gesicherten Artikel automatisch als Auswahl (gleiches Muster wie
+  `ArtikelHinzufuegenView.nachNeuanlageAufraeumen`).
+- **Speichern** setzt `alternativerName`, `artikel` sowie — falls ein Artikel gewählt
+  wurde — `kategorie = artikel.kategorie`, geschützt durch
+  `DatabaseLeaseService.performMicroLease` (explizite Speicherung, da
+  `ModelContext.autosaveEnabled == false`, siehe `docs/DATABASE_CONCURRENCY.md`).
 
-- **Speichern** setzt `eintrag.alternativerName` auf den (getrimmten) eingegebenen
-  Text, oder `nil`, falls das Feld leer gelassen wurde.
-- **Zurücksetzen** (nur sichtbar, wenn bereits ein alternativer Name gesetzt ist)
-  löscht `alternativerName` wieder — die Anzeige fällt dann zurück auf
-  `produktName`/`artikel?.name`/`artikelNameSnapshot`.
-- **Abbrechen** verwirft die Eingabe.
+Jede so gesetzte Alias-/Artikel-Kombination ist die Lerngrundlage für künftige
+Belegscans desselben Produkts (Schritt 4 oben).
 
-Die Änderung wirkt sich sofort auf alle Anzeigen dieser Position aus (SwiftData
-persistiert die Mutation über den üblichen Autosave-Mechanismus, kein expliziter
-Save-Aufruf nötig — siehe bestehende Mutationsstellen wie
-`Einkaufsvorgang.artikelAbhaken`).
+## Preisübersicht eines Geschäfts: `ArtikelPreisSpanne`
+
+`GeschaeftDetailView` zeigt statt einer flachen Liste aller `KaufEintrag`e eine nach
+Artikel gruppierte **Preisübersicht**:
+
+```swift
+struct ArtikelPreisSpanne: Identifiable {
+    let artikel: Artikel
+    let eintraege: [KaufEintrag]
+    var minimum: Decimal? { eintraege.compactMap(\.preis).min() }
+    var maximum: Decimal? { eintraege.compactMap(\.preis).max() }
+}
+```
+
+`ArtikelPreisSpanne.gruppieren(_:)` gruppiert alle `KaufEintrag`e eines Geschäfts nach
+ihrem verknüpften `artikel` (Einträge ohne Verknüpfung werden ausgelassen) und liefert
+pro Artikel eine Preisspanne, alphabetisch sortiert. Jede Zeile
+(`ArtikelPreisSpanneZeile`) zeigt Artikel-Symbol, -Name und die Preisspanne
+(„1,99 € – 2,49 €“, oder ein einzelner Preis, falls minimum == maximum). Ein
+Antippen (Info-/Drill-down-Funktion über `NavigationLink`) öffnet
+`ArtikelPreisVerlaufView`: eine eigene, live per `@Query` gefilterte Liste aller
+`KaufEintrag`e dieses Artikels **in diesem Geschäft**, sortiert nach Datum absteigend
+— die historische Kaufliste mit Einzelpreisen.
+
+**Ohne Artikel-Zuordnung**: `KaufEintrag`e ohne `artikel` (z.B. weil beim Scan kein
+Namensabgleich griff und noch keine manuelle Zuordnung erfolgte) erscheinen weiterhin
+sichtbar in einem eigenen Abschnitt darunter, mit der bestehenden Wisch-Aktion
+„Zuordnen“ zum Nachholen der Verknüpfung.
+
+## Mitlernen zwischen Belegscans
+
+`KaufEintrag.gelernteZuordnung(fuerErkannterName:in:)` ist die zentrale, reine
+(UI-unabhängige) Funktion dafür:
+
+```swift
+static func gelernteZuordnung(
+    fuerErkannterName erkannterName: String,
+    in verlauf: [KaufEintrag]
+) -> (alias: String, artikel: Artikel?)?
+```
+
+Durchsucht `verlauf` (i.d.R. alle vorhandenen `KaufEintrag`e, absteigend nach `datum`)
+nach dem jüngsten Eintrag mit gesetztem `alternativerName`, dessen
+`produktName`/`artikelNameSnapshot` zum übergebenen `erkannterName` passt
+(beidseitiger `localizedCaseInsensitiveContains`-Abgleich, wie auch an anderen Stellen
+in `BelegScanView` üblich). Der jüngste Treffer gewinnt, damit eine spätere Korrektur
+eine ältere Fehlzuordnung ersetzt.
+
+`BelegScanView.verarbeite(bild:)` ruft diese Funktion für jede frisch erkannte Position
+auf und übernimmt Alias (als Vorbelegung des Namensfelds) und `Artikel` (als
+`gelernterArtikel`) in `BearbeitbarePosition`. Damit schließt sich der Kreis: Eine
+einmal über `KaufEintragZuordnenSheet` (oder eine frühere manuelle Korrektur im
+Scan-Dialog) gesetzte Alias-/Artikel-Kombination wird beim nächsten Scan desselben
+Produkts automatisch vorgeschlagen und verknüpft, ohne dass der Nutzer erneut
+zuordnen muss.
 
 ## Bewusst nicht umgesetzt
 
-- **Kein Alias auf `Artikel`-Ebene**: Der alternative Name hängt an der einzelnen
-  `KaufEintrag`-Position, nicht am übergreifenden `Artikel`. Ein Alias auf
-  `Artikel.name` selbst (der dann für *alle* zukünftigen Belege desselben Artikels
-  gelten würde) ist eine andere, größere Änderung (u.a. Auswirkung auf
-  `ArtikelListView`, `EinkaufenView`, KI-Vorschläge) und nicht Teil dieser Iteration.
-- **Kein Rename-Einstieg direkt im Belegscan-Dialog** (`BelegScanView`/
-  `ErgebnisListe`): Dort lässt sich der erkannte Name vor dem Übernehmen weiterhin nur
-  zwecks Artikel-Zuordnung überschreiben (bestehendes Verhalten, wird als
-  `produktName` archiviert). Der alternative Name wird bewusst erst *nach* dem
-  Übernehmen, in der Preishistorie, vergeben — dort ist bereits klar, ob/welchem
-  `Artikel` die Position zugeordnet wurde.
+- **Kein Alias auf `Artikel`-Ebene**: Alias und Artikel-Zuordnung hängen an der
+  einzelnen `KaufEintrag`-Position, nicht am übergreifenden `Artikel` selbst. Das
+  erlaubt weiterhin, dass verschiedene Marken/Varianten (verschiedene `produktName`/
+  `alternativerName`) demselben generischen `Artikel` zugeordnet sind, ohne dass ein
+  Alias für eine bestimmte Marke versehentlich alle anderen überschreibt.
+- **Kein Fuzzy-Vorschlag für die Artikel-Auswahl** in `KaufEintragZuordnenSheet` über
+  den bereits erkannten Namen hinaus — die Suche ist bewusst eine einfache
+  Teilstring-Suche wie in `ArtikelHinzufuegenView`, kein KI-Vorschlag.
 - **Ablösen von `ReceiptScanService`/`VisionFoundationModelsReceiptScanner`** durch
   eine spätere, spezifischere On-Device-Scan-API ist als offene Idee in
   `docs/ROADMAP.md` vermerkt, noch nicht umgesetzt.

@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.2 (Build 31) — Belegscan: Artikel-Zuordnung, Preisübersicht + Mitlernen
+
+- `KaufEintragZuordnenSheet` (neu, `Views/Historie/`): löst die bisherige
+  Umbenennen-Alert ab — vergibt einen Alias (`KaufEintrag.alternativerName`) UND
+  ordnet die Position einem übergreifenden `Artikel` zu, inkl. Neuanlage direkt im
+  selben Dialog (`ArtikelEditView`, gleiches Muster wie `ArtikelHinzufuegenView`).
+  Aufgerufen aus `PreisHistorieZeile` (Wisch-Aktion „Zuordnen“, jetzt überall statt
+  nur in der Geschäfts-Ansicht).
+- `Models/ArtikelPreisSpanne.swift` (neu): gruppiert `KaufEintrag`e nach `Artikel`
+  und liefert je Preisspanne (min/max). `GeschaeftDetailView` zeigt statt der
+  bisherigen flachen „Preishistorie“ jetzt eine „Preisübersicht“ pro Artikel; ein
+  Antippen öffnet `ArtikelPreisVerlaufView` (Drill-down mit der historischen
+  Kaufliste). Positionen ohne Artikel-Zuordnung erscheinen separat darunter.
+- `KaufEintrag.gelernteZuordnung(fuerErkannterName:in:)` (neu): sucht den jüngsten
+  historischen Eintrag mit passendem erkanntem Namen und gesetztem Alias.
+  `BelegScanView` nutzt das beim Einlesen eines neuen Belegs, um bereits bekannte
+  Produkte automatisch mit Alias vorzubelegen und dem gelernten `Artikel` zu
+  verknüpfen — ohne dass der Nutzer erneut zuordnen muss.
+- Architektur vollständig in `docs/BELEGSCAN.md` aktualisiert (Ablauf, Datenmodell,
+  Preisübersicht, Mitlernen); `docs/ARCHITECTURE.md` entsprechend ergänzt.
+- Neue Unit-Tests in `ModelTests.swift`: `gelernteZuordnung`-Matching (jüngster
+  Treffer gewinnt, ignoriert Einträge ohne Alias/ohne passenden Namen) sowie
+  `ArtikelPreisSpanne`-Gruppierung/Min-Max-Berechnung.
+- Verifiziert: `xcodegen generate` + `xcodebuild build` + `xcodebuild test`
+  (`iPhone 17` Simulator) laufen fehlerfrei durch, alle 36 Unit-Tests bestehen.
+
 ## v0.2 (Build 30) — Mehrbenutzerzugriff auf die Datenbank + DB-Debug-Logging
 
 - `Services/DatabaseLeaseService.swift`: koordiniert Schreibzugriffe auf einen

@@ -3,17 +3,17 @@ import SwiftUI
 /// Eine Zeile der Preishistorie: Datum, Preis und wahlweise Artikel- oder
 /// Geschäftsname (je nachdem, aus welcher Detailansicht heraus sie angezeigt wird).
 ///
-/// In der Artikel-Spalte (``zeigeArtikel``) lässt sich per Kontextmenü/Wischgeste ein
-/// alternativer Anzeigename für genau diese Position vergeben — siehe
-/// ``KaufEintrag/anzeigeName`` und `docs/BELEGSCAN.md`.
+/// Über eine Wischgeste lässt sich ``KaufEintragZuordnenSheet`` öffnen, um dieser
+/// Position einen Alias-Namen zu geben und/oder sie einem übergreifenden ``Artikel``
+/// zuzuordnen (inkl. Neuanlage) — siehe ``KaufEintrag/anzeigeName`` und
+/// `docs/BELEGSCAN.md`.
 struct PreisHistorieZeile: View {
     let eintrag: KaufEintrag
     /// `true` in der Geschäfts-Detailansicht (zeigt den Artikelnamen), `false` in der
     /// Artikel-Detailansicht (zeigt den Geschäftsnamen).
     let zeigeArtikel: Bool
 
-    @State private var zeigeUmbenennenDialog = false
-    @State private var eingabeName = ""
+    @State private var zeigeZuordnenSheet = false
 
     private static let datumsFormat: Date.FormatStyle = .dateTime.day().month().year()
 
@@ -36,30 +36,15 @@ struct PreisHistorieZeile: View {
         }
         .contentShape(Rectangle())
         .swipeActions(edge: .leading) {
-            if zeigeArtikel {
-                Button {
-                    eingabeName = eintrag.alternativerName ?? ""
-                    zeigeUmbenennenDialog = true
-                } label: {
-                    Label("Umbenennen", systemImage: "pencil")
-                }
-                .tint(.blue)
+            Button {
+                zeigeZuordnenSheet = true
+            } label: {
+                Label("Zuordnen", systemImage: "tag")
             }
+            .tint(.blue)
         }
-        .alert("Alternativer Name", isPresented: $zeigeUmbenennenDialog) {
-            TextField("Alternativer Name", text: $eingabeName)
-            Button("Speichern") {
-                let getrimmt = eingabeName.trimmingCharacters(in: .whitespacesAndNewlines)
-                eintrag.alternativerName = getrimmt.isEmpty ? nil : getrimmt
-            }
-            if eintrag.alternativerName != nil {
-                Button("Zurücksetzen", role: .destructive) {
-                    eintrag.alternativerName = nil
-                }
-            }
-            Button("Abbrechen", role: .cancel) {}
-        } message: {
-            Text("Wird dieser Name gesetzt, ersetzt er ab sofort überall den erkannten Kassenbon-/Artikelnamen dieser Position.")
+        .sheet(isPresented: $zeigeZuordnenSheet) {
+            KaufEintragZuordnenSheet(eintrag: eintrag)
         }
     }
 

@@ -218,4 +218,60 @@ struct ModelTests {
         eintrag.alternativerName = nil
         #expect(eintrag.anzeigeName == "Colgate Total")
     }
+
+    @Test
+    func gelernteZuordnungFindetJuengstenPassendenAliasMitArtikel() {
+        let zahnpasta = Artikel(name: "Zahnpasta", symbolName: "sparkles", farbeHex: "#AF52DE")
+        let aelter = KaufEintrag(artikel: zahnpasta, geschaeft: nil, datum: Date(timeIntervalSince1970: 0))
+        aelter.artikelNameSnapshot = "COL-ZAH"
+        aelter.produktName = "COL-ZAH"
+        aelter.alternativerName = "Colgate (alt)"
+
+        let neuer = KaufEintrag(artikel: zahnpasta, geschaeft: nil, datum: Date(timeIntervalSince1970: 1_000_000))
+        neuer.artikelNameSnapshot = "COL-ZAH"
+        neuer.produktName = "COL-ZAH"
+        neuer.alternativerName = "Colgate"
+
+        let gelernt = KaufEintrag.gelernteZuordnung(fuerErkannterName: "COL-ZAH", in: [aelter, neuer])
+        #expect(gelernt?.alias == "Colgate")
+        #expect(gelernt?.artikel === zahnpasta)
+    }
+
+    @Test
+    func gelernteZuordnungIgnoriertEintraegeOhneAliasUndOhnePassendenNamen() {
+        let ohneAlias = KaufEintrag(artikel: nil, geschaeft: nil)
+        ohneAlias.artikelNameSnapshot = "COL-ZAH"
+        ohneAlias.produktName = "COL-ZAH"
+
+        let anderesProdukt = KaufEintrag(artikel: nil, geschaeft: nil)
+        anderesProdukt.artikelNameSnapshot = "MIL-VOLL"
+        anderesProdukt.produktName = "MIL-VOLL"
+        anderesProdukt.alternativerName = "Vollmilch"
+
+        #expect(KaufEintrag.gelernteZuordnung(fuerErkannterName: "COL-ZAH", in: [ohneAlias, anderesProdukt]) == nil)
+        #expect(KaufEintrag.gelernteZuordnung(fuerErkannterName: "", in: [anderesProdukt]) == nil)
+    }
+
+    @Test
+    func artikelPreisSpanneGruppiertUndBerechnetMinMax() throws {
+        let zahnpasta = Artikel(name: "Zahnpasta", symbolName: "sparkles", farbeHex: "#AF52DE")
+        let milch = Artikel(name: "Vollmilch", symbolName: "refrigerator.fill", farbeHex: "#5AC8FA")
+
+        let eintragEins = KaufEintrag(artikel: zahnpasta, geschaeft: nil, preis: 1.99)
+        let eintragZwei = KaufEintrag(artikel: zahnpasta, geschaeft: nil, preis: 2.49)
+        let eintragMilch = KaufEintrag(artikel: milch, geschaeft: nil, preis: 1.19)
+        let eintragOhneArtikel = KaufEintrag(artikel: nil, geschaeft: nil, preis: 0.99)
+
+        let spannen = ArtikelPreisSpanne.gruppieren([eintragEins, eintragZwei, eintragMilch, eintragOhneArtikel])
+
+        #expect(spannen.count == 2)
+        let zahnpastaSpanne = try #require(spannen.first { $0.artikel === zahnpasta })
+        #expect(zahnpastaSpanne.minimum == 1.99)
+        #expect(zahnpastaSpanne.maximum == 2.49)
+        let milchSpanne = try #require(spannen.first { $0.artikel === milch })
+        #expect(milchSpanne.minimum == 1.19)
+        #expect(milchSpanne.maximum == 1.19)
+        // Alphabetisch sortiert: "Vollmilch" vor "Zahnpasta".
+        #expect(spannen.map(\.artikel.name) == ["Vollmilch", "Zahnpasta"])
+    }
 }

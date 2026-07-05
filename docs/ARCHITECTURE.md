@@ -86,8 +86,12 @@ Verfügbarkeit.
   kombiniert Vision-OCR mit FoundationModels-Extraktion. Als Protokoll gekapselt, damit
   eine spätere, spezifischere On-Device-API (z.B. eine künftige System-Beleg-Scan-API)
   ohne UI-Änderungen eingesetzt werden kann. `KaufEintrag.anzeigeName` priorisiert einen
-  optionalen, vom Nutzer pro Position vergebenen `alternativerName` vor dem erkannten
-  `produktName`/`artikel`/`artikelNameSnapshot` — Details in
+  optionalen, vom Nutzer pro Position vergebenen `alternativerName` (Alias) vor dem
+  erkannten `produktName`/`artikel`/`artikelNameSnapshot`; `KaufEintragZuordnenSheet`
+  lässt Alias und `Artikel`-Zuordnung (inkl. Neuanlage) gemeinsam pflegen.
+  `ArtikelPreisSpanne.gruppieren(_:)` aggregiert die Preisübersicht eines Geschäfts pro
+  Artikel; `KaufEintrag.gelernteZuordnung(fuerErkannterName:in:)` schlägt beim nächsten
+  Scan bereits bekannte Alias-/Artikel-Kombinationen automatisch vor — Details in
   `docs/BELEGSCAN.md`.
 - **ShelfOrderLearningService**: aktualisiert nach jedem abgeschlossenen
   `Einkaufsvorgang` die `KategorieBesuchsStatistik` und leitet daraus sowohl eine

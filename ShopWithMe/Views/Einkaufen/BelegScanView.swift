@@ -38,6 +38,13 @@ enum BelegScanKontext {
 /// ursprünglich erkannte Produktname über ``KaufEintrag/produktName`` erhalten —
 /// so lassen sich verschiedene Marken desselben generischen Artikels weiterhin
 /// getrennt in der Preishistorie nachverfolgen.
+///
+/// **Mitlernen:** Wurde eine erkannte Position schon einmal (in einem früheren Beleg
+/// oder über ``KaufEintragZuordnenSheet``) mit einem Alias-Namen und/oder einem
+/// ``Artikel`` versehen, schlägt ``KaufEintrag/gelernteZuordnung(fuerErkannterName:in:)``
+/// beides bereits beim Einlesen vor: das Textfeld zeigt direkt den Alias statt des
+/// rohen Kassenbon-Texts, und die Position wird beim Übernehmen automatisch mit dem
+/// gelernten ``Artikel`` verknüpft — siehe `docs/BELEGSCAN.md`.
 struct BelegScanView: View {
     let kontext: BelegScanKontext
 
@@ -120,8 +127,18 @@ struct BelegScanView: View {
                 if let erkanntesDatum = ergebnis.erkanntesDatum {
                     belegDatum = erkanntesDatum
                 }
-                bearbeitbarePositionen = ergebnis.positionen.map {
-                    BearbeitbarePosition(erkannterName: $0.artikelName, artikelName: $0.artikelName, preisText: "\($0.einzelpreis)")
+                let bekannterVerlauf = (try? modelContext.fetch(FetchDescriptor<KaufEintrag>())) ?? []
+                bearbeitbarePositionen = ergebnis.positionen.map { position in
+                    let gelernt = KaufEintrag.gelernteZuordnung(
+                        fuerErkannterName: position.artikelName,
+                        in: bekannterVerlauf
+                    )
+                    return BearbeitbarePosition(
+                        erkannterName: position.artikelName,
+                        artikelName: gelernt?.alias ?? position.artikelName,
+                        preisText: "\(position.einzelpreis)",
+                        gelernterArtikel: gelernt?.artikel
+                    )
                 }
             } catch {
                 fehlermeldung = error.localizedDescription
@@ -139,6 +156,7 @@ struct BelegScanView: View {
                     let name = position.artikelName.trimmingCharacters(in: .whitespacesAndNewlines)
                     let erkannterName = position.erkannterName.trimmingCharacters(in: .whitespacesAndNewlines)
                     let produktName: String? = erkannterName.isEmpty ? nil : erkannterName
+                    let neuerAlternativerName = leiteAlternativenNamenAb(eingegeben: name, erkannt: erkannterName)
                     guard !name.isEmpty,
                           let preis = Decimal(string: position.preisText.replacingOccurrences(of: ",", with: "."))
                     else { continue }
@@ -149,20 +167,24 @@ struct BelegScanView: View {
                             vorhandenerEintrag.preis = preis
                             vorhandenerEintrag.datum = belegDatum
                             vorhandenerEintrag.produktName = produktName
+                            vorhandenerEintrag.alternativerName = neuerAlternativerName
                         } else {
+                            let artikel = position.gelernterArtikel
                             let neuerEintrag = KaufEintrag(
-                                artikel: nil,
+                                artikel: artikel,
                                 geschaeft: einkaufsvorgang.geschaeft,
+                                kategorie: artikel?.kategorie,
                                 preis: preis,
                                 datum: belegDatum
                             )
-                            neuerEintrag.artikelNameSnapshot = name
+                            neuerEintrag.artikelNameSnapshot = artikel?.name ?? name
                             neuerEintrag.produktName = produktName
+                            neuerEintrag.alternativerName = neuerAlternativerName
                             modelContext.insert(neuerEintrag)
                             neuerEintrag.einkaufsvorgang = einkaufsvorgang
                         }
                     case .geschaeft(let geschaeft):
-                        let artikel = passendesArtikel(fuer: name)
+                        let artikel = position.gelernterArtikel ?? passendesArtikel(fuer: name)
                         let neuerEintrag = KaufEintrag(
                             artikel: artikel,
                             geschaeft: geschaeft,
@@ -170,14 +192,24 @@ struct BelegScanView: View {
                             preis: preis,
                             datum: belegDatum
                         )
-                        neuerEintrag.artikelNameSnapshot = name
+                        neuerEintrag.artikelNameSnapshot = artikel?.name ?? name
                         neuerEintrag.produktName = produktName
+                        neuerEintrag.alternativerName = neuerAlternativerName
                         modelContext.insert(neuerEintrag)
                     }
                 }
             }
             dismiss()
         }
+    }
+
+    /// Der Text im „Artikel“-Feld weicht vom rohen erkannten Namen ab (manuell
+    /// korrigiert oder aus ``KaufEintrag/gelernteZuordnung(fuerErkannterName:in:)``
+    /// vorbelegt) → als ``KaufEintrag/alternativerName`` übernehmen, damit spätere
+    /// Belegscans desselben Produkts ihn wiederfinden (siehe `docs/BELEGSCAN.md`).
+    private func leiteAlternativenNamenAb(eingegeben: String, erkannt: String) -> String? {
+        guard !erkannt.isEmpty, eingegeben.localizedCaseInsensitiveCompare(erkannt) != .orderedSame else { return nil }
+        return eingegeben
     }
 
     private func passtZu(name: String, eintrag: KaufEintrag) -> Bool {
@@ -206,11 +238,15 @@ struct BelegScanView: View {
 /// „Colgate Total“ → „Zahnpasta“. `erkannterName` bleibt dabei unverändert der
 /// ursprünglich erkannte Produktname und wird als ``KaufEintrag/produktName``
 /// übernommen, damit die Preishistorie weiterhin nach Marke/Produkt unterscheidet.
+/// `gelernterArtikel` ist bereits beim Einlesen aus einer früheren, gleichartigen
+/// Position übernommen (siehe ``BelegScanView/verarbeite(bild:)``) und wird beim
+/// Übernehmen direkt verknüpft, ohne erneut über den Namen abgeglichen zu werden.
 private struct BearbeitbarePosition: Identifiable {
     let id = UUID()
     let erkannterName: String
     var artikelName: String
     var preisText: String
+    var gelernterArtikel: Artikel?
 }
 
 /// Aufforderung, ein Beleg-Foto aufzunehmen oder aus der Mediathek zu wählen.
@@ -296,22 +332,29 @@ private struct ErgebnisListe: View {
 
             Section {
                 ForEach($positionen) { $position in
-                    HStack {
-                        TextField("Artikel", text: $position.artikelName)
-                        Spacer()
-                        TextField("Preis", text: $position.preisText)
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 70)
-                        Text("€")
-                            .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            TextField("Artikel", text: $position.artikelName)
+                            Spacer()
+                            TextField("Preis", text: $position.preisText)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 70)
+                            Text("€")
+                                .foregroundStyle(.secondary)
+                        }
+                        if let artikel = position.gelernterArtikel {
+                            Label("Wird verknüpft mit „\(artikel.name)“", systemImage: "checkmark.circle")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
                 .onDelete { positionen.remove(atOffsets: $0) }
             } header: {
                 Text("Erkannte Positionen")
             } footer: {
-                Text("Prüfe Name und Preis, bevor du übernimmst. Nicht benötigte Positionen kannst du löschen.")
+                Text("Prüfe Name und Preis, bevor du übernimmst. Bereits bekannte Produkte werden automatisch dem passenden Artikel zugeordnet. Nicht benötigte Positionen kannst du löschen.")
             }
         }
         .safeAreaInset(edge: .bottom) {

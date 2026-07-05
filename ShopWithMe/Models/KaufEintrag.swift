@@ -87,4 +87,32 @@ extension KaufEintrag {
         let name = produktName ?? artikel?.name ?? artikelNameSnapshot
         return name.isEmpty ? "Unbekannter Artikel" : name
     }
+
+    /// Sucht in `verlauf` (typischerweise alle vorhandenen ``KaufEintrag``e) den
+    /// jüngsten Eintrag, dessen erkannter Name (``produktName``/``artikelNameSnapshot``)
+    /// zu `erkannterName` passt und der bereits einen ``alternativerName`` trägt —
+    /// Grundlage für das Mitlernen zwischen Belegscans (siehe ``BelegScanView`` und
+    /// `docs/BELEGSCAN.md`). Liefert dessen Alias sowie den ggf. verknüpften
+    /// ``artikel`` (kann `nil` sein, falls damals nur ein Alias ohne Artikel-Zuordnung
+    /// vergeben wurde). `nil`, falls kein passender, bereits benannter Eintrag existiert.
+    static func gelernteZuordnung(
+        fuerErkannterName erkannterName: String,
+        in verlauf: [KaufEintrag]
+    ) -> (alias: String, artikel: Artikel?)? {
+        let erkannterName = erkannterName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !erkannterName.isEmpty else { return nil }
+        let sortiert = verlauf.sorted { $0.datum > $1.datum }
+        for eintrag in sortiert {
+            guard let alias = eintrag.alternativerName,
+                  !alias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            else { continue }
+            let vergleichsName = eintrag.produktName ?? eintrag.artikelNameSnapshot
+            guard !vergleichsName.isEmpty else { continue }
+            if vergleichsName.localizedCaseInsensitiveContains(erkannterName)
+                || erkannterName.localizedCaseInsensitiveContains(vergleichsName) {
+                return (alias, eintrag.artikel)
+            }
+        }
+        return nil
+    }
 }
