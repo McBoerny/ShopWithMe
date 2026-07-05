@@ -128,3 +128,9 @@ Konfliktvermeidung (nur ein aktiv schreibendes Gerät) beim Nutzer, dokumentiert
 App-Hilfe. Koordinierter Mehrbenutzerzugriff auf einen solchen Fileshare-Ordner
 (Micro-/Session-Lease über `NSFileCoordinator`/`NSFilePresenter`) ist seit Build 30
 umgesetzt: siehe `docs/DATABASE_CONCURRENCY.md`.
+
+## Builds, Versionierung & Migrationen
+
+Checkliste für Checkpoints (Changelog, DocC, wann zusätzlich Doku aktualisiert wird),
+Versionsschema und die Entscheidungsregel additiv-optional vs. strukturell für
+SwiftData-Schemaänderungen: `docs/BUILD_WORKFLOW.md`.

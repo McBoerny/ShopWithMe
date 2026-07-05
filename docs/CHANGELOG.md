@@ -277,7 +277,7 @@
 - Neuer Unit-Test `regalSortierModusFaelltOhneGespeichertenRohwertAufManuellZurueck`
   (`ModelTests`) hält dieses Verhalten fest.
 
-## v1.4 — Manuelle und automatische Regal-Reihenfolge als gleichberechtigte Alternativen
+## v1.4 (Build 32) — Manuelle und automatische Regal-Reihenfolge als gleichberechtigte Alternativen
 
 - `Models/Geschaeft.swift`: neues `RegalSortierModus`-Enum (`manuell`/`automatisch`)
   und neue Property `regalSortierModus` (Default `.manuell`) legen pro Geschäft fest,

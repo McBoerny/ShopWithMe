@@ -6,7 +6,9 @@ Jeder Checkpoint ist ein Git-Commit mit einem `docs/CHANGELOG.md`-Eintrag. Forma
 (`CURRENT_PROJECT_VERSION`) ist die Build-Nummer und wird automatisch bei jedem
 Commit über `.githooks/pre-commit` erhöht (siehe `docs/DECISIONS.md`). Die
 Checkpoints unten aus der Zeit vor diesem Schema (bis v1.6) verwendeten `X.Y` noch
-als reinen Inkrement-Zähler ohne separate Build-Nummer.
+als reinen Inkrement-Zähler ohne separate Build-Nummer. Vollständige Checkliste für
+Checkpoints (Versionierung, Migrationsentscheidung, Build-Umgebung, wann zusätzlich
+die übrige Doku aktualisiert wird): `docs/BUILD_WORKFLOW.md`.
 
 ## Umgesetzt
 
