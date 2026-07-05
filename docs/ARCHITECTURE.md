@@ -88,7 +88,7 @@ Verfügbarkeit.
   ohne UI-Änderungen eingesetzt werden kann. `KaufEintrag.anzeigeName` priorisiert einen
   optionalen, vom Nutzer pro Position vergebenen `alternativerName` vor dem erkannten
   `produktName`/`artikel`/`artikelNameSnapshot` — Details in
-  `docs/BELEGSCAN_ALTERNATIVE_NAMEN.md`.
+  `docs/BELEGSCAN.md`.
 - **ShelfOrderLearningService**: aktualisiert nach jedem abgeschlossenen
   `Einkaufsvorgang` die `KategorieBesuchsStatistik` und leitet daraus sowohl eine
   vorgeschlagene automatische Regal-Reihenfolge als auch (für Geschäfte ohne Regale

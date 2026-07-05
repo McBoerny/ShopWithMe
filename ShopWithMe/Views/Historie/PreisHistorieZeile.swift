@@ -5,7 +5,7 @@ import SwiftUI
 ///
 /// In der Artikel-Spalte (``zeigeArtikel``) lässt sich per Kontextmenü/Wischgeste ein
 /// alternativer Anzeigename für genau diese Position vergeben — siehe
-/// ``KaufEintrag/anzeigeName`` und `docs/BELEGSCAN_ALTERNATIVE_NAMEN.md`.
+/// ``KaufEintrag/anzeigeName`` und `docs/BELEGSCAN.md`.
 struct PreisHistorieZeile: View {
     let eintrag: KaufEintrag
     /// `true` in der Geschäfts-Detailansicht (zeigt den Artikelnamen), `false` in der

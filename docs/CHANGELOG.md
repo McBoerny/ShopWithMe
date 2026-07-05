@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.2 (Build 29) — Belegscan-Doku konsolidiert
+
+- `docs/BELEGSCAN_ALTERNATIVE_NAMEN.md` in eine neue, gemeinsame
+  `docs/BELEGSCAN.md` überführt: beschreibt jetzt den kompletten Belegscan-Ablauf
+  (OCR, KI-Extraktion, Übernahme in `KaufEintrag`, Preishistorie-Anzeige) inklusive
+  des alternativen Anzeigenamens in einem Dokument statt in zwei getrennten. Verweise
+  in `docs/ARCHITECTURE.md`, `Models/KaufEintrag.swift` und
+  `Views/Historie/PreisHistorieZeile.swift` entsprechend angepasst.
+
 ## v0.2 (Build 28) — Belegscan: alternativer Anzeigename pro Kaufeintrag
 
 - Neues optionales, additives Attribut `KaufEintrag.alternativerName`

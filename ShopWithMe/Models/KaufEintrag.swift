@@ -41,7 +41,7 @@ final class KaufEintrag {
     /// einen unhandlich abgekürzten Kassenbon-Namen durch einen sprechenden Namen zu
     /// ersetzen. `nil`/leer, solange kein alternativer Name gesetzt wurde. Hat, sobald
     /// gesetzt, Vorrang vor ``produktName``/``artikel``/``artikelNameSnapshot`` — siehe
-    /// ``anzeigeName`` und `docs/BELEGSCAN_ALTERNATIVE_NAMEN.md`.
+    /// ``anzeigeName`` und `docs/BELEGSCAN.md`.
     var alternativerName: String?
     /// Datum des Kaufs.
     var datum: Date
@@ -79,7 +79,7 @@ extension KaufEintrag {
     /// Der für Anzeigen (z.B. ``PreisHistorieZeile``) tatsächlich zu verwendende
     /// Artikelname, mit ``alternativerName`` an oberster Priorität, sonst wie bisher
     /// ``produktName`` (Original vom Kassenbon), dann ``artikel``, dann
-    /// ``artikelNameSnapshot``. Siehe `docs/BELEGSCAN_ALTERNATIVE_NAMEN.md`.
+    /// ``artikelNameSnapshot``. Siehe `docs/BELEGSCAN.md`.
     var anzeigeName: String {
         if let alternativerName, !alternativerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return alternativerName
