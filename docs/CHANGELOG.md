@@ -190,7 +190,7 @@
   `MigrationStage`, `.lightweight` vs. `.custom`) — Hintergrund und Auslöser
   (v1.4→v1.5-Absturz) in `docs/DECISIONS.md` festgehalten.
 
-## v1.5 — Absturz beim Öffnen eines Geschäfts nach v1.4-Update behoben
+## v1.5 (Build 27) — Absturz beim Öffnen eines Geschäfts nach v1.4-Update behoben
 
 - `Models/Geschaeft.swift`: `regalSortierModus` (neu in v1.4) crashte für vor
   v1.4 angelegte Geschäfte, sobald die Detailansicht geöffnet wurde — SwiftData
