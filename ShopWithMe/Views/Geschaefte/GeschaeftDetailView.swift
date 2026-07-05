@@ -49,6 +49,10 @@ struct GeschaeftDetailView: View {
     }
 
     var body: some View {
+        SessionLeaseGate { listInhalt }
+    }
+
+    private var listInhalt: some View {
         List {
             if automatischeReihenfolgeVerfuegbar {
                 Section {

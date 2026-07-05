@@ -55,8 +55,13 @@ struct ArtikelListView: View {
     }
 
     private func artikelLoeschen(at offsets: IndexSet) {
-        for index in offsets {
-            modelContext.delete(artikel[index])
+        let zuLoeschende = offsets.map { artikel[$0] }
+        Task {
+            await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                for eintrag in zuLoeschende {
+                    modelContext.delete(eintrag)
+                }
+            }
         }
     }
 }

@@ -28,6 +28,10 @@ struct KategorieHinzufuegenSheet: View {
     }
 
     var body: some View {
+        SessionLeaseGate { navigationInhalt }
+    }
+
+    private var navigationInhalt: some View {
         NavigationStack {
             Form {
                 if !regaleSortiert.isEmpty {

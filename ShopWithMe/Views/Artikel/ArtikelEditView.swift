@@ -32,6 +32,14 @@ struct ArtikelEditView: View {
     }
 
     var body: some View {
+        if istNeu {
+            navigationInhalt
+        } else {
+            SessionLeaseGate { navigationInhalt }
+        }
+    }
+
+    private var navigationInhalt: some View {
         NavigationStack {
             Form {
                 Section {
@@ -116,9 +124,15 @@ struct ArtikelEditView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Sichern") {
                         if istNeu {
-                            modelContext.insert(artikel)
+                            Task {
+                                await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                                    modelContext.insert(artikel)
+                                }
+                                dismiss()
+                            }
+                        } else {
+                            dismiss()
                         }
-                        dismiss()
                     }
                     .disabled(artikel.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }

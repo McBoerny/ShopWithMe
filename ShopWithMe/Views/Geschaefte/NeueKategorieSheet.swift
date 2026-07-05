@@ -42,9 +42,13 @@ struct NeueKategorieSheet: View {
                             standardFarbeHex: farbeHex,
                             sortIndex: naechsterSortIndex
                         )
-                        modelContext.insert(kategorie)
-                        onErstellt(kategorie)
-                        dismiss()
+                        Task {
+                            await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                                modelContext.insert(kategorie)
+                            }
+                            onErstellt(kategorie)
+                            dismiss()
+                        }
                     }
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }

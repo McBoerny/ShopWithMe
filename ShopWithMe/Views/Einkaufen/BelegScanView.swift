@@ -130,47 +130,54 @@ struct BelegScanView: View {
     }
 
     private func uebernehmen() {
-        for position in bearbeitbarePositionen ?? [] {
-            let name = position.artikelName.trimmingCharacters(in: .whitespacesAndNewlines)
-            let erkannterName = position.erkannterName.trimmingCharacters(in: .whitespacesAndNewlines)
-            let produktName: String? = erkannterName.isEmpty ? nil : erkannterName
-            guard !name.isEmpty,
-                  let preis = Decimal(string: position.preisText.replacingOccurrences(of: ",", with: "."))
-            else { continue }
+        Task {
+            // Ein Micro-Lease um den gesamten Beleg-Vorgang statt pro Position —
+            // fachlich eine einzige Aktion (siehe `docs/DATABASE_CONCURRENCY.md` →
+            // „Vollständiger Schreibvorgang-Katalog“).
+            await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                for position in bearbeitbarePositionen ?? [] {
+                    let name = position.artikelName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let erkannterName = position.erkannterName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let produktName: String? = erkannterName.isEmpty ? nil : erkannterName
+                    guard !name.isEmpty,
+                          let preis = Decimal(string: position.preisText.replacingOccurrences(of: ",", with: "."))
+                    else { continue }
 
-            switch kontext {
-            case .einkaufsvorgang(let einkaufsvorgang):
-                if let vorhandenerEintrag = einkaufsvorgang.kaufEintraege.first(where: { passtZu(name: name, eintrag: $0) }) {
-                    vorhandenerEintrag.preis = preis
-                    vorhandenerEintrag.datum = belegDatum
-                    vorhandenerEintrag.produktName = produktName
-                } else {
-                    let neuerEintrag = KaufEintrag(
-                        artikel: nil,
-                        geschaeft: einkaufsvorgang.geschaeft,
-                        preis: preis,
-                        datum: belegDatum
-                    )
-                    neuerEintrag.artikelNameSnapshot = name
-                    neuerEintrag.produktName = produktName
-                    modelContext.insert(neuerEintrag)
-                    neuerEintrag.einkaufsvorgang = einkaufsvorgang
+                    switch kontext {
+                    case .einkaufsvorgang(let einkaufsvorgang):
+                        if let vorhandenerEintrag = einkaufsvorgang.kaufEintraege.first(where: { passtZu(name: name, eintrag: $0) }) {
+                            vorhandenerEintrag.preis = preis
+                            vorhandenerEintrag.datum = belegDatum
+                            vorhandenerEintrag.produktName = produktName
+                        } else {
+                            let neuerEintrag = KaufEintrag(
+                                artikel: nil,
+                                geschaeft: einkaufsvorgang.geschaeft,
+                                preis: preis,
+                                datum: belegDatum
+                            )
+                            neuerEintrag.artikelNameSnapshot = name
+                            neuerEintrag.produktName = produktName
+                            modelContext.insert(neuerEintrag)
+                            neuerEintrag.einkaufsvorgang = einkaufsvorgang
+                        }
+                    case .geschaeft(let geschaeft):
+                        let artikel = passendesArtikel(fuer: name)
+                        let neuerEintrag = KaufEintrag(
+                            artikel: artikel,
+                            geschaeft: geschaeft,
+                            kategorie: artikel?.kategorie,
+                            preis: preis,
+                            datum: belegDatum
+                        )
+                        neuerEintrag.artikelNameSnapshot = name
+                        neuerEintrag.produktName = produktName
+                        modelContext.insert(neuerEintrag)
+                    }
                 }
-            case .geschaeft(let geschaeft):
-                let artikel = passendesArtikel(fuer: name)
-                let neuerEintrag = KaufEintrag(
-                    artikel: artikel,
-                    geschaeft: geschaeft,
-                    kategorie: artikel?.kategorie,
-                    preis: preis,
-                    datum: belegDatum
-                )
-                neuerEintrag.artikelNameSnapshot = name
-                neuerEintrag.produktName = produktName
-                modelContext.insert(neuerEintrag)
             }
+            dismiss()
         }
-        dismiss()
     }
 
     private func passtZu(name: String, eintrag: KaufEintrag) -> Bool {

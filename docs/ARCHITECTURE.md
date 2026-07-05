@@ -100,6 +100,13 @@ Verfügbarkeit.
 - **DatabaseLocationService**: verwaltet Security-Scoped-Bookmarks für einen vom Nutzer
   gewählten Speicherort außerhalb des App-Containers und das Verschieben der
   SwiftData-Store-Dateien dorthin.
+- **DatabaseLeaseService**: koordiniert Mehrbenutzerzugriff auf einen geteilten
+  Fileshare-Ordner über eine `NSFileCoordinator`-basierte Lock-Datei (Micro-Lease für
+  diskrete Aktionen, Session-Lease für Bearbeitungs-Bildschirme) — siehe
+  `docs/DATABASE_CONCURRENCY.md`.
+- **DebugLogWriter**/**DatabaseDebugLogger**: optionaler, standardmäßig deaktivierter
+  Diagnose-Logging-Mechanismus für den Mehrbenutzerzugriff (Rotation, `os.Logger`,
+  Spiegelung in den geteilten DB-Ordner) — siehe `docs/LOGGING.md`.
 
 ## Liquid Glass
 
@@ -114,4 +121,6 @@ Standard: SwiftData-Standardpfad im App-Container. Alternative: vom Nutzer per
 `.fileImporter` gewählter Ordner (z.B. lokal gespiegelter Cloud-Ordner). Kein
 CloudKit/iCloud-Sync — bei Cloud-Sync-Ordnern liegt die Verantwortung für
 Konfliktvermeidung (nur ein aktiv schreibendes Gerät) beim Nutzer, dokumentiert in der
-App-Hilfe.
+App-Hilfe. Koordinierter Mehrbenutzerzugriff auf einen solchen Fileshare-Ordner
+(Micro-/Session-Lease über `NSFileCoordinator`/`NSFilePresenter`) ist seit Build 30
+umgesetzt: siehe `docs/DATABASE_CONCURRENCY.md`.

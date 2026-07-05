@@ -41,5 +41,12 @@ enum SeedData {
             )
             context.insert(kategorie)
         }
+        // Expliziter Save nötig, seit Autosave global deaktiviert ist (siehe
+        // `docs/DATABASE_CONCURRENCY.md` → „Voraussetzung: explizite Speicherpunkte“).
+        // Bewusst ohne Lease-Schutz (Nutzervorgabe) — das seltene Race bei
+        // zeitgleichem Erst-Start zweier Geräte gegen einen leeren Store führt
+        // höchstens zu kosmetischen doppelten Kategorien, siehe „Vollständiger
+        // Schreibvorgang-Katalog“.
+        try? context.save()
     }
 }

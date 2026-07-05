@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.2 (Build 30) — Mehrbenutzerzugriff auf die Datenbank + DB-Debug-Logging
+
+- `Services/DatabaseLeaseService.swift`: koordiniert Schreibzugriffe auf einen
+  geteilten Fileshare-Ordner (Box Drive/OneDrive/Synology Drive/iCloud Drive)
+  über eine `NSFileCoordinator`-basierte Lock-Datei. Micro-Lease für diskrete
+  Einzelaktionen (Artikel abhaken, Löschen, Anlegen, Belegscan-Übernahme, …),
+  Session-Lease (referenzgezählt, mit Heartbeat) für Bearbeitungs-Bildschirme
+  (Geschäft/Regal/Kategorie, `Views/SessionLeaseGate.swift`). Details, gewählte
+  Parameter und bekannte Grenzen in `docs/DATABASE_CONCURRENCY.md`.
+- `ModelContext.autosaveEnabled = false`: alle Schreibzugriffe laufen jetzt über
+  explizite, Lease-geschützte `save()`-Aufrufe statt über SwiftDatas implizites
+  Autosave.
+- `Einkaufsvorgang.artikelAbhaken`: Dedupe-Prüfung gegen doppelte `KaufEintrag`e
+  bei seltenen Sync-Latenz-Kollisionen zwischen zwei Geräten.
+- Optionaler, standardmäßig deaktivierter DB-Debug-Modus
+  (`Services/DebugLogWriter.swift`, `Services/DatabaseDebugLogger.swift`,
+  neue Einstellungen-Ansicht `DatabaseDebugSettingsView`) protokolliert
+  Sync-/Lock-/Öffnen-/Speicher-Ereignisse lokal und im geteilten DB-Ordner, für
+  die Auswertung nach einem künftigen Live-Test mit mehreren Geräten. Als
+  projektweite Logging-Architektur in `docs/LOGGING.md` dokumentiert.
+- Neue Tests: `DatabaseLeaseServiceTests`, `DebugLogWriterTests`, Dedupe-Test in
+  `EinkaufsvorgangTests`.
+
 ## v0.2 (Build 29) — Belegscan-Doku konsolidiert
 
 - `docs/BELEGSCAN_ALTERNATIVE_NAMEN.md` in eine neue, gemeinsame

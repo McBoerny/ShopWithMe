@@ -17,6 +17,11 @@ struct SettingsView: View {
                     } label: {
                         Label("Datenbank & Speicherort", systemImage: "externaldrive")
                     }
+                    NavigationLink {
+                        DatabaseDebugSettingsView()
+                    } label: {
+                        Label("DB-Debug-Modus", systemImage: "ladybug")
+                    }
                 }
 
                 Section("Über") {

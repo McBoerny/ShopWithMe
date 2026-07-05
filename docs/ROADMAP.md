@@ -25,6 +25,11 @@ als reinen Inkrement-Zähler ohne separate Build-Nummer.
   Einstellungen/Hilfe-Bildschirme + Datenbank-Speicherort-Funktion.
 - [x] **v0.7** — Belegscan (`ReceiptScanService`) + Preishistorie-Ansicht (in
   Artikel- und Geschäfts-Detailansicht).
+- [x] **v0.2 (Build 30)** — Mehrbenutzerzugriff auf einen geteilten Fileshare-Ordner
+  (`DatabaseLeaseService`: Micro-Lease für diskrete Aktionen, Session-Lease für
+  Bearbeitungs-Bildschirme) + optionaler DB-Debug-Logging-Mechanismus
+  (`DebugLogWriter`/`DatabaseDebugLogger`) — siehe `docs/DATABASE_CONCURRENCY.md`,
+  `docs/LOGGING.md`.
 
 Damit ist die in der Kickoff-Unterhaltung beschriebene Kernfunktionalität
 vollständig umgesetzt; weitere Ideen siehe „Zukünftig“ unten.

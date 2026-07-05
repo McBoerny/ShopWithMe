@@ -20,6 +20,10 @@ struct RegalDetailView: View {
     @State private var zeigeNeueKategorie = false
 
     var body: some View {
+        SessionLeaseGate { formInhalt }
+    }
+
+    private var formInhalt: some View {
         Form {
             Section("Name") {
                 TextField("Regalname", text: $regal.name)

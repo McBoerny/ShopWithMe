@@ -13,6 +13,14 @@ struct GeschaeftStammdatenEditView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
+        if istNeu {
+            navigationInhalt
+        } else {
+            SessionLeaseGate { navigationInhalt }
+        }
+    }
+
+    private var navigationInhalt: some View {
         NavigationStack {
             Form {
                 Section {
@@ -44,9 +52,15 @@ struct GeschaeftStammdatenEditView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Sichern") {
                         if istNeu {
-                            modelContext.insert(geschaeft)
+                            Task {
+                                await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                                    modelContext.insert(geschaeft)
+                                }
+                                dismiss()
+                            }
+                        } else {
+                            dismiss()
                         }
-                        dismiss()
                     }
                     .disabled(geschaeft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }

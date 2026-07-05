@@ -9,6 +9,7 @@ import SwiftData
 struct ArtikelHinzufuegenView: View {
     @Query(sort: \Artikel.name) private var alleArtikel: [Artikel]
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
 
     @State private var suchtext = ""
     @State private var neuerArtikelEntwurf: Artikel?
@@ -75,8 +76,12 @@ struct ArtikelHinzufuegenView: View {
     }
 
     private func hinzufuegen(_ artikel: Artikel) {
-        artikel.istAufEinkaufsliste = true
-        dismiss()
+        Task {
+            await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                artikel.istAufEinkaufsliste = true
+            }
+            dismiss()
+        }
     }
 
     private func neuenArtikelAnlegen() {

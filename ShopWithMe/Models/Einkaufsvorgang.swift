@@ -43,6 +43,22 @@ final class Einkaufsvorgang {
     /// ohne eigene Kategorie fallen dabei automatisch unter "Sonstiges" (siehe
     /// ``Artikel/effektiveKategorie(context:)``).
     func artikelAbhaken(_ artikel: Artikel, context: ModelContext) {
+        // Dedupe-Schutz gegen das in `docs/DATABASE_CONCURRENCY.md` dokumentierte
+        // Restrisiko (Sync-Latenz-Kollisionsfenster bei zeitgleichem Abhaken auf zwei
+        // Geräten): pro (Einkaufsvorgang, Artikel) darf nur ein `KaufEintrag`
+        // entstehen. Existiert bereits einer (z.B. weil das andere Gerät knapp vor
+        // uns synchronisiert hat), kein Duplikat anlegen.
+        let einkaufsvorgangID = persistentModelID
+        let artikelID = artikel.persistentModelID
+        let deskriptor = FetchDescriptor<KaufEintrag>(
+            predicate: #Predicate { $0.einkaufsvorgang?.persistentModelID == einkaufsvorgangID && $0.artikel?.persistentModelID == artikelID }
+        )
+        if let anzahl = try? context.fetchCount(deskriptor), anzahl > 0 {
+            DatabaseDebugLogger.log(.dedupeConflictDetected, details: "artikelAbhaken: \(artikel.name)")
+            artikel.istAufEinkaufsliste = false
+            return
+        }
+
         let kategorie = artikel.effektiveKategorie(context: context)
         let index = naechsterKategorieBesuchsIndex(fuer: kategorie)
         let eintrag = KaufEintrag(artikel: artikel, geschaeft: geschaeft, kategorie: kategorie, kategorieBesuchsIndex: index)

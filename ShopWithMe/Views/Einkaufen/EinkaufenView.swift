@@ -42,17 +42,20 @@ struct EinkaufenView: View {
                 }
             }
         }
-        .onAppear(perform: einkaufSicherstellen)
-        .onChange(of: ausgewaehltesGeschaeft) { _, _ in einkaufSicherstellen() }
+        .onAppear { Task { await einkaufSicherstellen() } }
+        .onChange(of: ausgewaehltesGeschaeft) { _, _ in Task { await einkaufSicherstellen() } }
     }
 
     /// Legt bei Bedarf einen neuen ``Einkaufsvorgang`` für das aktuell gewählte
     /// Geschäft (bzw. ohne Geschäft) an, damit die Einkaufsliste immer sofort
-    /// angezeigt wird.
-    private func einkaufSicherstellen() {
+    /// angezeigt wird. Diskrete Einzelaktion → Micro-Lease (siehe
+    /// `docs/DATABASE_CONCURRENCY.md` → „Vollständiger Schreibvorgang-Katalog“).
+    private func einkaufSicherstellen() async {
         guard aktuellerEinkauf == nil else { return }
-        let vorgang = Einkaufsvorgang(geschaeft: ausgewaehltesGeschaeft)
-        modelContext.insert(vorgang)
+        await DatabaseLeaseService.performMicroLease(context: modelContext) {
+            let vorgang = Einkaufsvorgang(geschaeft: ausgewaehltesGeschaeft)
+            modelContext.insert(vorgang)
+        }
     }
 }
 
@@ -248,9 +251,16 @@ private struct EinkaufslisteView: View {
         }
         .safeAreaInset(edge: .bottom) {
             Button("Einkauf abschließen") {
-                einkaufsvorgang.abschliessen()
-                ShelfOrderLearningService.lernenAus(einkaufsvorgang, context: modelContext)
-                zeigeBelegScanAngebot = true
+                Task {
+                    // Abschließen + Lernschritt sind fachlich eine Aktion → ein
+                    // gemeinsamer Micro-Lease statt zwei getrennter (siehe
+                    // `docs/DATABASE_CONCURRENCY.md` → „Gebündelte Aktionen“).
+                    await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                        einkaufsvorgang.abschliessen()
+                        ShelfOrderLearningService.lernenAus(einkaufsvorgang, context: modelContext)
+                    }
+                    zeigeBelegScanAngebot = true
+                }
             }
             .buttonStyle(.glass)
             .padding()
@@ -298,15 +308,23 @@ private struct EinkaufslisteView: View {
     }
 
     private func umschalten(_ artikel: Artikel) {
-        if istAbgehakt(artikel) {
-            einkaufsvorgang.artikelAbwaehlen(artikel, context: modelContext)
-        } else {
-            einkaufsvorgang.artikelAbhaken(artikel, context: modelContext)
+        Task {
+            await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                if istAbgehakt(artikel) {
+                    einkaufsvorgang.artikelAbwaehlen(artikel, context: modelContext)
+                } else {
+                    einkaufsvorgang.artikelAbhaken(artikel, context: modelContext)
+                }
+            }
         }
     }
 
     private func entferneDauerhaft(_ artikel: Artikel) {
-        einkaufsvorgang.artikelDauerhaftEntfernen(artikel, context: modelContext)
+        Task {
+            await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                einkaufsvorgang.artikelDauerhaftEntfernen(artikel, context: modelContext)
+            }
+        }
     }
 }
 

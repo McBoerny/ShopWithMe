@@ -137,4 +137,29 @@ struct EinkaufsvorgangTests {
         #expect(apfel.istAufEinkaufsliste == true)
         #expect(einkauf.kaufEintraege.isEmpty)
     }
+
+    /// Dedupe-Schutz gegen das in `docs/DATABASE_CONCURRENCY.md` dokumentierte
+    /// Sync-Latenz-Restrisiko: ein zweiter Aufruf von `artikelAbhaken` für denselben
+    /// Artikel im selben Einkaufsvorgang darf keinen zweiten `KaufEintrag` anlegen.
+    @Test
+    func abhakenErstelltBeiWiederholtemAufrufKeinDuplikat() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        context.insert(obst)
+        let geschaeft = Geschaeft(name: "Testladen", typ: .lebensmittel)
+        context.insert(geschaeft)
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorie: obst, istAufEinkaufsliste: true)
+        context.insert(apfel)
+
+        let einkauf = Einkaufsvorgang(geschaeft: geschaeft)
+        context.insert(einkauf)
+
+        einkauf.artikelAbhaken(apfel, context: context)
+        einkauf.artikelAbhaken(apfel, context: context)
+
+        #expect(einkauf.kaufEintraege.count == 1)
+        #expect(apfel.istAufEinkaufsliste == false)
+    }
 }
