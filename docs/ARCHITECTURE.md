@@ -4,8 +4,8 @@
 
 - **SwiftUI**, iOS-only (kein macOS/Catalyst-Target), min. Deployment-Target iOS 26.0.
 - **SwiftData** für Persistenz (kein Core Data, kein iCloud/CloudKit).
-- **FoundationModels** (Apple Intelligence, on-device) für Artikel-Vorschläge und
-  Beleg-Extraktion.
+- **FoundationModels** (Apple Intelligence, on-device) für automatische
+  Kategorie-Vorschläge beim Artikel-Anlegen und für die Beleg-Extraktion.
 - **Vision** (`VNRecognizeTextRequest`) für Beleg-OCR.
 - **XcodeGen** erzeugt das `.xcodeproj` aus `project.yml` — das Projektfile selbst wird
   nicht versioniert, nur `project.yml`. Neu auschecken: `xcodegen generate`.
@@ -49,14 +49,16 @@ Artikel                              Einkaufsvorgang            KaufEintrag
 ───────                              ───────────────            ───────────
 id: UUID                             id: UUID                   id: UUID
 name: String                         geschaeft: Geschaeft?      artikel: Artikel?
-symbolName: String                   startZeit: Date            einkaufsvorgang: Einkaufsvorgang?
-farbeHex: String                     endZeit: Date?             geschaeft: Geschaeft?  (denormalisiert)
+symbolName: String (UI-los)          startZeit: Date            einkaufsvorgang: Einkaufsvorgang?
+farbeHex: String (UI-los)            endZeit: Date?             geschaeft: Geschaeft?  (denormalisiert)
 kategorie: ArtikelKategorie?         kaufEintraege: [KaufEintrag]  datum: Date
 istAufEinkaufsliste: Bool                                        preis: Decimal?
 erstelltAm: Date                                                 menge: Double
-                                                                  produktName: String?
-                                                                  alternativerName: String?
-                                                                  kategorieBesuchsIndex: Int?
+notiz: String?                                                   produktName: String?
+einheitRaw: String?                                              alternativerName: String?
+mengenSchrittRaw: Double?                                        kategorieBesuchsIndex: Int?
+mengeRaw: Double?
+einkaufslistenNotiz: String?
 
 KategorieBesuchsStatistik
 ─────────────────────────
@@ -79,9 +81,11 @@ Verfügbarkeit.
 ## Services
 
 - **AISuggestionService**: prüft `SystemLanguageModel.default.availability`; nutzt bei
-  Verfügbarkeit `LanguageModelSession` mit einem `@Generable`-Ergebnistyp, um Symbol,
-  Farbe, Kategorie- und Regalname vorzuschlagen. Bekommt bestehende Kategorie-/Regalnamen
-  als Kontext, damit bevorzugt bestehende Werte wiederverwendet werden.
+  Verfügbarkeit `LanguageModelSession` mit einem `@Generable`-Ergebnistyp, um Kategorie-
+  und Regalname vorzuschlagen. Bekommt bestehende Kategorie-/Regalnamen als Kontext,
+  damit bevorzugt bestehende Werte wiederverwendet werden. Wird in `ArtikelEditView`
+  automatisch (entprellt per `.task(id: artikel.name)`) aufgerufen, sobald ein neuer
+  Artikel noch keine Kategorie hat — kein manueller Button mehr.
 - **ReceiptScanService** (Protokoll): Implementierung `VisionFoundationModelsReceiptScanner`
   kombiniert Vision-OCR mit FoundationModels-Extraktion. Als Protokoll gekapselt, damit
   eine spätere, spezifischere On-Device-API (z.B. eine künftige System-Beleg-Scan-API)

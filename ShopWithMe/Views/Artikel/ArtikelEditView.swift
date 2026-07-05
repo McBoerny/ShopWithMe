@@ -1,6 +1,5 @@
 import SwiftUI
 import SwiftData
-import UIKit
 
 /// Anlegen/Bearbeiten eines ``Artikel``s.
 ///
@@ -43,41 +42,8 @@ struct ArtikelEditView: View {
         NavigationStack {
             Form {
                 Section {
-                    HStack(spacing: 16) {
-                        GlassSymbolBadge(symbolName: artikel.symbolName, farbe: Color(hex: artikel.farbeHex), groesse: 56)
-                        TextField("Name", text: $artikel.name)
-                            .font(.title3)
-                    }
-                    SymbolFarbAuswahlZeile(symbolName: $artikel.symbolName, farbeHex: $artikel.farbeHex)
-                }
-
-                if istNeu && AISuggestionService.istVerfuegbar {
-                    Section {
-                        Button {
-                            kiVorschlagAnfordern()
-                        } label: {
-                            if kiVorschlagLaeuft {
-                                HStack {
-                                    ProgressView()
-                                    Text("Apple Intelligence denkt nach…")
-                                }
-                            } else {
-                                Label("Mit Apple Intelligence vorschlagen", systemImage: "sparkles")
-                            }
-                        }
-                        .disabled(kiVorschlagLaeuft || artikel.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-                        if let kiRegalHinweis {
-                            Text(kiRegalHinweis)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                        if let kiFehlermeldung {
-                            Text(kiFehlermeldung)
-                                .font(.footnote)
-                                .foregroundStyle(.orange)
-                        }
-                    }
+                    TextField("Name", text: $artikel.name)
+                        .font(.title3)
                 }
 
                 Section {
@@ -88,8 +54,45 @@ struct ArtikelEditView: View {
                                 .tag(Optional(kategorie))
                         }
                     }
+
+                    if kiVorschlagLaeuft {
+                        HStack {
+                            ProgressView()
+                            Text("Apple Intelligence schlägt eine Kategorie vor…")
+                        }
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    }
+                    if let kiRegalHinweis {
+                        Text(kiRegalHinweis)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let kiFehlermeldung {
+                        Text(kiFehlermeldung)
+                            .font(.footnote)
+                            .foregroundStyle(.orange)
+                    }
                 } footer: {
                     Text("Ohne Auswahl landet der Artikel automatisch in „Sonstiges“.")
+                }
+
+                Section("Menge & Einheit") {
+                    Picker("Einheit", selection: $artikel.einheit) {
+                        ForEach(Einheit.allCases) { einheit in
+                            Text(einheit.anzeigename).tag(einheit)
+                        }
+                    }
+                    HStack {
+                        Text("Standardmenge")
+                        Spacer()
+                        TextField("Menge", value: $artikel.mengenSchritt, format: .number)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 80)
+                        Text(artikel.einheit.kurzform)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 Section("Notiz") {
@@ -101,10 +104,6 @@ struct ArtikelEditView: View {
                         ),
                         axis: .vertical
                     )
-                }
-
-                Section {
-                    Toggle("Auf Einkaufsliste", isOn: $artikel.istAufEinkaufsliste)
                 }
 
                 if !istNeu && !kaufHistorie.isEmpty {
@@ -137,43 +136,48 @@ struct ArtikelEditView: View {
                     .disabled(artikel.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
+            .task(id: artikel.name) {
+                await kategorieAutomatischVorschlagen()
+            }
         }
     }
 
-    private func kiVorschlagAnfordern() {
+    /// Bestimmt automatisch (ohne manuellen Anstoß) eine Kategorie für einen neuen
+    /// Artikel, sobald Apple Intelligence verfügbar ist — entprellt um 600ms, damit
+    /// nicht bei jedem Tastenanschlag ein KI-Aufruf losgeschickt wird. SwiftUI
+    /// storniert diesen Task automatisch, sobald sich `artikel.name` erneut ändert
+    /// (`.task(id:)`). Überschreibt niemals eine bereits (manuell oder von einem
+    /// vorherigen Durchlauf) gesetzte Kategorie.
+    private func kategorieAutomatischVorschlagen() async {
+        guard istNeu, AISuggestionService.istVerfuegbar, artikel.kategorie == nil else { return }
+        let name = artikel.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+
+        try? await Task.sleep(for: .milliseconds(600))
+        guard !Task.isCancelled, artikel.kategorie == nil else { return }
+
         kiVorschlagLaeuft = true
         kiFehlermeldung = nil
-        kiRegalHinweis = nil
-        let name = artikel.name
-        let bekannteKategorien = kategorien.map(\.name)
-        let bekannteRegale = Set(alleRegale.map(\.name)).sorted()
+        defer { kiVorschlagLaeuft = false }
 
-        Task {
-            defer { kiVorschlagLaeuft = false }
-            do {
-                let vorschlag = try await AISuggestionService.vorschlag(
-                    fuerArtikelName: name,
-                    bekannteKategorien: bekannteKategorien,
-                    bekannteRegale: bekannteRegale
-                )
+        do {
+            let vorschlag = try await AISuggestionService.vorschlag(
+                fuerArtikelName: name,
+                bekannteKategorien: kategorien.map(\.name),
+                bekannteRegale: Set(alleRegale.map(\.name)).sorted()
+            )
+            guard !Task.isCancelled, artikel.kategorie == nil else { return }
 
-                if UIImage(systemName: vorschlag.symbolName) != nil {
-                    artikel.symbolName = vorschlag.symbolName
-                }
-                if vorschlag.farbeHex.count == 7, vorschlag.farbeHex.hasPrefix("#") {
-                    artikel.farbeHex = vorschlag.farbeHex
-                }
-                if let passendeKategorie = kategorien.first(where: {
-                    $0.name.localizedCaseInsensitiveCompare(vorschlag.kategorieName) == .orderedSame
-                }) {
-                    artikel.kategorie = passendeKategorie
-                }
-                if !vorschlag.regalName.isEmpty {
-                    kiRegalHinweis = "Vorschlag: Regal „\(vorschlag.regalName)“ — bitte in den Geschäften prüfen/zuordnen."
-                }
-            } catch {
-                kiFehlermeldung = "KI-Vorschlag nicht verfügbar: \(error.localizedDescription)"
+            if let passendeKategorie = kategorien.first(where: {
+                $0.name.localizedCaseInsensitiveCompare(vorschlag.kategorieName) == .orderedSame
+            }) {
+                artikel.kategorie = passendeKategorie
             }
+            if !vorschlag.regalName.isEmpty {
+                kiRegalHinweis = "Vorschlag: Regal „\(vorschlag.regalName)“ — bitte in den Geschäften prüfen/zuordnen."
+            }
+        } catch {
+            kiFehlermeldung = "KI-Vorschlag nicht verfügbar: \(error.localizedDescription)"
         }
     }
 }

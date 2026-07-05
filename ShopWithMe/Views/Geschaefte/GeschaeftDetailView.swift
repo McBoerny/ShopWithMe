@@ -277,13 +277,12 @@ private struct RegalZeile: View {
     }
 }
 
-/// Eine Zeile der Preisübersicht: Artikel-Symbol/-Name links, Preisspanne rechts.
+/// Eine Zeile der Preisübersicht: Artikelname links, Preisspanne rechts.
 private struct ArtikelPreisSpanneZeile: View {
     let spanne: ArtikelPreisSpanne
 
     var body: some View {
         HStack(spacing: 16) {
-            GlassSymbolBadge(symbolName: spanne.artikel.symbolName, farbe: Color(hex: spanne.artikel.farbeHex), groesse: 36)
             Text(spanne.artikel.name)
                 .foregroundStyle(.primary)
             Spacer()

@@ -61,19 +61,27 @@ final class Einkaufsvorgang {
 
         let kategorie = artikel.effektiveKategorie(context: context)
         let index = naechsterKategorieBesuchsIndex(fuer: kategorie)
-        let eintrag = KaufEintrag(artikel: artikel, geschaeft: geschaeft, kategorie: kategorie, kategorieBesuchsIndex: index)
+        let eintrag = KaufEintrag(
+            artikel: artikel,
+            geschaeft: geschaeft,
+            kategorie: kategorie,
+            menge: artikel.menge,
+            kategorieBesuchsIndex: index
+        )
         context.insert(eintrag)
         eintrag.einkaufsvorgang = self
         artikel.istAufEinkaufsliste = false
     }
 
     /// Macht ``artikelAbhaken(_:context:)`` rückgängig: löscht den zugehörigen
-    /// ``KaufEintrag`` und setzt den Artikel zurück auf die Einkaufsliste.
+    /// ``KaufEintrag`` und setzt den Artikel zurück auf die Einkaufsliste (inkl.
+    /// Zurücksetzen von Menge/temporärer Notiz, siehe
+    /// ``Artikel/aufEinkaufslisteSetzen()``).
     func artikelAbwaehlen(_ artikel: Artikel, context: ModelContext) {
         guard let index = kaufEintraege.firstIndex(where: { $0.artikel == artikel }) else { return }
         let eintrag = kaufEintraege.remove(at: index)
         context.delete(eintrag)
-        artikel.istAufEinkaufsliste = true
+        artikel.aufEinkaufslisteSetzen()
     }
 
     /// Entfernt einen bereits abgehakten Artikel dauerhaft aus der Einkaufsliste-Ansicht

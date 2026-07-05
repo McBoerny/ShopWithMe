@@ -207,7 +207,9 @@ private struct EinkaufslisteView: View {
                         ArtikelAbhakZeile(
                             artikel: artikel,
                             istAbgehakt: istAbgehakt(artikel),
-                            umschalten: { umschalten(artikel) },
+                            abhaken: { umschalten(artikel) },
+                            mengeErhoehen: { mengeErhoehen(artikel) },
+                            mengeVerringern: { mengeVerringern(artikel) },
                             dauerhaftEntfernen: istAbgehakt(artikel) ? { entferneDauerhaft(artikel) } : nil
                         )
                     }
@@ -220,7 +222,9 @@ private struct EinkaufslisteView: View {
                         ArtikelAbhakZeile(
                             artikel: artikel,
                             istAbgehakt: istAbgehakt(artikel),
-                            umschalten: { umschalten(artikel) },
+                            abhaken: { umschalten(artikel) },
+                            mengeErhoehen: { mengeErhoehen(artikel) },
+                            mengeVerringern: { mengeVerringern(artikel) },
                             dauerhaftEntfernen: istAbgehakt(artikel) ? { entferneDauerhaft(artikel) } : nil
                         )
                     }
@@ -326,36 +330,151 @@ private struct EinkaufslisteView: View {
             }
         }
     }
+
+    /// Diskrete Einzelaktion wie das Abhaken (``umschalten``) — jeder Tap ist ein
+    /// abgeschlossener Schreibvorgang und wird deshalb ebenso per Micro-Lease
+    /// abgesichert (siehe `docs/DATABASE_CONCURRENCY.md` → „Vollständiger
+    /// Schreibvorgang-Katalog“).
+    private func mengeErhoehen(_ artikel: Artikel) {
+        Task {
+            await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                artikel.mengeErhoehen()
+            }
+        }
+    }
+
+    private func mengeVerringern(_ artikel: Artikel) {
+        Task {
+            await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                artikel.mengeVerringern()
+            }
+        }
+    }
 }
 
-/// Eine antippbare Zeile zum Abhaken eines Artikels beim Einkaufen. Ist der Artikel
-/// bereits abgehakt, bietet eine Swipe-Aktion an, ihn dauerhaft aus dieser Ansicht zu
-/// entfernen (``dauerhaftEntfernen``, `nil` bei noch offenen Artikeln).
+/// Eine Zeile zum Erhöhen/Verringern der Menge eines Artikels beim Einkaufen — Abhaken
+/// geschieht über die eigenständige Checkbox am Zeilenende, nicht mehr über einen Tap
+/// auf die ganze Zeile:
+/// - Einfacher Tap: ``Artikel/mengeErhoehen()`` um ``Artikel/mengenSchritt``.
+/// - Doppel-Tap: ``Artikel/mengeVerringern()`` um ``Artikel/mengenSchritt``.
+/// - Langes Drücken: öffnet ``MengenNotizSheet`` für eine exakte Menge + temporäre Notiz.
+///
+/// Ist der Artikel bereits abgehakt, bietet eine Swipe-Aktion an, ihn dauerhaft aus
+/// dieser Ansicht zu entfernen (``dauerhaftEntfernen``, `nil` bei noch offenen Artikeln).
 private struct ArtikelAbhakZeile: View {
     let artikel: Artikel
     let istAbgehakt: Bool
-    let umschalten: () -> Void
+    let abhaken: () -> Void
+    let mengeErhoehen: () -> Void
+    let mengeVerringern: () -> Void
     var dauerhaftEntfernen: (() -> Void)?
 
+    @State private var zeigeMengenSheet = false
+
     var body: some View {
-        Button(action: umschalten) {
-            HStack {
-                GlassSymbolBadge(symbolName: artikel.symbolName, farbe: Color(hex: artikel.farbeHex), groesse: 36)
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(artikel.name)
                     .strikethrough(istAbgehakt)
                     .foregroundStyle(istAbgehakt ? .secondary : .primary)
-                Spacer()
+                HStack(spacing: 4) {
+                    Text("\(artikel.menge.formatted()) \(artikel.einheit.kurzform)")
+                    if let notiz = artikel.einkaufslistenNotiz, !notiz.isEmpty {
+                        Text("· \(notiz)")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button(action: abhaken) {
                 Image(systemName: istAbgehakt ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
                     .foregroundStyle(istAbgehakt ? Color.accentColor : .secondary)
             }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
+        .contentShape(Rectangle())
+        // Reihenfolge wichtig: der Doppel-Tap-Modifier muss vor dem Einfach-Tap-
+        // Modifier stehen, damit SwiftUI den Einfach-Tap intern verzögert, bis
+        // sicher ist, dass kein zweiter Tap mehr folgt.
+        .onTapGesture(count: 2, perform: mengeVerringern)
+        .onTapGesture(count: 1, perform: mengeErhoehen)
+        .onLongPressGesture { zeigeMengenSheet = true }
         .swipeActions(edge: .trailing) {
             if let dauerhaftEntfernen {
                 Button(role: .destructive, action: dauerhaftEntfernen) {
                     Label("Dauerhaft entfernen", systemImage: "trash")
                 }
             }
+        }
+        .sheet(isPresented: $zeigeMengenSheet) {
+            MengenNotizSheet(artikel: artikel)
+        }
+    }
+}
+
+/// Sheet zum exakten Vorgeben der Menge und einer temporären Notiz für einen Artikel
+/// auf der Einkaufsliste (Long-Press auf ``ArtikelAbhakZeile``). Arbeitet mit
+/// lokalem Entwurfs-Zustand (analog `NeueKategorieSheet`) — die Übernahme ins Modell
+/// geschieht erst bei „Sichern“, gekapselt in einem einzelnen Micro-Lease.
+private struct MengenNotizSheet: View {
+    let artikel: Artikel
+
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+    @State private var mengeText: String
+    @State private var notizText: String
+
+    init(artikel: Artikel) {
+        self.artikel = artikel
+        _mengeText = State(initialValue: artikel.menge.formatted())
+        _notizText = State(initialValue: artikel.einkaufslistenNotiz ?? "")
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Menge") {
+                    HStack {
+                        TextField("Menge", text: $mengeText)
+                            .keyboardType(.decimalPad)
+                        Text(artikel.einheit.kurzform)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Section("Notiz") {
+                    TextField(
+                        "Temporäre Notiz, z.B. \"diesmal die große Packung\"",
+                        text: $notizText,
+                        axis: .vertical
+                    )
+                }
+            }
+            .navigationTitle(artikel.name)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Abbrechen") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Sichern", action: sichern)
+                }
+            }
+        }
+    }
+
+    private func sichern() {
+        let neueMenge = Double(mengeText.replacingOccurrences(of: ",", with: ".").trimmingCharacters(in: .whitespaces))
+        let getrimmteNotiz = notizText.trimmingCharacters(in: .whitespacesAndNewlines)
+        Task {
+            await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                if let neueMenge, neueMenge > 0 {
+                    artikel.menge = neueMenge
+                }
+                artikel.einkaufslistenNotiz = getrimmteNotiz.isEmpty ? nil : getrimmteNotiz
+            }
+            dismiss()
         }
     }
 }

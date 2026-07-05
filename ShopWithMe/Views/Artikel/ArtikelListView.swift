@@ -72,7 +72,6 @@ private struct ArtikelZeile: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            GlassSymbolBadge(symbolName: artikel.symbolName, farbe: Color(hex: artikel.farbeHex))
             VStack(alignment: .leading, spacing: 2) {
                 Text(artikel.name.isEmpty ? "Unbenannt" : artikel.name)
                     .foregroundStyle(.primary)

@@ -78,7 +78,7 @@ struct ArtikelHinzufuegenView: View {
     private func hinzufuegen(_ artikel: Artikel) {
         Task {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
-                artikel.istAufEinkaufsliste = true
+                artikel.aufEinkaufslisteSetzen()
             }
             dismiss()
         }
@@ -112,7 +112,6 @@ private struct ArtikelSucheZeile: View {
 
     var body: some View {
         HStack {
-            GlassSymbolBadge(symbolName: artikel.symbolName, farbe: Color(hex: artikel.farbeHex), groesse: 36)
             VStack(alignment: .leading, spacing: 2) {
                 Text(artikel.name)
                     .foregroundStyle(.primary)

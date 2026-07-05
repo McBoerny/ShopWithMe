@@ -10,8 +10,11 @@ Geschäfte und den Einkaufsvorgang selbst intelligent unterstützt.
 
 ## Kernkonzepte
 
-- **Artikel**: hat Name, Symbol (SF Symbol), Farbe, und eine **Kategorie**, die bei der
-  Anlage festgelegt wird und sich danach nicht mehr ändert.
+- **Artikel**: hat Name, eine **Kategorie** (jederzeit änderbar) sowie **Menge** und
+  **Einheit** (Gewicht: kg/g, Volumen: ltr/ml, oder Stück) — die beim Anlegen
+  festgelegte Menge ist zugleich die Standard-Schrittweite für Erhöhen/Verringern auf
+  der Einkaufsliste. Symbol/Farbe existieren weiterhin als Datenfelder, werden aber in
+  keiner UI mehr angezeigt oder vom Anwender/der KI gesetzt.
 - **Artikelkategorie**: z.B. Obst, Milchprodukte, Drogerieartikel. Kategorien sind global,
   nicht pro Geschäft.
 - **Geschäft**: hat einen Typ (Lebensmittel, Drogerie, Baumarkt, Apotheke, …) sowie
@@ -27,11 +30,32 @@ Geschäfte und den Einkaufsvorgang selbst intelligent unterstützt.
 
 ## Artikel-Anlage mit KI-Unterstützung
 
-Beim Anlegen eines neuen Artikels schlägt eine lokale Apple-KI (FoundationModels /
-"Apple Intelligence") automatisch ein passendes Symbol, eine Farbe, eine Kategorie und
-ein Regal vor. Der Anwender kann die Vorschläge übernehmen oder überschreiben. Ist auf
-dem Gerät keine Apple Intelligence verfügbar, wird die Funktion ausgeblendet — reine
-manuelle Anlage bleibt immer möglich.
+Beim Anlegen eines neuen Artikels bestimmt eine lokale Apple-KI (FoundationModels /
+"Apple Intelligence") automatisch eine passende Kategorie — ganz ohne manuellen
+Anstoß: sobald der Anwender einen Namen eingibt (entprellt, damit nicht bei jedem
+Tastenanschlag ein KI-Aufruf losgeschickt wird), wird die Kategorie vorgeschlagen,
+sofern noch keine gewählt wurde. Eine bereits manuell gewählte Kategorie wird dabei
+nie überschrieben. Zusätzlich liefert die KI informativ einen Regal-Hinweis. Ist auf
+dem Gerät keine Apple Intelligence verfügbar, bleibt die Kategorie einfach leer (dann
+"Sonstiges") — reine manuelle Auswahl bleibt immer möglich.
+
+Artikel werden ausschließlich aus der Einkaufsliste-Ansicht heraus neu angelegt und
+kommen dabei automatisch auf die Liste (siehe „Einkaufsvorgang“ unten); der
+Artikel-Tab dient primär dem Durchsuchen/Bearbeiten/Löschen, legt aber ebenfalls einen
+„+“-Button zum Anlegen bereit (Artikel landen dabei nicht automatisch auf der Liste).
+
+## Menge, Einheit & Einkaufslisten-Interaktion
+
+Jeder Artikel hat eine Einheit (Stück, Kilogramm, Gramm, Liter oder Milliliter) und
+eine beim Anlegen festgelegte Standardmenge, die zugleich als Schrittweite dient. Auf
+der Einkaufsliste:
+- **Einfacher Tap** auf eine Zeile erhöht die Menge um die Schrittweite.
+- **Doppel-Tap** verringert sie (nie unter die Schrittweite).
+- **Langes Drücken** öffnet ein Sheet für eine exakte Menge und eine temporäre Notiz.
+- **Abhaken** geschieht ausschließlich über eine eigenständige Checkbox am Zeilenende.
+
+Menge und temporäre Notiz werden zurückgesetzt, sobald ein Artikel (neu oder erneut)
+auf die Einkaufsliste kommt.
 
 ## Einkaufsvorgang
 

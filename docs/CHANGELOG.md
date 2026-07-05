@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.2 (Build 33) — Artikel: automatische KI-Kategorie, Menge & Einheit, kein Icon/Farbe mehr
+
+- **KI-Kategorie automatisch statt Button**: `ArtikelEditView` bestimmt die Kategorie
+  eines neuen Artikels jetzt automatisch (entprellt per `.task(id: artikel.name)`),
+  sobald Apple Intelligence verfügbar ist und noch keine Kategorie gesetzt wurde —
+  kein manueller "Mit Apple Intelligence vorschlagen"-Button mehr.
+  `AISuggestionService.ArtikelVorschlag` liefert entsprechend nur noch
+  Kategorie-/Regalname (kein Symbol/Farbe mehr).
+- **Kein Icon/keine Farbe mehr pro Artikel in der UI**: `Artikel.symbolName`/
+  `farbeHex` bleiben als Modellfelder erhalten, werden aber in keiner Ansicht mehr
+  angezeigt/editiert (Artikel-Tab, Einkaufsliste, Artikel-Suche, Preisübersicht,
+  Belegscan-Zuordnung).
+- **"Auf Einkaufsliste"-Toggle entfernt**: Artikel kommen nur noch automatisch auf
+  die Liste, wenn sie aus der Einkaufsliste-Ansicht heraus (neu oder erneut)
+  hinzugefügt werden (`Artikel.aufEinkaufslisteSetzen()`, neu).
+- **Neue Attribute `Einheit`/`Menge`/`mengenSchritt`** (additiv-optional, keine neue
+  Schema-Version): Einheit ist Stück, Kilogramm, Gramm, Liter oder Milliliter; die
+  beim Anlegen festgelegte Standardmenge (`mengenSchritt`) dient als Schrittweite.
+  `Einkaufsvorgang.artikelAbhaken` übernimmt die tatsächlich gewünschte Menge in den
+  `KaufEintrag`.
+- **Neue Einkaufslisten-Interaktion** (`EinkaufenView`): Abhaken nur noch über eine
+  eigenständige Checkbox; ein Tap auf die Zeile erhöht die Menge um `mengenSchritt`,
+  ein Doppel-Tap verringert sie (nie unter `mengenSchritt`), ein langer Druck öffnet
+  ein neues `MengenNotizSheet` für exakte Menge + temporäre Notiz
+  (`Artikel.einkaufslistenNotiz`).
+
 ## v0.2 (Build 31) — Belegscan: Artikel-Zuordnung, Preisübersicht + Mitlernen
 
 - `KaufEintragZuordnenSheet` (neu, `Views/Historie/`): löst die bisherige

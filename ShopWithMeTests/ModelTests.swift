@@ -274,4 +274,49 @@ struct ModelTests {
         // Alphabetisch sortiert: "Vollmilch" vor "Zahnpasta".
         #expect(spannen.map(\.artikel.name) == ["Vollmilch", "Zahnpasta"])
     }
+
+    @Test
+    func einheitMengeUndMengenSchrittFallenOhneVorgabeAufDefaultsZurueck() {
+        let artikel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759")
+        #expect(artikel.einheit == .stueck)
+        #expect(artikel.mengenSchritt == 1)
+        #expect(artikel.menge == 1)
+    }
+
+    @Test
+    func mengenSchrittBeimAnlegenBestimmtStartmenge() {
+        let artikel = Artikel(name: "Mehl", symbolName: "carrot.fill", farbeHex: "#34C759", einheit: .kilogramm, mengenSchritt: 0.5)
+        #expect(artikel.einheit == .kilogramm)
+        #expect(artikel.mengenSchritt == 0.5)
+        #expect(artikel.menge == 0.5)
+    }
+
+    @Test
+    func mengeErhoehenUndVerringernRespektierenSchrittweiteUndUntergrenze() {
+        let artikel = Artikel(name: "Mehl", symbolName: "carrot.fill", farbeHex: "#34C759", einheit: .kilogramm, mengenSchritt: 0.5)
+
+        artikel.mengeErhoehen()
+        #expect(artikel.menge == 1.0)
+
+        artikel.mengeVerringern()
+        #expect(artikel.menge == 0.5)
+
+        // Darf nicht unter die Schrittweite fallen.
+        artikel.mengeVerringern()
+        #expect(artikel.menge == 0.5)
+    }
+
+    @Test
+    func aufEinkaufslisteSetzenSetztMengeUndTemporaereNotizZurueck() {
+        let artikel = Artikel(name: "Mehl", symbolName: "carrot.fill", farbeHex: "#34C759", einheit: .kilogramm, mengenSchritt: 0.5)
+        artikel.mengeErhoehen()
+        artikel.einkaufslistenNotiz = "Bio, falls vorhanden"
+        artikel.istAufEinkaufsliste = false
+
+        artikel.aufEinkaufslisteSetzen()
+
+        #expect(artikel.istAufEinkaufsliste == true)
+        #expect(artikel.menge == artikel.mengenSchritt)
+        #expect(artikel.einkaufslistenNotiz == nil)
+    }
 }

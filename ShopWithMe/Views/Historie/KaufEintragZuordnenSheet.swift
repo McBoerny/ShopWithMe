@@ -80,7 +80,6 @@ struct KaufEintragZuordnenSheet: View {
                             ausgewaehlterArtikel = artikel
                         } label: {
                             HStack {
-                                GlassSymbolBadge(symbolName: artikel.symbolName, farbe: Color(hex: artikel.farbeHex), groesse: 32)
                                 Text(artikel.name)
                                     .foregroundStyle(.primary)
                                 Spacer()

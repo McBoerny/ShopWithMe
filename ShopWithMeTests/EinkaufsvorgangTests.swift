@@ -27,7 +27,7 @@ struct EinkaufsvorgangTests {
         let regal = Regal(name: "Obstregal", geschaeft: geschaeft)
         regal.kategorien = [obst]
         context.insert(regal)
-        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorie: obst, istAufEinkaufsliste: true)
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorie: obst, istAufEinkaufsliste: true, einheit: .stueck, mengenSchritt: 3)
         context.insert(apfel)
 
         let einkauf = Einkaufsvorgang(geschaeft: geschaeft)
@@ -40,6 +40,7 @@ struct EinkaufsvorgangTests {
         #expect(einkauf.kaufEintraege.first?.kategorie == obst)
         #expect(einkauf.kaufEintraege.first?.kategorieBesuchsIndex == 0)
         #expect(einkauf.kaufEintraege.first?.preis == nil)
+        #expect(einkauf.kaufEintraege.first?.menge == apfel.menge)
     }
 
     @Test
@@ -125,17 +126,23 @@ struct EinkaufsvorgangTests {
         let regal = Regal(name: "Obstregal", geschaeft: geschaeft)
         regal.kategorien = [obst]
         context.insert(regal)
-        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorie: obst, istAufEinkaufsliste: true)
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorie: obst, istAufEinkaufsliste: true, mengenSchritt: 2)
         context.insert(apfel)
 
         let einkauf = Einkaufsvorgang(geschaeft: geschaeft)
         context.insert(einkauf)
 
+        apfel.mengeErhoehen()
+        apfel.einkaufslistenNotiz = "Nur grüne"
         einkauf.artikelAbhaken(apfel, context: context)
         einkauf.artikelAbwaehlen(apfel, context: context)
 
         #expect(apfel.istAufEinkaufsliste == true)
         #expect(einkauf.kaufEintraege.isEmpty)
+        // Menge/temporäre Notiz werden beim erneuten Auf-die-Liste-Setzen
+        // zurückgesetzt, siehe `Artikel.aufEinkaufslisteSetzen()`.
+        #expect(apfel.menge == apfel.mengenSchritt)
+        #expect(apfel.einkaufslistenNotiz == nil)
     }
 
     /// Dedupe-Schutz gegen das in `docs/DATABASE_CONCURRENCY.md` dokumentierte
