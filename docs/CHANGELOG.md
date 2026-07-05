@@ -325,7 +325,7 @@
   (`ShelfOrderLearningServiceTests`) prüft, dass Hin- und Herschalten zwischen den
   Modi die manuelle Reihenfolge unangetastet lässt.
 
-## v1.3 — Unkategorisierte Artikel fallen automatisch unter „Sonstiges“
+## v1.3 (Build 34) — Unkategorisierte Artikel fallen automatisch unter „Sonstiges“
 
 - `Models/ArtikelKategorie.swift`: neue statische Methode `sonstige(context:)`
   findet die "Sonstiges"-Kategorie (normalerweise über `SeedData` angelegt) oder

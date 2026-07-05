@@ -41,7 +41,7 @@ actor DebugLogWriter {
         }
         guard let handle = try? FileHandle(forWritingTo: dateiURL) else { return }
         defer { try? handle.close() }
-        try? handle.seekToEnd()
+        _ = try? handle.seekToEnd()
         try? handle.write(contentsOf: daten)
     }
 
