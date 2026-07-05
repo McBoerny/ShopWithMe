@@ -1,6 +1,24 @@
 import SwiftUI
 import SwiftData
 
+/// Wie die Artikelliste in ``ArtikelListView`` sortiert/gruppiert wird.
+private enum ArtikelSortierung: String, CaseIterable, Identifiable {
+    /// Eine flache, alphabetisch sortierte Liste (Standard).
+    case alphabetisch
+    /// Nach ``ArtikelKategorie`` gruppiert (Reihenfolge nach
+    /// ``ArtikelKategorie/sortIndex``), innerhalb einer Kategorie alphabetisch.
+    case kategorie
+
+    var id: String { rawValue }
+
+    var anzeigename: String {
+        switch self {
+        case .alphabetisch: return "Alphabetisch"
+        case .kategorie: return "Nach Kategorie"
+        }
+    }
+}
+
 /// Zeigt alle Artikel als Liste und erlaubt Anlegen, Bearbeiten und Löschen.
 struct ArtikelListView: View {
     @Query(sort: \Artikel.name) private var artikel: [Artikel]
@@ -8,19 +26,53 @@ struct ArtikelListView: View {
 
     @State private var neuerArtikelEntwurf: Artikel?
     @State private var bearbeiteterArtikel: Artikel?
+    @State private var sortierung: ArtikelSortierung = .alphabetisch
+
+    private struct KategorieGruppe: Identifiable {
+        let kategorie: ArtikelKategorie
+        var artikel: [Artikel]
+        var id: PersistentIdentifier { kategorie.persistentModelID }
+    }
+
+    /// ``artikel``, gruppiert nach ``Artikel/effektiveKategorie(context:)`` und nach
+    /// ``ArtikelKategorie/sortIndex`` sortiert — nur relevant im
+    /// ``ArtikelSortierung/kategorie``-Modus.
+    private var kategorieGruppen: [KategorieGruppe] {
+        var nachKategorie: [PersistentIdentifier: KategorieGruppe] = [:]
+        for eintrag in artikel {
+            let kategorie = eintrag.effektiveKategorie(context: modelContext)
+            nachKategorie[kategorie.persistentModelID, default: KategorieGruppe(kategorie: kategorie, artikel: [])].artikel.append(eintrag)
+        }
+        return nachKategorie.values.sorted {
+            $0.kategorie.sortIndex == $1.kategorie.sortIndex
+                ? $0.kategorie.name < $1.kategorie.name
+                : $0.kategorie.sortIndex < $1.kategorie.sortIndex
+        }
+    }
 
     var body: some View {
         NavigationStack {
             List {
-                ForEach(artikel) { eintrag in
-                    Button {
-                        bearbeiteterArtikel = eintrag
-                    } label: {
-                        ArtikelZeile(artikel: eintrag)
+                switch sortierung {
+                case .alphabetisch:
+                    ForEach(artikel) { eintrag in
+                        artikelZeile(eintrag)
                     }
-                    .buttonStyle(.plain)
+                    .onDelete { offsets in
+                        artikelLoeschen(offsets.map { artikel[$0] })
+                    }
+                case .kategorie:
+                    ForEach(kategorieGruppen) { gruppe in
+                        Section(gruppe.kategorie.name) {
+                            ForEach(gruppe.artikel) { eintrag in
+                                artikelZeile(eintrag)
+                            }
+                            .onDelete { offsets in
+                                artikelLoeschen(offsets.map { gruppe.artikel[$0] })
+                            }
+                        }
+                    }
                 }
-                .onDelete(perform: artikelLoeschen)
             }
             .overlay {
                 if artikel.isEmpty {
@@ -33,6 +85,14 @@ struct ArtikelListView: View {
             }
             .navigationTitle("Artikel")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Picker("Sortierung", selection: $sortierung) {
+                        ForEach(ArtikelSortierung.allCases) { modus in
+                            Text(modus.anzeigename).tag(modus)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         neuerArtikelEntwurf = Artikel(
@@ -54,8 +114,17 @@ struct ArtikelListView: View {
         }
     }
 
-    private func artikelLoeschen(at offsets: IndexSet) {
-        let zuLoeschende = offsets.map { artikel[$0] }
+    @ViewBuilder
+    private func artikelZeile(_ eintrag: Artikel) -> some View {
+        Button {
+            bearbeiteterArtikel = eintrag
+        } label: {
+            ArtikelZeile(artikel: eintrag)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func artikelLoeschen(_ zuLoeschende: [Artikel]) {
         Task {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
                 for eintrag in zuLoeschende {
@@ -82,7 +151,7 @@ private struct ArtikelZeile: View {
                 }
             }
             Spacer()
-            if artikel.istAufEinkaufsliste {
+            if !artikel.einkaufslistenEintraege.isEmpty {
                 Image(systemName: "checklist")
                     .foregroundStyle(.tint)
             }
@@ -92,5 +161,5 @@ private struct ArtikelZeile: View {
 
 #Preview {
     ArtikelListView()
-        .modelContainer(for: [Artikel.self, ArtikelKategorie.self], inMemory: true)
+        .modelContainer(for: [Artikel.self, ArtikelKategorie.self, Einkaufsliste.self, EinkaufslistenEintrag.self], inMemory: true)
 }

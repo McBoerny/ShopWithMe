@@ -1,8 +1,8 @@
 import Foundation
 import SwiftData
 
-/// Maßeinheit, in der ``Artikel/menge``/``Artikel/mengenSchritt`` geführt werden —
-/// Gewicht, Volumen oder Stück.
+/// Maßeinheit, in der ``EinkaufslistenEintrag/menge``/``Artikel/mengenSchritt``
+/// geführt werden — Gewicht, Volumen oder Stück.
 enum Einheit: String, Codable, CaseIterable, Identifiable {
     case stueck
     case kilogramm
@@ -54,12 +54,16 @@ final class Artikel {
     var farbeHex: String
     /// Die Kategorie dieses Artikels.
     var kategorie: ArtikelKategorie?
-    /// Ob der Artikel aktuell auf der Einkaufsliste steht.
-    var istAufEinkaufsliste: Bool
     /// Zeitpunkt der Anlage.
     var erstelltAm: Date
     /// Optionale, dauerhafte Notiz, z.B. bevorzugte Marke.
     var notiz: String?
+
+    /// Die Einkaufslisten-Mitgliedschaften dieses Artikels — je ``Einkaufsliste``,
+    /// auf der er aktuell steht, ein Eintrag (siehe ``EinkaufslistenEintrag``). Wird
+    /// der Artikel gelöscht, verschwinden auch seine Mitgliedschaften.
+    @Relationship(deleteRule: .cascade, inverse: \EinkaufslistenEintrag.artikel)
+    var einkaufslistenEintraege: [EinkaufslistenEintrag] = []
 
     /// Rohwert für ``einheit``. Optional gespeichert, damit vor Einführung dieses
     /// Attributs angelegte Artikel beim automatischen Laden nicht abstürzen — ein
@@ -75,36 +79,18 @@ final class Artikel {
     /// ein `nil`-Rohwert fällt auf `1` zurück.
     private var mengenSchrittRaw: Double?
     /// Vom Nutzer beim Anlegen (und danach jederzeit) festgelegte Standardmenge —
-    /// dient als Schrittweite für Erhöhen/Verringern von ``menge`` auf der
-    /// Einkaufsliste (siehe ``mengeErhoehen()``/``mengeVerringern()``).
+    /// dient als Start- und Schrittwert für ``EinkaufslistenEintrag/menge`` (siehe
+    /// ``EinkaufslistenEintrag/mengeErhoehen()``/``EinkaufslistenEintrag/mengeVerringern()``).
     var mengenSchritt: Double {
         get { mengenSchrittRaw ?? 1 }
         set { mengenSchrittRaw = newValue }
     }
-
-    /// Rohwert für ``menge``. Optional gespeichert (siehe ``einheitRaw``); ein
-    /// `nil`-Rohwert fällt auf ``mengenSchritt`` zurück.
-    private var mengeRaw: Double?
-    /// Aktuell auf der Einkaufsliste gewünschte Menge. Startet bei ``mengenSchritt``
-    /// und wird beim Einkaufen in Schritten von ``mengenSchritt`` verändert (siehe
-    /// ``aufEinkaufslisteSetzen()``).
-    var menge: Double {
-        get { mengeRaw ?? mengenSchritt }
-        set { mengeRaw = newValue }
-    }
-
-    /// Temporäre Notiz für den aktuellen Einkaufslisten-Eintrag (z.B. "diesmal die
-    /// große Packung") — anders als ``notiz`` nicht dauerhaft, sondern wird beim
-    /// erneuten Hinzufügen zur Einkaufsliste zurückgesetzt (siehe
-    /// ``aufEinkaufslisteSetzen()``).
-    var einkaufslistenNotiz: String?
 
     init(
         name: String,
         symbolName: String,
         farbeHex: String,
         kategorie: ArtikelKategorie? = nil,
-        istAufEinkaufsliste: Bool = false,
         notiz: String? = nil,
         einheit: Einheit = .stueck,
         mengenSchritt: Double = 1
@@ -114,12 +100,10 @@ final class Artikel {
         self.symbolName = symbolName
         self.farbeHex = farbeHex
         self.kategorie = kategorie
-        self.istAufEinkaufsliste = istAufEinkaufsliste
         self.erstelltAm = Date()
         self.notiz = notiz
         self.einheitRaw = einheit.rawValue
         self.mengenSchrittRaw = mengenSchritt
-        self.mengeRaw = mengenSchritt
     }
 }
 
@@ -129,29 +113,5 @@ extension Artikel {
     /// automatisch "Sonstiges" (siehe ``ArtikelKategorie/sonstige(context:)``).
     func effektiveKategorie(context: ModelContext) -> ArtikelKategorie {
         kategorie ?? ArtikelKategorie.sonstige(context: context)
-    }
-
-    /// Erhöht ``menge`` um ``mengenSchritt`` — Reaktion auf einen einfachen Tap in
-    /// der Einkaufsliste (siehe ``EinkaufenView``).
-    func mengeErhoehen() {
-        menge += mengenSchritt
-    }
-
-    /// Verringert ``menge`` um ``mengenSchritt``, ohne unter ``mengenSchritt`` zu
-    /// fallen — Reaktion auf einen Doppel-Tap in der Einkaufsliste (siehe
-    /// ``EinkaufenView``).
-    func mengeVerringern() {
-        menge = max(mengenSchritt, menge - mengenSchritt)
-    }
-
-    /// Setzt diesen Artikel (neu oder erneut) auf die Einkaufsliste: ``menge`` wird
-    /// auf ``mengenSchritt`` zurückgesetzt und ``einkaufslistenNotiz`` geleert,
-    /// unabhängig vom zuletzt vor dem Abhaken gewählten Wert. Zentrale Stelle für
-    /// alle Orte, die einen Artikel (neu oder erneut) auf die Liste setzen (siehe
-    /// ``ArtikelHinzufuegenView``, ``Einkaufsvorgang/artikelAbwaehlen(_:context:)``).
-    func aufEinkaufslisteSetzen() {
-        istAufEinkaufsliste = true
-        menge = mengenSchritt
-        einkaufslistenNotiz = nil
     }
 }

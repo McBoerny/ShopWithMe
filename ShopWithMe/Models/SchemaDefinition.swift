@@ -32,6 +32,8 @@ enum SchemaV1: VersionedSchema {
             Einkaufsvorgang.self,
             KaufEintrag.self,
             KategorieBesuchsStatistik.self,
+            Einkaufsliste.self,
+            EinkaufslistenEintrag.self,
         ]
     }
 }

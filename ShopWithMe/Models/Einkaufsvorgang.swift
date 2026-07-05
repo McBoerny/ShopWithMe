@@ -13,6 +13,8 @@ final class Einkaufsvorgang {
     var id: UUID
     /// Das Geschäft, in dem dieser Einkauf stattfindet.
     var geschaeft: Geschaeft?
+    /// Die Einkaufsliste, aus der dieser Einkauf abgehakt wird.
+    var einkaufsliste: Einkaufsliste?
     /// Startzeitpunkt des Einkaufs.
     var startZeit: Date
     /// Endzeitpunkt — `nil`, solange der Einkauf noch läuft.
@@ -21,9 +23,10 @@ final class Einkaufsvorgang {
     @Relationship(deleteRule: .cascade, inverse: \KaufEintrag.einkaufsvorgang)
     var kaufEintraege: [KaufEintrag] = []
 
-    init(geschaeft: Geschaeft? = nil, startZeit: Date = Date()) {
+    init(geschaeft: Geschaeft? = nil, einkaufsliste: Einkaufsliste? = nil, startZeit: Date = Date()) {
         self.id = UUID()
         self.geschaeft = geschaeft
+        self.einkaufsliste = einkaufsliste
         self.startZeit = startZeit
     }
 
@@ -36,8 +39,9 @@ final class Einkaufsvorgang {
     }
 
     /// Markiert einen Artikel als gekauft: legt einen ``KaufEintrag`` (zunächst ohne
-    /// Preis) in diesem Einkaufsvorgang an und nimmt den Artikel von der
-    /// Einkaufsliste. Artikel derselben ``ArtikelKategorie`` erhalten denselben
+    /// Preis) in diesem Einkaufsvorgang an und entfernt den Artikel von
+    /// ``einkaufsliste`` (falls dort noch ein ``EinkaufslistenEintrag`` existiert).
+    /// Artikel derselben ``ArtikelKategorie`` erhalten denselben
     /// ``KaufEintrag/kategorieBesuchsIndex``, neue Kategorien den jeweils nächsten
     /// Index — das ist die Rohdatenbasis für ``ShelfOrderLearningService``. Artikel
     /// ohne eigene Kategorie fallen dabei automatisch unter "Sonstiges" (siehe
@@ -53,9 +57,12 @@ final class Einkaufsvorgang {
         let deskriptor = FetchDescriptor<KaufEintrag>(
             predicate: #Predicate { $0.einkaufsvorgang?.persistentModelID == einkaufsvorgangID && $0.artikel?.persistentModelID == artikelID }
         )
+        let listenEintrag = einkaufsliste?.eintrag(fuer: artikel)
         if let anzahl = try? context.fetchCount(deskriptor), anzahl > 0 {
             DatabaseDebugLogger.log(.dedupeConflictDetected, details: "artikelAbhaken: \(artikel.name)")
-            artikel.istAufEinkaufsliste = false
+            if let listenEintrag {
+                context.delete(listenEintrag)
+            }
             return
         }
 
@@ -65,23 +72,25 @@ final class Einkaufsvorgang {
             artikel: artikel,
             geschaeft: geschaeft,
             kategorie: kategorie,
-            menge: artikel.menge,
+            menge: listenEintrag?.menge ?? artikel.mengenSchritt,
             kategorieBesuchsIndex: index
         )
         context.insert(eintrag)
         eintrag.einkaufsvorgang = self
-        artikel.istAufEinkaufsliste = false
+        if let listenEintrag {
+            context.delete(listenEintrag)
+        }
     }
 
     /// Macht ``artikelAbhaken(_:context:)`` rückgängig: löscht den zugehörigen
-    /// ``KaufEintrag`` und setzt den Artikel zurück auf die Einkaufsliste (inkl.
+    /// ``KaufEintrag`` und setzt den Artikel zurück auf ``einkaufsliste`` (inkl.
     /// Zurücksetzen von Menge/temporärer Notiz, siehe
-    /// ``Artikel/aufEinkaufslisteSetzen()``).
+    /// ``Einkaufsliste/artikelHinzufuegen(_:context:)``).
     func artikelAbwaehlen(_ artikel: Artikel, context: ModelContext) {
         guard let index = kaufEintraege.firstIndex(where: { $0.artikel == artikel }) else { return }
         let eintrag = kaufEintraege.remove(at: index)
         context.delete(eintrag)
-        artikel.aufEinkaufslisteSetzen()
+        einkaufsliste?.artikelHinzufuegen(artikel, context: context)
     }
 
     /// Entfernt einen bereits abgehakten Artikel dauerhaft aus der Einkaufsliste-Ansicht

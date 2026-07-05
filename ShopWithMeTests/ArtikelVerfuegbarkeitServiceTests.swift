@@ -9,6 +9,7 @@ struct ArtikelVerfuegbarkeitServiceTests {
         let schema = Schema([
             Artikel.self, ArtikelKategorie.self, Regal.self, Geschaeft.self,
             Einkaufsvorgang.self, KaufEintrag.self, KategorieBesuchsStatistik.self,
+            Einkaufsliste.self, EinkaufslistenEintrag.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
@@ -77,7 +78,7 @@ struct ArtikelVerfuegbarkeitServiceTests {
         let kiosk = Geschaeft(name: "Kiosk", typ: .sonstiges)
         context.insert(kiosk)
 
-        let kaugummi = Artikel(name: "Kaugummi", symbolName: "shippingbox.fill", farbeHex: "#8E8E93", kategorie: sonstiges, istAufEinkaufsliste: true)
+        let kaugummi = Artikel(name: "Kaugummi", symbolName: "shippingbox.fill", farbeHex: "#8E8E93", kategorie: sonstiges)
         context.insert(kaugummi)
 
         #expect(!ArtikelVerfuegbarkeitService.istVerfuegbar(kaugummi, in: kiosk, context: context))
@@ -102,7 +103,7 @@ struct ArtikelVerfuegbarkeitServiceTests {
         context.insert(kiosk)
         context.insert(anderesGeschaeft)
 
-        let kaugummi = Artikel(name: "Kaugummi", symbolName: "shippingbox.fill", farbeHex: "#8E8E93", kategorie: sonstiges, istAufEinkaufsliste: true)
+        let kaugummi = Artikel(name: "Kaugummi", symbolName: "shippingbox.fill", farbeHex: "#8E8E93", kategorie: sonstiges)
         context.insert(kaugummi)
 
         let einkauf = Einkaufsvorgang(geschaeft: anderesGeschaeft)

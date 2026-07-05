@@ -19,6 +19,7 @@ struct ArtikelEditView: View {
     @State private var kiVorschlagLaeuft = false
     @State private var kiFehlermeldung: String?
     @State private var kiRegalHinweis: String?
+    @State private var zeigeNeueKategorie = false
 
     init(artikel: Artikel, istNeu: Bool) {
         self.artikel = artikel
@@ -53,6 +54,12 @@ struct ArtikelEditView: View {
                             Label(kategorie.name, systemImage: kategorie.standardSymbol)
                                 .tag(Optional(kategorie))
                         }
+                    }
+
+                    Button {
+                        zeigeNeueKategorie = true
+                    } label: {
+                        Label("Neue Kategorie anlegen", systemImage: "plus")
                     }
 
                     if kiVorschlagLaeuft {
@@ -139,6 +146,11 @@ struct ArtikelEditView: View {
             .task(id: artikel.name) {
                 await kategorieAutomatischVorschlagen()
             }
+            .sheet(isPresented: $zeigeNeueKategorie) {
+                NeueKategorieSheet(naechsterSortIndex: (kategorien.map(\.sortIndex).max() ?? -1) + 1) { kategorie in
+                    artikel.kategorie = kategorie
+                }
+            }
         }
     }
 
@@ -187,5 +199,5 @@ struct ArtikelEditView: View {
         artikel: Artikel(name: "Vollmilch", symbolName: "refrigerator.fill", farbeHex: "#5AC8FA"),
         istNeu: true
     )
-    .modelContainer(for: [Artikel.self, ArtikelKategorie.self], inMemory: true)
+    .modelContainer(for: [Artikel.self, ArtikelKategorie.self, Einkaufsliste.self, EinkaufslistenEintrag.self], inMemory: true)
 }

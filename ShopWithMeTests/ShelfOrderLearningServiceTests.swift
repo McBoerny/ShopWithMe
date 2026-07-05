@@ -9,6 +9,7 @@ struct ShelfOrderLearningServiceTests {
         let schema = Schema([
             Artikel.self, ArtikelKategorie.self, Regal.self, Geschaeft.self,
             Einkaufsvorgang.self, KaufEintrag.self, KategorieBesuchsStatistik.self,
+            Einkaufsliste.self, EinkaufslistenEintrag.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
@@ -44,8 +45,6 @@ struct ShelfOrderLearningServiceTests {
         // Der Anwender läuft aber tatsächlich immer zuerst durchs Obstregal, dann
         // durchs Drogerieregal.
         for _ in 0..<ShelfOrderLearningService.mindestEinkaeufeFuerVorschlag {
-            apfel.istAufEinkaufsliste = true
-            shampoo.istAufEinkaufsliste = true
             let einkauf = Einkaufsvorgang(geschaeft: geschaeft)
             context.insert(einkauf)
             einkauf.artikelAbhaken(apfel, context: context)
@@ -94,8 +93,6 @@ struct ShelfOrderLearningServiceTests {
         context.insert(shampoo)
 
         for _ in 0..<ShelfOrderLearningService.mindestEinkaeufeFuerVorschlag {
-            apfel.istAufEinkaufsliste = true
-            shampoo.istAufEinkaufsliste = true
             let einkauf = Einkaufsvorgang(geschaeft: geschaeft)
             context.insert(einkauf)
             einkauf.artikelAbhaken(apfel, context: context)

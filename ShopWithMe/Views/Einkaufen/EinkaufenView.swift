@@ -1,34 +1,59 @@
 import SwiftUI
 import SwiftData
 
-/// Einstiegspunkt zum Einkaufen: zeigt sofort beim Öffnen die aktuelle globale
-/// Einkaufsliste an — optional gruppiert nach Regal eines gewählten Geschäfts. Ein
-/// passender ``Einkaufsvorgang`` (für das gewählte Geschäft, oder ohne Geschäft) wird
-/// dafür automatisch angelegt, sobald keiner läuft; ein manueller "Start" ist nicht
-/// nötig, Artikel lassen sich jederzeit abhaken.
+/// Einstiegspunkt zum Einkaufen: zeigt sofort beim Öffnen die Einkaufsliste der
+/// ausgewählten ``Einkaufsliste`` an — optional gruppiert nach Regal eines
+/// gewählten Geschäfts. Ein passender ``Einkaufsvorgang`` (für die Kombination aus
+/// gewählter Liste und gewähltem Geschäft) wird dafür automatisch angelegt, sobald
+/// keiner läuft; ein manueller "Start" ist nicht nötig, Artikel lassen sich
+/// jederzeit abhaken.
 struct EinkaufenView: View {
     @Query(sort: \Geschaeft.name) private var geschaefte: [Geschaeft]
+    @Query(sort: \Einkaufsliste.erstelltAm) private var einkaufslisten: [Einkaufsliste]
     @Query(filter: #Predicate<Einkaufsvorgang> { $0.endZeit == nil })
     private var offeneEinkaufsvorgaenge: [Einkaufsvorgang]
     @Environment(\.modelContext) private var modelContext
 
     @State private var ausgewaehltesGeschaeft: Geschaeft?
+    @State private var ausgewaehlteListe: Einkaufsliste?
+    @State private var zeigeNeueListe = false
 
     private var aktuellerEinkauf: Einkaufsvorgang? {
-        offeneEinkaufsvorgaenge.first { $0.geschaeft == ausgewaehltesGeschaeft }
+        guard let ausgewaehlteListe else { return nil }
+        return offeneEinkaufsvorgaenge.first {
+            $0.geschaeft == ausgewaehltesGeschaeft && $0.einkaufsliste == ausgewaehlteListe
+        }
     }
 
     var body: some View {
         NavigationStack {
             Group {
-                if let einkauf = aktuellerEinkauf {
-                    EinkaufslisteView(geschaeft: ausgewaehltesGeschaeft, einkaufsvorgang: einkauf)
+                if let ausgewaehlteListe, let einkauf = aktuellerEinkauf {
+                    EinkaufslisteView(geschaeft: ausgewaehltesGeschaeft, einkaufsliste: ausgewaehlteListe, einkaufsvorgang: einkauf)
                 } else {
                     ProgressView()
                 }
             }
             .navigationTitle("Einkaufen")
             .toolbar {
+                if !einkaufslisten.isEmpty {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Menu {
+                            Picker("Einkaufsliste", selection: $ausgewaehlteListe) {
+                                ForEach(einkaufslisten) { liste in
+                                    Text(liste.name).tag(Optional(liste))
+                                }
+                            }
+                            Button {
+                                zeigeNeueListe = true
+                            } label: {
+                                Label("Neue Liste …", systemImage: "plus")
+                            }
+                        } label: {
+                            Label(ausgewaehlteListe?.name ?? "Liste", systemImage: "checklist")
+                        }
+                    }
+                }
                 if !geschaefte.isEmpty {
                     ToolbarItem(placement: .principal) {
                         Picker("Geschäft", selection: $ausgewaehltesGeschaeft) {
@@ -42,24 +67,90 @@ struct EinkaufenView: View {
                 }
             }
         }
-        .onAppear { Task { await einkaufSicherstellen() } }
+        .onAppear {
+            Task {
+                await listeSicherstellen()
+                await einkaufSicherstellen()
+            }
+        }
         .onChange(of: ausgewaehltesGeschaeft) { _, _ in Task { await einkaufSicherstellen() } }
+        .onChange(of: ausgewaehlteListe) { _, _ in Task { await einkaufSicherstellen() } }
         // Reagiert darauf, dass ein Einkaufsvorgang abgeschlossen wurde (verschwindet
         // dadurch aus `offeneEinkaufsvorgaenge`): legt sofort den nächsten an, damit die
         // gerade abgehakten Artikel des beendeten Einkaufs aus der Ansicht verschwinden,
         // statt bis zum nächsten Tab-Wechsel als "ProgressView" hängen zu bleiben.
         .onChange(of: offeneEinkaufsvorgaenge.count) { _, _ in Task { await einkaufSicherstellen() } }
+        .sheet(isPresented: $zeigeNeueListe) {
+            NeueEinkaufslisteSheet { liste in
+                ausgewaehlteListe = liste
+            }
+        }
     }
 
-    /// Legt bei Bedarf einen neuen ``Einkaufsvorgang`` für das aktuell gewählte
-    /// Geschäft (bzw. ohne Geschäft) an, damit die Einkaufsliste immer sofort
+    /// Stellt sicher, dass ``ausgewaehlteListe`` gesetzt ist: übernimmt die erste
+    /// vorhandene ``Einkaufsliste``, oder legt (falls noch keine existiert) über
+    /// ``Einkaufsliste/standard(context:)`` eine erste an.
+    private func listeSicherstellen() async {
+        guard ausgewaehlteListe == nil else { return }
+        if let erste = einkaufslisten.first {
+            ausgewaehlteListe = erste
+            return
+        }
+        var neue: Einkaufsliste?
+        await DatabaseLeaseService.performMicroLease(context: modelContext) {
+            neue = Einkaufsliste.standard(context: modelContext)
+        }
+        ausgewaehlteListe = neue
+    }
+
+    /// Legt bei Bedarf einen neuen ``Einkaufsvorgang`` für die aktuell gewählte
+    /// Kombination aus Liste und Geschäft an, damit die Einkaufsliste immer sofort
     /// angezeigt wird. Diskrete Einzelaktion → Micro-Lease (siehe
     /// `docs/DATABASE_CONCURRENCY.md` → „Vollständiger Schreibvorgang-Katalog“).
     private func einkaufSicherstellen() async {
-        guard aktuellerEinkauf == nil else { return }
+        guard let ausgewaehlteListe, aktuellerEinkauf == nil else { return }
         await DatabaseLeaseService.performMicroLease(context: modelContext) {
-            let vorgang = Einkaufsvorgang(geschaeft: ausgewaehltesGeschaeft)
+            let vorgang = Einkaufsvorgang(geschaeft: ausgewaehltesGeschaeft, einkaufsliste: ausgewaehlteListe)
             modelContext.insert(vorgang)
+        }
+    }
+}
+
+/// Sheet zum Anlegen einer neuen ``Einkaufsliste`` — aufrufbar direkt aus dem
+/// Listen-Menü in ``EinkaufenView`` für schnellen Zugriff während des Einkaufens.
+private struct NeueEinkaufslisteSheet: View {
+    let onErstellt: (Einkaufsliste) -> Void
+
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("Name, z.B. \"Wocheneinkauf\"", text: $name)
+                    .font(.title3)
+            }
+            .navigationTitle("Neue Liste")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Abbrechen") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Sichern") {
+                        let liste = Einkaufsliste(name: name.trimmingCharacters(in: .whitespacesAndNewlines))
+                        Task {
+                            await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                                modelContext.insert(liste)
+                            }
+                            onErstellt(liste)
+                            dismiss()
+                        }
+                    }
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
         }
     }
 }
@@ -70,7 +161,7 @@ private enum EinkaufsAnzeigeModus: String, CaseIterable, Identifiable {
     case offene
     /// Zusätzlich die in diesem Einkauf bereits abgehakten Artikel.
     case mitAbgehakten
-    /// Lernmodus: zeigt alle auf der globalen Einkaufsliste gespeicherten Artikel,
+    /// Lernmodus: zeigt alle auf der Einkaufsliste gespeicherten Artikel,
     /// unabhängig vom Verfügbarkeitsfilter des Geschäfts
     /// (``Geschaeft/artikelFilterModus``) — zum Entdecken und Abhaken bislang
     /// unbekannter Artikel, die dadurch für dieses Geschäft als verfügbar gelernt
@@ -88,13 +179,13 @@ private enum EinkaufsAnzeigeModus: String, CaseIterable, Identifiable {
     }
 }
 
-/// Die global gültige Einkaufsliste für einen laufenden Einkaufsvorgang — bei
-/// gewähltem Geschäft nach Regal gruppiert, sonst flach.
+/// Die Einkaufsliste einer ``Einkaufsliste`` für einen laufenden Einkaufsvorgang —
+/// bei gewähltem Geschäft nach Regal gruppiert, sonst flach.
 private struct EinkaufslisteView: View {
     let geschaeft: Geschaeft?
+    let einkaufsliste: Einkaufsliste
     let einkaufsvorgang: Einkaufsvorgang
 
-    @Query(sort: \Artikel.name) private var alleArtikel: [Artikel]
     @Environment(\.modelContext) private var modelContext
 
     @State private var zeigeBelegScanAngebot = false
@@ -108,14 +199,14 @@ private struct EinkaufslisteView: View {
         Set(einkaufsvorgang.kaufEintraege.compactMap { $0.artikel?.persistentModelID })
     }
 
-    /// Artikel, die noch auf der globalen Einkaufsliste stehen.
+    /// Artikel, die noch auf ``einkaufsliste`` stehen.
     private var offeneArtikel: [Artikel] {
-        alleArtikel.filter(\.istAufEinkaufsliste)
+        einkaufsliste.eintraege.compactMap(\.artikel)
     }
 
     /// Artikel, die in diesem Einkaufsvorgang bereits abgehakt wurden.
     private var abgehakteArtikel: [Artikel] {
-        alleArtikel.filter { abgehakteArtikelIDs.contains($0.persistentModelID) }
+        einkaufsvorgang.kaufEintraege.compactMap(\.artikel).filter { abgehakteArtikelIDs.contains($0.persistentModelID) }
     }
 
     /// Ist ein Geschäft gewählt und dessen ``Geschaeft/artikelFilterModus`` auf
@@ -204,6 +295,18 @@ private struct EinkaufslisteView: View {
         return posA < posB
     }
 
+    /// Die momentan für die Anzeige relevante Menge eines Artikels: solange er noch
+    /// auf ``einkaufsliste`` steht, dessen ``EinkaufslistenEintrag/menge``, sonst
+    /// (bereits abgehakt) die im ``KaufEintrag`` festgehaltene Menge.
+    private func menge(fuer artikel: Artikel) -> Double {
+        if let eintrag = einkaufsliste.eintrag(fuer: artikel) { return eintrag.menge }
+        return kaufEintrag(fuer: artikel)?.menge ?? artikel.mengenSchritt
+    }
+
+    private func kaufEintrag(fuer artikel: Artikel) -> KaufEintrag? {
+        einkaufsvorgang.kaufEintraege.first { $0.artikel == artikel }
+    }
+
     var body: some View {
         List {
             ForEach(gruppen) { gruppe in
@@ -211,7 +314,8 @@ private struct EinkaufslisteView: View {
                     ForEach(gruppe.artikel) { artikel in
                         ArtikelAbhakZeile(
                             artikel: artikel,
-                            kategorie: effektiveKategorie(fuer: artikel),
+                            eintrag: einkaufsliste.eintrag(fuer: artikel),
+                            mengeAnzeige: menge(fuer: artikel),
                             istAbgehakt: istAbgehakt(artikel),
                             abhaken: { umschalten(artikel) },
                             mengeErhoehen: { mengeErhoehen(artikel) },
@@ -220,12 +324,7 @@ private struct EinkaufslisteView: View {
                         )
                     }
                 } header: {
-                    EinkaufslistenSektionHeader(
-                        titel: gruppe.regal.name,
-                        kategorie: nil,
-                        gesamt: gruppe.artikel.count,
-                        abgehakt: gruppe.artikel.filter(istAbgehakt).count
-                    )
+                    EinkaufslistenSektionHeader(titel: gruppe.regal.name, kategorie: nil)
                 }
             }
 
@@ -234,7 +333,8 @@ private struct EinkaufslisteView: View {
                     ForEach(gruppe.artikel) { artikel in
                         ArtikelAbhakZeile(
                             artikel: artikel,
-                            kategorie: gruppe.kategorie,
+                            eintrag: einkaufsliste.eintrag(fuer: artikel),
+                            mengeAnzeige: menge(fuer: artikel),
                             istAbgehakt: istAbgehakt(artikel),
                             abhaken: { umschalten(artikel) },
                             mengeErhoehen: { mengeErhoehen(artikel) },
@@ -243,12 +343,7 @@ private struct EinkaufslisteView: View {
                         )
                     }
                 } header: {
-                    EinkaufslistenSektionHeader(
-                        titel: gruppe.kategorie.name,
-                        kategorie: gruppe.kategorie,
-                        gesamt: gruppe.artikel.count,
-                        abgehakt: gruppe.artikel.filter(istAbgehakt).count
-                    )
+                    EinkaufslistenSektionHeader(titel: gruppe.kategorie.name, kategorie: gruppe.kategorie)
                 }
             }
 
@@ -263,7 +358,7 @@ private struct EinkaufslisteView: View {
                     ContentUnavailableView(
                         "Einkaufsliste ist leer",
                         systemImage: "checklist",
-                        description: Text("Markiere Artikel im Artikel-Tab als „Auf Einkaufsliste“.")
+                        description: Text("Füge oben rechts Artikel zu „\(einkaufsliste.name)“ hinzu.")
                     )
                 } else {
                     ContentUnavailableView(
@@ -290,7 +385,7 @@ private struct EinkaufslisteView: View {
             .buttonStyle(.glass)
             .padding()
         }
-        .navigationTitle(geschaeft?.name ?? "Einkaufsliste")
+        .navigationTitle(geschaeft?.name ?? einkaufsliste.name)
         .toolbar {
             if !abgehakteArtikel.isEmpty || geschaeft?.artikelFilterModus == .nurVerfuegbare {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -311,7 +406,7 @@ private struct EinkaufslisteView: View {
             }
         }
         .sheet(isPresented: $zeigeArtikelHinzufuegen) {
-            ArtikelHinzufuegenView()
+            ArtikelHinzufuegenView(einkaufsliste: einkaufsliste)
         }
         .confirmationDialog(
             "Einkauf abgeschlossen",
@@ -355,11 +450,17 @@ private struct EinkaufslisteView: View {
     /// Diskrete Einzelaktion wie das Abhaken (``umschalten``) — jeder Tap ist ein
     /// abgeschlossener Schreibvorgang und wird deshalb ebenso per Micro-Lease
     /// abgesichert (siehe `docs/DATABASE_CONCURRENCY.md` → „Vollständiger
-    /// Schreibvorgang-Katalog“).
+    /// Schreibvorgang-Katalog“). Solange der Artikel noch auf ``einkaufsliste``
+    /// steht, wirkt sich das auf dessen ``EinkaufslistenEintrag/menge`` aus, danach
+    /// (bereits abgehakt) auf die im ``KaufEintrag`` festgehaltene Menge.
     private func mengeErhoehen(_ artikel: Artikel) {
         Task {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
-                artikel.mengeErhoehen()
+                if let eintrag = einkaufsliste.eintrag(fuer: artikel) {
+                    eintrag.mengeErhoehen()
+                } else if let kauf = kaufEintrag(fuer: artikel) {
+                    kauf.menge += artikel.mengenSchritt
+                }
             }
         }
     }
@@ -367,22 +468,23 @@ private struct EinkaufslisteView: View {
     private func mengeVerringern(_ artikel: Artikel) {
         Task {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
-                artikel.mengeVerringern()
+                if let eintrag = einkaufsliste.eintrag(fuer: artikel) {
+                    eintrag.mengeVerringern()
+                } else if let kauf = kaufEintrag(fuer: artikel) {
+                    kauf.menge = max(artikel.mengenSchritt, kauf.menge - artikel.mengenSchritt)
+                }
             }
         }
     }
 }
 
-/// Kopfzeile einer Einkaufslisten-Sektion (Regal oder Kategorie): zeigt neben dem
-/// Titel, wie viele der enthaltenen Artikel bereits abgehakt sind. Bei
+/// Kopfzeile einer Einkaufslisten-Sektion (Regal oder Kategorie). Bei
 /// Kategorie-Sektionen (``kategorie`` gesetzt) wird zusätzlich deren Icon/Farbe
 /// (``ArtikelKategorie/standardSymbol``/``standardFarbeHex``) angezeigt — Regal-
 /// Sektionen bleiben ohne Icon, da ein Regal mehrere Kategorien bündeln kann.
 private struct EinkaufslistenSektionHeader: View {
     let titel: String
     let kategorie: ArtikelKategorie?
-    let gesamt: Int
-    let abgehakt: Int
 
     var body: some View {
         HStack(spacing: 6) {
@@ -392,25 +494,26 @@ private struct EinkaufslistenSektionHeader: View {
             }
             Text(titel)
             Spacer()
-            Text("\(abgehakt)/\(gesamt)")
         }
     }
 }
 
 /// Eine Zeile zum Erhöhen/Verringern der Menge eines Artikels beim Einkaufen — Abhaken
-/// geschieht über die eigenständige Checkbox am Zeilenende, nicht mehr über einen Tap
-/// auf die ganze Zeile:
-/// - Einfacher Tap: ``Artikel/mengeErhoehen()`` um ``Artikel/mengenSchritt``.
-/// - Doppel-Tap: ``Artikel/mengeVerringern()`` um ``Artikel/mengenSchritt``.
-/// - Langes Drücken: öffnet ``MengenNotizSheet`` für eine exakte Menge + temporäre Notiz.
+/// geschieht über die eigenständige Checkbox am Zeilenende:
+/// - Tap auf die Mengenangabe (nur solange noch offen, ``eintrag`` gesetzt): öffnet
+///   ``MengenNotizSheet`` für eine exakte Menge + temporäre Notiz.
+/// - Swipe nach links (trailing): erhöht die Menge um ``Artikel/mengenSchritt``.
+/// - Swipe nach rechts (leading): verringert die Menge um ``Artikel/mengenSchritt``.
 ///
-/// Ist der Artikel bereits abgehakt, bietet eine Swipe-Aktion an, ihn dauerhaft aus
-/// dieser Ansicht zu entfernen (``dauerhaftEntfernen``, `nil` bei noch offenen Artikeln).
+/// Ist der Artikel bereits abgehakt, bietet die Trailing-Swipe-Aktion zusätzlich an, ihn
+/// dauerhaft aus dieser Ansicht zu entfernen (``dauerhaftEntfernen``, `nil` bei noch
+/// offenen Artikeln).
 private struct ArtikelAbhakZeile: View {
     let artikel: Artikel
-    /// Die für die Icon/Farb-Anzeige wirksame Kategorie (siehe
-    /// ``Artikel/effektiveKategorie(context:)``).
-    let kategorie: ArtikelKategorie
+    /// Der offene Einkaufslisten-Eintrag dieses Artikels — `nil`, wenn er bereits
+    /// abgehakt wurde (dann gibt es keinen Eintrag mehr, siehe ``mengeAnzeige``).
+    let eintrag: EinkaufslistenEintrag?
+    let mengeAnzeige: Double
     let istAbgehakt: Bool
     let abhaken: () -> Void
     let mengeErhoehen: () -> Void
@@ -421,21 +524,22 @@ private struct ArtikelAbhakZeile: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            GlassSymbolBadge(symbolName: kategorie.standardSymbol, farbe: Color(hex: kategorie.standardFarbeHex), groesse: 32)
             VStack(alignment: .leading, spacing: 2) {
                 Text(artikel.name)
                     .strikethrough(istAbgehakt)
                     .foregroundStyle(istAbgehakt ? .secondary : .primary)
-                if let notiz = artikel.einkaufslistenNotiz, !notiz.isEmpty {
+                if let notiz = eintrag?.notiz, !notiz.isEmpty {
                     Text(notiz)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
             Spacer()
-            Text("\(artikel.menge.formatted()) \(artikel.einheit.kurzform)")
+            Text("\(mengeAnzeige.formatted()) \(artikel.einheit.kurzform)")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .contentShape(Rectangle())
+                .onTapGesture { if eintrag != nil { zeigeMengenSheet = true } }
             Button(action: abhaken) {
                 Image(systemName: istAbgehakt ? "checkmark.circle.fill" : "circle")
                     .font(.title3)
@@ -443,42 +547,48 @@ private struct ArtikelAbhakZeile: View {
             }
             .buttonStyle(.plain)
         }
-        .contentShape(Rectangle())
-        // Reihenfolge wichtig: der Doppel-Tap-Modifier muss vor dem Einfach-Tap-
-        // Modifier stehen, damit SwiftUI den Einfach-Tap intern verzögert, bis
-        // sicher ist, dass kein zweiter Tap mehr folgt.
-        .onTapGesture(count: 2, perform: mengeVerringern)
-        .onTapGesture(count: 1, perform: mengeErhoehen)
-        .onLongPressGesture { zeigeMengenSheet = true }
-        .swipeActions(edge: .trailing) {
+        .swipeActions(edge: .leading) {
+            Button(action: mengeVerringern) {
+                Label("Menge verringern", systemImage: "minus")
+            }
+            .tint(.orange)
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             if let dauerhaftEntfernen {
                 Button(role: .destructive, action: dauerhaftEntfernen) {
                     Label("Dauerhaft entfernen", systemImage: "trash")
                 }
             }
+            Button(action: mengeErhoehen) {
+                Label("Menge erhöhen", systemImage: "plus")
+            }
+            .tint(.blue)
         }
         .sheet(isPresented: $zeigeMengenSheet) {
-            MengenNotizSheet(artikel: artikel)
+            if let eintrag {
+                MengenNotizSheet(eintrag: eintrag)
+            }
         }
     }
 }
 
-/// Sheet zum exakten Vorgeben der Menge und einer temporären Notiz für einen Artikel
-/// auf der Einkaufsliste (Long-Press auf ``ArtikelAbhakZeile``). Arbeitet mit
-/// lokalem Entwurfs-Zustand (analog `NeueKategorieSheet`) — die Übernahme ins Modell
-/// geschieht erst bei „Sichern“, gekapselt in einem einzelnen Micro-Lease.
+/// Sheet zum exakten Vorgeben der Menge und einer temporären Notiz für einen
+/// ``EinkaufslistenEintrag`` (Tap auf die Mengenangabe in ``ArtikelAbhakZeile``).
+/// Arbeitet mit lokalem Entwurfs-Zustand (analog `NeueKategorieSheet`) — die
+/// Übernahme ins Modell geschieht erst bei „Sichern“, gekapselt in einem einzelnen
+/// Micro-Lease.
 private struct MengenNotizSheet: View {
-    let artikel: Artikel
+    let eintrag: EinkaufslistenEintrag
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @State private var mengeText: String
     @State private var notizText: String
 
-    init(artikel: Artikel) {
-        self.artikel = artikel
-        _mengeText = State(initialValue: artikel.menge.formatted())
-        _notizText = State(initialValue: artikel.einkaufslistenNotiz ?? "")
+    init(eintrag: EinkaufslistenEintrag) {
+        self.eintrag = eintrag
+        _mengeText = State(initialValue: eintrag.menge.formatted())
+        _notizText = State(initialValue: eintrag.notiz ?? "")
     }
 
     var body: some View {
@@ -488,7 +598,7 @@ private struct MengenNotizSheet: View {
                     HStack {
                         TextField("Menge", text: $mengeText)
                             .keyboardType(.decimalPad)
-                        Text(artikel.einheit.kurzform)
+                        Text(eintrag.artikel?.einheit.kurzform ?? "")
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -500,7 +610,7 @@ private struct MengenNotizSheet: View {
                     )
                 }
             }
-            .navigationTitle(artikel.name)
+            .navigationTitle(eintrag.artikel?.name ?? "")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -519,9 +629,9 @@ private struct MengenNotizSheet: View {
         Task {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
                 if let neueMenge, neueMenge > 0 {
-                    artikel.menge = neueMenge
+                    eintrag.menge = neueMenge
                 }
-                artikel.einkaufslistenNotiz = getrimmteNotiz.isEmpty ? nil : getrimmteNotiz
+                eintrag.notiz = getrimmteNotiz.isEmpty ? nil : getrimmteNotiz
             }
             dismiss()
         }
@@ -530,5 +640,5 @@ private struct MengenNotizSheet: View {
 
 #Preview {
     EinkaufenView()
-        .modelContainer(for: [Geschaeft.self, Regal.self, ArtikelKategorie.self, Artikel.self, Einkaufsvorgang.self], inMemory: true)
+        .modelContainer(for: [Geschaeft.self, Regal.self, ArtikelKategorie.self, Artikel.self, Einkaufsvorgang.self, Einkaufsliste.self, EinkaufslistenEintrag.self], inMemory: true)
 }

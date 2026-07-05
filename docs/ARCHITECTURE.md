@@ -49,16 +49,24 @@ Artikel                              Einkaufsvorgang            KaufEintrag
 ───────                              ───────────────            ───────────
 id: UUID                             id: UUID                   id: UUID
 name: String                         geschaeft: Geschaeft?      artikel: Artikel?
-symbolName: String (UI-los)          startZeit: Date            einkaufsvorgang: Einkaufsvorgang?
-farbeHex: String (UI-los)            endZeit: Date?             geschaeft: Geschaeft?  (denormalisiert)
-kategorie: ArtikelKategorie?         kaufEintraege: [KaufEintrag]  datum: Date
-istAufEinkaufsliste: Bool                                        preis: Decimal?
-erstelltAm: Date                                                 menge: Double
-notiz: String?                                                   produktName: String?
-einheitRaw: String?                                              alternativerName: String?
-mengenSchrittRaw: Double?                                        kategorieBesuchsIndex: Int?
-mengeRaw: Double?
-einkaufslistenNotiz: String?
+symbolName: String (UI-los)          einkaufsliste: Einkaufsliste? einkaufsvorgang: Einkaufsvorgang?
+farbeHex: String (UI-los)            startZeit: Date            geschaeft: Geschaeft?  (denormalisiert)
+kategorie: ArtikelKategorie?         endZeit: Date?             datum: Date
+erstelltAm: Date                     kaufEintraege: [KaufEintrag]  preis: Decimal?
+notiz: String?                                                   menge: Double
+einheitRaw: String?                                              produktName: String?
+mengenSchrittRaw: Double?                                        alternativerName: String?
+┌einkaufslistenEintraege:                                        kategorieBesuchsIndex: Int?
+│ [EinkaufslistenEintrag]
+│
+Einkaufsliste                        EinkaufslistenEintrag
+─────────────                        ─────────────────────
+id: UUID                             id: UUID
+name: String                         einkaufsliste: Einkaufsliste?
+erstelltAm: Date                     artikel: Artikel? ─────────────┘
+└eintraege: [EinkaufslistenEintrag]  menge: Double
+                                      notiz: String?
+                                      erstelltAm: Date
 
 KategorieBesuchsStatistik
 ─────────────────────────
@@ -105,6 +113,15 @@ Verfügbarkeit.
   verfügbar ist — über `Geschaeft.verfuegbareKategorien`, oder (besitzt das Geschäft
   keine eigenen Kategorien) gelernt aus der Kaufhistorie (`KaufEintrag`). Grundlage für
   den Filter `ArtikelFilterModus.nurVerfuegbare` beim Einkaufen.
+- **Einkaufsliste — Interaktionsmodell**: Tap auf die Mengenangabe öffnet direkt das
+  Sheet für exakte Menge + Notiz; Swipe links/rechts erhöht/verringert die Menge;
+  Sektions-Header ohne Fortschrittszähler — Details in
+  `docs/EINKAUFSLISTE_INTERAKTION.md`.
+- **Mehrere Einkaufslisten**: der Nutzer kann beliebig viele benannte `Einkaufsliste`n
+  anlegen und beim Einkaufen auswählen, welche gerade genutzt wird — Menge/Notiz sind
+  dabei je Liste eigenständig (`EinkaufslistenEintrag`). Details, insbesondere die
+  Ablösung des früheren globalen `Artikel.istAufEinkaufsliste`, in
+  `docs/EINKAUFSLISTEN.md`.
 - **DatabaseLocationService**: verwaltet Security-Scoped-Bookmarks für einen vom Nutzer
   gewählten Speicherort außerhalb des App-Containers und das Verschieben der
   SwiftData-Store-Dateien dorthin.

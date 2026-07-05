@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.2 (Build 36) — Mehrere Einkaufslisten, Kategorien-Verwaltung, Artikel nach Kategorie sortierbar
+
+- **Mehrere Einkaufslisten** (`Models/Einkaufsliste.swift`, `Models/EinkaufslistenEintrag.swift`):
+  der Nutzer kann beliebig viele benannte Listen anlegen und beim Einkaufen auswählen,
+  welche gerade genutzt wird — Menge/temporäre Notiz sind je Liste eigenständig, ein
+  Artikel kann gleichzeitig auf mehreren Listen stehen. Ersetzt das bisherige globale
+  `Artikel.istAufEinkaufsliste`/`menge`/`einkaufslistenNotiz`. `EinkaufenView` bekommt
+  dafür einen zweiten Menü-Picker samt Schnellanlage; volle Verwaltung (Umbenennen/
+  Löschen) über `EinkaufslistenVerwaltungView` in den Einstellungen. Details in
+  `docs/EINKAUFSLISTEN.md`.
+- **Kategorien-Verwaltung** (`KategorienVerwaltungView`, neu in den Einstellungen):
+  Kategorien umbenennen, Symbol/Farbe ändern, Reihenfolge per Drag-Handle anpassen,
+  anlegen/löschen — analog zur neuen Listen-Verwaltung. `ArtikelEditView` bekommt
+  dafür ebenfalls eine "Neue Kategorie anlegen"-Schnellaktion.
+- **Artikel-Liste nach Kategorie sortierbar** (`ArtikelListView`): Menü-Picker
+  "Alphabetisch"/"Nach Kategorie" oben links, analog zur Einkaufsliste gruppiert und
+  nach `ArtikelKategorie.sortIndex` sortiert.
+
 ## v0.2 (Build 35) — Einkaufsliste: Kategorie-Icon/Farbe, Sektions-Zähler, Menge vor der Checkbox
 
 - **Kategorie-Icon/Farbe wieder sichtbar, jetzt in der Einkaufsliste** (`EinkaufenView`):

@@ -9,6 +9,7 @@ struct EinkaufsvorgangTests {
         let schema = Schema([
             Artikel.self, ArtikelKategorie.self, Regal.self, Geschaeft.self,
             Einkaufsvorgang.self, KaufEintrag.self, KategorieBesuchsStatistik.self,
+            Einkaufsliste.self, EinkaufslistenEintrag.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
@@ -27,20 +28,27 @@ struct EinkaufsvorgangTests {
         let regal = Regal(name: "Obstregal", geschaeft: geschaeft)
         regal.kategorien = [obst]
         context.insert(regal)
-        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorie: obst, istAufEinkaufsliste: true, einheit: .stueck, mengenSchritt: 3)
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorie: obst, einheit: .stueck, mengenSchritt: 3)
         context.insert(apfel)
+        liste.artikelHinzufuegen(apfel, context: context)
 
-        let einkauf = Einkaufsvorgang(geschaeft: geschaeft)
+        let einkauf = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste)
         context.insert(einkauf)
 
         einkauf.artikelAbhaken(apfel, context: context)
+        // In der App löst `DatabaseLeaseService.performMicroLease` nach jeder
+        // Mutation ein `save()` aus — erst danach spiegelt sich ein `context.delete()`
+        // auch in Relationship-Arrays anderer Objekte (hier `liste.eintraege`) wider.
+        try context.save()
 
-        #expect(apfel.istAufEinkaufsliste == false)
+        #expect(liste.enthaelt(apfel) == false)
         #expect(einkauf.kaufEintraege.count == 1)
         #expect(einkauf.kaufEintraege.first?.kategorie == obst)
         #expect(einkauf.kaufEintraege.first?.kategorieBesuchsIndex == 0)
         #expect(einkauf.kaufEintraege.first?.preis == nil)
-        #expect(einkauf.kaufEintraege.first?.menge == apfel.menge)
+        #expect(einkauf.kaufEintraege.first?.menge == 3)
     }
 
     @Test
@@ -62,9 +70,9 @@ struct EinkaufsvorgangTests {
         drogerieregal.kategorien = [drogerie]
         context.insert(drogerieregal)
 
-        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorie: obst, istAufEinkaufsliste: true)
-        let birne = Artikel(name: "Birne", symbolName: "carrot.fill", farbeHex: "#34C759", kategorie: obst, istAufEinkaufsliste: true)
-        let shampoo = Artikel(name: "Shampoo", symbolName: "sparkles", farbeHex: "#AF52DE", kategorie: drogerie, istAufEinkaufsliste: true)
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorie: obst)
+        let birne = Artikel(name: "Birne", symbolName: "carrot.fill", farbeHex: "#34C759", kategorie: obst)
+        let shampoo = Artikel(name: "Shampoo", symbolName: "sparkles", farbeHex: "#AF52DE", kategorie: drogerie)
         context.insert(apfel)
         context.insert(birne)
         context.insert(shampoo)
@@ -94,8 +102,8 @@ struct EinkaufsvorgangTests {
         context.insert(sonstiges)
         let geschaeft = Geschaeft(name: "Testladen", typ: .lebensmittel)
         context.insert(geschaeft)
-        let ohneKategorie = Artikel(name: "Mysteriöses Ding", symbolName: "questionmark", farbeHex: "#8E8E93", istAufEinkaufsliste: true)
-        let explizitSonstiges = Artikel(name: "Kerzen", symbolName: "flame.fill", farbeHex: "#8E8E93", kategorie: sonstiges, istAufEinkaufsliste: true)
+        let ohneKategorie = Artikel(name: "Mysteriöses Ding", symbolName: "questionmark", farbeHex: "#8E8E93")
+        let explizitSonstiges = Artikel(name: "Kerzen", symbolName: "flame.fill", farbeHex: "#8E8E93", kategorie: sonstiges)
         context.insert(ohneKategorie)
         context.insert(explizitSonstiges)
 
@@ -126,23 +134,27 @@ struct EinkaufsvorgangTests {
         let regal = Regal(name: "Obstregal", geschaeft: geschaeft)
         regal.kategorien = [obst]
         context.insert(regal)
-        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorie: obst, istAufEinkaufsliste: true, mengenSchritt: 2)
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorie: obst, mengenSchritt: 2)
         context.insert(apfel)
+        let listenEintrag = liste.artikelHinzufuegen(apfel, context: context)
 
-        let einkauf = Einkaufsvorgang(geschaeft: geschaeft)
+        let einkauf = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste)
         context.insert(einkauf)
 
-        apfel.mengeErhoehen()
-        apfel.einkaufslistenNotiz = "Nur grüne"
+        listenEintrag.mengeErhoehen()
+        listenEintrag.notiz = "Nur grüne"
         einkauf.artikelAbhaken(apfel, context: context)
         einkauf.artikelAbwaehlen(apfel, context: context)
 
-        #expect(apfel.istAufEinkaufsliste == true)
+        #expect(liste.enthaelt(apfel) == true)
         #expect(einkauf.kaufEintraege.isEmpty)
         // Menge/temporäre Notiz werden beim erneuten Auf-die-Liste-Setzen
-        // zurückgesetzt, siehe `Artikel.aufEinkaufslisteSetzen()`.
-        #expect(apfel.menge == apfel.mengenSchritt)
-        #expect(apfel.einkaufslistenNotiz == nil)
+        // zurückgesetzt, siehe `Einkaufsliste.artikelHinzufuegen(_:context:)`.
+        let neuerEintrag = try #require(liste.eintrag(fuer: apfel))
+        #expect(neuerEintrag.menge == apfel.mengenSchritt)
+        #expect(neuerEintrag.notiz == nil)
     }
 
     /// Dedupe-Schutz gegen das in `docs/DATABASE_CONCURRENCY.md` dokumentierte
@@ -157,16 +169,21 @@ struct EinkaufsvorgangTests {
         context.insert(obst)
         let geschaeft = Geschaeft(name: "Testladen", typ: .lebensmittel)
         context.insert(geschaeft)
-        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorie: obst, istAufEinkaufsliste: true)
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorie: obst)
         context.insert(apfel)
+        liste.artikelHinzufuegen(apfel, context: context)
 
-        let einkauf = Einkaufsvorgang(geschaeft: geschaeft)
+        let einkauf = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste)
         context.insert(einkauf)
 
         einkauf.artikelAbhaken(apfel, context: context)
+        try context.save()
         einkauf.artikelAbhaken(apfel, context: context)
+        try context.save()
 
         #expect(einkauf.kaufEintraege.count == 1)
-        #expect(apfel.istAufEinkaufsliste == false)
+        #expect(liste.enthaelt(apfel) == false)
     }
 }

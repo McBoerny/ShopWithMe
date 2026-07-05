@@ -11,6 +11,7 @@ struct ModelTests {
         let schema = Schema([
             Artikel.self, ArtikelKategorie.self, Regal.self, Geschaeft.self,
             Einkaufsvorgang.self, KaufEintrag.self, KategorieBesuchsStatistik.self,
+            Einkaufsliste.self, EinkaufslistenEintrag.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
@@ -280,7 +281,6 @@ struct ModelTests {
         let artikel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759")
         #expect(artikel.einheit == .stueck)
         #expect(artikel.mengenSchritt == 1)
-        #expect(artikel.menge == 1)
     }
 
     @Test
@@ -288,35 +288,48 @@ struct ModelTests {
         let artikel = Artikel(name: "Mehl", symbolName: "carrot.fill", farbeHex: "#34C759", einheit: .kilogramm, mengenSchritt: 0.5)
         #expect(artikel.einheit == .kilogramm)
         #expect(artikel.mengenSchritt == 0.5)
-        #expect(artikel.menge == 0.5)
     }
 
     @Test
-    func mengeErhoehenUndVerringernRespektierenSchrittweiteUndUntergrenze() {
+    func mengeErhoehenUndVerringernRespektierenSchrittweiteUndUntergrenze() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
         let artikel = Artikel(name: "Mehl", symbolName: "carrot.fill", farbeHex: "#34C759", einheit: .kilogramm, mengenSchritt: 0.5)
+        context.insert(artikel)
+        let eintrag = liste.artikelHinzufuegen(artikel, context: context)
 
-        artikel.mengeErhoehen()
-        #expect(artikel.menge == 1.0)
+        eintrag.mengeErhoehen()
+        #expect(eintrag.menge == 1.0)
 
-        artikel.mengeVerringern()
-        #expect(artikel.menge == 0.5)
+        eintrag.mengeVerringern()
+        #expect(eintrag.menge == 0.5)
 
         // Darf nicht unter die Schrittweite fallen.
-        artikel.mengeVerringern()
-        #expect(artikel.menge == 0.5)
+        eintrag.mengeVerringern()
+        #expect(eintrag.menge == 0.5)
     }
 
     @Test
-    func aufEinkaufslisteSetzenSetztMengeUndTemporaereNotizZurueck() {
+    func artikelHinzufuegenSetztMengeUndTemporaereNotizZurueck() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
         let artikel = Artikel(name: "Mehl", symbolName: "carrot.fill", farbeHex: "#34C759", einheit: .kilogramm, mengenSchritt: 0.5)
-        artikel.mengeErhoehen()
-        artikel.einkaufslistenNotiz = "Bio, falls vorhanden"
-        artikel.istAufEinkaufsliste = false
+        context.insert(artikel)
+        let eintrag = liste.artikelHinzufuegen(artikel, context: context)
+        eintrag.mengeErhoehen()
+        eintrag.notiz = "Bio, falls vorhanden"
 
-        artikel.aufEinkaufslisteSetzen()
+        let erneuterEintrag = liste.artikelHinzufuegen(artikel, context: context)
 
-        #expect(artikel.istAufEinkaufsliste == true)
-        #expect(artikel.menge == artikel.mengenSchritt)
-        #expect(artikel.einkaufslistenNotiz == nil)
+        #expect(liste.enthaelt(artikel) == true)
+        #expect(erneuterEintrag === eintrag)
+        #expect(erneuterEintrag.menge == artikel.mengenSchritt)
+        #expect(erneuterEintrag.notiz == nil)
     }
 }

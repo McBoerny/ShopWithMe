@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Einstiegspunkt für Einstellungen: Hilfe/Anleitungen, Datenbank-Speicherort und
-/// App-Informationen.
+/// Einstiegspunkt für Einstellungen: Hilfe/Anleitungen, Kategorien- und
+/// Einkaufslisten-Verwaltung, Datenbank-Speicherort und App-Informationen.
 struct SettingsView: View {
     var body: some View {
         NavigationStack {
@@ -11,6 +11,16 @@ struct SettingsView: View {
                         HelpView()
                     } label: {
                         Label("Hilfe & Anleitungen", systemImage: "questionmark.circle")
+                    }
+                    NavigationLink {
+                        KategorienVerwaltungView()
+                    } label: {
+                        Label("Kategorien", systemImage: "tag")
+                    }
+                    NavigationLink {
+                        EinkaufslistenVerwaltungView()
+                    } label: {
+                        Label("Einkaufslisten", systemImage: "checklist")
                     }
                     NavigationLink {
                         DatabaseLocationSettingsView()
