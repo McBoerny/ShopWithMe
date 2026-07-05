@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.3 (Build 37) — Artikel hinzufügen: Mehrfachauswahl
+## v0.3 (Build 38) — Artikel hinzufügen: Mehrfachauswahl
 
 - **`ArtikelHinzufuegenView` neu gestaltet** (`Views/Einkaufen/ArtikelHinzufuegenView.swift`):
   ein Tap auf einen ganzen Artikeleintrag wählt ihn aus bzw. hebt die Auswahl wieder
@@ -430,7 +430,7 @@
 - Verifiziert: `xcodegen generate` + `xcodebuild build` + `xcodebuild test`
   (`iPhone 17` Simulator) laufen fehlerfrei durch, alle 8 Unit-Tests bestehen.
 
-## v1.1 — Artikel direkt aus der Einkaufsliste hinzufügen
+## v1.1 (Build 39) — Artikel direkt aus der Einkaufsliste hinzufügen
 
 - Neu: `Views/Einkaufen/ArtikelHinzufuegenView.swift` — Sheet mit Suchfeld über alle
   bereits angelegten Artikel, aufrufbar über den neuen „+“-Button in der
