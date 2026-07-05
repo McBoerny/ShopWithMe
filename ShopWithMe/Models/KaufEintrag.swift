@@ -37,6 +37,12 @@ final class KaufEintrag {
     /// Zuordnung verlorenzugehen. `nil` für normale Einkaufslisten-Käufe ohne
     /// Belegscan.
     var produktName: String?
+    /// Vom Nutzer vergebener alternativer Anzeigename für diese Position, z.B. um
+    /// einen unhandlich abgekürzten Kassenbon-Namen durch einen sprechenden Namen zu
+    /// ersetzen. `nil`/leer, solange kein alternativer Name gesetzt wurde. Hat, sobald
+    /// gesetzt, Vorrang vor ``produktName``/``artikel``/``artikelNameSnapshot`` — siehe
+    /// ``anzeigeName`` und `docs/BELEGSCAN_ALTERNATIVE_NAMEN.md`.
+    var alternativerName: String?
     /// Datum des Kaufs.
     var datum: Date
     /// Bezahlter Preis — `nil`, solange noch kein Beleg dazu gescannt/erfasst wurde.
@@ -66,5 +72,19 @@ final class KaufEintrag {
         self.preis = preis
         self.menge = menge
         self.kategorieBesuchsIndex = kategorieBesuchsIndex
+    }
+}
+
+extension KaufEintrag {
+    /// Der für Anzeigen (z.B. ``PreisHistorieZeile``) tatsächlich zu verwendende
+    /// Artikelname, mit ``alternativerName`` an oberster Priorität, sonst wie bisher
+    /// ``produktName`` (Original vom Kassenbon), dann ``artikel``, dann
+    /// ``artikelNameSnapshot``. Siehe `docs/BELEGSCAN_ALTERNATIVE_NAMEN.md`.
+    var anzeigeName: String {
+        if let alternativerName, !alternativerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return alternativerName
+        }
+        let name = produktName ?? artikel?.name ?? artikelNameSnapshot
+        return name.isEmpty ? "Unbekannter Artikel" : name
     }
 }

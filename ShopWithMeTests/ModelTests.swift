@@ -198,4 +198,24 @@ struct ModelTests {
         statistik.erfassen(sequenzPosition: 3)
         #expect(statistik.durchschnittlichePosition == 2)
     }
+
+    @Test
+    func anzeigeNamePriorisiertAlternativenNamenVorProduktNameVorArtikelVorSnapshot() {
+        let artikel = Artikel(name: "Zahnpasta", symbolName: "sparkles", farbeHex: "#AF52DE")
+        let eintrag = KaufEintrag(artikel: artikel, geschaeft: nil)
+        eintrag.artikelNameSnapshot = "Zahnpasta"
+        #expect(eintrag.anzeigeName == "Zahnpasta")
+
+        eintrag.produktName = "Colgate Total"
+        #expect(eintrag.anzeigeName == "Colgate Total")
+
+        eintrag.alternativerName = "Zahnpasta (groß)"
+        #expect(eintrag.anzeigeName == "Zahnpasta (groß)")
+
+        eintrag.alternativerName = "   "
+        #expect(eintrag.anzeigeName == "Colgate Total")
+
+        eintrag.alternativerName = nil
+        #expect(eintrag.anzeigeName == "Colgate Total")
+    }
 }

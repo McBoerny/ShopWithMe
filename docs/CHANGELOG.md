@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.2 (Build 28) — Belegscan: alternativer Anzeigename pro Kaufeintrag
+
+- Neues optionales, additives Attribut `KaufEintrag.alternativerName`
+  (`Models/KaufEintrag.swift`) sowie Computed-Property `KaufEintrag.anzeigeName`,
+  das diesen Namen vor `produktName`/`artikel`/`artikelNameSnapshot` priorisiert.
+  Keine neue `SchemaVN`/`MigrationStage` nötig (rein additiv-optional).
+- `PreisHistorieZeile` zeigt jetzt `anzeigeName` statt die Priorisierung selbst
+  nachzubilden und bietet in der Artikel-Spalte eine Wisch-Aktion „Umbenennen“
+  (Alert mit Texteingabe, inkl. „Zurücksetzen“) zum dauerhaften Vergeben/Löschen
+  eines alternativen Namens pro Position.
+- Architektur/Design-Entscheidungen dazu neu dokumentiert in
+  `docs/BELEGSCAN_ALTERNATIVE_NAMEN.md`, verlinkt aus `docs/ARCHITECTURE.md`.
+
 ## v0.2 (Build 25) — Kategorien wichtiger als Regale: Versions-Checkpoint
 
 - Minor-Version auf `0.2` angehoben (Nutzervorgabe) — der bisherige `v0.1`-Zyklus

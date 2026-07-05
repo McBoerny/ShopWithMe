@@ -55,6 +55,7 @@ kategorie: ArtikelKategorie?         kaufEintraege: [KaufEintrag]  datum: Date
 istAufEinkaufsliste: Bool                                        preis: Decimal?
 erstelltAm: Date                                                 menge: Double
                                                                   produktName: String?
+                                                                  alternativerName: String?
                                                                   kategorieBesuchsIndex: Int?
 
 KategorieBesuchsStatistik
@@ -84,7 +85,10 @@ Verfügbarkeit.
 - **ReceiptScanService** (Protokoll): Implementierung `VisionFoundationModelsReceiptScanner`
   kombiniert Vision-OCR mit FoundationModels-Extraktion. Als Protokoll gekapselt, damit
   eine spätere, spezifischere On-Device-API (z.B. eine künftige System-Beleg-Scan-API)
-  ohne UI-Änderungen eingesetzt werden kann.
+  ohne UI-Änderungen eingesetzt werden kann. `KaufEintrag.anzeigeName` priorisiert einen
+  optionalen, vom Nutzer pro Position vergebenen `alternativerName` vor dem erkannten
+  `produktName`/`artikel`/`artikelNameSnapshot` — Details in
+  `docs/BELEGSCAN_ALTERNATIVE_NAMEN.md`.
 - **ShelfOrderLearningService**: aktualisiert nach jedem abgeschlossenen
   `Einkaufsvorgang` die `KategorieBesuchsStatistik` und leitet daraus sowohl eine
   vorgeschlagene automatische Regal-Reihenfolge als auch (für Geschäfte ohne Regale
