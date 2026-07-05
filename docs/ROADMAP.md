@@ -32,6 +32,9 @@ die übrige Doku aktualisiert wird): `docs/BUILD_WORKFLOW.md`.
   Bearbeitungs-Bildschirme) + optionaler DB-Debug-Logging-Mechanismus
   (`DebugLogWriter`/`DatabaseDebugLogger`) — siehe `docs/DATABASE_CONCURRENCY.md`,
   `docs/LOGGING.md`.
+- [x] **v0.3** — `ArtikelHinzufuegenView` neu gestaltet: Mehrfachauswahl statt
+  Sofort-Hinzufügen pro Artikel, Direktanlage landet automatisch in der Auswahl —
+  siehe `docs/ARTIKEL_HINZUFUEGEN_INTERAKTION.md`.
 
 Damit ist die in der Kickoff-Unterhaltung beschriebene Kernfunktionalität
 vollständig umgesetzt; weitere Ideen siehe „Zukünftig“ unten.

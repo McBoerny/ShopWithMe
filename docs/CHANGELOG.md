@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.3 (Build 37) — Artikel hinzufügen: Mehrfachauswahl
+
+- **`ArtikelHinzufuegenView` neu gestaltet** (`Views/Einkaufen/ArtikelHinzufuegenView.swift`):
+  ein Tap auf einen ganzen Artikeleintrag wählt ihn aus bzw. hebt die Auswahl wieder
+  auf (gefüllter Haken statt leerem Kreis, Zeile farblich hervorgehoben); mehrere
+  Artikel lassen sich so nacheinander markieren und erst über den Toolbar-Button
+  "Hinzufügen (n)" gemeinsam auf die Einkaufsliste übernommen. "Abbrechen" verwirft
+  die gesamte Auswahl. Artikel, die bereits auf der Liste stehen, zeigen statt der
+  Auswahlmöglichkeit einen "Auf Liste"-Hinweis. Zeilen bekommen außerdem das
+  Kategorie-Icon/Farbe über den gemeinsamen `GlassSymbolBadge`-Baustein.
+- **Direktanlage landet jetzt in der Auswahl statt sofort zu committen**: legt man
+  über "„X“ neu anlegen" einen neuen Artikel an, wird er nach dem Sichern automatisch
+  ausgewählt (statt die Liste sofort zu schließen) — man kann direkt weitere Artikel
+  dazu auswählen, bevor gemeinsam auf "Hinzufügen" getippt wird.
+- **Bugfix beim Zusammenspiel mit `.sheet(item:)`**: SwiftUI setzt die an ein
+  `sheet(item:)` gebundene Property bereits vor dem Aufruf von `onDismiss` auf `nil`
+  zurück — das bisherige `nachNeuanlageAufraeumen` griff dadurch auf ein bereits
+  geleertes Optional zu und der neu angelegte Artikel ging beim automatischen
+  Übernehmen verloren. Behoben über eine separate, vom Sheet-Binding unabhängige
+  Referenz auf den zuletzt angelegten Entwurf.
+
 ## v0.2 (Build 36) — Mehrere Einkaufslisten, Kategorien-Verwaltung, Artikel nach Kategorie sortierbar
 
 - **Mehrere Einkaufslisten** (`Models/Einkaufsliste.swift`, `Models/EinkaufslistenEintrag.swift`):
@@ -389,7 +410,7 @@
 - Verifiziert: `xcodegen generate` + `xcodebuild build` + `xcodebuild test`
   (`iPhone 17` Simulator) laufen fehlerfrei durch, alle 10 Unit-Tests bestehen.
 
-## v1.2 — Lern-Algorithmus auf Artikelkategorie umgestellt
+## v1.2 (Build 38) — Lern-Algorithmus auf Artikelkategorie umgestellt
 
 - `Models/KategorieBesuchsStatistik.swift` (neu) ersetzt `RegalBesuchsStatistik`:
   die gelernte Besuchsstatistik hängt jetzt an der ``ArtikelKategorie`` eines

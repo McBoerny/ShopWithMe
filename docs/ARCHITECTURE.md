@@ -117,6 +117,11 @@ Verfügbarkeit.
   Sheet für exakte Menge + Notiz; Swipe links/rechts erhöht/verringert die Menge;
   Sektions-Header ohne Fortschrittszähler — Details in
   `docs/EINKAUFSLISTE_INTERAKTION.md`.
+- **Artikel hinzufügen — Mehrfachauswahl**: Tap auf eine ganze Zeile in
+  `ArtikelHinzufuegenView` wählt sie aus/ab (statt sofort zu übernehmen); „Hinzufügen
+  (n)“ committet die gesamte Auswahl auf einmal; ein per Direktanlage neu erstellter
+  Artikel landet automatisch in der Auswahl — Details (inkl. einer SwiftUI-
+  Sheet-Dismiss-Falle) in `docs/ARTIKEL_HINZUFUEGEN_INTERAKTION.md`.
 - **Mehrere Einkaufslisten**: der Nutzer kann beliebig viele benannte `Einkaufsliste`n
   anlegen und beim Einkaufen auswählen, welche gerade genutzt wird — Menge/Notiz sind
   dabei je Liste eigenständig (`EinkaufslistenEintrag`). Details, insbesondere die
