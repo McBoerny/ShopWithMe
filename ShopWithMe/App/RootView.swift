@@ -16,7 +16,9 @@ struct RootView: View {
                 ArtikelListView()
             }
             Tab("Geschäfte", systemImage: "cart.fill") {
-                GeschaeftListView()
+                NavigationStack {
+                    GeschaeftListView()
+                }
             }
             Tab("Einkaufen", systemImage: "checklist") {
                 EinkaufenView()

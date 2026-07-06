@@ -22,6 +22,8 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Wird benötigt, um Kassenbons für die Preishistorie zu fotografieren.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Wird benötigt, um beim Einkaufen automatisch das passende Geschäft in der Nähe vorzuschlagen.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

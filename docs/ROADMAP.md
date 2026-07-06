@@ -38,14 +38,16 @@ die übrige Doku aktualisiert wird): `docs/BUILD_WORKFLOW.md`.
 - [x] **v0.4** — Automatische, konfigurierbare Bereinigung alter Preishistorie
   (`PreisHistorieBereinigungService`) + Einstellungen-Bildschirm — siehe
   `docs/PREISHISTORIE_BEREINIGUNG.md`.
+- [x] **v0.5** — Standort-basierte automatische Ladenerkennung
+  (`GeschaeftErkennungService`, Vorschlags-Banner in `EinkaufenView`) + neue
+  Geschäftsverwaltung in den Einstellungen + Löschen eines Geschäfts löscht jetzt auch
+  dessen Preishistorie — siehe `docs/GESCHAEFTSERKENNUNG.md`.
 
 Damit ist die in der Kickoff-Unterhaltung beschriebene Kernfunktionalität
 vollständig umgesetzt; weitere Ideen siehe „Zukünftig“ unten.
 
 ## Zukünftig (nicht terminiert)
 
-- Standort-basierte automatische Anzeige der passenden Einkaufsliste (Geschäft in der
-  Nähe erkennen). Datenmodell (Lat/Long am Geschäft) ist vorbereitet.
 - Echter iCloud-/CloudKit-Sync der Datenbank (aktuell nur lokale Speicherort-Wahl ohne
   Sync-Logik).
 - Ablösen von `ReceiptScanService`/`VisionFoundationModelsReceiptScanner` durch

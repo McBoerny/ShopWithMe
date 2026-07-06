@@ -44,6 +44,8 @@ sortIndex: Int            │ kategorien: [ArtikelKategorie]  breitengrad/laenge
 └─geschaefte: [Geschaeft] ─────────────────────────────kategorien: [ArtikelKategorie]
   (many-to-many, direkt —                              regalSortierModusRaw: String?
    ohne Regal nötig)                                    artikelFilterModusRaw: String?
+                                                         kaufEintraege: [KaufEintrag]
+                                                           (cascade — siehe unten)
 
 Artikel                              Einkaufsvorgang            KaufEintrag
 ───────                              ───────────────            ───────────
@@ -127,6 +129,12 @@ Verfügbarkeit.
   dabei je Liste eigenständig (`EinkaufslistenEintrag`). Details, insbesondere die
   Ablösung des früheren globalen `Artikel.istAufEinkaufsliste`, in
   `docs/EINKAUFSLISTEN.md`.
+- **GeschaeftErkennungService**: erkennt per einmaliger `CLLocationManager`-
+  Standortabfrage (nur „Bei Nutzung“, kein Hintergrund-Tracking) und
+  `MKLocalPointsOfInterestRequest`, ob sich der Nutzer in der Nähe eines bekannten
+  Ladens befindet — schlägt ihn dafür in `EinkaufenView` vor (bereits angelegtes
+  `Geschaeft` oder neuer, von Apple Maps bekannter Laden zum Hinzufügen). Details in
+  `docs/GESCHAEFTSERKENNUNG.md`.
 - **DatabaseLocationService**: verwaltet Security-Scoped-Bookmarks für einen vom Nutzer
   gewählten Speicherort außerhalb des App-Containers und das Verschieben der
   SwiftData-Store-Dateien dorthin.
@@ -165,3 +173,7 @@ umgesetzt: siehe `docs/DATABASE_CONCURRENCY.md`.
 Checkliste für Checkpoints (Changelog, DocC, wann zusätzlich Doku aktualisiert wird),
 Versionsschema und die Entscheidungsregel additiv-optional vs. strukturell für
 SwiftData-Schemaänderungen: `docs/BUILD_WORKFLOW.md`.
+
+Standardplan für Review-/Test-/Doku-Aufgaben bei jedem Minor- oder Major-
+Versionssprung (Code-Review, Security-Check, Migrationscheck, Regressionstest
+usw., gestaffelt nach Minor/Major): `docs/RELEASE_CHECKLIST.md`.

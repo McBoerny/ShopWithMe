@@ -332,4 +332,28 @@ struct ModelTests {
         #expect(erneuterEintrag.menge == artikel.mengenSchritt)
         #expect(erneuterEintrag.notiz == nil)
     }
+
+    @Test
+    func geschaeftLoeschenLoeschtZugehoerigePreishistorie() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let geschaeft = Geschaeft(name: "Testladen", typ: .lebensmittel)
+        context.insert(geschaeft)
+        let anderesGeschaeft = Geschaeft(name: "Anderer Laden", typ: .lebensmittel)
+        context.insert(anderesGeschaeft)
+
+        let eintrag = KaufEintrag(artikel: nil, geschaeft: geschaeft, preis: 1.99)
+        context.insert(eintrag)
+        let andererEintrag = KaufEintrag(artikel: nil, geschaeft: anderesGeschaeft, preis: 2.49)
+        context.insert(andererEintrag)
+        try context.save()
+
+        context.delete(geschaeft)
+        try context.save()
+
+        let verbleibende = try context.fetch(FetchDescriptor<KaufEintrag>())
+        #expect(verbleibende.count == 1)
+        #expect(verbleibende.first?.id == andererEintrag.id)
+    }
 }

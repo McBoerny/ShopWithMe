@@ -1,7 +1,11 @@
 import SwiftUI
 import SwiftData
 
-/// Zeigt alle Geschäfte als Liste und erlaubt Anlegen, Bearbeiten und Löschen.
+/// Zeigt alle Geschäfte als Liste und erlaubt Anlegen, Bearbeiten und Löschen —
+/// sowohl als Tab-Wurzel (``RootView``) als auch, per `NavigationLink`, aus der
+/// Geschäftsverwaltung in ``SettingsView``. Erwartet einen umgebenden
+/// `NavigationStack` beim Aufrufer statt selbst einen anzulegen, damit beide
+/// Einbindungen ohne verschachtelte `NavigationStack`s funktionieren.
 struct GeschaeftListView: View {
     @Query(sort: \Geschaeft.name) private var geschaefte: [Geschaeft]
     @Environment(\.modelContext) private var modelContext
@@ -9,40 +13,38 @@ struct GeschaeftListView: View {
     @State private var neuesGeschaeftEntwurf: Geschaeft?
 
     var body: some View {
-        NavigationStack {
-            List {
-                ForEach(geschaefte) { geschaeft in
-                    NavigationLink(value: geschaeft) {
-                        GeschaeftZeile(geschaeft: geschaeft)
-                    }
-                }
-                .onDelete(perform: geschaeftLoeschen)
-            }
-            .overlay {
-                if geschaefte.isEmpty {
-                    ContentUnavailableView(
-                        "Keine Geschäfte",
-                        systemImage: "cart.fill",
-                        description: Text("Lege dein erstes Geschäft mit dem Plus-Symbol an.")
-                    )
+        List {
+            ForEach(geschaefte) { geschaeft in
+                NavigationLink(value: geschaeft) {
+                    GeschaeftZeile(geschaeft: geschaeft)
                 }
             }
-            .navigationDestination(for: Geschaeft.self) { geschaeft in
-                GeschaeftDetailView(geschaeft: geschaeft)
+            .onDelete(perform: geschaeftLoeschen)
+        }
+        .overlay {
+            if geschaefte.isEmpty {
+                ContentUnavailableView(
+                    "Keine Geschäfte",
+                    systemImage: "cart.fill",
+                    description: Text("Lege dein erstes Geschäft mit dem Plus-Symbol an.")
+                )
             }
-            .navigationTitle("Geschäfte")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        neuesGeschaeftEntwurf = Geschaeft(name: "", typ: .lebensmittel)
-                    } label: {
-                        Label("Geschäft hinzufügen", systemImage: "plus")
-                    }
+        }
+        .navigationDestination(for: Geschaeft.self) { geschaeft in
+            GeschaeftDetailView(geschaeft: geschaeft)
+        }
+        .navigationTitle("Geschäfte")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    neuesGeschaeftEntwurf = Geschaeft(name: "", typ: .lebensmittel)
+                } label: {
+                    Label("Geschäft hinzufügen", systemImage: "plus")
                 }
             }
-            .sheet(item: $neuesGeschaeftEntwurf) { entwurf in
-                GeschaeftStammdatenEditView(geschaeft: entwurf, istNeu: true)
-            }
+        }
+        .sheet(item: $neuesGeschaeftEntwurf) { entwurf in
+            GeschaeftStammdatenEditView(geschaeft: entwurf, istNeu: true)
         }
     }
 
@@ -76,6 +78,8 @@ private struct GeschaeftZeile: View {
 }
 
 #Preview {
-    GeschaeftListView()
-        .modelContainer(for: [Geschaeft.self, Regal.self, ArtikelKategorie.self], inMemory: true)
+    NavigationStack {
+        GeschaeftListView()
+    }
+    .modelContainer(for: [Geschaeft.self, Regal.self, ArtikelKategorie.self], inMemory: true)
 }

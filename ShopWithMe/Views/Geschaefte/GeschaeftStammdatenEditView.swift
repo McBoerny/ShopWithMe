@@ -8,6 +8,10 @@ import SwiftData
 struct GeschaeftStammdatenEditView: View {
     @Bindable var geschaeft: Geschaeft
     let istNeu: Bool
+    /// Wird nach erfolgreichem Sichern eines neuen Geschäfts (`istNeu == true`)
+    /// aufgerufen — z.B. um es in ``EinkaufenView`` nach dem per Ladenerkennung
+    /// angebotenen Hinzufügen automatisch als aktives Geschäft zu übernehmen.
+    var onGespeichert: ((Geschaeft) -> Void)? = nil
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -56,6 +60,7 @@ struct GeschaeftStammdatenEditView: View {
                                 await DatabaseLeaseService.performMicroLease(context: modelContext) {
                                     modelContext.insert(geschaeft)
                                 }
+                                onGespeichert?(geschaeft)
                                 dismiss()
                             }
                         } else {

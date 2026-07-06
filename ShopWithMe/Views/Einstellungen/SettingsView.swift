@@ -1,7 +1,11 @@
 import SwiftUI
 
-/// Einstiegspunkt für Einstellungen: Hilfe/Anleitungen, Kategorien- und
+/// Einstiegspunkt für Einstellungen: Hilfe/Anleitungen, Geschäfte-, Kategorien- und
 /// Einkaufslisten-Verwaltung, Datenbank-Speicherort und App-Informationen.
+///
+/// „Geschäfte“ verlinkt auf dieselbe ``GeschaeftListView`` wie der gleichnamige Tab
+/// (``RootView``) — sie erwartet deshalb einen umgebenden `NavigationStack` beim
+/// Aufrufer statt selbst einen anzulegen, siehe deren Dokumentation.
 struct SettingsView: View {
     var body: some View {
         NavigationStack {
@@ -11,6 +15,11 @@ struct SettingsView: View {
                         HelpView()
                     } label: {
                         Label("Hilfe & Anleitungen", systemImage: "questionmark.circle")
+                    }
+                    NavigationLink {
+                        GeschaeftListView()
+                    } label: {
+                        Label("Geschäfte", systemImage: "cart")
                     }
                     NavigationLink {
                         KategorienVerwaltungView()

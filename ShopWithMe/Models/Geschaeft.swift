@@ -147,6 +147,11 @@ final class Geschaeft {
     /// nicht erforderlich (siehe ``verfuegbareKategorien``).
     @Relationship(inverse: \ArtikelKategorie.geschaefte)
     var kategorien: [ArtikelKategorie] = []
+    /// Preishistorie (``KaufEintrag``), die in diesem Geschäft erfasst wurde. Wird das
+    /// Geschäft gelöscht, wird auch seine gesamte Preishistorie gelöscht — siehe
+    /// `docs/GESCHAEFTSERKENNUNG.md`.
+    @Relationship(deleteRule: .cascade, inverse: \KaufEintrag.geschaeft)
+    var kaufEintraege: [KaufEintrag] = []
 
     init(name: String, typ: GeschaeftTyp, adresse: String? = nil) {
         self.id = UUID()

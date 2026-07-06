@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import MapKit
 
 /// Einstiegspunkt zum Einkaufen: zeigt sofort beim Öffnen die Einkaufsliste der
 /// ausgewählten ``Einkaufsliste`` an — optional gruppiert nach Regal eines
@@ -7,6 +8,10 @@ import SwiftData
 /// gewählter Liste und gewähltem Geschäft) wird dafür automatisch angelegt, sobald
 /// keiner läuft; ein manueller "Start" ist nicht nötig, Artikel lassen sich
 /// jederzeit abhaken.
+///
+/// Prüft beim Öffnen zusätzlich per ``GeschaeftErkennungService``, ob sich der
+/// Anwender in der Nähe eines bekannten Ladens befindet, und zeigt dafür ggf. ein
+/// ``GeschaeftVorschlagBanner`` an — siehe `docs/GESCHAEFTSERKENNUNG.md`.
 struct EinkaufenView: View {
     @Query(sort: \Geschaeft.name) private var geschaefte: [Geschaeft]
     @Query(sort: \Einkaufsliste.erstelltAm) private var einkaufslisten: [Einkaufsliste]
@@ -17,6 +22,8 @@ struct EinkaufenView: View {
     @State private var ausgewaehltesGeschaeft: Geschaeft?
     @State private var ausgewaehlteListe: Einkaufsliste?
     @State private var zeigeNeueListe = false
+    @State private var geschaeftVorschlag: GeschaeftVorschlag?
+    @State private var geschaeftEntwurfAusVorschlag: Geschaeft?
 
     private var aktuellerEinkauf: Einkaufsvorgang? {
         guard let ausgewaehlteListe else { return nil }
@@ -32,6 +39,22 @@ struct EinkaufenView: View {
                     EinkaufslisteView(geschaeft: ausgewaehltesGeschaeft, einkaufsliste: ausgewaehlteListe, einkaufsvorgang: einkauf)
                 } else {
                     ProgressView()
+                }
+            }
+            .safeAreaInset(edge: .top) {
+                if let geschaeftVorschlag {
+                    GeschaeftVorschlagBanner(
+                        vorschlag: geschaeftVorschlag,
+                        aktivieren: { geschaeft in
+                            ausgewaehltesGeschaeft = geschaeft
+                            self.geschaeftVorschlag = nil
+                        },
+                        hinzufuegen: { mapItem in
+                            geschaeftEntwurfAusVorschlag = GeschaeftErkennungService.entwurf(aus: mapItem)
+                            self.geschaeftVorschlag = nil
+                        },
+                        verwerfen: { self.geschaeftVorschlag = nil }
+                    )
                 }
             }
             .navigationTitle("Einkaufen")
@@ -72,6 +95,9 @@ struct EinkaufenView: View {
                 await listeSicherstellen()
                 await einkaufSicherstellen()
             }
+            Task {
+                await geschaeftErkennungPruefen()
+            }
         }
         .onChange(of: ausgewaehltesGeschaeft) { _, _ in Task { await einkaufSicherstellen() } }
         .onChange(of: ausgewaehlteListe) { _, _ in Task { await einkaufSicherstellen() } }
@@ -85,6 +111,26 @@ struct EinkaufenView: View {
                 ausgewaehlteListe = liste
             }
         }
+        .sheet(item: $geschaeftEntwurfAusVorschlag) { entwurf in
+            GeschaeftStammdatenEditView(geschaeft: entwurf, istNeu: true) { neuesGeschaeft in
+                ausgewaehltesGeschaeft = neuesGeschaeft
+            }
+        }
+    }
+
+    /// Fragt ``GeschaeftErkennungService`` nach einem Vorschlag für den aktuellen
+    /// Standort. Schlägt kein bereits als ``ausgewaehltesGeschaeft`` gewähltes
+    /// Geschäft erneut vor.
+    private func geschaeftErkennungPruefen() async {
+        guard let vorschlag = await GeschaeftErkennungService.vorschlag(vorhandeneGeschaefte: geschaefte) else {
+            geschaeftVorschlag = nil
+            return
+        }
+        if case .bekannt(let geschaeft) = vorschlag, geschaeft == ausgewaehltesGeschaeft {
+            geschaeftVorschlag = nil
+            return
+        }
+        geschaeftVorschlag = vorschlag
     }
 
     /// Stellt sicher, dass ``ausgewaehlteListe`` gesetzt ist: übernimmt die erste
@@ -151,6 +197,71 @@ private struct NeueEinkaufslisteSheet: View {
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
+        }
+    }
+}
+
+/// Banner in ``EinkaufenView``, das einen per ``GeschaeftErkennungService`` in der
+/// Nähe erkannten Laden vorschlägt. Erscheint nur, wenn tatsächlich ein relevanter
+/// Laden erkannt wurde (z.B. nicht zu Hause) — siehe `docs/GESCHAEFTSERKENNUNG.md`.
+private struct GeschaeftVorschlagBanner: View {
+    let vorschlag: GeschaeftVorschlag
+    let aktivieren: (Geschaeft) -> Void
+    let hinzufuegen: (MKMapItem) -> Void
+    let verwerfen: () -> Void
+
+    private var name: String {
+        switch vorschlag {
+        case .bekannt(let geschaeft): return geschaeft.name
+        case .unbekannt(let mapItem): return mapItem.name ?? "Unbekannter Laden"
+        }
+    }
+
+    private var untertitel: String {
+        switch vorschlag {
+        case .bekannt: return "Als Geschäft für diesen Einkauf auswählen?"
+        case .unbekannt: return "Noch nicht in deiner Geschäfte-Liste."
+        }
+    }
+
+    private var aktionsTitel: String {
+        switch vorschlag {
+        case .bekannt: return "Auswählen"
+        case .unbekannt: return "Hinzufügen"
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "location.fill")
+                .foregroundStyle(Color.accentColor)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("In der Nähe: \(name)")
+                    .font(.subheadline.bold())
+                Text(untertitel)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button(aktionsTitel, action: aktion)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            Button {
+                verwerfen()
+            } label: {
+                Image(systemName: "xmark")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+        }
+        .glassCard()
+        .padding(.horizontal)
+    }
+
+    private func aktion() {
+        switch vorschlag {
+        case .bekannt(let geschaeft): aktivieren(geschaeft)
+        case .unbekannt(let mapItem): hinzufuegen(mapItem)
         }
     }
 }

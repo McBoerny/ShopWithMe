@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.5 (Build 42) — Standort-basierte Ladenerkennung, Geschäftsverwaltung, Preishistorie-Kaskade
+
+- **`GeschaeftErkennungService`** (`Services/GeschaeftErkennungService.swift`, neu):
+  erkennt per einmaliger Standortabfrage (`NSLocationWhenInUseUsageDescription`, kein
+  Hintergrund-Tracking) und `MKLocalPointsOfInterestRequest`, ob sich der Nutzer in
+  der Nähe eines bekannten Ladens (Apple Maps) befindet. `EinkaufenView` zeigt dafür
+  ein neues `GeschaeftVorschlagBanner`, sobald sie geöffnet wird — nur, wenn
+  tatsächlich ein relevanter Laden in der Nähe erkannt wurde (z.B. nicht zu Hause).
+  Ein bereits angelegtes Geschäft lässt sich direkt übernehmen; ein noch unbekannter
+  Laden lässt sich über den bestehenden `GeschaeftStammdatenEditView`-Anlage-Flow
+  (neuer optionaler `onGespeichert`-Callback) mit vorausgefüllten Stammdaten
+  hinzufügen. Details in `docs/GESCHAEFTSERKENNUNG.md`.
+- **Geschäftsverwaltung in den Einstellungen**: neuer „Geschäfte“-Eintrag in
+  `SettingsView`, verlinkt auf dieselbe `GeschaeftListView` wie der gleichnamige Tab
+  (Bearbeiten/Anlegen/Löschen war dort bereits vorhanden). Dafür verliert
+  `GeschaeftListView` ihren eigenen `NavigationStack` (verschachtelte
+  `NavigationStack`s vermeiden) — `RootView` umschließt den Tab jetzt selbst damit.
+- **Löschen eines Geschäfts löscht jetzt auch seine Preishistorie**: neue
+  `@Relationship(deleteRule: .cascade, inverse: \KaufEintrag.geschaeft)` an
+  `Geschaeft.kaufEintraege` — vorher blieben zugehörige `KaufEintrag`e beim Löschen
+  eines Geschäfts verwaist bestehen.
+
 ## v0.4 (Build 40) — Automatische Bereinigung der Preishistorie
 
 - **`PreisHistorieBereinigungService`** (`Services/PreisHistorieBereinigungService.swift`):
