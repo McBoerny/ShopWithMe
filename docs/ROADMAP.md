@@ -35,6 +35,9 @@ die übrige Doku aktualisiert wird): `docs/BUILD_WORKFLOW.md`.
 - [x] **v0.3** — `ArtikelHinzufuegenView` neu gestaltet: Mehrfachauswahl statt
   Sofort-Hinzufügen pro Artikel, Direktanlage landet automatisch in der Auswahl —
   siehe `docs/ARTIKEL_HINZUFUEGEN_INTERAKTION.md`.
+- [x] **v0.4** — Automatische, konfigurierbare Bereinigung alter Preishistorie
+  (`PreisHistorieBereinigungService`) + Einstellungen-Bildschirm — siehe
+  `docs/PREISHISTORIE_BEREINIGUNG.md`.
 
 Damit ist die in der Kickoff-Unterhaltung beschriebene Kernfunktionalität
 vollständig umgesetzt; weitere Ideen siehe „Zukünftig“ unten.

@@ -137,6 +137,11 @@ Verfügbarkeit.
 - **DebugLogWriter**/**DatabaseDebugLogger**: optionaler, standardmäßig deaktivierter
   Diagnose-Logging-Mechanismus für den Mehrbenutzerzugriff (Rotation, `os.Logger`,
   Spiegelung in den geteilten DB-Ordner) — siehe `docs/LOGGING.md`.
+- **PreisHistorieBereinigungService**: löscht alte `KaufEintrag`e (Preishistorie)
+  anhand einer vom Nutzer gewählten, standardmäßig deaktivierten Aufbewahrungsfrist,
+  automatisch bei App-Start/Vordergrund-Wechsel oder manuell — lässt Einträge eines
+  laufenden `Einkaufsvorgang`s dabei immer unangetastet. Details in
+  `docs/PREISHISTORIE_BEREINIGUNG.md`.
 
 ## Liquid Glass
 

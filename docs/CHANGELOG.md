@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.4 (Build 40) — Automatische Bereinigung der Preishistorie
+
+- **`PreisHistorieBereinigungService`** (`Services/PreisHistorieBereinigungService.swift`):
+  löscht `KaufEintrag`e, die älter als eine vom Nutzer wählbare Aufbewahrungsfrist
+  (30 Tage / 3 Monate / 6 Monate / 1 Jahr / eigene Anzahl Tage / „Nie“, Standard: „Nie“)
+  sind. Läuft automatisch bei App-Start und beim Zurückkehren aus dem Hintergrund
+  (`RootView`, mit 24h-Mindestintervall) sowie manuell über einen Button. Einträge
+  eines noch nicht abgeschlossenen `Einkaufsvorgang`s bleiben davon immer unberührt.
+- **`PreisHistorieSettingsView`** (`Views/Einstellungen/PreisHistorieSettingsView.swift`):
+  neuer Einstellungen-Bildschirm zur Wahl der Aufbewahrungsfrist, zeigt Zeitpunkt der
+  letzten Bereinigung und erlaubt manuelles Anstoßen.
+- Details siehe `docs/PREISHISTORIE_BEREINIGUNG.md`.
+
 ## v0.3 (Build 38) — Artikel hinzufügen: Mehrfachauswahl
 
 - **`ArtikelHinzufuegenView` neu gestaltet** (`Views/Einkaufen/ArtikelHinzufuegenView.swift`):

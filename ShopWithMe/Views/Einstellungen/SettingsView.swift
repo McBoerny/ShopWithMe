@@ -23,6 +23,11 @@ struct SettingsView: View {
                         Label("Einkaufslisten", systemImage: "checklist")
                     }
                     NavigationLink {
+                        PreisHistorieSettingsView()
+                    } label: {
+                        Label("Preishistorie", systemImage: "clock.arrow.circlepath")
+                    }
+                    NavigationLink {
                         DatabaseLocationSettingsView()
                     } label: {
                         Label("Datenbank & Speicherort", systemImage: "externaldrive")
