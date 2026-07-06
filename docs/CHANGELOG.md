@@ -21,6 +21,15 @@
   `@Relationship(deleteRule: .cascade, inverse: \KaufEintrag.geschaeft)` an
   `Geschaeft.kaufEintraege` — vorher blieben zugehörige `KaufEintrag`e beim Löschen
   eines Geschäfts verwaist bestehen.
+- **Preisschild-Scan** (`Services/PriceTagScanService.swift`,
+  `Views/Einkaufen/PreisschildScanView.swift`, neu): fotografiert ein einzelnes
+  Regal-Preisschild (Vision-OCR + FoundationModels, dasselbe Muster wie der
+  Belegscan) und legt Artikelname + Verkaufspreis direkt als `KaufEintrag` mit
+  heutigem Datum an — unabhängig vom tatsächlichen Kauf, z.B. zum Preisvergleich vor
+  der Kaufentscheidung. Neuer Button „Preisschild scannen“ in
+  `GeschaeftDetailView` neben „Kaufbeleg scannen“. Details, Abgrenzung zum Belegscan
+  und das noch nicht umgesetzte Regal-Mehrfach-Scan-Konzept in
+  `docs/PREISSCHILD_SCAN.md`.
 
 ## v0.4 (Build 40) — Automatische Bereinigung der Preishistorie
 
@@ -493,7 +502,7 @@
 - Verifiziert: `xcodegen generate` + `xcodebuild build` + `xcodebuild test`
   (`iPhone 17` Simulator) laufen fehlerfrei durch, alle 7 Unit-Tests bestehen.
 
-## v0.9 — Kamera-Funktion reaktiviert
+## v0.9 (Build 43) — Kamera-Funktion reaktiviert
 
 - `NSCameraUsageDescription` wieder ergänzt (jetzt über `info.properties` in
   `project.yml`, da die App auf ein explizites `ShopWithMe/Info.plist` umgestellt

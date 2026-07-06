@@ -21,7 +21,8 @@ ShopWithMe/
     App/                      # App-Entry-Point, ModelContainer-Setup
     Models/                   # SwiftData @Model Typen + Seed-Daten
     Services/                 # AISuggestionService, ReceiptScanService,
-                               # ShelfOrderLearningService, DatabaseLocationService
+                               # PriceTagScanService, ShelfOrderLearningService,
+                               # DatabaseLocationService
     DesignSystem/              # Liquid-Glass-Wrapper, Symbol/Farb-Picker
     Views/                    # nach Feature gruppiert: Artikel, Geschaefte,
                                # Einkaufen, Historie, Einstellungen
@@ -107,6 +108,12 @@ Verfügbarkeit.
   Artikel; `KaufEintrag.gelernteZuordnung(fuerErkannterName:in:)` schlägt beim nächsten
   Scan bereits bekannte Alias-/Artikel-Kombinationen automatisch vor — Details in
   `docs/BELEGSCAN.md`.
+- **PriceTagScanService** (Protokoll): dasselbe Vision-OCR-+-FoundationModels-Muster wie
+  `ReceiptScanService`, hier auf ein einzelnes fotografiertes Preisschild statt einen
+  ganzen Kassenbon angewendet. Legt direkt einen `KaufEintrag` mit heutigem Datum an,
+  unabhängig vom tatsächlichen Kauf. Details, Abgrenzung zum Belegscan und das
+  (noch nicht umgesetzte) Konzept für einen Mehrfach-Regal-Scan in
+  `docs/PREISSCHILD_SCAN.md`.
 - **ShelfOrderLearningService**: aktualisiert nach jedem abgeschlossenen
   `Einkaufsvorgang` die `KategorieBesuchsStatistik` und leitet daraus sowohl eine
   vorgeschlagene automatische Regal-Reihenfolge als auch (für Geschäfte ohne Regale

@@ -42,6 +42,11 @@ die übrige Doku aktualisiert wird): `docs/BUILD_WORKFLOW.md`.
   (`GeschaeftErkennungService`, Vorschlags-Banner in `EinkaufenView`) + neue
   Geschäftsverwaltung in den Einstellungen + Löschen eines Geschäfts löscht jetzt auch
   dessen Preishistorie — siehe `docs/GESCHAEFTSERKENNUNG.md`.
+- [x] **v0.5** — Preisschild-Scan (`PriceTagScanService`, `PreisschildScanView`):
+  fotografiert ein einzelnes Regal-Preisschild und legt Artikelname + Verkaufspreis
+  direkt als `KaufEintrag` an, unabhängig vom tatsächlichen Kauf (Preisvergleich vor
+  der Kaufentscheidung) — Einstieg über „Preisschild scannen“ in
+  `GeschaeftDetailView`. Siehe `docs/PREISSCHILD_SCAN.md`.
 
 Damit ist die in der Kickoff-Unterhaltung beschriebene Kernfunktionalität
 vollständig umgesetzt; weitere Ideen siehe „Zukünftig“ unten.
@@ -53,6 +58,12 @@ vollständig umgesetzt; weitere Ideen siehe „Zukünftig“ unten.
 - Ablösen von `ReceiptScanService`/`VisionFoundationModelsReceiptScanner` durch
   speziellere, künftige On-Device-Scan-APIs, sobald verfügbar und mit verifizierten
   Namen bekannt (zum Zeitpunkt der Erstellung war kein iOS-27-SDK verfügbar).
+- **Regal-Scan**: aus einem Foto eines ganzen Regals mehrere Preisschilder gleichzeitig
+  erkennen (statt wie aktuell nur ein einzelnes Schild pro Foto). Konzept inkl.
+  Begründung, warum das kein triviales Ausweiten von `PriceTagScanService` ist
+  (räumliches Zuordnungsproblem der OCR-Textblöcke zu einzelnen Schildern, nicht die
+  Texterkennung selbst), siehe `docs/PREISSCHILD_SCAN.md` → „Zukünftige Erweiterung:
+  Regal-Scan“.
 - Echte Trennung der Preishistorie in einen eigenen DB-Store (statt nur der
   umgesetzten Lösch-Logik in `PreisHistorieBereinigungService`) — zurückgestellt, da
   SwiftData-`@Relationship`s nicht store-übergreifend funktionieren und die dafür

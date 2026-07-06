@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 
 /// Detailansicht eines ``Geschaeft``s: Stammdaten, Kategorien- und Regal-Verwaltung
-/// sowie Kaufbeleg-Scan.
+/// sowie Kaufbeleg- und Preisschild-Scan.
 ///
 /// Der „Kategorien“-Abschnitt zeigt ``Geschaeft/verfuegbareKategorien`` — Kategorien
 /// sind dabei auch ohne Regal sofort verfügbar (siehe ``Geschaeft/kategorien``);
@@ -19,6 +19,11 @@ import SwiftData
 /// Kontext — unabhängig von einem laufenden ``Einkaufsvorgang``, z.B. um Preise für
 /// einen älteren oder nachträglich gefundenen Kassenbon zu erfassen.
 ///
+/// „Preisschild scannen“ öffnet ``PreisschildScanView`` — erfasst den Preis eines
+/// einzelnen fotografierten Regal-Preisschilds direkt als ``KaufEintrag`` mit
+/// heutigem Datum, unabhängig davon, ob der Artikel tatsächlich gekauft wird (z.B.
+/// zum Preisvergleich vor der Kaufentscheidung). Siehe `docs/PREISSCHILD_SCAN.md`.
+///
 /// „Preisübersicht“ zeigt, gruppiert über ``ArtikelPreisSpanne/gruppieren(_:)``, pro
 /// jemals hier gekauftem ``Artikel`` die Preisspanne (niedrigster–höchster erfasster
 /// Preis). Ein Antippen öffnet ``ArtikelPreisVerlaufView`` mit der historischen Liste
@@ -29,6 +34,7 @@ struct GeschaeftDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var zeigeStammdatenEdit = false
     @State private var zeigeBelegScan = false
+    @State private var zeigePreisschildScan = false
     @State private var zeigeKategorieHinzufuegen = false
     @Query private var kaufHistorie: [KaufEintrag]
 
@@ -175,8 +181,13 @@ struct GeschaeftDetailView: View {
                 } label: {
                     Label("Kaufbeleg scannen", systemImage: "doc.text.viewfinder")
                 }
+                Button {
+                    zeigePreisschildScan = true
+                } label: {
+                    Label("Preisschild scannen", systemImage: "tag.viewfinder")
+                }
             } footer: {
-                Text("Erfasse Preise für dieses Geschäft direkt von einem Kassenbon, auch ohne laufenden Einkauf.")
+                Text("Erfasse Preise für dieses Geschäft direkt von einem Kassenbon, auch ohne laufenden Einkauf. „Preisschild scannen“ erfasst den Preis eines einzelnen Regal-Preisschilds, auch ohne Kauf — z.B. zum Preisvergleich.")
             }
 
             if !artikelPreisSpannen.isEmpty {
@@ -219,6 +230,9 @@ struct GeschaeftDetailView: View {
         }
         .sheet(isPresented: $zeigeBelegScan) {
             BelegScanView(geschaeft: geschaeft)
+        }
+        .sheet(isPresented: $zeigePreisschildScan) {
+            PreisschildScanView(geschaeft: geschaeft)
         }
         .sheet(isPresented: $zeigeKategorieHinzufuegen) {
             KategorieHinzufuegenSheet(geschaeft: geschaeft)
