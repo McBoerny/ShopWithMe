@@ -51,3 +51,9 @@ vollständig umgesetzt; weitere Ideen siehe „Zukünftig“ unten.
 - Ablösen von `ReceiptScanService`/`VisionFoundationModelsReceiptScanner` durch
   speziellere, künftige On-Device-Scan-APIs, sobald verfügbar und mit verifizierten
   Namen bekannt (zum Zeitpunkt der Erstellung war kein iOS-27-SDK verfügbar).
+- Echte Trennung der Preishistorie in einen eigenen DB-Store (statt nur der
+  umgesetzten Lösch-Logik in `PreisHistorieBereinigungService`) — zurückgestellt, da
+  SwiftData-`@Relationship`s nicht store-übergreifend funktionieren und die dafür
+  nötige Ablösung von `KaufEintrag`s operativer Rolle (laufender Einkaufsvorgang,
+  `ShelfOrderLearningService`) ein eigenständiges, größeres Vorhaben wäre. Details/
+  erwogene Alternativen siehe `docs/PREISHISTORIE_BEREINIGUNG.md`.

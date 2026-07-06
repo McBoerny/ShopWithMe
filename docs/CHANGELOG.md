@@ -453,7 +453,7 @@
   anlegen“ sofort über die bestehende `ArtikelEditView` angelegt werden
   (inkl. Kategorie-Auswahl) und landet danach automatisch auf der Einkaufsliste.
 
-## v1.0 — Globale Einkaufsliste & frei änderbare Kategorie
+## v1.0 (Build 41) — Globale Einkaufsliste & frei änderbare Kategorie
 
 - `Views/Einkaufen/EinkaufenView.swift`: Die Einkaufsliste ist jetzt global und nicht
   mehr von einer Geschäftsauswahl abhängig. Der Geschäft-Picker bekommt eine „Kein

@@ -9,7 +9,7 @@ settings:
   base:
     SWIFT_VERSION: "6.0"
     MARKETING_VERSION: "0.4"
-    CURRENT_PROJECT_VERSION: "40"
+    CURRENT_PROJECT_VERSION: "41"
     TARGETED_DEVICE_FAMILY: "1,2"
 
 targets:
@@ -26,6 +26,7 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CFBundleDisplayName: ShopWithMe
         NSCameraUsageDescription: "Wird benötigt, um Kassenbons für die Preishistorie zu fotografieren."
+        NSLocationWhenInUseUsageDescription: "Wird benötigt, um beim Einkaufen automatisch das passende Geschäft in der Nähe vorzuschlagen."
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait

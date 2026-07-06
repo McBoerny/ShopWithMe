@@ -37,3 +37,35 @@ Einträge an.
 Es entsteht bewusst **kein separater Store/keine Archivierung** — gelöschte Einträge
 sind endgültig weg. Für Nutzer, die die volle Historie behalten möchten, bleibt „Nie“
 die Standardeinstellung.
+
+## Design-Entscheidung: kein separater DB-Store für die Preishistorie
+
+Ursprünglich angefragt war, die Preishistorie in eine **eigene, vom Hauptstore
+getrennte Datenbank** auszulagern (eigene `.sqlite`-Datei), damit Aufbewahrung/Löschung
+unabhängig vom übrigen Datenmodell verwaltet werden kann. Das wurde bewusst **nicht**
+umgesetzt — nur die Lösch-Logik oben.
+
+**Grund:** `KaufEintrag` hat zwei Rollen gleichzeitig:
+
+1. Preishistorie-Datensatz (Anzeige in `ArtikelEditView`/`PreisHistorieZeile`/
+   `GeschaeftDetailView`).
+2. Operative Grundlage des laufenden `Einkaufsvorgang`s — `artikel`, `geschaeft`,
+   `kategorie` und `einkaufsvorgang` sind echte SwiftData-`@Relationship`s
+   (`Einkaufsvorgang.kaufEintraege` z.B. mit `deleteRule: .cascade`).
+
+SwiftData unterstützt keine `@Relationship`s, deren Zielobjekt in einem *anderen*
+`ModelConfiguration`/Store liegt als das Quellobjekt — beide Seiten einer Beziehung
+müssen im selben Store liegen. Ein zweiter Store für `KaufEintrag` (oder ein neues,
+schlankeres Preis-Modell) hätte diese Relationships daher zwangsläufig durch reine
+UUID-Referenzen mit manuellem Nachschlagen ersetzt — ein invasiver Eingriff quer durch
+`Einkaufsvorgang`, `ShelfOrderLearningService`, `BelegScanView` und die zugehörigen
+Tests, für einen Nutzen (unabhängige Aufbewahrungsfrist), der sich wie oben gezeigt
+auch ohne Store-Trennung erreichen lässt.
+
+**Erwogene Alternative (verworfen):** ein neues, eigenständiges Modell
+`PreisEintrag` (nur Snapshot-Felder, keine Relationships) in einem zweiten Store,
+zusätzlich zu `KaufEintrag.preis` befüllt, sobald ein Preis erfasst wird. Verworfen,
+weil dadurch der Preis dauerhaft doppelt vorläge (`KaufEintrag.preis` **und**
+`PreisEintrag.preis`) und beide Seiten synchron gehalten werden müssten — ein
+Aufwand, der einer echten künftigen Store-Trennung vorbehalten bleiben sollte, falls
+sie tatsächlich gebraucht wird (siehe `docs/ROADMAP.md`).
