@@ -141,4 +141,51 @@ struct GeschaeftErkennungServiceTests {
         }
         #expect(mapItem.name == "Ferner Laden")
     }
+
+    @Test
+    func dedupliziertDoppelteApppleMapsTrefferDesselbenBekanntenGeschaefts() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let rewe = Geschaeft(name: "Rewe am Markt", typ: .lebensmittel)
+        context.insert(rewe)
+
+        // Zwei Apple-Maps-Einträge für denselben physischen Laden (z.B. unter
+        // leicht unterschiedlichen POI-Kategorien) — beide matchen `rewe`.
+        let eintraege = [
+            GeschaeftInDerNaeheEintrag(vorschlag: .bekannt(rewe), istIgnoriert: false),
+            GeschaeftInDerNaeheEintrag(vorschlag: .bekannt(rewe), istIgnoriert: true),
+        ]
+
+        let dedupliziert = GeschaeftErkennungService.dedupliziert(eintraege)
+
+        #expect(dedupliziert.count == 1)
+    }
+
+    @Test
+    func dedupliziertDoppelteApppleMapsTrefferDesselbenUnbekanntenLadensAnhandDesNamens() {
+        let a = mapItem(name: "Bio-Markt", latitude: 52.5, longitude: 13.4)
+        let b = mapItem(name: "Bio-Markt", latitude: 52.5002, longitude: 13.4002)
+        let eintraege = [
+            GeschaeftInDerNaeheEintrag(vorschlag: .unbekannt(a), istIgnoriert: false),
+            GeschaeftInDerNaeheEintrag(vorschlag: .unbekannt(b), istIgnoriert: false),
+        ]
+
+        let dedupliziert = GeschaeftErkennungService.dedupliziert(eintraege)
+
+        #expect(dedupliziert.count == 1)
+    }
+
+    @Test
+    func behaeltVerschiedeneLaedenBeimDeduplizieren() {
+        let a = mapItem(name: "Bio-Markt", latitude: 52.5, longitude: 13.4)
+        let b = mapItem(name: "Anderer Laden", latitude: 52.9, longitude: 13.9)
+        let eintraege = [
+            GeschaeftInDerNaeheEintrag(vorschlag: .unbekannt(a), istIgnoriert: false),
+            GeschaeftInDerNaeheEintrag(vorschlag: .unbekannt(b), istIgnoriert: false),
+        ]
+
+        let dedupliziert = GeschaeftErkennungService.dedupliziert(eintraege)
+
+        #expect(dedupliziert.count == 2)
+    }
 }

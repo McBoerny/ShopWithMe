@@ -104,7 +104,7 @@ enum GeschaeftErkennungService {
         guard let standort = await EinmaligerStandortAbruf().standortErmitteln() else { return nil }
         guard let treffer = try? await nahegelegeneLaeden(bei: standort, radius: alleInDerNaeheRadius) else { return nil }
         let sortiert = treffer.sorted { entfernung(zu: $0, von: standort) < entfernung(zu: $1, von: standort) }
-        return sortiert.map { item in
+        let eintraege = sortiert.map { item -> GeschaeftInDerNaeheEintrag in
             let vorschlag: GeschaeftVorschlag
             if let bekanntesGeschaeft = vorhandeneGeschaefte.first(where: { istBekannterTreffer($0, fuer: item) }) {
                 vorschlag = .bekannt(bekanntesGeschaeft)
@@ -113,6 +113,39 @@ enum GeschaeftErkennungService {
             }
             return GeschaeftInDerNaeheEintrag(vorschlag: vorschlag, istIgnoriert: istIgnoriert(item, ignorierte: ignorierteVorschlaege))
         }
+        return dedupliziert(eintraege)
+    }
+
+    /// Apple Maps liefert für denselben physischen Laden gelegentlich mehrere
+    /// `MKMapItem`-Treffer (z.B. unter leicht unterschiedlichen POI-Kategorien) — ohne
+    /// Deduplizierung würde ``alleInDerNaehe(vorhandeneGeschaefte:ignorierteVorschlaege:)``
+    /// dasselbe (ggf. ignorierte) ``Geschaeft``/denselben unbekannten Laden mehrfach
+    /// auflisten. Behält jeweils den ersten (nächstgelegenen, da `treffer` vorher nach
+    /// Entfernung sortiert ist) Eintrag pro identifiziertem Laden.
+    /// `internal` statt `private` (wie ``passendenVorschlag(aus:standort:vorhandeneGeschaefte:)``),
+    /// damit die Deduplizierung ohne echtes CoreLocation/MapKit direkt getestet werden kann.
+    static func dedupliziert(_ eintraege: [GeschaeftInDerNaeheEintrag]) -> [GeschaeftInDerNaeheEintrag] {
+        var ergebnis: [GeschaeftInDerNaeheEintrag] = []
+        for eintrag in eintraege where !ergebnis.contains(where: { istSelberLaden($0.vorschlag, eintrag.vorschlag) }) {
+            ergebnis.append(eintrag)
+        }
+        return ergebnis
+    }
+
+    /// Zwei ``GeschaeftVorschlag``e gelten als derselbe Laden, wenn sie auf dasselbe
+    /// ``Geschaeft`` verweisen, oder (mind. einer davon `unbekannt`) bei Namens- ODER
+    /// Koordinatenübereinstimmung — analog ``istBekannterTreffer(_:fuer:)``.
+    private static func istSelberLaden(_ a: GeschaeftVorschlag, _ b: GeschaeftVorschlag) -> Bool {
+        if case .bekannt(let g1) = a, case .bekannt(let g2) = b {
+            return g1.persistentModelID == g2.persistentModelID
+        }
+        if a.name.localizedCaseInsensitiveCompare(b.name) == .orderedSame { return true }
+        if let ka = a.koordinaten, let kb = b.koordinaten {
+            let ortA = CLLocation(latitude: ka.breitengrad, longitude: ka.laengengrad)
+            let ortB = CLLocation(latitude: kb.breitengrad, longitude: kb.laengengrad)
+            return ortA.distance(from: ortB) < koordinatenTreffertoleranz
+        }
+        return false
     }
 
     /// Baut aus einem per Ladenerkennung gefundenen, noch unbekannten Laden einen

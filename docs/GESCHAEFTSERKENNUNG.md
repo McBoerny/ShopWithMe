@@ -107,6 +107,17 @@ nicht erschien) manuell wählen kann, gibt es eine zweite, umfassendere Ansicht:
   `EinkaufenView`-Toolbar (`principal`-Platzierung, gemeinsam mit dem bestehenden
   Geschäft-Picker), damit der Anwender jederzeit „nachträglich“ manuell auswählen
   oder ignorierte Läden reaktivieren kann.
+- **Deduplizierung:** Apple Maps liefert für denselben physischen Laden gelegentlich
+  mehrere `MKMapItem`-Treffer (z.B. unter leicht unterschiedlichen POI-Kategorien) —
+  ohne Gegenmaßnahme erschien z.B. ein ignoriertes Geschäft doppelt in der Liste, weil
+  beide Treffer unabhängig voneinander auf dasselbe `Geschaeft` gemappt wurden.
+  `GeschaeftErkennungService.dedupliziert(_:)` (aufgerufen am Ende von
+  `alleInDerNaehe`) entfernt solche Duplikate: gleiches `Geschaeft`
+  (`persistentModelID`) bei zwei `.bekannt`-Treffern, sonst Namens- ODER
+  Koordinatenübereinstimmung (analog `istBekannterTreffer(_:fuer:)`) — behält jeweils
+  den nächstgelegenen Eintrag, da `treffer` vorher nach Entfernung sortiert wird.
+  `internal` statt `private`, direkt getestet ohne echtes CoreLocation/MapKit
+  (`GeschaeftErkennungServiceTests`).
 
 ## Geschäftsverwaltung in den Einstellungen
 

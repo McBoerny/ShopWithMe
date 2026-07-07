@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.5 (Build 48) — Duplikate in „Alle Geschäfte in der Nähe“ behoben
+
+- **`GeschaeftErkennungService.dedupliziert(_:)`** (neu): Apple Maps liefert für
+  denselben physischen Laden gelegentlich mehrere `MKMapItem`-Treffer — dadurch
+  erschien z.B. ein ignoriertes Geschäft doppelt in der Liste „Alle Geschäfte in der
+  Nähe“. `alleInDerNaehe(vorhandeneGeschaefte:ignorierteVorschlaege:)` dedupliziert
+  jetzt am Ende: gleiches `Geschaeft` bei zwei `.bekannt`-Treffern, sonst Namens- ODER
+  Koordinatenübereinstimmung. `internal` statt `private`, direkt getestet.
+
 ## v0.5 (Build 47) — Verfügbarkeitsfilter direkt im Einkauf statt als Geschäfts-Einstellung
 
 - **`Geschaeft.artikelFilterModus`/`ArtikelFilterModus` entfernt**: die Entscheidung
