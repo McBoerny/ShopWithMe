@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.5 (Build 49) — Manuelles Geschäft-Hinzufügen im Einkaufen-Tab
+
+- **„Neues Geschäft hinzufügen“** ergänzt im Geschäft-Menü (Toolbar, `EinkaufenView`):
+  öffnet über einen leeren `Geschaeft`-Entwurf denselben
+  `GeschaeftStammdatenEditView`-Anlage-Flow wie der Standort-Vorschlag, unabhängig von
+  Standortberechtigung/Apple-Maps-Treffern — die automatische Ladenerkennung bleibt
+  damit immer nur eine Ergänzung, nie der einzige Weg, ein Geschäft anzulegen.
+
 ## v0.5 (Build 48) — Duplikate in „Alle Geschäfte in der Nähe“ behoben
 
 - **`GeschaeftErkennungService.dedupliziert(_:)`** (neu): Apple Maps liefert für

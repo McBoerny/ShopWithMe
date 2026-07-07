@@ -107,6 +107,15 @@ nicht erschien) manuell wählen kann, gibt es eine zweite, umfassendere Ansicht:
   `EinkaufenView`-Toolbar (`principal`-Platzierung, gemeinsam mit dem bestehenden
   Geschäft-Picker), damit der Anwender jederzeit „nachträglich“ manuell auswählen
   oder ignorierte Läden reaktivieren kann.
+- **„Neues Geschäft hinzufügen“ bleibt zusätzlich rein manuell möglich**: dasselbe
+  Geschäft-Menü bietet immer (unabhängig von Standort/Apple Maps) einen eigenen
+  Button, der einen leeren `Geschaeft`-Entwurf (`name: "", typ: .lebensmittel`) über
+  denselben `GeschaeftStammdatenEditView`-Anlage-Flow öffnet wie der Vorschlags-Banner
+  (`onGespeichert` übernimmt das neue Geschäft automatisch als
+  `ausgewaehltesGeschaeft`) — analog zum „+“ in `GeschaeftListView`. Die
+  Standort-Erkennung ersetzt die manuelle Anlage also nie, sie ergänzt sie nur
+  (relevant z.B. ohne Standortberechtigung oder wenn Apple Maps den Laden nicht
+  kennt).
 - **Deduplizierung:** Apple Maps liefert für denselben physischen Laden gelegentlich
   mehrere `MKMapItem`-Treffer (z.B. unter leicht unterschiedlichen POI-Kategorien) —
   ohne Gegenmaßnahme erschien z.B. ein ignoriertes Geschäft doppelt in der Liste, weil

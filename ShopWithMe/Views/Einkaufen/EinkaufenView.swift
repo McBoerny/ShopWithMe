@@ -11,7 +11,10 @@ import MapKit
 ///
 /// Prüft beim Öffnen zusätzlich per ``GeschaeftErkennungService``, ob sich der
 /// Anwender in der Nähe eines bekannten Ladens befindet, und zeigt dafür ggf. ein
-/// ``GeschaeftVorschlagBanner`` an — siehe `docs/GESCHAEFTSERKENNUNG.md`.
+/// ``GeschaeftVorschlagBanner`` an — siehe `docs/GESCHAEFTSERKENNUNG.md`. Unabhängig
+/// davon lässt sich im Geschäft-Menü der Toolbar jederzeit manuell ein neues
+/// Geschäft anlegen (analog ``GeschaeftListView``) oder „Geschäfte in der Nähe“
+/// öffnen — die Standort-Erkennung ist also nie der einzige Weg.
 struct EinkaufenView: View {
     @Query(sort: \Geschaeft.name) private var geschaefte: [Geschaeft]
     @Query(sort: \Einkaufsliste.erstelltAm) private var einkaufslisten: [Einkaufsliste]
@@ -97,6 +100,11 @@ struct EinkaufenView: View {
                                     Text(geschaeft.name).tag(Optional(geschaeft))
                                 }
                             }
+                        }
+                        Button {
+                            geschaeftEntwurfAusVorschlag = Geschaeft(name: "", typ: .lebensmittel)
+                        } label: {
+                            Label("Neues Geschäft hinzufügen", systemImage: "plus")
                         }
                         Button {
                             zeigeAlleInDerNaehe = true
