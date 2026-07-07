@@ -128,6 +128,30 @@ nicht erschien) manuell wählen kann, gibt es eine zweite, umfassendere Ansicht:
   `internal` statt `private`, direkt getestet ohne echtes CoreLocation/MapKit
   (`GeschaeftErkennungServiceTests`).
 
+## Suchradius im Debug-Build testweise überschreibbar
+
+**Status: Umgesetzt** (`Services/DebugEinstellungen.swift`,
+`Views/Einstellungen/DebugEinstellungenView.swift`).
+
+Beide Radien (`standardSuchradius`, 150m; `standardAlleInDerNaeheRadius`, 100m) sind
+in der Praxis unbequem zu testen, wenn man während der Entwicklung nicht direkt neben
+einem echten Apple-Maps-Laden steht. Deshalb:
+
+- `GeschaeftErkennungService.suchradius`/`alleInDerNaeheRadius` sind keine `static
+  let`-Konstanten mehr, sondern `static var`: in Debug-Builds (`#if DEBUG`) liefern
+  sie `DebugEinstellungen.sucheRadiusUeberschreibung ?? standardXYZ`, in
+  Release-Builds unbedingt den festen Standardwert (`#if DEBUG`/`#else` direkt im
+  Getter, kein Laufzeit-Flag) — die Überschreibung existiert in einem
+  Release-/App-Store-Build gar nicht erst im Binary.
+- `DebugEinstellungen` (nur innerhalb `#if DEBUG` deklariert) kapselt die
+  Überschreibung in `UserDefaults`; `DebugEinstellungenView` (neuer Eintrag
+  „Debug-Einstellungen“ in `SettingsView`, ebenfalls `#if DEBUG`) bietet dafür einen
+  Toggle + Stepper (100–5000m). Eine Überschreibung gilt für **beide** Radien
+  gemeinsam, da ein Entwickler beim Testen typischerweise beide gleichzeitig
+  vergrößern möchte.
+- Ist die Überschreibung deaktiviert (Standard), gelten unverändert
+  `standardSuchradius`/`standardAlleInDerNaeheRadius`.
+
 ## Geschäftsverwaltung in den Einstellungen
 
 `SettingsView` bekommt einen neuen Eintrag „Geschäfte“, der auf dieselbe

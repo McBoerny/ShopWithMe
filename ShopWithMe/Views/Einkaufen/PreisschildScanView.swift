@@ -178,7 +178,7 @@ private struct AufnahmeAnsicht: View {
                 ProgressView("Preisschild wird ausgewertet…")
             } else {
                 ContentUnavailableView {
-                    Label("Preisschild scannen", systemImage: "tag.viewfinder")
+                    Label("Preisschild scannen", systemImage: "text.viewfinder")
                 } description: {
                     Text("Fotografiere ein Preisschild im Regal von „\(geschaeftName)“ oder wähle ein Foto aus deiner Mediathek.")
                 } actions: {

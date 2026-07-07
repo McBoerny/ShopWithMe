@@ -171,7 +171,7 @@ struct GeschaeftDetailView: View {
                 Button {
                     zeigePreisschildScan = true
                 } label: {
-                    Label("Preisschild scannen", systemImage: "tag.viewfinder")
+                    Label("Preisschild scannen", systemImage: "text.viewfinder")
                 }
             } footer: {
                 Text("Erfasse Preise für dieses Geschäft direkt von einem Kassenbon, auch ohne laufenden Einkauf. „Preisschild scannen“ erfasst den Preis eines einzelnen Regal-Preisschilds, auch ohne Kauf — z.B. zum Preisvergleich.")

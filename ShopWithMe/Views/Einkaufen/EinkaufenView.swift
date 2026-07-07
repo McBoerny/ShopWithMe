@@ -674,7 +674,7 @@ private struct EinkaufslisteView: View {
                         Button {
                             zeigePreisschildScanFuerGeschaeft = true
                         } label: {
-                            Label("Preisschild scannen", systemImage: "tag.viewfinder")
+                            Label("Preisschild scannen", systemImage: "text.viewfinder")
                         }
                     } label: {
                         Label("Scannen", systemImage: "camera.viewfinder")

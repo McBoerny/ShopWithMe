@@ -56,14 +56,37 @@ enum GeschaeftErkennungService {
         .foodMarket, .store, .pharmacy, .bakery, .winery, .brewery,
     ]
 
-    /// Umkreis in Metern, in dem nach bekannten Läden gesucht wird.
-    static let suchradius: CLLocationDistance = 150
+    /// Standard-Umkreis in Metern, in dem nach bekannten Läden gesucht wird.
+    static let standardSuchradius: CLLocationDistance = 150
 
-    /// Umkreis für „Alle Geschäfte in der Nähe“ (``alleInDerNaehe(vorhandeneGeschaefte:)``)
-    /// — enger als ``suchradius``, da der Anwender hier bewusst und gezielt in einer
+    /// Standard-Umkreis für „Alle Geschäfte in der Nähe“
+    /// (``alleInDerNaehe(vorhandeneGeschaefte:ignorierteVorschlaege:)``) — enger als
+    /// ``standardSuchradius``, da der Anwender hier bewusst und gezielt in einer
     /// kurzen, überschaubaren Liste stöbert statt automatisch einen einzelnen
     /// Vorschlag zu erhalten.
-    static let alleInDerNaeheRadius: CLLocationDistance = 100
+    static let standardAlleInDerNaeheRadius: CLLocationDistance = 100
+
+    /// Umkreis in Metern, in dem nach bekannten Läden gesucht wird — in Debug-Builds
+    /// über ``DebugEinstellungen/sucheRadiusUeberschreibung`` testweise erhöhbar
+    /// (siehe `docs/GESCHAEFTSERKENNUNG.md`), in Release-Builds immer
+    /// ``standardSuchradius``.
+    static var suchradius: CLLocationDistance {
+        #if DEBUG
+        DebugEinstellungen.sucheRadiusUeberschreibung ?? standardSuchradius
+        #else
+        standardSuchradius
+        #endif
+    }
+
+    /// Umkreis für „Alle Geschäfte in der Nähe“ — dieselbe Debug-Überschreibung wie
+    /// ``suchradius``, damit sich beide Ladenerkennungs-Wege gemeinsam testen lassen.
+    static var alleInDerNaeheRadius: CLLocationDistance {
+        #if DEBUG
+        DebugEinstellungen.sucheRadiusUeberschreibung ?? standardAlleInDerNaeheRadius
+        #else
+        standardAlleInDerNaeheRadius
+        #endif
+    }
 
     /// Maximale Entfernung zwischen einem gespeicherten ``Geschaeft/breitengrad``/
     /// ``Geschaeft/laengengrad`` und einem Apple-Maps-Treffer, damit beide trotz

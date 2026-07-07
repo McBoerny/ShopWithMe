@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.5 (Build 50) — Suchradius im Debug-Build testweise überschreibbar
+
+- **`DebugEinstellungen`/`DebugEinstellungenView`** (neu, beide nur `#if DEBUG`):
+  neuer Eintrag „Debug-Einstellungen“ in `SettingsView` (ebenfalls `#if DEBUG`)
+  erlaubt es, den Suchradius von `GeschaeftErkennungService` (automatischer
+  Einzelvorschlag + „Alle Geschäfte in der Nähe“) testweise auf 100–5000m zu
+  erhöhen, ohne echte Nähe zu einem Apple-Maps-Laden zu benötigen.
+  `suchradius`/`alleInDerNaeheRadius` sind dafür von `static let` zu `static var`
+  geworden: in Debug-Builds `DebugEinstellungen.sucheRadiusUeberschreibung ??
+  standardXYZ`, in Release-Builds unbedingt der feste Standardwert (150m/100m) —
+  die Überschreibung ist in einem Release-Build gar nicht Teil des Binaries.
+
 ## v0.5 (Build 49) — Manuelles Geschäft-Hinzufügen im Einkaufen-Tab
 
 - **„Neues Geschäft hinzufügen“** ergänzt im Geschäft-Menü (Toolbar, `EinkaufenView`):

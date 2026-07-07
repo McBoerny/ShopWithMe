@@ -46,6 +46,13 @@ struct SettingsView: View {
                     } label: {
                         Label("DB-Debug-Modus", systemImage: "ladybug")
                     }
+                    #if DEBUG
+                    NavigationLink {
+                        DebugEinstellungenView()
+                    } label: {
+                        Label("Debug-Einstellungen", systemImage: "hammer")
+                    }
+                    #endif
                 }
 
                 Section("Über") {
