@@ -30,6 +30,18 @@
   `GeschaeftDetailView` neben „Kaufbeleg scannen“. Details, Abgrenzung zum Belegscan
   und das noch nicht umgesetzte Regal-Mehrfach-Scan-Konzept in
   `docs/PREISSCHILD_SCAN.md`.
+- **Automatischer Geschäfts-Abgleich beim Beleg-/Preisschild-Scan**: neues
+  `Geschaeft.alternativeNamen: [String]` + `Geschaeft.passendes(fuerErkannterName:unter:)`
+  ordnen einen aus einem Beleg/Preisschild erkannten Geschäftsnamen automatisch
+  einem bekannten Geschäft zu — relevant, wenn ohne vorherige Geschäftswahl
+  gescannt wird (z.B. nachträglich zuhause). Ohne Treffer fragt das neue
+  `GeschaeftWahlSheet` nach (mit Möglichkeit, direkt ein neues Geschäft
+  anzulegen); `Geschaeft.alternativenNamenLernen(_:)` merkt sich den erkannten
+  Namen danach als Alias für künftige Scans. Neuer geschäftsloser Scan-Einstieg
+  (Toolbar-Menü „Scannen“ in `GeschaeftListView`) sowie neue Scan-Buttons direkt in
+  `EinkaufenView`, sobald dort ein Geschäft gewählt ist. Ein `Einkaufsvorgang` ohne
+  gewähltes Geschäft übernimmt das erkannte/gewählte Geschäft rückwirkend. Details
+  in `docs/BELEGSCAN.md` → „Automatischer Geschäfts-Abgleich“.
 
 ## v0.4 (Build 40) — Automatische Bereinigung der Preishistorie
 
@@ -527,7 +539,7 @@
   „Cannot code sign because the target does not have an Info.plist file“
   fehlschlägt.
 
-## v0.8 — Kamera-Funktion deaktiviert
+## v0.8 (Build 44) — Kamera-Funktion deaktiviert
 
 - Das Camera-Entitlement (`NSCameraUsageDescription`) wird vom Apple-Developer-Account
   aktuell nicht unterstützt und wurde daher wieder entfernt (`project.yml`).

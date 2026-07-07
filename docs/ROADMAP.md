@@ -47,6 +47,14 @@ die übrige Doku aktualisiert wird): `docs/BUILD_WORKFLOW.md`.
   direkt als `KaufEintrag` an, unabhängig vom tatsächlichen Kauf (Preisvergleich vor
   der Kaufentscheidung) — Einstieg über „Preisschild scannen“ in
   `GeschaeftDetailView`. Siehe `docs/PREISSCHILD_SCAN.md`.
+- [x] **v0.5** — Automatischer Geschäfts-Abgleich beim Beleg-/Preisschild-Scan
+  (`Geschaeft.passendes(fuerErkannterName:unter:)`, `GeschaeftWahlSheet`,
+  `Geschaeft.alternativenNamenLernen(_:)`): erkennt beim nachträglichen (z.B.
+  zuhause) Scannen das Geschäft automatisch anhand des erkannten Namens und
+  gelernter Alias-Namen, fragt sonst nach und lernt den Namen für künftige Scans.
+  Neuer geschäftsloser Scan-Einstieg in `GeschaeftListView` sowie Scan-Buttons in
+  `EinkaufenView` bei bereits gewähltem Geschäft. Siehe `docs/BELEGSCAN.md` →
+  „Automatischer Geschäfts-Abgleich“.
 
 Damit ist die in der Kickoff-Unterhaltung beschriebene Kernfunktionalität
 vollständig umgesetzt; weitere Ideen siehe „Zukünftig“ unten.

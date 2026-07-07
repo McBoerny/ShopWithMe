@@ -45,6 +45,7 @@ sortIndex: Int            │ kategorien: [ArtikelKategorie]  breitengrad/laenge
 └─geschaefte: [Geschaeft] ─────────────────────────────kategorien: [ArtikelKategorie]
   (many-to-many, direkt —                              regalSortierModusRaw: String?
    ohne Regal nötig)                                    artikelFilterModusRaw: String?
+                                                         alternativeNamenRaw: String?
                                                          kaufEintraege: [KaufEintrag]
                                                            (cascade — siehe unten)
 
@@ -114,6 +115,14 @@ Verfügbarkeit.
   unabhängig vom tatsächlichen Kauf. Details, Abgrenzung zum Belegscan und das
   (noch nicht umgesetzte) Konzept für einen Mehrfach-Regal-Scan in
   `docs/PREISSCHILD_SCAN.md`.
+- **Automatischer Geschäfts-Abgleich beim Beleg-/Preisschild-Scan**:
+  `Geschaeft.passendes(fuerErkannterName:unter:)` ordnet einen aus einem Beleg/
+  Preisschild erkannten Geschäftsnamen einem bekannten `Geschaeft` zu (Name oder
+  gelernte `alternativeNamen`); ohne Treffer fragt `GeschaeftWahlSheet` nach.
+  `Geschaeft.alternativenNamenLernen(_:)` merkt sich den erkannten Namen danach als
+  Alias für künftige Scans. Greift nur, wenn der Scan-Kontext noch kein Geschäft
+  feststehend mitbringt (z.B. nachträglich zuhause gescannter Beleg) — Details in
+  `docs/BELEGSCAN.md` → „Automatischer Geschäfts-Abgleich“.
 - **ShelfOrderLearningService**: aktualisiert nach jedem abgeschlossenen
   `Einkaufsvorgang` die `KategorieBesuchsStatistik` und leitet daraus sowohl eine
   vorgeschlagene automatische Regal-Reihenfolge als auch (für Geschäfte ohne Regale

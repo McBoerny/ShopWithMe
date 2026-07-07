@@ -10,9 +10,17 @@ Belegscans hinweg.
 
 - `ShopWithMe/Services/ReceiptScanService.swift` — OCR + KI-Extraktion.
 - `ShopWithMe/Views/Einkaufen/BelegScanView.swift` — Aufnahme, Prüf-/Korrektur-UI,
-  Übernahme in `KaufEintrag`e, Mitlern-Vorbelegung.
+  Übernahme in `KaufEintrag`e, Mitlern-Vorbelegung, automatischer
+  Geschäfts-Abgleich (siehe unten).
+- `ShopWithMe/Views/Einkaufen/PreisschildScanView.swift` — analoger, einzelner
+  Preisschild-Scan (`docs/PREISSCHILD_SCAN.md`), teilt sich denselben
+  Geschäfts-Abgleich.
 - `ShopWithMe/Models/KaufEintrag.swift` — persistentes Ziel-Model, `anzeigeName`,
   `gelernteZuordnung(fuerErkannterName:in:)`.
+- `ShopWithMe/Models/Geschaeft.swift` — `alternativeNamen`,
+  `alternativenNamenLernen(_:)`, `passendes(fuerErkannterName:unter:)`.
+- `ShopWithMe/Views/Geschaefte/GeschaeftWahlSheet.swift` — Geschäftsauswahl, falls
+  der automatische Abgleich keinen Treffer findet.
 - `ShopWithMe/Models/ArtikelPreisSpanne.swift` — Gruppierung nach Artikel + Preisspanne.
 - `ShopWithMe/Views/Historie/PreisHistorieZeile.swift` — einzelne Zeile, öffnet die
   Zuordnen-Sheet.
@@ -20,6 +28,8 @@ Belegscans hinweg.
   Artikel zuordnen/neu anlegen.
 - `ShopWithMe/Views/Geschaefte/GeschaeftDetailView.swift` — Preisübersicht-Sektion +
   `ArtikelPreisSpanneZeile`/`ArtikelPreisVerlaufView` (Drill-down).
+- `ShopWithMe/Views/Geschaefte/GeschaeftListView.swift` — geschäftsloser
+  Scan-Einstieg (Toolbar-Menü „Scannen“).
 - `ShopWithMeTests/ReceiptScanServiceTests.swift`, `ShopWithMeTests/ModelTests.swift`.
 
 ## Ablauf
@@ -64,9 +74,54 @@ Belegscans hinweg.
      Geschäfts-Detailansicht. Jede Position wird als neuer `KaufEintrag` angelegt,
      verknüpft mit `position.gelernterArtikel` — ansonsten sucht `passendesArtikel(fuer:)`
      per Namensabgleich unter allen `Artikel`n einen Treffer als Fallback.
-   - In beiden Fällen: weicht der (ggf. korrigierte) Anzeigetext vom rohen erkannten
+   - `.unbekannt`: geschäftsloser Scan (siehe „Automatischer Geschäfts-Abgleich“
+     unten) — verhält sich sonst wie `.geschaeft`, nur dass das Geschäft erst nach
+     dem Scan feststeht (`erkanntesGeschaeft` statt eines fest übergebenen Werts).
+   - In allen Fällen: weicht der (ggf. korrigierte) Anzeigetext vom rohen erkannten
      Namen ab, wird er als `alternativerName` übernommen (`leiteAlternativenNamenAb`)
      — das ist zugleich die Quelle für das Mitlernen beim nächsten Scan.
+
+## Automatischer Geschäfts-Abgleich
+
+Wird ein Beleg/Preisschild nachträglich gescannt — z.B. zuhause, ohne vorher ein
+Geschäft auszuwählen —, steht zum Scan-Zeitpunkt noch kein `Geschaeft` fest.
+`BelegScanKontext.unbekannt` (bzw. `PreisschildScanView` ohne
+`vorgegebenesGeschaeft`) sowie ein `.einkaufsvorgang` ohne gewähltes Geschäft (Picker-
+Option „Kein Geschäft“ in `EinkaufenView`) decken diesen Fall ab:
+
+1. **Erkennung**: `ReceiptScanService`/`PriceTagScanService` liefern zusätzlich zu
+   den Positionen einen rohen `geschaeftName: String` (auf einem Kassenbon meist
+   vorhanden, auf einem Preisschild nur selten — z.B. bei mitfotografierter
+   Regal-/Gang-Beschilderung).
+2. **Abgleich** (`BelegScanView.geschaeftAbgleichen(erkannterName:)` bzw. die
+   analoge Methode in `PreisschildScanView`): sucht per
+   `Geschaeft.passendes(fuerErkannterName:unter:)` unter allen vorhandenen
+   Geschäften nach einem Treffer — sowohl gegen `Geschaeft.name` als auch gegen
+   dessen gelernte `alternativeNamen` (beidseitiger
+   `localizedCaseInsensitiveContains`-Abgleich, analog
+   `KaufEintrag.gelernteZuordnung`).
+3. **Kein Treffer → Anwenderauswahl** (`GeschaeftWahlSheet`): öffnet sich
+   automatisch, sobald kein Treffer gefunden wurde. Bietet Suche unter
+   bestehenden Geschäften, „Kein Geschäft“ (bewusstes Überspringen — die
+   entstehenden `KaufEintrag`e bleiben dann ohne `geschaeft`, wie bisher) sowie
+   „„<Suchtext>“ neu anlegen“ (öffnet `GeschaeftStammdatenEditView`, vorausgefüllt
+   mit dem erkannten Namen). Der Anwender kann das erkannte/gewählte Geschäft in
+   der Ergebnisansicht jederzeit über die „Geschäft“-Zeile ändern.
+4. **Mitlernen** (`Geschaeft.alternativenNamenLernen(_:)`, aufgerufen in
+   `uebernehmen()`): der rohe erkannte Name wird als zusätzlicher
+   `alternativeNamen`-Eintrag des (automatisch erkannten oder manuell gewählten)
+   Geschäfts gespeichert — sofern er weder dem `name` noch einem bereits bekannten
+   Alias entspricht. Künftige Scans desselben Geschäfts (z.B. mit
+   Filial-Zusatz „REWE Center Musterstadt“ statt nur „Rewe“) werden dadurch
+   automatisch erkannt, ohne dass der Anwender erneut auswählen muss.
+5. **Rückwirkende Zuordnung**: steht ein `.einkaufsvorgang` ohne Geschäft dahinter,
+   wird `einkaufsvorgang.geschaeft` beim Übernehmen auf das erkannte/gewählte
+   Geschäft gesetzt — der gesamte Einkauf gilt rückwirkend als dort getätigt
+   (relevant für `ShelfOrderLearningService`/`ArtikelVerfuegbarkeitService`).
+
+Bei `.geschaeft(Geschaeft)` (Scan direkt aus der Geschäfts-Detailansicht) entfällt
+dieser gesamte Abgleich — das Geschäft steht bereits fest, die „Geschäft“-Zeile
+erscheint dort nicht.
 
 ## Datenmodell: `KaufEintrag`
 

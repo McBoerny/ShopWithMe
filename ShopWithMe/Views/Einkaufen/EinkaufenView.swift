@@ -288,6 +288,15 @@ private enum EinkaufsAnzeigeModus: String, CaseIterable, Identifiable {
         case .lernmodus: return "Lernmodus (alle Artikel)"
         }
     }
+
+    /// Icon für die Schnellauswahl in der Toolbar.
+    var icon: String {
+        switch self {
+        case .offene: return "circle"
+        case .mitAbgehakten: return "checkmark.circle"
+        case .lernmodus: return "graduationcap.fill"
+        }
+    }
 }
 
 /// Die Einkaufsliste einer ``Einkaufsliste`` für einen laufenden Einkaufsvorgang —
@@ -302,6 +311,11 @@ private struct EinkaufslisteView: View {
     @State private var zeigeBelegScanAngebot = false
     @State private var zeigeBelegScan = false
     @State private var zeigeArtikelHinzufuegen = false
+    /// Beleg-/Preisschild-Scan direkt für das aktuell gewählte ``geschaeft`` über den
+    /// Toolbar-Button — unabhängig vom Abschluss-Angebot (``zeigeBelegScanAngebot``),
+    /// das an den laufenden ``einkaufsvorgang`` gebunden ist.
+    @State private var zeigeBelegScanFuerGeschaeft = false
+    @State private var zeigePreisschildScanFuerGeschaeft = false
     /// Wie die Einkaufsliste dieses Einkaufsvorgangs gerade angezeigt wird — siehe
     /// ``EinkaufsAnzeigeModus``.
     @State private var anzeigeModus: EinkaufsAnzeigeModus = .offene
@@ -502,10 +516,31 @@ private struct EinkaufslisteView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Picker("Anzeige", selection: $anzeigeModus) {
                         ForEach(EinkaufsAnzeigeModus.allCases) { modus in
-                            Text(modus.anzeigename).tag(modus)
+                            Label(modus.anzeigename, systemImage: modus.icon)
+                                .labelStyle(.iconOnly)
+                                .tag(modus)
                         }
                     }
-                    .pickerStyle(.menu)
+                    .pickerStyle(.segmented)
+                    .fixedSize()
+                }
+            }
+            if let geschaeft {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button {
+                            zeigeBelegScanFuerGeschaeft = true
+                        } label: {
+                            Label("Beleg scannen", systemImage: "doc.text.viewfinder")
+                        }
+                        Button {
+                            zeigePreisschildScanFuerGeschaeft = true
+                        } label: {
+                            Label("Preisschild scannen", systemImage: "tag.viewfinder")
+                        }
+                    } label: {
+                        Label("Scannen", systemImage: "camera.viewfinder")
+                    }
                 }
             }
             ToolbarItem(placement: .primaryAction) {
@@ -518,6 +553,16 @@ private struct EinkaufslisteView: View {
         }
         .sheet(isPresented: $zeigeArtikelHinzufuegen) {
             ArtikelHinzufuegenView(einkaufsliste: einkaufsliste)
+        }
+        .sheet(isPresented: $zeigeBelegScanFuerGeschaeft) {
+            if let geschaeft {
+                BelegScanView(geschaeft: geschaeft)
+            }
+        }
+        .sheet(isPresented: $zeigePreisschildScanFuerGeschaeft) {
+            if let geschaeft {
+                PreisschildScanView(geschaeft: geschaeft)
+            }
         }
         .confirmationDialog(
             "Einkauf abgeschlossen",

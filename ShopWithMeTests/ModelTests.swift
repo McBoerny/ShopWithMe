@@ -356,4 +356,37 @@ struct ModelTests {
         #expect(verbleibende.count == 1)
         #expect(verbleibende.first?.id == andererEintrag.id)
     }
+
+    @Test
+    func passendesFindetGeschaeftAnhandDesNamensOderEinesAlternativenNamens() {
+        let rewe = Geschaeft(name: "Rewe", typ: .lebensmittel)
+        rewe.alternativeNamen = ["REWE Center Musterstadt"]
+        let edeka = Geschaeft(name: "Edeka", typ: .lebensmittel)
+
+        #expect(Geschaeft.passendes(fuerErkannterName: "REWE Musterstadt", unter: [rewe, edeka]) === rewe)
+        #expect(Geschaeft.passendes(fuerErkannterName: "REWE Center Musterstadt Filiale 12", unter: [rewe, edeka]) === rewe)
+        #expect(Geschaeft.passendes(fuerErkannterName: "Netto", unter: [rewe, edeka]) == nil)
+        #expect(Geschaeft.passendes(fuerErkannterName: "", unter: [rewe, edeka]) == nil)
+    }
+
+    @Test
+    func alternativenNamenLernenIgnoriertLeereUndBereitsBekannteNamen() {
+        let rewe = Geschaeft(name: "Rewe", typ: .lebensmittel)
+
+        rewe.alternativenNamenLernen("REWE Center Musterstadt")
+        #expect(rewe.alternativeNamen == ["REWE Center Musterstadt"])
+
+        // Erneutes Lernen desselben (auch groß-/kleinschreibungs-abweichenden) Namens
+        // legt kein Duplikat an.
+        rewe.alternativenNamenLernen("rewe center musterstadt")
+        #expect(rewe.alternativeNamen == ["REWE Center Musterstadt"])
+
+        // Der eigentliche Name selbst wird nicht zusätzlich als Alias gelernt.
+        rewe.alternativenNamenLernen("Rewe")
+        #expect(rewe.alternativeNamen == ["REWE Center Musterstadt"])
+
+        // Leerer Name wird ignoriert.
+        rewe.alternativenNamenLernen("   ")
+        #expect(rewe.alternativeNamen == ["REWE Center Musterstadt"])
+    }
 }

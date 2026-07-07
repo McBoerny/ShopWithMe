@@ -152,12 +152,56 @@ final class Geschaeft {
     /// `docs/GESCHAEFTSERKENNUNG.md`.
     @Relationship(deleteRule: .cascade, inverse: \KaufEintrag.geschaeft)
     var kaufEintraege: [KaufEintrag] = []
+    /// Rohwert für ``alternativeNamen`` — durch `\n` getrennt gespeichert. Optional,
+    /// damit vor Einführung dieses Attributs angelegte Geschäfte beim automatischen
+    /// Laden nicht abstürzen (siehe `docs/BELEGSCAN.md`).
+    private var alternativeNamenRaw: String?
+    /// Zusätzliche Namen, unter denen dieses Geschäft auf einem Kassenbon oder
+    /// Preisschild erkannt werden kann (z.B. Kurzform oder Filial-Zusatz wie
+    /// „REWE Center Musterstadt“ für „Rewe“) — gelernt beim automatischen
+    /// Geschäfts-Abgleich in ``BelegScanView``/``PreisschildScanView``, siehe
+    /// ``alternativenNamenLernen(_:)`` und `docs/BELEGSCAN.md`.
+    var alternativeNamen: [String] {
+        get { (alternativeNamenRaw ?? "").split(separator: "\n").map(String.init) }
+        set { alternativeNamenRaw = newValue.isEmpty ? nil : newValue.joined(separator: "\n") }
+    }
 
     init(name: String, typ: GeschaeftTyp, adresse: String? = nil) {
         self.id = UUID()
         self.name = name
         self.typ = typ
         self.adresse = adresse
+    }
+
+    /// Merkt sich `name` als zusätzlichen ``alternativeNamen``-Eintrag dieses
+    /// Geschäfts, falls er weder dem eigentlichen ``name`` noch einem bereits
+    /// bekannten Alias entspricht (kein Duplikat). Grundlage für das automatische
+    /// Wiedererkennen desselben Geschäfts bei künftigen Scans — siehe
+    /// ``passendes(fuerErkannterName:unter:)``.
+    func alternativenNamenLernen(_ name: String) {
+        let getrimmt = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !getrimmt.isEmpty,
+              getrimmt.localizedCaseInsensitiveCompare(self.name) != .orderedSame,
+              !alternativeNamen.contains(where: { $0.localizedCaseInsensitiveCompare(getrimmt) == .orderedSame })
+        else { return }
+        alternativeNamen.append(getrimmt)
+    }
+
+    /// Sucht unter `geschaefte` dasjenige, dessen ``name`` oder ``alternativeNamen``
+    /// zum per KI erkannten `erkannterName` eines Kassenbons/Preisschilds passt
+    /// (beidseitiger `localizedCaseInsensitiveContains`-Abgleich, analog
+    /// ``KaufEintrag/gelernteZuordnung(fuerErkannterName:in:)``). `nil`, falls
+    /// `erkannterName` leer ist oder kein Treffer existiert — dann fragt die
+    /// aufrufende Scan-Ansicht über `GeschaeftWahlSheet` nach.
+    static func passendes(fuerErkannterName erkannterName: String, unter geschaefte: [Geschaeft]) -> Geschaeft? {
+        let erkannterName = erkannterName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !erkannterName.isEmpty else { return nil }
+        func passt(_ bekannterName: String) -> Bool {
+            guard !bekannterName.isEmpty else { return false }
+            return bekannterName.localizedCaseInsensitiveContains(erkannterName)
+                || erkannterName.localizedCaseInsensitiveContains(bekannterName)
+        }
+        return geschaefte.first { passt($0.name) || $0.alternativeNamen.contains(where: passt) }
     }
 
     /// Alle Artikelkategorien, die in diesem Geschäft verfügbar sind.

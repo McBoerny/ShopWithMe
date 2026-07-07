@@ -13,19 +13,44 @@ import PhotosUI
 /// Mitlern-Logik (``KaufEintrag/gelernteZuordnung(fuerErkannterName:in:)``,
 /// ``alternativerName``) entspricht ansonsten dem Belegscan, siehe
 /// `docs/PREISSCHILD_SCAN.md`.
+///
+/// Wird ohne ``vorgegebenesGeschaeft`` gestartet (z.B. nachträglich zuhause, ohne
+/// vorher ein Geschäft zu wählen), versucht diese Ansicht das Geschäft nach dem Scan
+/// automatisch über ``Geschaeft/passendes(fuerErkannterName:unter:)`` zuzuordnen und
+/// fragt sonst über ``GeschaeftWahlSheet`` nach — identisches Verhalten zu
+/// ``BelegScanView``, siehe `docs/BELEGSCAN.md` → „Automatischer Geschäfts-Abgleich“.
 struct PreisschildScanView: View {
-    let geschaeft: Geschaeft
+    /// Bereits feststehendes Geschäft, wenn von einer Geschäfts-Detailseite aus
+    /// aufgerufen — `nil`, wenn der Scan geschäftslos gestartet wurde.
+    let vorgegebenesGeschaeft: Geschaeft?
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Query(sort: \Geschaeft.name) private var alleGeschaefte: [Geschaeft]
 
     @State private var ausgewaehltesFoto: PhotosPickerItem?
     @State private var zeigeKamera = false
     @State private var laeuft = false
     @State private var fehlermeldung: String?
     @State private var bearbeitbarePosition: BearbeitbarePreisschildPosition?
+    @State private var erkanntesGeschaeft: Geschaeft?
+    @State private var erkannterGeschaeftName = ""
+    @State private var zeigeGeschaeftWahl = false
 
     private let scanner: PriceTagScanService = VisionFoundationModelsPriceTagScanner()
+
+    /// Siehe ``BelegScanView/geschaeftAbgleichNoetig``.
+    private var geschaeftAbgleichNoetig: Bool { vorgegebenesGeschaeft == nil }
+
+    init(geschaeft: Geschaeft) {
+        self.vorgegebenesGeschaeft = geschaeft
+    }
+
+    /// Scannt ein Preisschild, ohne vorher ein Geschäft festzulegen — siehe
+    /// ``geschaeftAbgleichNoetig``.
+    init() {
+        self.vorgegebenesGeschaeft = nil
+    }
 
     var body: some View {
         NavigationStack {
@@ -36,13 +61,16 @@ struct PreisschildScanView: View {
                             get: { bearbeitbarePosition },
                             set: { self.bearbeitbarePosition = $0 }
                         ),
+                        geschaeftAbgleichNoetig: geschaeftAbgleichNoetig,
+                        erkanntesGeschaeft: erkanntesGeschaeft,
+                        geschaeftWaehlen: { zeigeGeschaeftWahl = true },
                         uebernehmen: uebernehmen
                     )
                 } else {
                     AufnahmeAnsicht(
                         laeuft: laeuft,
                         fehlermeldung: fehlermeldung,
-                        geschaeftName: geschaeft.name,
+                        geschaeftName: vorgegebenesGeschaeft?.name ?? "",
                         ausgewaehltesFoto: $ausgewaehltesFoto,
                         kameraOeffnen: { zeigeKamera = true }
                     )
@@ -60,6 +88,11 @@ struct PreisschildScanView: View {
             KameraAufnahmeView { bild in
                 zeigeKamera = false
                 verarbeite(bild: bild)
+            }
+        }
+        .sheet(isPresented: $zeigeGeschaeftWahl) {
+            GeschaeftWahlSheet(erkannterName: erkannterGeschaeftName) { gewaehlt in
+                erkanntesGeschaeft = gewaehlt
             }
         }
         .onChange(of: ausgewaehltesFoto) { _, neuesFoto in
@@ -80,6 +113,7 @@ struct PreisschildScanView: View {
             defer { laeuft = false }
             do {
                 let ergebnis = try await scanner.auswerten(bild: bild)
+                geschaeftAbgleichen(erkannterName: ergebnis.geschaeftName)
                 let bekannterVerlauf = (try? modelContext.fetch(FetchDescriptor<KaufEintrag>())) ?? []
                 let gelernt = KaufEintrag.gelernteZuordnung(
                     fuerErkannterName: ergebnis.artikelName,
@@ -97,6 +131,21 @@ struct PreisschildScanView: View {
         }
     }
 
+    /// Siehe ``BelegScanView/geschaeftAbgleichen(erkannterName:)``.
+    private func geschaeftAbgleichen(erkannterName: String) {
+        erkannterGeschaeftName = erkannterName
+        guard geschaeftAbgleichNoetig else {
+            erkanntesGeschaeft = vorgegebenesGeschaeft
+            return
+        }
+        if let treffer = Geschaeft.passendes(fuerErkannterName: erkannterName, unter: alleGeschaefte) {
+            erkanntesGeschaeft = treffer
+        } else {
+            erkanntesGeschaeft = nil
+            zeigeGeschaeftWahl = true
+        }
+    }
+
     private func uebernehmen() {
         guard let bearbeitbarePosition else { return }
         Task {
@@ -109,10 +158,13 @@ struct PreisschildScanView: View {
             // Diskrete Einzelaktion → ein Micro-Lease (siehe
             // `docs/DATABASE_CONCURRENCY.md` → „Vollständiger Schreibvorgang-Katalog“).
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                if !erkannterGeschaeftName.isEmpty {
+                    erkanntesGeschaeft?.alternativenNamenLernen(erkannterGeschaeftName)
+                }
                 let artikel = bearbeitbarePosition.gelernterArtikel ?? passendesArtikel(fuer: name)
                 let neuerEintrag = KaufEintrag(
                     artikel: artikel,
-                    geschaeft: geschaeft,
+                    geschaeft: erkanntesGeschaeft,
                     kategorie: artikel?.kategorie,
                     preis: preis,
                     datum: .now
@@ -170,7 +222,9 @@ private struct AufnahmeAnsicht: View {
                 ContentUnavailableView {
                     Label("Preisschild scannen", systemImage: "tag.viewfinder")
                 } description: {
-                    Text("Fotografiere ein Preisschild im Regal von „\(geschaeftName)“ oder wähle ein Foto aus deiner Mediathek.")
+                    Text(geschaeftName.isEmpty
+                         ? "Fotografiere ein Preisschild im Regal oder wähle ein Foto aus deiner Mediathek. Das Geschäft wird nach Möglichkeit automatisch erkannt."
+                         : "Fotografiere ein Preisschild im Regal von „\(geschaeftName)“ oder wähle ein Foto aus deiner Mediathek.")
                 } actions: {
                     VStack(spacing: 12) {
                         if UIImagePickerController.isSourceTypeAvailable(.camera) {
@@ -224,10 +278,33 @@ private struct KameraAufnahmeView: UIViewControllerRepresentable {
 /// Editierbare Einzelposition zur Kontrolle vor dem Übernehmen.
 private struct ErgebnisAnsicht: View {
     @Binding var position: BearbeitbarePreisschildPosition
+    /// Siehe ``BelegScanView/ErgebnisListe``.
+    let geschaeftAbgleichNoetig: Bool
+    let erkanntesGeschaeft: Geschaeft?
+    let geschaeftWaehlen: () -> Void
     let uebernehmen: () -> Void
 
     var body: some View {
         Form {
+            if geschaeftAbgleichNoetig {
+                Section {
+                    Button(action: geschaeftWaehlen) {
+                        HStack {
+                            Text("Geschäft")
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            Text(erkanntesGeschaeft?.name ?? "Wählen")
+                                .foregroundStyle(erkanntesGeschaeft == nil ? Color.accentColor : .secondary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                } footer: {
+                    Text(erkanntesGeschaeft == nil
+                         ? "Auf dem Foto wurde kein bekanntes Geschäft erkannt — bitte auswählen, damit der Preis diesem Geschäft zugeordnet wird."
+                         : "Automatisch erkannt. Bei Bedarf antippen, um ein anderes Geschäft zu wählen.")
+                }
+            }
+
             Section {
                 HStack {
                     TextField("Artikel", text: $position.artikelName)

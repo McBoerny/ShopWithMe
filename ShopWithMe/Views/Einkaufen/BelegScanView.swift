@@ -9,14 +9,24 @@ import PhotosUI
 /// sich ein Beleg auch direkt für ein ``Geschaeft`` scannen — dort entsteht für jede
 /// erkannte Position ein neuer, eigenständiger ``KaufEintrag``, standardmäßig mit dem
 /// heutigen Datum (vom Anwender bei Bedarf überschreibbar, siehe ``BelegScanView``).
+///
+/// ``unbekannt`` deckt den Fall ab, dass der Beleg nachträglich (z.B. zuhause) ohne
+/// vorherige Geschäftswahl gescannt wird — dafür versucht ``BelegScanView`` das
+/// Geschäft automatisch über ``Geschaeft/passendes(fuerErkannterName:unter:)``
+/// zuzuordnen bzw. fragt über ``GeschaeftWahlSheet`` nach, siehe `docs/BELEGSCAN.md`.
 enum BelegScanKontext {
     case einkaufsvorgang(Einkaufsvorgang)
     case geschaeft(Geschaeft)
+    case unbekannt
 
+    /// Das bereits feststehende Geschäft dieses Kontexts — `nil`, wenn es (noch)
+    /// automatisch erkannt oder vom Anwender gewählt werden muss (``unbekannt``, oder
+    /// ein ``einkaufsvorgang`` ohne gewähltes Geschäft).
     var geschaeft: Geschaeft? {
         switch self {
         case .einkaufsvorgang(let einkaufsvorgang): einkaufsvorgang.geschaeft
         case .geschaeft(let geschaeft): geschaeft
+        case .unbekannt: nil
         }
     }
 }
@@ -50,6 +60,7 @@ struct BelegScanView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Query(sort: \Geschaeft.name) private var alleGeschaefte: [Geschaeft]
 
     @State private var ausgewaehltesFoto: PhotosPickerItem?
     @State private var zeigeKamera = false
@@ -57,8 +68,24 @@ struct BelegScanView: View {
     @State private var fehlermeldung: String?
     @State private var bearbeitbarePositionen: [BearbeitbarePosition]?
     @State private var belegDatum: Date
+    /// Das für die Übernahme zu verwendende Geschäft — bei ``BelegScanKontext/geschaeft(_:)``
+    /// sofort feststehend, sonst nach dem Scan automatisch erkannt
+    /// (``Geschaeft/passendes(fuerErkannterName:unter:)``) oder vom Anwender über
+    /// ``GeschaeftWahlSheet`` gewählt. Siehe ``geschaeftAbgleichNoetig``.
+    @State private var erkanntesGeschaeft: Geschaeft?
+    /// Der auf dem Beleg erkannte, rohe Geschäftsname (``BelegErgebnis/geschaeftName``)
+    /// — Grundlage sowohl für den automatischen Abgleich als auch fürs Mitlernen
+    /// (``Geschaeft/alternativenNamenLernen(_:)``) beim Übernehmen.
+    @State private var erkannterGeschaeftName = ""
+    @State private var zeigeGeschaeftWahl = false
 
     private let scanner: ReceiptScanService = VisionFoundationModelsReceiptScanner()
+
+    /// Muss das Geschäft dieses Scans erst noch bestimmt werden (automatisch oder per
+    /// Anwenderauswahl)? Nur der Fall, wenn der ``kontext`` noch kein Geschäft
+    /// feststehend mitbringt — bei ``BelegScanKontext/geschaeft(_:)`` bleibt das
+    /// bisherige Verhalten unverändert.
+    private var geschaeftAbgleichNoetig: Bool { kontext.geschaeft == nil }
 
     init(einkaufsvorgang: Einkaufsvorgang) {
         self.kontext = .einkaufsvorgang(einkaufsvorgang)
@@ -67,6 +94,13 @@ struct BelegScanView: View {
 
     init(geschaeft: Geschaeft) {
         self.kontext = .geschaeft(geschaeft)
+        _belegDatum = State(initialValue: .now)
+    }
+
+    /// Scannt einen Beleg, ohne vorher ein Geschäft festzulegen — z.B. wenn der Beleg
+    /// nachträglich zuhause gescannt wird. Siehe ``geschaeftAbgleichNoetig``.
+    init() {
+        self.kontext = .unbekannt
         _belegDatum = State(initialValue: .now)
     }
 
@@ -80,6 +114,9 @@ struct BelegScanView: View {
                             set: { self.bearbeitbarePositionen = $0 }
                         ),
                         belegDatum: $belegDatum,
+                        geschaeftAbgleichNoetig: geschaeftAbgleichNoetig,
+                        erkanntesGeschaeft: erkanntesGeschaeft,
+                        geschaeftWaehlen: { zeigeGeschaeftWahl = true },
                         uebernehmen: uebernehmen
                     )
                 } else {
@@ -106,6 +143,11 @@ struct BelegScanView: View {
                 verarbeite(bild: bild)
             }
         }
+        .sheet(isPresented: $zeigeGeschaeftWahl) {
+            GeschaeftWahlSheet(erkannterName: erkannterGeschaeftName) { gewaehlt in
+                erkanntesGeschaeft = gewaehlt
+            }
+        }
         .onChange(of: ausgewaehltesFoto) { _, neuesFoto in
             guard let neuesFoto else { return }
             Task {
@@ -127,6 +169,7 @@ struct BelegScanView: View {
                 if let erkanntesDatum = ergebnis.erkanntesDatum {
                     belegDatum = erkanntesDatum
                 }
+                geschaeftAbgleichen(erkannterName: ergebnis.geschaeftName)
                 let bekannterVerlauf = (try? modelContext.fetch(FetchDescriptor<KaufEintrag>())) ?? []
                 bearbeitbarePositionen = ergebnis.positionen.map { position in
                     let gelernt = KaufEintrag.gelernteZuordnung(
@@ -146,12 +189,40 @@ struct BelegScanView: View {
         }
     }
 
+    /// Bestimmt ``erkanntesGeschaeft`` nach dem Scan: bei bereits feststehendem
+    /// ``kontext``-Geschäft unverändert übernommen, sonst per
+    /// ``Geschaeft/passendes(fuerErkannterName:unter:)`` gegen alle vorhandenen
+    /// Geschäfte (inkl. gelernter ``Geschaeft/alternativeNamen``) abgeglichen. Ohne
+    /// Treffer öffnet sich sofort ``GeschaeftWahlSheet`` (weiterhin abbrechbar, dann
+    /// bleibt ``erkanntesGeschaeft`` `nil` — wie bisher bei Käufen ohne Geschäft).
+    private func geschaeftAbgleichen(erkannterName: String) {
+        erkannterGeschaeftName = erkannterName
+        guard geschaeftAbgleichNoetig else {
+            erkanntesGeschaeft = kontext.geschaeft
+            return
+        }
+        if let treffer = Geschaeft.passendes(fuerErkannterName: erkannterName, unter: alleGeschaefte) {
+            erkanntesGeschaeft = treffer
+        } else {
+            erkanntesGeschaeft = nil
+            zeigeGeschaeftWahl = true
+        }
+    }
+
     private func uebernehmen() {
         Task {
             // Ein Micro-Lease um den gesamten Beleg-Vorgang statt pro Position —
             // fachlich eine einzige Aktion (siehe `docs/DATABASE_CONCURRENCY.md` →
             // „Vollständiger Schreibvorgang-Katalog“).
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                if !erkannterGeschaeftName.isEmpty {
+                    erkanntesGeschaeft?.alternativenNamenLernen(erkannterGeschaeftName)
+                }
+
+                if case .einkaufsvorgang(let einkaufsvorgang) = kontext, einkaufsvorgang.geschaeft == nil {
+                    einkaufsvorgang.geschaeft = erkanntesGeschaeft
+                }
+
                 for position in bearbeitbarePositionen ?? [] {
                     let name = position.artikelName.trimmingCharacters(in: .whitespacesAndNewlines)
                     let erkannterName = position.erkannterName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -183,11 +254,11 @@ struct BelegScanView: View {
                             modelContext.insert(neuerEintrag)
                             neuerEintrag.einkaufsvorgang = einkaufsvorgang
                         }
-                    case .geschaeft(let geschaeft):
+                    case .geschaeft, .unbekannt:
                         let artikel = position.gelernterArtikel ?? passendesArtikel(fuer: name)
                         let neuerEintrag = KaufEintrag(
                             artikel: artikel,
-                            geschaeft: geschaeft,
+                            geschaeft: erkanntesGeschaeft,
                             kategorie: artikel?.kategorie,
                             preis: preis,
                             datum: belegDatum
@@ -265,7 +336,9 @@ private struct AufnahmeAnsicht: View {
                 ContentUnavailableView {
                     Label("Beleg scannen", systemImage: "doc.text.viewfinder")
                 } description: {
-                    Text("Fotografiere den Kassenbon von „\(geschaeftName)“ oder wähle ein Foto aus deiner Mediathek.")
+                    Text(geschaeftName.isEmpty
+                         ? "Fotografiere den Kassenbon oder wähle ein Foto aus deiner Mediathek. Das Geschäft wird nach Möglichkeit automatisch erkannt."
+                         : "Fotografiere den Kassenbon von „\(geschaeftName)“ oder wähle ein Foto aus deiner Mediathek.")
                 } actions: {
                     VStack(spacing: 12) {
                         if UIImagePickerController.isSourceTypeAvailable(.camera) {
@@ -320,10 +393,35 @@ private struct KameraAufnahmeView: UIViewControllerRepresentable {
 private struct ErgebnisListe: View {
     @Binding var positionen: [BearbeitbarePosition]
     @Binding var belegDatum: Date
+    /// Nur `true`, wenn der ``BelegScanKontext`` kein Geschäft feststehend mitbringt
+    /// (siehe ``BelegScanView/geschaeftAbgleichNoetig``) — blendet die
+    /// Geschäfts-Zeile unten ein.
+    let geschaeftAbgleichNoetig: Bool
+    let erkanntesGeschaeft: Geschaeft?
+    let geschaeftWaehlen: () -> Void
     let uebernehmen: () -> Void
 
     var body: some View {
         List {
+            if geschaeftAbgleichNoetig {
+                Section {
+                    Button(action: geschaeftWaehlen) {
+                        HStack {
+                            Text("Geschäft")
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            Text(erkanntesGeschaeft?.name ?? "Wählen")
+                                .foregroundStyle(erkanntesGeschaeft == nil ? Color.accentColor : .secondary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                } footer: {
+                    Text(erkanntesGeschaeft == nil
+                         ? "Auf dem Beleg wurde kein bekanntes Geschäft erkannt — bitte auswählen, damit die Preise diesem Geschäft zugeordnet werden."
+                         : "Automatisch anhand des Belegs erkannt. Bei Bedarf antippen, um ein anderes Geschäft zu wählen.")
+                }
+            }
+
             Section {
                 DatePicker("Einkaufsdatum", selection: $belegDatum, displayedComponents: .date)
             } footer: {
