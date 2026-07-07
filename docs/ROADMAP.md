@@ -57,6 +57,20 @@ die übrige Doku aktualisiert wird): `docs/BUILD_WORKFLOW.md`.
   feststehendes Geschäft, siehe `docs/PREISSCHILD_SCAN.md` → „Kein geschäftsloser
   Einstieg“) sowie Scan-Buttons in `EinkaufenView` bei bereits gewähltem Geschäft.
   Siehe `docs/BELEGSCAN.md` → „Automatischer Geschäfts-Abgleich“.
+- [x] **v0.5** — Verfügbarkeitsfilter beim Einkaufen direkt im laufenden Einkauf statt
+  als persistente Geschäfts-Einstellung: `Geschaeft.artikelFilterModus`/
+  `ArtikelFilterModus` entfernt. Drei vorherige Einzel-Buttons zu einer einzigen
+  Schnellauswahl in der Toolbar verschmolzen (neben „Artikel hinzufügen“): kurzer
+  Tap schaltet „Nur offene“/„Auch abgehakte Artikel“ um, langer Tap (`Menu` mit
+  `primaryAction`) den Lernmodus (alle Artikel, unabhängig vom Verfügbarkeitsfilter).
+- [x] **v0.5** — Standort-Vorschlag „Ignorieren“ und „Alle Geschäfte in der Nähe“:
+  neues Modell `IgnorierterGeschaeftsVorschlag` merkt sich dauerhaft ignorierte
+  Vorschläge; neue Liste zeigt alle Läden im 100m-Radius inkl. ignorierter mit
+  „Wieder aufnehmen“-Option. Zusätzlich bleibt „Neues Geschäft hinzufügen“ im
+  selben Geschäft-Menü weiterhin rein manuell (unabhängig von Standort/Apple Maps)
+  möglich. Suchradius in Debug-Builds über neue Einstellungen testweise erhöhbar
+  (`DebugEinstellungen`, `#if DEBUG`, kein Teil des Release-Binaries). Siehe
+  `docs/GESCHAEFTSERKENNUNG.md`.
 
 Damit ist die in der Kickoff-Unterhaltung beschriebene Kernfunktionalität
 vollständig umgesetzt; weitere Ideen siehe „Zukünftig“ unten.

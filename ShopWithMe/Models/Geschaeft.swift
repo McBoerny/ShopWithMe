@@ -70,8 +70,6 @@ enum RegalSortierModus: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-/// Legt fest, welche Artikel der globalen Einkaufsliste beim Einkaufen in einem
-/// bestimmten ``Geschaeft`` angezeigt werden.
 /// Ein Geschäft, das der Anwender zum Einkaufen aufsucht.
 ///
 /// Kategorien sind wichtiger als Regale: Ein Geschäft kann ``ArtikelKategorie``n

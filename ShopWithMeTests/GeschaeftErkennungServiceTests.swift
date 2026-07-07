@@ -188,4 +188,30 @@ struct GeschaeftErkennungServiceTests {
 
         #expect(dedupliziert.count == 2)
     }
+
+    @Test
+    func dedupliziertBekanntenTrefferOhneKoordinatenGegenUnbekanntenPerNamensTeilstring() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        // Manuell angelegtes Geschäft ohne gespeicherten Standort (breitengrad/
+        // laengengrad nil) — der Koordinatenabgleich in `istSelberLaden` kann hier
+        // nicht greifen, nur der (Teilstring-)Namensabgleich. Vor der Konsolidierung
+        // auf `istGleicherOrt` prüfte `istSelberLaden` nur exakte Namensgleichheit
+        // und hätte diesen Fall fälschlich als zwei verschiedene Läden gelistet.
+        let bioEcke = Geschaeft(name: "Bio Ecke", typ: .lebensmittel)
+        context.insert(bioEcke)
+
+        // Ein zweiter Apple-Maps-Treffer für denselben physischen Laden, dessen Name
+        // "Bio Ecke" als Teilstring enthält, aber nicht exakt gleich ist.
+        let unbekannterTreffer = mapItem(name: "Bio Ecke Frankfurt", latitude: 52.5, longitude: 13.4)
+
+        let eintraege = [
+            GeschaeftInDerNaeheEintrag(vorschlag: .bekannt(bioEcke), istIgnoriert: false),
+            GeschaeftInDerNaeheEintrag(vorschlag: .unbekannt(unbekannterTreffer), istIgnoriert: false),
+        ]
+
+        let dedupliziert = GeschaeftErkennungService.dedupliziert(eintraege)
+
+        #expect(dedupliziert.count == 1)
+    }
 }

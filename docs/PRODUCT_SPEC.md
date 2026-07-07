@@ -94,12 +94,18 @@ auf die Einkaufsliste kommt.
 - Ein Einkauf lässt sich jederzeit abschließen, auch wenn nicht alle Artikel abgehakt
   wurden — nicht gekaufte Artikel bleiben einfach auf der globalen Einkaufsliste.
 
-## Standortbezug (zukünftig)
+## Standortbezug
 
-Über Standortdaten soll dem Anwender künftig automatisch die passende Einkaufsliste des
-Geschäfts angezeigt werden, in dessen Nähe er sich befindet. **Nicht Teil der aktuellen
-Umsetzung** — Datenmodell hält Lat/Long am Geschäft bereits vor, aber es gibt noch keine
-Standort-Logik/Berechtigung.
+**Umgesetzt** (`GeschaeftErkennungService`, Details in `docs/GESCHAEFTSERKENNUNG.md`):
+Beim Öffnen des Einkaufen-Tabs erkennt die App per einmaliger Standortabfrage („Bei
+Nutzung“, kein Hintergrund-Tracking) über Apple Maps, ob sich der Anwender in der Nähe
+eines Ladens befindet, und schlägt ihn in einem Banner vor — ein bereits angelegtes
+Geschäft direkt zur Auswahl, ein noch unbekannter Laden zum Anlegen mit
+vorausgefüllten Stammdaten. Ein Vorschlag lässt sich dauerhaft ignorieren; „Alle
+Geschäfte in der Nähe“ zeigt zusätzlich alle Läden im 100m-Radius (inkl. ignorierter,
+mit Möglichkeit zum Wiederaufnehmen). Ein neues Geschäft lässt sich davon unabhängig
+weiterhin jederzeit rein manuell anlegen — die Standort-Erkennung ist nur eine
+Ergänzung, nie der einzige Weg.
 
 ## Belegscan / Preishistorie
 
@@ -135,7 +141,6 @@ lassen.
 
 - Keine macOS-Version.
 - Kein iCloud-Sync.
-- Keine Standort-basierte automatische Ladenerkennung (nur Datenmodell vorbereitet).
 
 Siehe [ARCHITECTURE.md](ARCHITECTURE.md) für die technische Umsetzung,
 [ROADMAP.md](ROADMAP.md) für den Checkpoint-Plan und [DECISIONS.md](DECISIONS.md) für

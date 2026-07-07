@@ -71,14 +71,14 @@ erstelltAm: Date                     artikel: Artikel? ────────�
                                       notiz: String?
                                       erstelltAm: Date
 
-KategorieBesuchsStatistik
-─────────────────────────
-id: UUID
-geschaeft: Geschaeft?
-kategorie: ArtikelKategorie?
-besucheAnzahl: Int
-summeSequenzPosition: Double
-→ durchschnittlichePosition (computed = summe/anzahl)
+KategorieBesuchsStatistik                IgnorierterGeschaeftsVorschlag
+─────────────────────────                ──────────────────────────────
+id: UUID                                  name: String
+geschaeft: Geschaeft?                     breitengrad/laengengrad: Double?
+kategorie: ArtikelKategorie?              ignoriertAm: Date
+besucheAnzahl: Int                        (keine Relationship zu Geschaeft —
+summeSequenzPosition: Double               Name/Koordinaten genügen für den
+→ durchschnittlichePosition (computed)     Abgleich, siehe unten)
 ```
 
 Design-Entscheidung (aktualisiert, siehe `docs/DECISIONS.md`): **Kategorien sind

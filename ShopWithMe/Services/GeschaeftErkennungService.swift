@@ -31,6 +31,15 @@ enum GeschaeftVorschlag {
             return (mapItem.location.coordinate.latitude, mapItem.location.coordinate.longitude)
         }
     }
+
+    /// Beschriftung des primären Aktions-Buttons in ``GeschaeftVorschlagBanner`` und
+    /// ``GeschaeftInDerNaeheZeile``.
+    var aktionsTitel: String {
+        switch self {
+        case .bekannt: return "Auswählen"
+        case .unbekannt: return "Hinzufügen"
+        }
+    }
 }
 
 /// Ein Eintrag in der Liste „Alle Geschäfte in der Nähe“
@@ -41,7 +50,10 @@ enum GeschaeftVorschlag {
 struct GeschaeftInDerNaeheEintrag: Identifiable {
     let id = UUID()
     let vorschlag: GeschaeftVorschlag
-    let istIgnoriert: Bool
+    /// `var` statt `let`, damit ``GeschaeftAlleInDerNaeheSheet`` nach „Wieder
+    /// aufnehmen“ den Ignoriert-Status optimistisch lokal aktualisieren kann, ohne
+    /// die ganze Liste neu von ``GeschaeftErkennungService`` abzufragen.
+    var istIgnoriert: Bool
 }
 
 /// Erkennt anhand des aktuellen Standorts, ob sich der Anwender bei einem bekannten
@@ -157,15 +169,32 @@ enum GeschaeftErkennungService {
 
     /// Zwei ``GeschaeftVorschlag``e gelten als derselbe Laden, wenn sie auf dasselbe
     /// ``Geschaeft`` verweisen, oder (mind. einer davon `unbekannt`) bei Namens- ODER
-    /// Koordinatenübereinstimmung — analog ``istBekannterTreffer(_:fuer:)``.
+    /// Koordinatenübereinstimmung (``istGleicherOrt(nameA:koordinatenA:nameB:koordinatenB:)``).
     private static func istSelberLaden(_ a: GeschaeftVorschlag, _ b: GeschaeftVorschlag) -> Bool {
         if case .bekannt(let g1) = a, case .bekannt(let g2) = b {
             return g1.persistentModelID == g2.persistentModelID
         }
-        if a.name.localizedCaseInsensitiveCompare(b.name) == .orderedSame { return true }
-        if let ka = a.koordinaten, let kb = b.koordinaten {
-            let ortA = CLLocation(latitude: ka.breitengrad, longitude: ka.laengengrad)
-            let ortB = CLLocation(latitude: kb.breitengrad, longitude: kb.laengengrad)
+        return istGleicherOrt(nameA: a.name, koordinatenA: a.koordinaten, nameB: b.name, koordinatenB: b.koordinaten)
+    }
+
+    /// Zentrale Namens-/Koordinaten-Matching-Logik, die
+    /// ``istBekannterTreffer(_:fuer:)``, ``istIgnoriert(_:ignorierte:)``,
+    /// ``istSelberLaden(_:_:)`` und ``ignorierteEintraege(fuer:in:)`` gemeinsam
+    /// nutzen: Namensübereinstimmung (exakt ODER Teilstring in beide Richtungen —
+    /// deckt Kurzformen wie Apple-Maps-„REWE“ vs. selbst vergebenem „Rewe am Markt“
+    /// ab) ODER Koordinaten innerhalb ``koordinatenTreffertoleranz``, falls für beide
+    /// Seiten vorhanden.
+    private static func istGleicherOrt(
+        nameA: String,
+        koordinatenA: (breitengrad: Double, laengengrad: Double)?,
+        nameB: String,
+        koordinatenB: (breitengrad: Double, laengengrad: Double)?
+    ) -> Bool {
+        if nameA.localizedCaseInsensitiveCompare(nameB) == .orderedSame { return true }
+        if nameA.localizedCaseInsensitiveContains(nameB) || nameB.localizedCaseInsensitiveContains(nameA) { return true }
+        if let koordinatenA, let koordinatenB {
+            let ortA = CLLocation(latitude: koordinatenA.breitengrad, longitude: koordinatenA.laengengrad)
+            let ortB = CLLocation(latitude: koordinatenB.breitengrad, longitude: koordinatenB.laengengrad)
             return ortA.distance(from: ortB) < koordinatenTreffertoleranz
         }
         return false
@@ -225,17 +254,10 @@ enum GeschaeftErkennungService {
     }
 
     static func istBekannterTreffer(_ geschaeft: Geschaeft, fuer item: MKMapItem) -> Bool {
-        if let name = item.name {
-            if geschaeft.name.localizedCaseInsensitiveCompare(name) == .orderedSame { return true }
-            if geschaeft.name.localizedCaseInsensitiveContains(name) || name.localizedCaseInsensitiveContains(geschaeft.name) {
-                return true
-            }
-        }
-        if let breitengrad = geschaeft.breitengrad, let laengengrad = geschaeft.laengengrad {
-            let gespeicherterOrt = CLLocation(latitude: breitengrad, longitude: laengengrad)
-            if gespeicherterOrt.distance(from: item.location) < koordinatenTreffertoleranz { return true }
-        }
-        return false
+        istGleicherOrt(
+            nameA: geschaeft.name, koordinatenA: koordinatenPaar(geschaeft.breitengrad, geschaeft.laengengrad),
+            nameB: item.name ?? "", koordinatenB: koordinaten(fuer: item)
+        )
     }
 
     /// Prüft, ob `item` einem vom Anwender ignorierten Vorschlag (siehe
@@ -243,14 +265,10 @@ enum GeschaeftErkennungService {
     /// Koordinatenübereinstimmung genügt, analog ``istBekannterTreffer(_:fuer:)``.
     static func istIgnoriert(_ item: MKMapItem, ignorierte: [IgnorierterGeschaeftsVorschlag]) -> Bool {
         ignorierte.contains { ignoriert in
-            if let name = item.name, ignoriert.name.localizedCaseInsensitiveCompare(name) == .orderedSame {
-                return true
-            }
-            if let breitengrad = ignoriert.breitengrad, let laengengrad = ignoriert.laengengrad {
-                let ort = CLLocation(latitude: breitengrad, longitude: laengengrad)
-                if ort.distance(from: item.location) < koordinatenTreffertoleranz { return true }
-            }
-            return false
+            istGleicherOrt(
+                nameA: ignoriert.name, koordinatenA: koordinatenPaar(ignoriert.breitengrad, ignoriert.laengengrad),
+                nameB: item.name ?? "", koordinatenB: koordinaten(fuer: item)
+            )
         }
     }
 
@@ -262,15 +280,20 @@ enum GeschaeftErkennungService {
         in ignorierte: [IgnorierterGeschaeftsVorschlag]
     ) -> [IgnorierterGeschaeftsVorschlag] {
         ignorierte.filter { eintrag in
-            if eintrag.name.localizedCaseInsensitiveCompare(vorschlag.name) == .orderedSame { return true }
-            if let koordinaten = vorschlag.koordinaten,
-               let breitengrad = eintrag.breitengrad, let laengengrad = eintrag.laengengrad {
-                let ignoriertOrt = CLLocation(latitude: breitengrad, longitude: laengengrad)
-                let vorschlagOrt = CLLocation(latitude: koordinaten.breitengrad, longitude: koordinaten.laengengrad)
-                return ignoriertOrt.distance(from: vorschlagOrt) < koordinatenTreffertoleranz
-            }
-            return false
+            istGleicherOrt(
+                nameA: eintrag.name, koordinatenA: koordinatenPaar(eintrag.breitengrad, eintrag.laengengrad),
+                nameB: vorschlag.name, koordinatenB: vorschlag.koordinaten
+            )
         }
+    }
+
+    private static func koordinatenPaar(_ breitengrad: Double?, _ laengengrad: Double?) -> (breitengrad: Double, laengengrad: Double)? {
+        guard let breitengrad, let laengengrad else { return nil }
+        return (breitengrad, laengengrad)
+    }
+
+    private static func koordinaten(fuer item: MKMapItem) -> (breitengrad: Double, laengengrad: Double) {
+        (item.location.coordinate.latitude, item.location.coordinate.longitude)
     }
 
     static func entfernung(zu item: MKMapItem, von standort: CLLocation) -> CLLocationDistance {

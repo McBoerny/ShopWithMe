@@ -101,7 +101,11 @@ nicht erschien) manuell wählen kann, gibt es eine zweite, umfassendere Ansicht:
 - Ignorierte Einträge zeigen statt „Auswählen“/„Hinzufügen“ einen Button „Wieder
   aufnehmen“, der die passenden `IgnorierterGeschaeftsVorschlag`-Einträge über
   `GeschaeftErkennungService.ignorierteEintraege(fuer:in:)` (gleiche Namens-/
-  Koordinaten-Logik) löscht.
+  Koordinaten-Logik) löscht. `GeschaeftAlleInDerNaeheSheet` holt die Liste nur einmal
+  in `.task` (kein Live-`@Query`) — „Wieder aufnehmen“ aktualisiert deshalb zusätzlich
+  lokal `istIgnoriert` auf dem betroffenen `GeschaeftInDerNaeheEintrag` (jetzt `var`
+  statt `let`), sonst bliebe die Zeile bis zum erneuten Öffnen des Sheets fälschlich
+  auf „Ignoriert“ stehen.
 - **Zugriff:** Sowohl aus dem „…“-Menü des Banners als auch — für den Fall, dass
   gerade kein Banner sichtbar ist — dauerhaft aus dem Geschäft-Menü in der
   `EinkaufenView`-Toolbar (`principal`-Platzierung, gemeinsam mit dem bestehenden
@@ -123,10 +127,20 @@ nicht erschien) manuell wählen kann, gibt es eine zweite, umfassendere Ansicht:
   `GeschaeftErkennungService.dedupliziert(_:)` (aufgerufen am Ende von
   `alleInDerNaehe`) entfernt solche Duplikate: gleiches `Geschaeft`
   (`persistentModelID`) bei zwei `.bekannt`-Treffern, sonst Namens- ODER
-  Koordinatenübereinstimmung (analog `istBekannterTreffer(_:fuer:)`) — behält jeweils
-  den nächstgelegenen Eintrag, da `treffer` vorher nach Entfernung sortiert wird.
-  `internal` statt `private`, direkt getestet ohne echtes CoreLocation/MapKit
-  (`GeschaeftErkennungServiceTests`).
+  Koordinatenübereinstimmung — behält jeweils den nächstgelegenen Eintrag, da
+  `treffer` vorher nach Entfernung sortiert wird. `internal` statt `private`, direkt
+  getestet ohne echtes CoreLocation/MapKit (`GeschaeftErkennungServiceTests`).
+- **Zentrales Matching (`istGleicherOrt`):** `istBekannterTreffer(_:fuer:)`,
+  `istIgnoriert(_:ignorierte:)`, `istSelberLaden(_:_:)` (Dedup) und
+  `ignorierteEintraege(fuer:in:)` teilen sich seit einem Refactor eine gemeinsame
+  private Namens-/Koordinaten-Vergleichsfunktion, statt vier fast identische
+  Implementierungen zu pflegen. Das behebt nebenbei eine echte Lücke: vorher prüfte
+  nur `istBekannterTreffer` Namens-Teilstrings (z.B. Apple-Maps-„REWE“ vs. selbst
+  vergebenem „Rewe am Markt“) — `istSelberLaden` verglich Namen nur exakt und konnte
+  dadurch ein manuell angelegtes Geschäft ohne gespeicherte Koordinaten nicht mit
+  einem abweichend benannten Apple-Maps-Treffer für denselben Laden deduplizieren
+  (`GeschaeftAlleInDerNaeheSheet` hätte ihn doppelt gelistet). Jetzt nutzen alle vier
+  Stellen dieselbe (Teilstring-fähige) Logik.
 
 ## Suchradius im Debug-Build testweise überschreibbar
 

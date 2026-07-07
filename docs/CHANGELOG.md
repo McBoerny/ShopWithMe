@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.6 (Build 51) — Release-Review: Matching-Logik konsolidiert, zwei Bugs behoben
+
+Review vor dem Minor-Bump auf v0.6 (siehe `docs/RELEASE_CHECKLIST.md`) deckte zwei
+echte Bugs in der v0.5-Ladenerkennung auf, beide jetzt behoben:
+
+- **`GeschaeftErkennungService`**: `istBekannterTreffer(_:fuer:)`,
+  `istIgnoriert(_:ignorierte:)`, `istSelberLaden(_:_:)` (Dedup) und
+  `ignorierteEintraege(fuer:in:)` teilten sich vier fast identische Namens-/
+  Koordinaten-Matching-Implementierungen, die dabei leicht auseinandergelaufen
+  waren — nur `istBekannterTreffer` prüfte Namens-Teilstrings (z.B. Apple-Maps-
+  „REWE“ vs. „Rewe am Markt“), die anderen drei nur exakte Gleichheit. Auf eine
+  gemeinsame `istGleicherOrt(nameA:koordinatenA:nameB:koordinatenB:)` konsolidiert.
+- **Bug behoben**: dadurch konnte ein manuell angelegtes Geschäft ohne gespeicherte
+  Koordinaten nicht mit einem abweichend benannten Apple-Maps-Treffer für denselben
+  Laden dedupliziert werden — „Alle Geschäfte in der Nähe“ listete ihn doppelt.
+  Neuer Test `dedupliziertBekanntenTrefferOhneKoordinatenGegenUnbekanntenPerNamensTeilstring`.
+- **Bug behoben**: „Wieder aufnehmen“ in `GeschaeftAlleInDerNaeheSheet` aktualisierte
+  den lokal einmalig geladenen (`.task`, kein Live-`@Query`) Ignoriert-Status nicht —
+  die Zeile blieb bis zum erneuten Öffnen fälschlich auf „Ignoriert“ stehen.
+  `GeschaeftInDerNaeheEintrag.istIgnoriert` ist jetzt `var`, optimistisches lokales
+  Update direkt nach dem Tap.
+- `GeschaeftVorschlag.aktionsTitel` (neu) ersetzt zwei identische
+  `aktionsTitel`-Computed-Properties in `GeschaeftVorschlagBanner` und
+  `GeschaeftInDerNaeheZeile`.
+- Dokumentationsabgleich (`ARCHITECTURE.md`, `ROADMAP.md`, `PRODUCT_SPEC.md`) für
+  den gesamten v0.5-Zyklus, u.a. das veraltete „Standortbezug (zukünftig)“-Kapitel
+  in `PRODUCT_SPEC.md` (Standort-basierte Ladenerkennung ist längst umgesetzt).
+
 ## v0.5 (Build 50) — Suchradius im Debug-Build testweise überschreibbar
 
 - **`DebugEinstellungen`/`DebugEinstellungenView`** (neu, beide nur `#if DEBUG`):

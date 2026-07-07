@@ -297,13 +297,6 @@ private struct GeschaeftVorschlagBanner: View {
         }
     }
 
-    private var aktionsTitel: String {
-        switch vorschlag {
-        case .bekannt: return "Auswählen"
-        case .unbekannt: return "Hinzufügen"
-        }
-    }
-
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: "location.fill")
@@ -316,7 +309,7 @@ private struct GeschaeftVorschlagBanner: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Button(aktionsTitel, action: aktion)
+            Button(vorschlag.aktionsTitel, action: aktion)
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
             Menu {
@@ -381,7 +374,19 @@ private struct GeschaeftAlleInDerNaeheSheet: View {
                                 }
                                 dismiss()
                             },
-                            wiederAufnehmen: { wiederAufnehmen(eintrag.vorschlag) }
+                            wiederAufnehmen: {
+                                wiederAufnehmen(eintrag.vorschlag)
+                                // Optimistisches lokales Update: `eintraege` ist ein
+                                // einmaliger Snapshot (siehe `.task` unten), löst also
+                                // nicht automatisch neu auf, wenn `wiederAufnehmen` den
+                                // zugrundeliegenden `IgnorierterGeschaeftsVorschlag`
+                                // async löscht. Ohne dieses Update bliebe die Zeile bis
+                                // zum erneuten Öffnen des Sheets fälschlich auf
+                                // "Ignoriert"/"Wieder aufnehmen" stehen.
+                                if let index = self.eintraege?.firstIndex(where: { $0.id == eintrag.id }) {
+                                    self.eintraege?[index].istIgnoriert = false
+                                }
+                            }
                         )
                     }
                 } else {
@@ -417,13 +422,6 @@ private struct GeschaeftInDerNaeheZeile: View {
     let auswaehlen: () -> Void
     let wiederAufnehmen: () -> Void
 
-    private var aktionsTitel: String {
-        switch eintrag.vorschlag {
-        case .bekannt: return "Auswählen"
-        case .unbekannt: return "Hinzufügen"
-        }
-    }
-
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
@@ -440,7 +438,7 @@ private struct GeschaeftInDerNaeheZeile: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
             } else {
-                Button(aktionsTitel, action: auswaehlen)
+                Button(eintrag.vorschlag.aktionsTitel, action: auswaehlen)
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
             }
@@ -663,7 +661,7 @@ private struct EinkaufslisteView: View {
         }
         .navigationTitle(geschaeft?.name ?? einkaufsliste.name)
         .toolbar {
-            if let geschaeft {
+            if geschaeft != nil {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Button {
