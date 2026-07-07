@@ -10,8 +10,6 @@ struct PreisschildErgebnis {
     var artikelName: String
     @Guide(description: "Verkaufspreis des Produkts in Euro, z.B. 2.49. Zeigt das Preisschild zusätzlich einen Grundpreis (z.B. „1,99 € / 100g“ oder „3,98 € / kg“), NICHT diesen, sondern ausschließlich den tatsächlichen Verkaufspreis zurückgeben.")
     var preis: Decimal
-    @Guide(description: "Name des Geschäfts, falls auf dem Foto erkennbar (z.B. Regal-/Filialbeschilderung im Hintergrund), sonst ein leerer String")
-    var geschaeftName: String
 }
 
 /// Fehler beim Scannen/Auswerten eines Preisschilds.
@@ -80,10 +78,7 @@ struct VisionFoundationModelsPriceTagScanner: PriceTagScanService {
         Preisschilder zeigen oft zusätzlich einen Grundpreis (z.B. „1,99 € / 100g“ \
         oder „3,98 € / kg“) — ignoriere diesen und gib ausschließlich den \
         tatsächlichen Verkaufspreis des Produkts zurück. Der Artikelname soll ohne \
-        Mengenangabe, Marke-Zusatzcodes oder Artikelnummer erscheinen. Ist im Text \
-        zusätzlich ein Geschäfts-/Filialname erkennbar (selten, meist nur bei \
-        mitfotografierter Regal- oder Gang-Beschilderung), gib ihn zurück, sonst \
-        einen leeren String.
+        Mengenangabe, Marke-Zusatzcodes oder Artikelnummer erscheinen.
         """
         let session = LanguageModelSession(instructions: anweisungen)
         let antwort = try await session.respond(to: text, generating: PreisschildErgebnis.self)

@@ -112,13 +112,15 @@ Verfügbarkeit.
 - **PriceTagScanService** (Protokoll): dasselbe Vision-OCR-+-FoundationModels-Muster wie
   `ReceiptScanService`, hier auf ein einzelnes fotografiertes Preisschild statt einen
   ganzen Kassenbon angewendet. Legt direkt einen `KaufEintrag` mit heutigem Datum an,
-  unabhängig vom tatsächlichen Kauf. Details, Abgrenzung zum Belegscan und das
-  (noch nicht umgesetzte) Konzept für einen Mehrfach-Regal-Scan in
-  `docs/PREISSCHILD_SCAN.md`.
-- **Automatischer Geschäfts-Abgleich beim Beleg-/Preisschild-Scan**:
-  `Geschaeft.passendes(fuerErkannterName:unter:)` ordnet einen aus einem Beleg/
-  Preisschild erkannten Geschäftsnamen einem bekannten `Geschaeft` zu (Name oder
-  gelernte `alternativeNamen`); ohne Treffer fragt `GeschaeftWahlSheet` nach.
+  unabhängig vom tatsächlichen Kauf. Funktioniert immer direkt für ein bereits
+  feststehendes `Geschaeft` (kein geschäftsloser Einstieg, siehe unten). Details,
+  Abgrenzung zum Belegscan und das (noch nicht umgesetzte) Konzept für einen
+  Mehrfach-Regal-Scan in `docs/PREISSCHILD_SCAN.md`.
+- **Automatischer Geschäfts-Abgleich beim Belegscan** (nur dort, nicht beim
+  Preisschild-Scan — siehe `docs/PREISSCHILD_SCAN.md` → „Kein geschäftsloser
+  Einstieg“): `Geschaeft.passendes(fuerErkannterName:unter:)` ordnet einen aus einem
+  Beleg erkannten Geschäftsnamen einem bekannten `Geschaeft` zu (Name oder gelernte
+  `alternativeNamen`); ohne Treffer fragt `GeschaeftWahlSheet` nach.
   `Geschaeft.alternativenNamenLernen(_:)` merkt sich den erkannten Namen danach als
   Alias für künftige Scans. Greift nur, wenn der Scan-Kontext noch kein Geschäft
   feststehend mitbringt (z.B. nachträglich zuhause gescannter Beleg) — Details in

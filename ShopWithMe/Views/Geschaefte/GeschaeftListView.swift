@@ -7,17 +7,17 @@ import SwiftData
 /// `NavigationStack` beim Aufrufer statt selbst einen anzulegen, damit beide
 /// Einbindungen ohne verschachtelte `NavigationStack`s funktionieren.
 ///
-/// Bietet außerdem den geschäftslosen Scan-Einstieg für Belege/Preisschilder, die
-/// nachträglich (z.B. zuhause, ohne vorher ein Geschäft zu wählen) gescannt werden —
-/// ``BelegScanView/init()`` bzw. ``PreisschildScanView/init()`` erkennen das
-/// Geschäft dafür automatisch, siehe `docs/BELEGSCAN.md`.
+/// Bietet außerdem den geschäftslosen Scan-Einstieg für Belege, die nachträglich
+/// (z.B. zuhause, ohne vorher ein Geschäft zu wählen) gescannt werden —
+/// ``BelegScanView/init()`` erkennt das Geschäft dafür automatisch, siehe
+/// `docs/BELEGSCAN.md`. Der Preisschild-Scan hat bewusst keinen geschäftslosen
+/// Einstieg (siehe `docs/PREISSCHILD_SCAN.md`) und ist deshalb hier nicht verlinkt.
 struct GeschaeftListView: View {
     @Query(sort: \Geschaeft.name) private var geschaefte: [Geschaeft]
     @Environment(\.modelContext) private var modelContext
 
     @State private var neuesGeschaeftEntwurf: Geschaeft?
     @State private var zeigeBelegScan = false
-    @State private var zeigePreisschildScan = false
 
     var body: some View {
         List {
@@ -50,19 +50,10 @@ struct GeschaeftListView: View {
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Button {
-                        zeigeBelegScan = true
-                    } label: {
-                        Label("Beleg scannen", systemImage: "doc.text.viewfinder")
-                    }
-                    Button {
-                        zeigePreisschildScan = true
-                    } label: {
-                        Label("Preisschild scannen", systemImage: "tag.viewfinder")
-                    }
+                Button {
+                    zeigeBelegScan = true
                 } label: {
-                    Label("Scannen", systemImage: "camera.viewfinder")
+                    Label("Beleg scannen", systemImage: "doc.text.viewfinder")
                 }
             }
         }
@@ -71,9 +62,6 @@ struct GeschaeftListView: View {
         }
         .sheet(isPresented: $zeigeBelegScan) {
             BelegScanView()
-        }
-        .sheet(isPresented: $zeigePreisschildScan) {
-            PreisschildScanView()
         }
     }
 

@@ -13,8 +13,8 @@ Belegscans hinweg.
   Übernahme in `KaufEintrag`e, Mitlern-Vorbelegung, automatischer
   Geschäfts-Abgleich (siehe unten).
 - `ShopWithMe/Views/Einkaufen/PreisschildScanView.swift` — analoger, einzelner
-  Preisschild-Scan (`docs/PREISSCHILD_SCAN.md`), teilt sich denselben
-  Geschäfts-Abgleich.
+  Preisschild-Scan (`docs/PREISSCHILD_SCAN.md`); funktioniert immer direkt für ein
+  feststehendes Geschäft, **ohne** den automatischen Geschäfts-Abgleich unten.
 - `ShopWithMe/Models/KaufEintrag.swift` — persistentes Ziel-Model, `anzeigeName`,
   `gelernteZuordnung(fuerErkannterName:in:)`.
 - `ShopWithMe/Models/Geschaeft.swift` — `alternativeNamen`,
@@ -83,18 +83,17 @@ Belegscans hinweg.
 
 ## Automatischer Geschäfts-Abgleich
 
-Wird ein Beleg/Preisschild nachträglich gescannt — z.B. zuhause, ohne vorher ein
-Geschäft auszuwählen —, steht zum Scan-Zeitpunkt noch kein `Geschaeft` fest.
-`BelegScanKontext.unbekannt` (bzw. `PreisschildScanView` ohne
-`vorgegebenesGeschaeft`) sowie ein `.einkaufsvorgang` ohne gewähltes Geschäft (Picker-
-Option „Kein Geschäft“ in `EinkaufenView`) decken diesen Fall ab:
+Nur beim Belegscan relevant (siehe `docs/PREISSCHILD_SCAN.md` → „Kein
+geschäftsloser Einstieg“ für die bewusste Abgrenzung zum Preisschild-Scan). Wird ein
+Beleg nachträglich gescannt — z.B. zuhause, ohne vorher ein Geschäft auszuwählen —,
+steht zum Scan-Zeitpunkt noch kein `Geschaeft` fest. `BelegScanKontext.unbekannt`
+sowie ein `.einkaufsvorgang` ohne gewähltes Geschäft (Picker-Option „Kein Geschäft“
+in `EinkaufenView`) decken diesen Fall ab:
 
-1. **Erkennung**: `ReceiptScanService`/`PriceTagScanService` liefern zusätzlich zu
-   den Positionen einen rohen `geschaeftName: String` (auf einem Kassenbon meist
-   vorhanden, auf einem Preisschild nur selten — z.B. bei mitfotografierter
-   Regal-/Gang-Beschilderung).
-2. **Abgleich** (`BelegScanView.geschaeftAbgleichen(erkannterName:)` bzw. die
-   analoge Methode in `PreisschildScanView`): sucht per
+1. **Erkennung**: `ReceiptScanService` liefert zusätzlich zu den Positionen einen
+   rohen `geschaeftName: String` (auf einem Kassenbon meist in der Kopfzeile
+   vorhanden).
+2. **Abgleich** (`BelegScanView.geschaeftAbgleichen(erkannterName:)`): sucht per
    `Geschaeft.passendes(fuerErkannterName:unter:)` unter allen vorhandenen
    Geschäften nach einem Treffer — sowohl gegen `Geschaeft.name` als auch gegen
    dessen gelernte `alternativeNamen` (beidseitiger

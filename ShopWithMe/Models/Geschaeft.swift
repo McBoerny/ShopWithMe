@@ -156,11 +156,11 @@ final class Geschaeft {
     /// damit vor Einführung dieses Attributs angelegte Geschäfte beim automatischen
     /// Laden nicht abstürzen (siehe `docs/BELEGSCAN.md`).
     private var alternativeNamenRaw: String?
-    /// Zusätzliche Namen, unter denen dieses Geschäft auf einem Kassenbon oder
-    /// Preisschild erkannt werden kann (z.B. Kurzform oder Filial-Zusatz wie
-    /// „REWE Center Musterstadt“ für „Rewe“) — gelernt beim automatischen
-    /// Geschäfts-Abgleich in ``BelegScanView``/``PreisschildScanView``, siehe
-    /// ``alternativenNamenLernen(_:)`` und `docs/BELEGSCAN.md`.
+    /// Zusätzliche Namen, unter denen dieses Geschäft auf einem Kassenbon erkannt
+    /// werden kann (z.B. Kurzform oder Filial-Zusatz wie „REWE Center Musterstadt“
+    /// für „Rewe“) — gelernt beim automatischen Geschäfts-Abgleich in
+    /// ``BelegScanView``, siehe ``alternativenNamenLernen(_:)`` und
+    /// `docs/BELEGSCAN.md`.
     var alternativeNamen: [String] {
         get { (alternativeNamenRaw ?? "").split(separator: "\n").map(String.init) }
         set { alternativeNamenRaw = newValue.isEmpty ? nil : newValue.joined(separator: "\n") }
@@ -188,8 +188,8 @@ final class Geschaeft {
     }
 
     /// Sucht unter `geschaefte` dasjenige, dessen ``name`` oder ``alternativeNamen``
-    /// zum per KI erkannten `erkannterName` eines Kassenbons/Preisschilds passt
-    /// (beidseitiger `localizedCaseInsensitiveContains`-Abgleich, analog
+    /// zum per KI erkannten `erkannterName` eines Kassenbons passt (beidseitiger
+    /// `localizedCaseInsensitiveContains`-Abgleich, analog
     /// ``KaufEintrag/gelernteZuordnung(fuerErkannterName:in:)``). `nil`, falls
     /// `erkannterName` leer ist oder kein Treffer existiert — dann fragt die
     /// aufrufende Scan-Ansicht über `GeschaeftWahlSheet` nach.

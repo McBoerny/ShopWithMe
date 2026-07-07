@@ -1,18 +1,17 @@
 import SwiftUI
 import SwiftData
 
-/// Sheet zur Auswahl eines Geschäfts für einen Beleg-/Preisschild-Scan, dessen
-/// Geschäft nicht automatisch über ``Geschaeft/passendes(fuerErkannterName:unter:)``
-/// zugeordnet werden konnte — siehe `docs/BELEGSCAN.md` → „Automatischer
-/// Geschäfts-Abgleich“.
+/// Sheet zur Auswahl eines Geschäfts für einen Belegscan, dessen Geschäft nicht
+/// automatisch über ``Geschaeft/passendes(fuerErkannterName:unter:)`` zugeordnet
+/// werden konnte — siehe `docs/BELEGSCAN.md` → „Automatischer Geschäfts-Abgleich“.
 ///
 /// Existiert das gewünschte Geschäft noch nicht, lässt es sich direkt hier über die
 /// bestehende ``GeschaeftStammdatenEditView`` anlegen (vorausgefüllt mit dem
 /// erkannten Namen) und wird danach automatisch ausgewählt — analog
 /// ``KaufEintragZuordnenSheet``s Artikel-Neuanlage.
 struct GeschaeftWahlSheet: View {
-    /// Der auf dem Beleg/Preisschild erkannte Geschäftsname, falls vorhanden — nur
-    /// zur Anzeige und als Vorbelegung der Suche/Neuanlage.
+    /// Der auf dem Beleg erkannte Geschäftsname, falls vorhanden — nur zur Anzeige
+    /// und als Vorbelegung der Suche/Neuanlage.
     let erkannterName: String
     let onAuswahl: (Geschaeft?) -> Void
 

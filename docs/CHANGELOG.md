@@ -30,18 +30,22 @@
   `GeschaeftDetailView` neben „Kaufbeleg scannen“. Details, Abgrenzung zum Belegscan
   und das noch nicht umgesetzte Regal-Mehrfach-Scan-Konzept in
   `docs/PREISSCHILD_SCAN.md`.
-- **Automatischer Geschäfts-Abgleich beim Beleg-/Preisschild-Scan**: neues
+- **Automatischer Geschäfts-Abgleich beim Belegscan**: neues
   `Geschaeft.alternativeNamen: [String]` + `Geschaeft.passendes(fuerErkannterName:unter:)`
-  ordnen einen aus einem Beleg/Preisschild erkannten Geschäftsnamen automatisch
-  einem bekannten Geschäft zu — relevant, wenn ohne vorherige Geschäftswahl
-  gescannt wird (z.B. nachträglich zuhause). Ohne Treffer fragt das neue
-  `GeschaeftWahlSheet` nach (mit Möglichkeit, direkt ein neues Geschäft
-  anzulegen); `Geschaeft.alternativenNamenLernen(_:)` merkt sich den erkannten
-  Namen danach als Alias für künftige Scans. Neuer geschäftsloser Scan-Einstieg
-  (Toolbar-Menü „Scannen“ in `GeschaeftListView`) sowie neue Scan-Buttons direkt in
-  `EinkaufenView`, sobald dort ein Geschäft gewählt ist. Ein `Einkaufsvorgang` ohne
-  gewähltes Geschäft übernimmt das erkannte/gewählte Geschäft rückwirkend. Details
-  in `docs/BELEGSCAN.md` → „Automatischer Geschäfts-Abgleich“.
+  ordnen einen aus einem Beleg erkannten Geschäftsnamen automatisch einem
+  bekannten Geschäft zu — relevant, wenn ohne vorherige Geschäftswahl gescannt
+  wird (z.B. nachträglich zuhause). Ohne Treffer fragt das neue `GeschaeftWahlSheet`
+  nach (mit Möglichkeit, direkt ein neues Geschäft anzulegen);
+  `Geschaeft.alternativenNamenLernen(_:)` merkt sich den erkannten Namen danach als
+  Alias für künftige Scans. Neuer geschäftsloser Beleg-Scan-Einstieg (Toolbar-Button
+  „Beleg scannen“ in `GeschaeftListView`) sowie neue Scan-Buttons (Beleg +
+  Preisschild) direkt in `EinkaufenView`, sobald dort ein Geschäft gewählt ist. Ein
+  `Einkaufsvorgang` ohne gewähltes Geschäft übernimmt das erkannte/gewählte
+  Geschäft rückwirkend. Der Preisschild-Scan bleibt bewusst ohne geschäftslosen
+  Einstieg (funktioniert immer nur direkt für ein bereits feststehendes Geschäft —
+  ein Preisschild zeigt so gut wie nie den Geschäftsnamen). Details in
+  `docs/BELEGSCAN.md` → „Automatischer Geschäfts-Abgleich“ und
+  `docs/PREISSCHILD_SCAN.md` → „Kein geschäftsloser Einstieg“.
 - **`docs/RELEASE_CHECKLIST.md`** (neu): gestaffelte Release-Checkliste für
   Minor-/Major-Versionssprünge (Code-Review, Security-Check, Build/Tests,
   Migrationscheck, Doku-Abgleich bei jedem Bump; zusätzlich voller
@@ -575,7 +579,7 @@
 - `NSCameraUsageDescription` in `project.yml` ergänzt.
 - Hilfe-Eintrag „Belegscan & Preishistorie“ in `HelpView` ergänzt.
 
-## v0.6 — KI-Vorschlag, Einstellungen & Datenbank-Speicherort
+## v0.6 (Build 46) — KI-Vorschlag, Einstellungen & Datenbank-Speicherort
 
 - `Services/AISuggestionService.swift`: FoundationModels-basierter Vorschlag
   (Symbol, Farbe, Kategorie, informativer Regal-Hinweis) beim Anlegen eines

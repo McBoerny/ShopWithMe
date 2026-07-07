@@ -18,10 +18,13 @@ Regal-Scan.
 - `ShopWithMe/Views/Einkaufen/PreisschildScanView.swift` — Aufnahme, Prüf-/Korrektur-UI,
   Übernahme als `KaufEintrag`.
 - `ShopWithMe/Views/Geschaefte/GeschaeftDetailView.swift` — Einstiegspunkt „Preisschild
-  scannen“ neben „Kaufbeleg scannen“ (mit bereits feststehendem Geschäft).
-- `ShopWithMe/Views/Geschaefte/GeschaeftListView.swift` — zusätzlicher, geschäftsloser
-  Einstiegspunkt (Toolbar-Menü „Scannen“) für nachträgliche Scans ohne vorherige
-  Geschäftswahl.
+  scannen“ neben „Kaufbeleg scannen“.
+- `ShopWithMe/Views/Einkaufen/EinkaufenView.swift` — weiterer Einstiegspunkt, sobald
+  in der Einkaufen-Ansicht ein Geschäft gewählt ist.
+
+Bewusst **kein** Einstiegspunkt in `GeschaeftListView` (anders als der geschäftslose
+Beleg-Scan dort) — der Preisschild-Scan funktioniert immer nur direkt für ein bereits
+feststehendes Geschäft, siehe „Kein geschäftsloser Einstieg“ unten.
 
 ## Unterschiede zum Belegscan
 
@@ -31,17 +34,25 @@ Regal-Scan.
 | KI-Ergebnis | `BelegErgebnis` mit `[BelegPosition]` (Liste) | `PreisschildErgebnis` mit genau einem `artikelName`/`preis` |
 | Menge | `menge: Double` pro Position (vom Bon erkannt) | keine — ein Preisschild zeigt keine Stückzahl |
 | Datum | von der KI aus dem Bon erkannt, editierbar | immer der Scan-Zeitpunkt (`.now`), nicht editierbar |
-| Kontext | `BelegScanKontext` (`.einkaufsvorgang`/`.geschaeft`/`.unbekannt`) | `vorgegebenesGeschaeft: Geschaeft?` — `nil` beim geschäftslosen Einstieg, sonst identisches Verhalten |
+| Kontext | `BelegScanKontext` (`.einkaufsvorgang`/`.geschaeft`/`.unbekannt`) | `geschaeft: Geschaeft` — immer feststehend, kein geschäftsloser Fall |
 | Grundpreis | kommt auf Kassenbons praktisch nicht vor | Preisschilder zeigen oft zusätzlich einen Grundpreis (z.B. „1,99 € / 100g“) — die KI-Instruktion weist explizit an, ausschließlich den Verkaufspreis zurückzugeben, nicht den Grundpreis |
-| Geschäftsname im Foto | auf Kassenbons meist vorhanden (Kopfzeile) | auf Preisschildern selten (nur bei mitfotografierter Regal-/Gang-Beschilderung) |
 
 Mitlern-Logik (`KaufEintrag.gelernteZuordnung`), Artikel-Namensabgleich
 (`passendesArtikel`) und `alternativerName`-Ableitung sind identisch zum Belegscan
-übernommen (siehe `docs/BELEGSCAN.md` → „Mitlernen“/„Übernahme“). Ebenso der
-automatische Geschäfts-Abgleich (`Geschaeft.passendes(fuerErkannterName:unter:)`,
-`GeschaeftWahlSheet`, `Geschaeft.alternativenNamenLernen(_:)`) — siehe
-`docs/BELEGSCAN.md` → „Automatischer Geschäfts-Abgleich“, dort auch für den
-Preisschild-Scan gültig (`PreisschildErgebnis.geschaeftName`).
+übernommen (siehe `docs/BELEGSCAN.md` → „Mitlernen“/„Übernahme“).
+
+## Kein geschäftsloser Einstieg (bewusste Entscheidung)
+
+Der Belegscan kann ohne vorherige Geschäftswahl gestartet werden (z.B. nachträglich
+zuhause) und erkennt das Geschäft danach automatisch anhand des auf dem Kassenbon
+erkannten Namens (siehe `docs/BELEGSCAN.md` → „Automatischer Geschäfts-Abgleich“).
+Für den Preisschild-Scan wurde das bewusst **nicht** übernommen: ein Preisschild zeigt
+so gut wie nie den Geschäftsnamen (anders als ein Kassenbon mit fester Kopfzeile), ein
+automatischer Abgleich hätte hier also fast immer ohnehin nur zur Anwenderauswahl
+geführt. Der Preisschild-Scan funktioniert deshalb ausschließlich direkt für ein
+bereits feststehendes Geschäft (`GeschaeftDetailView`/`EinkaufenView`) und ist —
+anders als der Beleg-Scan — nicht im geschäftslosen Scan-Einstieg von
+`GeschaeftListView` verlinkt.
 
 ## Zukünftige Erweiterung: Regal-Scan (Konzept, nicht umgesetzt)
 
@@ -76,13 +87,12 @@ erkennen, statt jedes einzeln fotografieren zu müssen.
 4. Pro erkannter Gruppe den zusammengehörigen Text (statt des gesamten Bild-Texts) an
    `FoundationModels` übergeben und ein `PreisschildErgebnis` je Gruppe erzeugen —
    Analog zu `BelegErgebnis.positionen: [BelegPosition]` beim Belegscan, hier dann
-   z.B. `RegalErgebnis.positionen: [PreisschildErgebnis]` plus einem einzelnen,
-   fürs ganze Regalfoto gemeinsamen `geschaeftName: String` (ein Regal gehört immer
-   zu genau einem Geschäft, anders als die Positionen).
+   z.B. `RegalErgebnis.positionen: [PreisschildErgebnis]`.
 5. UI: analog `BelegScanView.ErgebnisListe` (Liste editierbarer Positionen) statt der
-   aktuellen Einzelposition-Ansicht in `PreisschildScanView` — inklusive derselben
-   „Geschäft“-Zeile/`GeschaeftWahlSheet`-Anbindung, damit der automatische
-   Geschäfts-Abgleich (siehe oben) unverändert wiederverwendet werden kann.
+   aktuellen Einzelposition-Ansicht in `PreisschildScanView`. Wie der Einzelschild-Scan
+   funktioniert auch der Regal-Scan direkt für ein bereits feststehendes Geschäft, ohne
+   geschäftslosen Einstieg (siehe „Kein geschäftsloser Einstieg“ oben) — auch ein
+   ganzes Regalfoto zeigt in aller Regel keinen Geschäftsnamen.
 
 Deutlich größerer Aufwand als der Einzelschild-Scan, da Perspektivverzerrung,
 unterschiedliche Schilddesigns je Geschäft und teilweise Verdeckung im Regalfoto reale
