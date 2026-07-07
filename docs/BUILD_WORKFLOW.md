@@ -40,7 +40,7 @@ nicht pro Schema-Version eingefroren. Das hat eine wichtige Konsequenz (siehe
 `Models/SchemaDefinition.swift` und `docs/DECISIONS.md` → „Duplicate version
 checksums“-Vorfall):
 
-- **Additiv-optionales Attribut** (Normalfall — z.B. `Geschaeft.artikelFilterModus`,
+- **Additiv-optionales Attribut** (Normalfall — z.B. `Geschaeft.regalSortierModus`,
   `KaufEintrag.produktName`/`alternativerName`): **keine** neue `SchemaVN`/
   `MigrationStage`. Nur als `private var xyzRaw: String?` (o.ä.) speichern und über ein
   Computed-Property mit sicherem Fallback kapseln (Vorbild:

@@ -17,6 +17,8 @@ struct EinkaufenView: View {
     @Query(sort: \Einkaufsliste.erstelltAm) private var einkaufslisten: [Einkaufsliste]
     @Query(filter: #Predicate<Einkaufsvorgang> { $0.endZeit == nil })
     private var offeneEinkaufsvorgaenge: [Einkaufsvorgang]
+    @Query(sort: \IgnorierterGeschaeftsVorschlag.ignoriertAm, order: .reverse)
+    private var ignorierteVorschlaege: [IgnorierterGeschaeftsVorschlag]
     @Environment(\.modelContext) private var modelContext
 
     @State private var ausgewaehltesGeschaeft: Geschaeft?
@@ -24,6 +26,7 @@ struct EinkaufenView: View {
     @State private var zeigeNeueListe = false
     @State private var geschaeftVorschlag: GeschaeftVorschlag?
     @State private var geschaeftEntwurfAusVorschlag: Geschaeft?
+    @State private var zeigeAlleInDerNaehe = false
 
     private var aktuellerEinkauf: Einkaufsvorgang? {
         guard let ausgewaehlteListe else { return nil }
@@ -53,7 +56,15 @@ struct EinkaufenView: View {
                             geschaeftEntwurfAusVorschlag = GeschaeftErkennungService.entwurf(aus: mapItem)
                             self.geschaeftVorschlag = nil
                         },
-                        verwerfen: { self.geschaeftVorschlag = nil }
+                        verwerfen: { self.geschaeftVorschlag = nil },
+                        ignorieren: {
+                            ignorierenVorschlag(geschaeftVorschlag)
+                            self.geschaeftVorschlag = nil
+                        },
+                        alleInDerNaeheAnzeigen: {
+                            self.geschaeftVorschlag = nil
+                            zeigeAlleInDerNaehe = true
+                        }
                     )
                 }
             }
@@ -77,15 +88,23 @@ struct EinkaufenView: View {
                         }
                     }
                 }
-                if !geschaefte.isEmpty {
-                    ToolbarItem(placement: .principal) {
-                        Picker("Geschäft", selection: $ausgewaehltesGeschaeft) {
-                            Text("Kein Geschäft").tag(Optional<Geschaeft>.none)
-                            ForEach(geschaefte) { geschaeft in
-                                Text(geschaeft.name).tag(Optional(geschaeft))
+                ToolbarItem(placement: .principal) {
+                    Menu {
+                        if !geschaefte.isEmpty {
+                            Picker("Geschäft", selection: $ausgewaehltesGeschaeft) {
+                                Text("Kein Geschäft").tag(Optional<Geschaeft>.none)
+                                ForEach(geschaefte) { geschaeft in
+                                    Text(geschaeft.name).tag(Optional(geschaeft))
+                                }
                             }
                         }
-                        .pickerStyle(.menu)
+                        Button {
+                            zeigeAlleInDerNaehe = true
+                        } label: {
+                            Label("Geschäfte in der Nähe…", systemImage: "location.magnifyingglass")
+                        }
+                    } label: {
+                        Label(ausgewaehltesGeschaeft?.name ?? "Geschäft", systemImage: "cart.fill")
                     }
                 }
             }
@@ -116,13 +135,28 @@ struct EinkaufenView: View {
                 ausgewaehltesGeschaeft = neuesGeschaeft
             }
         }
+        .sheet(isPresented: $zeigeAlleInDerNaehe) {
+            GeschaeftAlleInDerNaeheSheet(
+                vorhandeneGeschaefte: geschaefte,
+                ignorierteVorschlaege: ignorierteVorschlaege,
+                auswaehlen: { geschaeft in ausgewaehltesGeschaeft = geschaeft },
+                hinzufuegen: { mapItem in
+                    geschaeftEntwurfAusVorschlag = GeschaeftErkennungService.entwurf(aus: mapItem)
+                },
+                wiederAufnehmen: { vorschlag in wiederAufnehmenVorschlag(vorschlag) }
+            )
+        }
     }
 
     /// Fragt ``GeschaeftErkennungService`` nach einem Vorschlag für den aktuellen
     /// Standort. Schlägt kein bereits als ``ausgewaehltesGeschaeft`` gewähltes
-    /// Geschäft erneut vor.
+    /// Geschäft erneut vor. Bereits ignorierte Vorschläge (``ignorierteVorschlaege``)
+    /// werden vom Service selbst aussortiert.
     private func geschaeftErkennungPruefen() async {
-        guard let vorschlag = await GeschaeftErkennungService.vorschlag(vorhandeneGeschaefte: geschaefte) else {
+        guard let vorschlag = await GeschaeftErkennungService.vorschlag(
+            vorhandeneGeschaefte: geschaefte,
+            ignorierteVorschlaege: ignorierteVorschlaege
+        ) else {
             geschaeftVorschlag = nil
             return
         }
@@ -131,6 +165,36 @@ struct EinkaufenView: View {
             return
         }
         geschaeftVorschlag = vorschlag
+    }
+
+    /// Merkt sich `vorschlag` dauerhaft als ignoriert (siehe
+    /// ``IgnorierterGeschaeftsVorschlag``). Diskrete Einzelaktion → Micro-Lease
+    /// (siehe `docs/DATABASE_CONCURRENCY.md` → „Vollständiger Schreibvorgang-Katalog“).
+    private func ignorierenVorschlag(_ vorschlag: GeschaeftVorschlag) {
+        Task {
+            await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                let koordinaten = vorschlag.koordinaten
+                let ignoriert = IgnorierterGeschaeftsVorschlag(
+                    name: vorschlag.name,
+                    breitengrad: koordinaten?.breitengrad,
+                    laengengrad: koordinaten?.laengengrad
+                )
+                modelContext.insert(ignoriert)
+            }
+        }
+    }
+
+    /// Entfernt alle zu `vorschlag` passenden ``IgnorierterGeschaeftsVorschlag``-
+    /// Einträge wieder — macht ``ignorierenVorschlag(_:)`` rückgängig, aufgerufen aus
+    /// „Alle Geschäfte in der Nähe“.
+    private func wiederAufnehmenVorschlag(_ vorschlag: GeschaeftVorschlag) {
+        let treffer = GeschaeftErkennungService.ignorierteEintraege(fuer: vorschlag, in: ignorierteVorschlaege)
+        guard !treffer.isEmpty else { return }
+        Task {
+            await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                for eintrag in treffer { modelContext.delete(eintrag) }
+            }
+        }
     }
 
     /// Stellt sicher, dass ``ausgewaehlteListe`` gesetzt ist: übernimmt die erste
@@ -209,13 +273,14 @@ private struct GeschaeftVorschlagBanner: View {
     let aktivieren: (Geschaeft) -> Void
     let hinzufuegen: (MKMapItem) -> Void
     let verwerfen: () -> Void
-
-    private var name: String {
-        switch vorschlag {
-        case .bekannt(let geschaeft): return geschaeft.name
-        case .unbekannt(let mapItem): return mapItem.name ?? "Unbekannter Laden"
-        }
-    }
+    /// Merkt sich den Vorschlag dauerhaft als ignoriert (``IgnorierterGeschaeftsVorschlag``)
+    /// — anders als ``verwerfen`` erscheint er danach nicht mehr automatisch, bis der
+    /// Anwender ihn über „Alle Geschäfte in der Nähe“ wieder aufnimmt.
+    let ignorieren: () -> Void
+    /// Öffnet die Liste aller Läden im Umkreis (``GeschaeftErkennungService/alleInDerNaeheRadius``),
+    /// inkl. bereits ignorierter — zum nachträglichen manuellen Auswählen oder
+    /// Wiederaufnehmen.
+    let alleInDerNaeheAnzeigen: () -> Void
 
     private var untertitel: String {
         switch vorschlag {
@@ -236,7 +301,7 @@ private struct GeschaeftVorschlagBanner: View {
             Image(systemName: "location.fill")
                 .foregroundStyle(Color.accentColor)
             VStack(alignment: .leading, spacing: 2) {
-                Text("In der Nähe: \(name)")
+                Text("In der Nähe: \(vorschlag.name)")
                     .font(.subheadline.bold())
                 Text(untertitel)
                     .font(.caption)
@@ -246,13 +311,22 @@ private struct GeschaeftVorschlagBanner: View {
             Button(aktionsTitel, action: aktion)
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
-            Button {
-                verwerfen()
+            Menu {
+                Button("Verwerfen", action: verwerfen)
+                Button {
+                    ignorieren()
+                } label: {
+                    Label("Diesen Laden ignorieren", systemImage: "eye.slash")
+                }
+                Button {
+                    alleInDerNaeheAnzeigen()
+                } label: {
+                    Label("Alle Geschäfte in der Nähe…", systemImage: "location.magnifyingglass")
+                }
             } label: {
-                Image(systemName: "xmark")
+                Image(systemName: "ellipsis.circle")
                     .foregroundStyle(.secondary)
             }
-            .buttonStyle(.plain)
         }
         .glassCard()
         .padding(.horizontal)
@@ -266,35 +340,102 @@ private struct GeschaeftVorschlagBanner: View {
     }
 }
 
-/// Wie die Einkaufsliste eines laufenden Einkaufsvorgangs angezeigt wird.
-private enum EinkaufsAnzeigeModus: String, CaseIterable, Identifiable {
-    /// Nur noch offene, für das gewählte Geschäft verfügbare Artikel (Standard).
-    case offene
-    /// Zusätzlich die in diesem Einkauf bereits abgehakten Artikel.
-    case mitAbgehakten
-    /// Lernmodus: zeigt alle auf der Einkaufsliste gespeicherten Artikel,
-    /// unabhängig vom Verfügbarkeitsfilter des Geschäfts
-    /// (``Geschaeft/artikelFilterModus``) — zum Entdecken und Abhaken bislang
-    /// unbekannter Artikel, die dadurch für dieses Geschäft als verfügbar gelernt
-    /// werden (siehe ``ArtikelVerfuegbarkeitService``).
-    case lernmodus
+/// Sheet „Alle Geschäfte in der Nähe“ (``GeschaeftErkennungService/alleInDerNaeheRadius``,
+/// 100m) — Ergänzung zum automatischen Einzelvorschlag (``GeschaeftVorschlagBanner``):
+/// zeigt alle Läden im Umkreis, inkl. bereits ignorierter (mit Möglichkeit, sie
+/// wieder aufzunehmen), damit der Anwender nachträglich manuell auswählen kann, auch
+/// wenn der automatische Vorschlag verworfen, ignoriert wurde oder gar nicht
+/// erschienen ist.
+private struct GeschaeftAlleInDerNaeheSheet: View {
+    let vorhandeneGeschaefte: [Geschaeft]
+    let ignorierteVorschlaege: [IgnorierterGeschaeftsVorschlag]
+    let auswaehlen: (Geschaeft) -> Void
+    let hinzufuegen: (MKMapItem) -> Void
+    let wiederAufnehmen: (GeschaeftVorschlag) -> Void
 
-    var id: String { rawValue }
+    @Environment(\.dismiss) private var dismiss
+    @State private var eintraege: [GeschaeftInDerNaeheEintrag]?
+    @State private var laeuft = true
 
-    var anzeigename: String {
-        switch self {
-        case .offene: return "Nur offene"
-        case .mitAbgehakten: return "Auch abgehakte Artikel"
-        case .lernmodus: return "Lernmodus (alle Artikel)"
+    var body: some View {
+        NavigationStack {
+            Group {
+                if laeuft {
+                    ProgressView("Suche in der Nähe…")
+                } else if let eintraege, !eintraege.isEmpty {
+                    List(eintraege) { eintrag in
+                        GeschaeftInDerNaeheZeile(
+                            eintrag: eintrag,
+                            auswaehlen: {
+                                switch eintrag.vorschlag {
+                                case .bekannt(let geschaeft): auswaehlen(geschaeft)
+                                case .unbekannt(let mapItem): hinzufuegen(mapItem)
+                                }
+                                dismiss()
+                            },
+                            wiederAufnehmen: { wiederAufnehmen(eintrag.vorschlag) }
+                        )
+                    }
+                } else {
+                    ContentUnavailableView(
+                        "Keine Geschäfte gefunden",
+                        systemImage: "location.slash",
+                        description: Text("Im Umkreis von 100m wurde kein Laden gefunden. Prüfe, ob der Standortzugriff erlaubt ist.")
+                    )
+                }
+            }
+            .navigationTitle("Geschäfte in der Nähe")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Fertig") { dismiss() }
+                }
+            }
+        }
+        .task {
+            eintraege = await GeschaeftErkennungService.alleInDerNaehe(
+                vorhandeneGeschaefte: vorhandeneGeschaefte,
+                ignorierteVorschlaege: ignorierteVorschlaege
+            )
+            laeuft = false
+        }
+    }
+}
+
+/// Eine Zeile in ``GeschaeftAlleInDerNaeheSheet``: ignorierte Einträge zeigen statt
+/// der Auswählen/Hinzufügen-Aktion einen „Wieder aufnehmen“-Button.
+private struct GeschaeftInDerNaeheZeile: View {
+    let eintrag: GeschaeftInDerNaeheEintrag
+    let auswaehlen: () -> Void
+    let wiederAufnehmen: () -> Void
+
+    private var aktionsTitel: String {
+        switch eintrag.vorschlag {
+        case .bekannt: return "Auswählen"
+        case .unbekannt: return "Hinzufügen"
         }
     }
 
-    /// Icon für die Schnellauswahl in der Toolbar.
-    var icon: String {
-        switch self {
-        case .offene: return "circle"
-        case .mitAbgehakten: return "checkmark.circle"
-        case .lernmodus: return "graduationcap.fill"
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(eintrag.vorschlag.name)
+                if eintrag.istIgnoriert {
+                    Text("Ignoriert")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            if eintrag.istIgnoriert {
+                Button("Wieder aufnehmen", action: wiederAufnehmen)
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+            } else {
+                Button(aktionsTitel, action: auswaehlen)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+            }
         }
     }
 }
@@ -316,9 +457,17 @@ private struct EinkaufslisteView: View {
     /// das an den laufenden ``einkaufsvorgang`` gebunden ist.
     @State private var zeigeBelegScanFuerGeschaeft = false
     @State private var zeigePreisschildScanFuerGeschaeft = false
-    /// Wie die Einkaufsliste dieses Einkaufsvorgangs gerade angezeigt wird — siehe
-    /// ``EinkaufsAnzeigeModus``.
-    @State private var anzeigeModus: EinkaufsAnzeigeModus = .offene
+    /// Blendet zusätzlich zu den offenen auch die in diesem Einkauf bereits
+    /// abgehakten Artikel ein (durchgestrichen) — per kurzem Tap auf die
+    /// Schnellauswahl (``SchnellauswahlButton``) umschaltbar.
+    @State private var zeigeAbgehakteArtikel = false
+    /// Übergeht für diesen Einkauf den Verfügbarkeitsfilter (siehe
+    /// ``verfuegbarkeitsgefiltert(_:)``) und zeigt alle Artikel der Einkaufsliste,
+    /// auch bislang nicht als verfügbar geltende — zum Entdecken/Abhaken bislang
+    /// unbekannter Artikel, wodurch sie für dieses Geschäft als verfügbar gelernt
+    /// werden (siehe ``ArtikelVerfuegbarkeitService``). Per langem Tap auf die
+    /// Schnellauswahl umschaltbar (Lernmodus); gilt nur für diesen Einkaufsvorgang.
+    @State private var zeigeAlleArtikel = false
 
     private var abgehakteArtikelIDs: Set<PersistentIdentifier> {
         Set(einkaufsvorgang.kaufEintraege.compactMap { $0.artikel?.persistentModelID })
@@ -334,26 +483,19 @@ private struct EinkaufslisteView: View {
         einkaufsvorgang.kaufEintraege.compactMap(\.artikel).filter { abgehakteArtikelIDs.contains($0.persistentModelID) }
     }
 
-    /// Ist ein Geschäft gewählt und dessen ``Geschaeft/artikelFilterModus`` auf
-    /// ``ArtikelFilterModus/nurVerfuegbare`` gestellt (Standard), blendet dies Artikel
-    /// aus, die in diesem Geschäft (noch) nicht als verfügbar gelten (siehe
-    /// ``ArtikelVerfuegbarkeitService``). Im ``EinkaufsAnzeigeModus/lernmodus`` wird
-    /// dieser Filter für diesen Einkauf übergangen.
+    /// Ist ein Geschäft gewählt, blendet dies standardmäßig Artikel aus, die darin
+    /// (noch) nicht als verfügbar gelten (siehe ``ArtikelVerfuegbarkeitService``).
+    /// Per ``zeigeAlleArtikel`` kann der Anwender diesen Filter für den laufenden
+    /// Einkauf übergehen.
     private func verfuegbarkeitsgefiltert(_ artikel: [Artikel]) -> [Artikel] {
-        guard let geschaeft, geschaeft.artikelFilterModus == .nurVerfuegbare else { return artikel }
+        guard let geschaeft, !zeigeAlleArtikel else { return artikel }
         return artikel.filter { ArtikelVerfuegbarkeitService.istVerfuegbar($0, in: geschaeft, context: modelContext) }
     }
 
-    /// Die aktuell darzustellenden Artikel — abhängig von ``anzeigeModus``.
+    /// Die aktuell darzustellenden Artikel — abhängig von ``zeigeAbgehakteArtikel``.
     private var artikelAufListe: [Artikel] {
-        switch anzeigeModus {
-        case .offene:
-            return verfuegbarkeitsgefiltert(offeneArtikel)
-        case .mitAbgehakten:
-            return verfuegbarkeitsgefiltert(offeneArtikel + abgehakteArtikel)
-        case .lernmodus:
-            return offeneArtikel
-        }
+        let basis = zeigeAbgehakteArtikel ? offeneArtikel + abgehakteArtikel : offeneArtikel
+        return verfuegbarkeitsgefiltert(basis)
     }
 
     private struct Gruppe: Identifiable {
@@ -473,11 +615,11 @@ private struct EinkaufslisteView: View {
             }
 
             if artikelAufListe.isEmpty {
-                if anzeigeModus != .lernmodus, !offeneArtikel.isEmpty {
+                if !offeneArtikel.isEmpty {
                     ContentUnavailableView(
                         "Keine verfügbaren Artikel",
                         systemImage: "checklist",
-                        description: Text("Wähle oben unter „Anzeige“ den „Lernmodus“, um bislang unbekannte Artikel abzuhaken.")
+                        description: Text("Halte die Schnellauswahl oben gedrückt und aktiviere den Lernmodus, um bislang unbekannte Artikel abzuhaken.")
                     )
                 } else if abgehakteArtikel.isEmpty {
                     ContentUnavailableView(
@@ -489,7 +631,7 @@ private struct EinkaufslisteView: View {
                     ContentUnavailableView(
                         "Alles erledigt",
                         systemImage: "checkmark.circle.fill",
-                        description: Text("Wähle oben unter „Anzeige“ „Auch abgehakte Artikel“, um sie zu sehen.")
+                        description: Text("Tippe oben auf die Schnellauswahl, um auch abgehakte Artikel zu sehen.")
                     )
                 }
             }
@@ -507,24 +649,12 @@ private struct EinkaufslisteView: View {
                     zeigeBelegScanAngebot = true
                 }
             }
-            .buttonStyle(.glass)
+            .buttonStyle(.glassProminent)
+            .frame(maxWidth: .infinity)
             .padding()
         }
         .navigationTitle(geschaeft?.name ?? einkaufsliste.name)
         .toolbar {
-            if !abgehakteArtikel.isEmpty || geschaeft?.artikelFilterModus == .nurVerfuegbare {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Picker("Anzeige", selection: $anzeigeModus) {
-                        ForEach(EinkaufsAnzeigeModus.allCases) { modus in
-                            Label(modus.anzeigename, systemImage: modus.icon)
-                                .labelStyle(.iconOnly)
-                                .tag(modus)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .fixedSize()
-                }
-            }
             if let geschaeft {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
@@ -542,6 +672,13 @@ private struct EinkaufslisteView: View {
                         Label("Scannen", systemImage: "camera.viewfinder")
                     }
                 }
+            }
+            ToolbarItem(placement: .primaryAction) {
+                SchnellauswahlButton(
+                    zeigeAbgehakteArtikel: $zeigeAbgehakteArtikel,
+                    zeigeAlleArtikel: $zeigeAlleArtikel,
+                    lernmodusVerfuegbar: geschaeft != nil
+                )
             }
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -631,6 +768,60 @@ private struct EinkaufslisteView: View {
                 }
             }
         }
+    }
+}
+
+/// Schnellauswahl in der Toolbar neben „Artikel hinzufügen“, die zwei unabhängige
+/// Anzeige-Entscheidungen in einem einzigen Button bündelt:
+/// - Kurzer Tap: schaltet zwischen „Nur offene“ und „Auch abgehakte Artikel“ um
+///   (``zeigeAbgehakteArtikel``).
+/// - Langer Tap (Kontextmenü): schaltet den Lernmodus (``zeigeAlleArtikel``) um, der
+///   für diesen Einkauf auch nicht als verfügbar geltende Artikel einblendet — siehe
+///   ``EinkaufslisteView/verfuegbarkeitsgefiltert(_:)``. Nur verfügbar, wenn ein
+///   Geschäft gewählt ist (``lernmodusVerfuegbar``), da der Verfügbarkeitsfilter sonst
+///   ohnehin nicht greift.
+private struct SchnellauswahlButton: View {
+    @Binding var zeigeAbgehakteArtikel: Bool
+    @Binding var zeigeAlleArtikel: Bool
+    let lernmodusVerfuegbar: Bool
+
+    private var symbolName: String {
+        if zeigeAlleArtikel { return "graduationcap.fill" }
+        return zeigeAbgehakteArtikel ? "checkmark.circle.fill" : "circle"
+    }
+
+    private var beschreibung: String {
+        if zeigeAlleArtikel { return "Lernmodus aktiv: Alle Artikel werden angezeigt" }
+        return zeigeAbgehakteArtikel ? "Auch abgehakte Artikel werden angezeigt" : "Nur offene Artikel werden angezeigt"
+    }
+
+    var body: some View {
+        // `Button` + `.contextMenu` löst den langen Tap nicht zuverlässig aus, da der
+        // `.glass`-Stil ein `PrimitiveButtonStyle` mit eigener Gestenerkennung ist, die
+        // dem `.contextMenu`-Long-Press-Recognizer die Touches wegnimmt. `Menu` mit
+        // `primaryAction` ist der dafür vorgesehene SwiftUI-Baustein: kurzer Tap löst
+        // `primaryAction` aus, langer Tap öffnet zuverlässig das Menü.
+        Menu {
+            if lernmodusVerfuegbar {
+                Button {
+                    zeigeAlleArtikel.toggle()
+                } label: {
+                    Label(
+                        zeigeAlleArtikel ? "Lernmodus beenden" : "Lernmodus: alle Artikel anzeigen",
+                        systemImage: zeigeAlleArtikel ? "graduationcap.fill" : "graduationcap"
+                    )
+                }
+            }
+        } label: {
+            Image(systemName: symbolName)
+                .font(.title2)
+                .frame(width: 44, height: 44)
+        } primaryAction: {
+            zeigeAbgehakteArtikel.toggle()
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .accessibilityLabel(beschreibung)
     }
 }
 

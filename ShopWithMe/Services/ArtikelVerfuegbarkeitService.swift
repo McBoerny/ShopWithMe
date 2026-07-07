@@ -2,8 +2,8 @@ import Foundation
 import SwiftData
 
 /// Bestimmt, ob ein ``Artikel`` in einem bestimmten ``Geschaeft`` "verfügbar" ist —
-/// Grundlage für den Standard-Filter ``ArtikelFilterModus/nurVerfuegbare`` beim
-/// Einkaufen.
+/// Grundlage für den Standard-Filter beim Einkaufen (siehe
+/// `EinkaufslisteView.verfuegbarkeitsgefiltert(_:)`).
 ///
 /// Besitzt das Geschäft eigene Kategorien (``Geschaeft/verfuegbareKategorien`` —
 /// direkt zugeordnet oder über ein Regal, ein Regal ist dafür nicht erforderlich),
@@ -11,8 +11,8 @@ import SwiftData
 /// Besitzt das Geschäft keine eigenen Kategorien, lernt die App stattdessen aus der
 /// Kaufhistorie: ein Artikel gilt als verfügbar, sobald er dort mindestens einmal
 /// abgehakt/gekauft wurde (``KaufEintrag``) — das Abhaken eines bislang unbekannten
-/// Artikels (im ``ArtikelFilterModus/alle``-Modus) macht ihn also unmittelbar auch
-/// für künftige Einkäufe in diesem Geschäft "verfügbar".
+/// Artikels (bei eingeblendeten "alle Artikeln" während des Einkaufs) macht ihn also
+/// unmittelbar auch für künftige Einkäufe in diesem Geschäft "verfügbar".
 enum ArtikelVerfuegbarkeitService {
     static func istVerfuegbar(_ artikel: Artikel, in geschaeft: Geschaeft, context: ModelContext) -> Bool {
         guard geschaeft.verfuegbareKategorien.isEmpty else {

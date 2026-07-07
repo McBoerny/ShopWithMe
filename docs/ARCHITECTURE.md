@@ -44,8 +44,7 @@ sortIndex: Int            │ kategorien: [ArtikelKategorie]  breitengrad/laenge
 ┌─regale: [Regal] ────────┘                            regale: [Regal] ──┘
 └─geschaefte: [Geschaeft] ─────────────────────────────kategorien: [ArtikelKategorie]
   (many-to-many, direkt —                              regalSortierModusRaw: String?
-   ohne Regal nötig)                                    artikelFilterModusRaw: String?
-                                                         alternativeNamenRaw: String?
+   ohne Regal nötig)                                    alternativeNamenRaw: String?
                                                          kaufEintraege: [KaufEintrag]
                                                            (cascade — siehe unten)
 
@@ -132,7 +131,9 @@ Verfügbarkeit.
 - **ArtikelVerfuegbarkeitService**: bestimmt, ob ein `Artikel` in einem `Geschaeft`
   verfügbar ist — über `Geschaeft.verfuegbareKategorien`, oder (besitzt das Geschäft
   keine eigenen Kategorien) gelernt aus der Kaufhistorie (`KaufEintrag`). Grundlage für
-  den Filter `ArtikelFilterModus.nurVerfuegbare` beim Einkaufen.
+  den Verfügbarkeitsfilter beim Einkaufen, den der Anwender per Umschalter direkt im
+  laufenden Einkauf übergehen kann (siehe `EinkaufenView`) — keine persistente
+  Geschäfts-Einstellung.
 - **Einkaufsliste — Interaktionsmodell**: Tap auf die Mengenangabe öffnet direkt das
   Sheet für exakte Menge + Notiz; Swipe links/rechts erhöht/verringert die Menge;
   Sektions-Header ohne Fortschrittszähler — Details in

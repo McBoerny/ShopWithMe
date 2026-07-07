@@ -51,7 +51,62 @@ diesem Checkpoint).
   `GeschaeftStammdatenEditView`-Anlage-Flow (`istNeu: true`, wie bereits in
   `GeschaeftListView`). Neuer optionaler `onGespeichert`-Callback dort übernimmt das
   frisch angelegte Geschäft automatisch als `ausgewaehltesGeschaeft`.
-- Ein „x“-Button verwirft den Vorschlag ohne Aktion.
+- Ein „…“-Menü (`ellipsis.circle`) bietet drei Optionen: „Verwerfen“ (Banner
+  verschwindet ohne Aktion, wird beim nächsten Aufruf ggf. erneut vorgeschlagen),
+  „Diesen Laden ignorieren“ (siehe unten) und „Alle Geschäfte in der Nähe…“ (siehe
+  unten).
+
+## Vorschlag ignorieren
+
+**Status: Umgesetzt** (`IgnorierterGeschaeftsVorschlag`, `Models/IgnorierterGeschaeftsVorschlag.swift`).
+
+Manche in der Nähe erkannten Läden will der Anwender nie als Vorschlag sehen (z.B.
+ein als `.store` kategorisierter Kiosk direkt neben der Wohnung). Anders als
+„Verwerfen“ (nur für diesen einen Aufruf) ist „Ignorieren“ dauerhaft:
+
+- Neues, eigenständiges Modell `IgnorierterGeschaeftsVorschlag` (`name`,
+  optional `breitengrad`/`laengengrad`, `ignoriertAm`) — bewusst **ohne**
+  Relationship zu `Geschaeft`, da auch noch nicht angelegte, per Apple Maps
+  erkannte Läden (`.unbekannt(MKMapItem)`) ignoriert werden können. Additiv zu
+  `SchemaV1.models` ergänzt (neue Modell-Klasse ohne Datentransformation
+  bestehender Zeilen → keine neue `SchemaVN`/`MigrationStage` nötig, siehe
+  `docs/DECISIONS.md`).
+- `GeschaeftErkennungService.istIgnoriert(_:ignorierte:)` prüft Namens- ODER
+  Koordinatenübereinstimmung (`koordinatenTreffertoleranz`, 75m) — analog
+  `istBekannterTreffer(_:fuer:)`.
+- `vorschlag(vorhandeneGeschaefte:ignorierteVorschlaege:)` sortiert ignorierte
+  Treffer vor dem Matching aus, damit sie nie mehr automatisch als Banner
+  erscheinen.
+- `EinkaufenView.ignorierenVorschlag(_:)` legt beim Antippen den Eintrag an
+  (`GeschaeftVorschlag/name`/`koordinaten` liefern die dafür nötigen Rohdaten aus
+  beiden Fällen, bekannt wie unbekannt).
+
+## Alle Geschäfte in der Nähe
+
+**Status: Umgesetzt** (`GeschaeftAlleInDerNaeheSheet` in `Views/Einkaufen/EinkaufenView.swift`).
+
+Damit „Ignorieren“ nicht endgültig ist und der Anwender auch unabhängig vom
+automatischen Vorschlag (der z.B. verworfen wurde oder mangels GPS-Genauigkeit gar
+nicht erschien) manuell wählen kann, gibt es eine zweite, umfassendere Ansicht:
+
+- **Radius:** `GeschaeftErkennungService.alleInDerNaeheRadius`, **100m** — bewusst
+  enger als der `suchradius` (150m) des automatischen Einzelvorschlags, da der
+  Anwender hier gezielt in einer kurzen, überschaubaren Liste stöbert statt einen
+  einzelnen automatischen Treffer zu bekommen.
+- `alleInDerNaehe(vorhandeneGeschaefte:ignorierteVorschlaege:)` liefert **alle**
+  Treffer im Radius, nach Entfernung sortiert, je als `GeschaeftInDerNaeheEintrag`
+  (`vorschlag: GeschaeftVorschlag`, `istIgnoriert: Bool`) — anders als beim
+  automatischen Vorschlag werden ignorierte Treffer hier bewusst **nicht**
+  aussortiert, sondern mit sichtbarem Ignoriert-Status geliefert.
+- Ignorierte Einträge zeigen statt „Auswählen“/„Hinzufügen“ einen Button „Wieder
+  aufnehmen“, der die passenden `IgnorierterGeschaeftsVorschlag`-Einträge über
+  `GeschaeftErkennungService.ignorierteEintraege(fuer:in:)` (gleiche Namens-/
+  Koordinaten-Logik) löscht.
+- **Zugriff:** Sowohl aus dem „…“-Menü des Banners als auch — für den Fall, dass
+  gerade kein Banner sichtbar ist — dauerhaft aus dem Geschäft-Menü in der
+  `EinkaufenView`-Toolbar (`principal`-Platzierung, gemeinsam mit dem bestehenden
+  Geschäft-Picker), damit der Anwender jederzeit „nachträglich“ manuell auswählen
+  oder ignorierte Läden reaktivieren kann.
 
 ## Geschäftsverwaltung in den Einstellungen
 

@@ -90,19 +90,6 @@ struct GeschaeftDetailView: View {
             }
 
             Section {
-                Picker("Artikel beim Einkaufen", selection: $geschaeft.artikelFilterModus) {
-                    ForEach(ArtikelFilterModus.allCases) { modus in
-                        Text(modus.anzeigename).tag(modus)
-                    }
-                }
-                .pickerStyle(.segmented)
-            } footer: {
-                Text(geschaeft.artikelFilterModus == .nurVerfuegbare
-                     ? "Nur Artikel, die in diesem Geschäft verfügbar sind, werden beim Einkaufen angezeigt."
-                     : "Alle Artikel der Einkaufsliste werden beim Einkaufen angezeigt, unabhängig von der Verfügbarkeit in diesem Geschäft.")
-            }
-
-            Section {
                 Button {
                     zeigeStammdatenEdit = true
                 } label: {

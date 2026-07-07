@@ -100,4 +100,45 @@ struct GeschaeftErkennungServiceTests {
         #expect(entwurf.breitengrad == 52.5)
         #expect(entwurf.laengengrad == 13.4)
     }
+
+    @Test
+    func ignorierterTrefferWirdAnhandDesNamensErkannt() {
+        let treffer = mapItem(name: "Bio-Markt", latitude: 52.6, longitude: 13.5)
+        let ignoriert = IgnorierterGeschaeftsVorschlag(name: "Bio-Markt", breitengrad: nil, laengengrad: nil)
+
+        #expect(GeschaeftErkennungService.istIgnoriert(treffer, ignorierte: [ignoriert]))
+    }
+
+    @Test
+    func ignorierterTrefferWirdAnhandDerKoordinatenErkannt() {
+        let treffer = mapItem(name: "Neuer Name", latitude: 52.5001, longitude: 13.4001)
+        let ignoriert = IgnorierterGeschaeftsVorschlag(name: "Alter Name", breitengrad: 52.5, laengengrad: 13.4)
+
+        #expect(GeschaeftErkennungService.istIgnoriert(treffer, ignorierte: [ignoriert]))
+    }
+
+    @Test
+    func nichtIgnorierterTrefferWirdNichtErkannt() {
+        let treffer = mapItem(name: "Anderer Laden", latitude: 52.9, longitude: 13.9)
+        let ignoriert = IgnorierterGeschaeftsVorschlag(name: "Bio-Markt", breitengrad: 52.5, laengengrad: 13.4)
+
+        #expect(!GeschaeftErkennungService.istIgnoriert(treffer, ignorierte: [ignoriert]))
+    }
+
+    @Test
+    func vorschlagMitIgnoriertemTrefferWirdAussortiert() {
+        let ferner = mapItem(name: "Ferner Laden", latitude: 52.51, longitude: 13.41)
+        let ignorierterNaeherer = mapItem(name: "Ignorierter Laden", latitude: 52.5001, longitude: 13.4001)
+        let standort = CLLocation(latitude: 52.5, longitude: 13.4)
+        let ignoriert = IgnorierterGeschaeftsVorschlag(name: "Ignorierter Laden", breitengrad: nil, laengengrad: nil)
+
+        let relevante = [ferner, ignorierterNaeherer].filter { !GeschaeftErkennungService.istIgnoriert($0, ignorierte: [ignoriert]) }
+        let vorschlag = GeschaeftErkennungService.passendenVorschlag(aus: relevante, standort: standort, vorhandeneGeschaefte: [])
+
+        guard case .unbekannt(let mapItem) = vorschlag else {
+            Issue.record("Erwartet .unbekannt, erhalten \(String(describing: vorschlag))")
+            return
+        }
+        #expect(mapItem.name == "Ferner Laden")
+    }
 }

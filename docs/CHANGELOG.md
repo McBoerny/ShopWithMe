@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.5 (Build 47) — Verfügbarkeitsfilter direkt im Einkauf statt als Geschäfts-Einstellung
+
+- **`Geschaeft.artikelFilterModus`/`ArtikelFilterModus` entfernt**: die Entscheidung
+  „nur verfügbare Artikel“ vs. „alle Artikel“ war bislang eine persistente
+  Geschäfts-Einstellung in `GeschaeftDetailView` — redundant, da der Anwender genau
+  diese Entscheidung ohnehin bei Bedarf direkt beim Einkaufen trifft. Stattdessen neuer
+  Umschalter (Listen-Icon) neben „Auch abgehakte Artikel“ in `EinkaufenView` — blendet
+  für den laufenden Einkauf alle Artikel der Einkaufsliste ein, auch nicht als
+  verfügbar geltende, unabhängig vom Verfügbarkeitsfilter. `ArtikelVerfuegbarkeitService`
+  bleibt unverändert (weiterhin Grundlage der Verfügbarkeitsermittlung selbst).
+- **Schnellauswahl statt drei Einzel-Buttons**: die vorherigen drei separaten
+  Anzeige-Buttons in `EinkaufenView` sind zu einem einzigen `SchnellauswahlButton` in
+  der Toolbar verschmolzen (neben „Artikel hinzufügen“, statt unten neben „Einkauf
+  abschließen“): kurzer Tap schaltet zwischen „Nur offene“/„Auch abgehakte Artikel“
+  um, langer Tap öffnet ein Menü zum Umschalten des Lernmodus (alle Artikel
+  anzeigen). Implementiert über `Menu(primaryAction:)` statt `Button` +
+  `.contextMenu` — Letzteres löste den langen Tap nicht zuverlässig aus, da der
+  `.glass`-Stil ein `PrimitiveButtonStyle` mit eigener Gestenerkennung ist. „Einkauf
+  abschließen“ nutzt jetzt `.buttonStyle(.glassProminent)`.
+- **Standort-Vorschlag: „Ignorieren“ und „Alle Geschäfte in der Nähe“** (siehe
+  `docs/GESCHAEFTSERKENNUNG.md`): neues Modell `IgnorierterGeschaeftsVorschlag`
+  (additiv zu `SchemaV1.models`) merkt sich dauerhaft ignorierte
+  Standort-Vorschläge. `GeschaeftVorschlagBanner` bekommt dafür ein „…“-Menü
+  (Verwerfen/Ignorieren/Alle Geschäfte in der Nähe…). Neues
+  `GeschaeftAlleInDerNaeheSheet` zeigt alle Läden im 100m-Radius
+  (`GeschaeftErkennungService.alleInDerNaeheRadius`, enger als der 150m-Radius des
+  automatischen Einzelvorschlags), inkl. ignorierter mit „Wieder aufnehmen“-Option —
+  erreichbar über das Banner-Menü sowie dauerhaft über das Geschäft-Menü in der
+  Toolbar.
+
 ## v0.5 (Build 42) — Standort-basierte Ladenerkennung, Geschäftsverwaltung, Preishistorie-Kaskade
 
 - **`GeschaeftErkennungService`** (`Services/GeschaeftErkennungService.swift`, neu):

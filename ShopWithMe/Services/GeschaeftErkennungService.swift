@@ -10,6 +10,38 @@ enum GeschaeftVorschlag {
     /// Ein von Apple Maps bekannter Laden in der Nähe wurde erkannt, der noch nicht in
     /// der eigenen Geschäfte-Liste existiert.
     case unbekannt(MKMapItem)
+
+    var name: String {
+        switch self {
+        case .bekannt(let geschaeft): return geschaeft.name
+        case .unbekannt(let mapItem): return mapItem.name ?? "Unbekannter Laden"
+        }
+    }
+
+    /// Koordinaten für ``IgnorierterGeschaeftsVorschlag``, sofern vorhanden — bei
+    /// ``unbekannt(_:)`` immer der Apple-Maps-Standort, bei ``bekannt(_:)`` nur, wenn
+    /// für das ``Geschaeft`` bereits ``Geschaeft/breitengrad``/``laengengrad``
+    /// hinterlegt sind.
+    var koordinaten: (breitengrad: Double, laengengrad: Double)? {
+        switch self {
+        case .bekannt(let geschaeft):
+            guard let breitengrad = geschaeft.breitengrad, let laengengrad = geschaeft.laengengrad else { return nil }
+            return (breitengrad, laengengrad)
+        case .unbekannt(let mapItem):
+            return (mapItem.location.coordinate.latitude, mapItem.location.coordinate.longitude)
+        }
+    }
+}
+
+/// Ein Eintrag in der Liste „Alle Geschäfte in der Nähe“
+/// (``GeschaeftErkennungService/alleInDerNaehe(vorhandeneGeschaefte:ignorierteVorschlaege:)``) —
+/// im Unterschied zum automatischen Einzelvorschlag (``GeschaeftVorschlag``) bleiben
+/// hier auch ignorierte Treffer sichtbar (``istIgnoriert``), damit der Anwender sie
+/// über diese Liste wieder aufnehmen kann.
+struct GeschaeftInDerNaeheEintrag: Identifiable {
+    let id = UUID()
+    let vorschlag: GeschaeftVorschlag
+    let istIgnoriert: Bool
 }
 
 /// Erkennt anhand des aktuellen Standorts, ob sich der Anwender bei einem bekannten
@@ -27,6 +59,12 @@ enum GeschaeftErkennungService {
     /// Umkreis in Metern, in dem nach bekannten Läden gesucht wird.
     static let suchradius: CLLocationDistance = 150
 
+    /// Umkreis für „Alle Geschäfte in der Nähe“ (``alleInDerNaehe(vorhandeneGeschaefte:)``)
+    /// — enger als ``suchradius``, da der Anwender hier bewusst und gezielt in einer
+    /// kurzen, überschaubaren Liste stöbert statt automatisch einen einzelnen
+    /// Vorschlag zu erhalten.
+    static let alleInDerNaeheRadius: CLLocationDistance = 100
+
     /// Maximale Entfernung zwischen einem gespeicherten ``Geschaeft/breitengrad``/
     /// ``Geschaeft/laengengrad`` und einem Apple-Maps-Treffer, damit beide trotz
     /// unterschiedlichen Namens (z.B. nach Umbenennung) als dasselbe Geschäft gelten.
@@ -36,12 +74,45 @@ enum GeschaeftErkennungService {
     /// aktuellen Standort einmalig und sucht in dessen Umkreis nach einem
     /// ``GeschaeftVorschlag``. Liefert `nil`, wenn keine Berechtigung erteilt wurde,
     /// der Standort nicht ermittelt werden konnte oder kein relevanter Laden in der
-    /// Nähe ist (z.B. zu Hause) — dann wird bewusst nichts vorgeschlagen.
+    /// Nähe ist (z.B. zu Hause) — dann wird bewusst nichts vorgeschlagen. Bereits
+    /// über ``IgnorierterGeschaeftsVorschlag`` ignorierte Treffer (siehe
+    /// ``istIgnoriert(_:ignorierte:)``) werden vorher aussortiert und deshalb auch
+    /// nie erneut automatisch vorgeschlagen.
     @MainActor
-    static func vorschlag(vorhandeneGeschaefte: [Geschaeft]) async -> GeschaeftVorschlag? {
+    static func vorschlag(
+        vorhandeneGeschaefte: [Geschaeft],
+        ignorierteVorschlaege: [IgnorierterGeschaeftsVorschlag] = []
+    ) async -> GeschaeftVorschlag? {
         guard let standort = await EinmaligerStandortAbruf().standortErmitteln() else { return nil }
-        guard let treffer = try? await nahegelegeneLaeden(bei: standort), !treffer.isEmpty else { return nil }
-        return passendenVorschlag(aus: treffer, standort: standort, vorhandeneGeschaefte: vorhandeneGeschaefte)
+        guard let treffer = try? await nahegelegeneLaeden(bei: standort, radius: suchradius), !treffer.isEmpty else { return nil }
+        let relevante = treffer.filter { !istIgnoriert($0, ignorierte: ignorierteVorschlaege) }
+        return passendenVorschlag(aus: relevante, standort: standort, vorhandeneGeschaefte: vorhandeneGeschaefte)
+    }
+
+    /// Sucht (unabhängig vom automatischen Einzelvorschlag) alle Läden im engeren
+    /// ``alleInDerNaeheRadius``-Umkreis, sortiert nach Entfernung — Grundlage für
+    /// „Alle Geschäfte in der Nähe“, mit der der Anwender nachträglich manuell
+    /// auswählen oder einen zuvor ignorierten Vorschlag wieder aufnehmen kann. Anders
+    /// als ``vorschlag(vorhandeneGeschaefte:ignorierteVorschlaege:)`` werden ignorierte
+    /// Treffer hier bewusst NICHT aussortiert, sondern zusammen mit ihrem
+    /// Ignoriert-Status geliefert. Liefert `nil` ohne Standortberechtigung.
+    @MainActor
+    static func alleInDerNaehe(
+        vorhandeneGeschaefte: [Geschaeft],
+        ignorierteVorschlaege: [IgnorierterGeschaeftsVorschlag]
+    ) async -> [GeschaeftInDerNaeheEintrag]? {
+        guard let standort = await EinmaligerStandortAbruf().standortErmitteln() else { return nil }
+        guard let treffer = try? await nahegelegeneLaeden(bei: standort, radius: alleInDerNaeheRadius) else { return nil }
+        let sortiert = treffer.sorted { entfernung(zu: $0, von: standort) < entfernung(zu: $1, von: standort) }
+        return sortiert.map { item in
+            let vorschlag: GeschaeftVorschlag
+            if let bekanntesGeschaeft = vorhandeneGeschaefte.first(where: { istBekannterTreffer($0, fuer: item) }) {
+                vorschlag = .bekannt(bekanntesGeschaeft)
+            } else {
+                vorschlag = .unbekannt(item)
+            }
+            return GeschaeftInDerNaeheEintrag(vorschlag: vorschlag, istIgnoriert: istIgnoriert(item, ignorierte: ignorierteVorschlaege))
+        }
     }
 
     /// Baut aus einem per Ladenerkennung gefundenen, noch unbekannten Laden einen
@@ -69,8 +140,8 @@ enum GeschaeftErkennungService {
     }
 
     @MainActor
-    private static func nahegelegeneLaeden(bei standort: CLLocation) async throws -> [MKMapItem] {
-        let anfrage = MKLocalPointsOfInterestRequest(center: standort.coordinate, radius: suchradius)
+    private static func nahegelegeneLaeden(bei standort: CLLocation, radius: CLLocationDistance) async throws -> [MKMapItem] {
+        let anfrage = MKLocalPointsOfInterestRequest(center: standort.coordinate, radius: radius)
         anfrage.pointOfInterestFilter = MKPointOfInterestFilter(including: relevanteKategorien)
         let antwort = try await MKLocalSearch(request: anfrage).start()
         return antwort.mapItems
@@ -109,6 +180,41 @@ enum GeschaeftErkennungService {
             if gespeicherterOrt.distance(from: item.location) < koordinatenTreffertoleranz { return true }
         }
         return false
+    }
+
+    /// Prüft, ob `item` einem vom Anwender ignorierten Vorschlag (siehe
+    /// ``IgnorierterGeschaeftsVorschlag``) entspricht — Namens- ODER
+    /// Koordinatenübereinstimmung genügt, analog ``istBekannterTreffer(_:fuer:)``.
+    static func istIgnoriert(_ item: MKMapItem, ignorierte: [IgnorierterGeschaeftsVorschlag]) -> Bool {
+        ignorierte.contains { ignoriert in
+            if let name = item.name, ignoriert.name.localizedCaseInsensitiveCompare(name) == .orderedSame {
+                return true
+            }
+            if let breitengrad = ignoriert.breitengrad, let laengengrad = ignoriert.laengengrad {
+                let ort = CLLocation(latitude: breitengrad, longitude: laengengrad)
+                if ort.distance(from: item.location) < koordinatenTreffertoleranz { return true }
+            }
+            return false
+        }
+    }
+
+    /// Alle `ignorierte`-Einträge, die zu `vorschlag` passen (Namens- ODER
+    /// Koordinatenübereinstimmung) — Grundlage für „Wieder aufnehmen“ in „Alle
+    /// Geschäfte in der Nähe“, das diese Einträge wieder löscht.
+    static func ignorierteEintraege(
+        fuer vorschlag: GeschaeftVorschlag,
+        in ignorierte: [IgnorierterGeschaeftsVorschlag]
+    ) -> [IgnorierterGeschaeftsVorschlag] {
+        ignorierte.filter { eintrag in
+            if eintrag.name.localizedCaseInsensitiveCompare(vorschlag.name) == .orderedSame { return true }
+            if let koordinaten = vorschlag.koordinaten,
+               let breitengrad = eintrag.breitengrad, let laengengrad = eintrag.laengengrad {
+                let ignoriertOrt = CLLocation(latitude: breitengrad, longitude: laengengrad)
+                let vorschlagOrt = CLLocation(latitude: koordinaten.breitengrad, longitude: koordinaten.laengengrad)
+                return ignoriertOrt.distance(from: vorschlagOrt) < koordinatenTreffertoleranz
+            }
+            return false
+        }
     }
 
     static func entfernung(zu item: MKMapItem, von standort: CLLocation) -> CLLocationDistance {

@@ -34,6 +34,7 @@ enum SchemaV1: VersionedSchema {
             KategorieBesuchsStatistik.self,
             Einkaufsliste.self,
             EinkaufslistenEintrag.self,
+            IgnorierterGeschaeftsVorschlag.self,
         ]
     }
 }

@@ -72,27 +72,6 @@ enum RegalSortierModus: String, Codable, CaseIterable, Identifiable {
 
 /// Legt fest, welche Artikel der globalen Einkaufsliste beim Einkaufen in einem
 /// bestimmten ``Geschaeft`` angezeigt werden.
-///
-/// ``nurVerfuegbare`` blendet Artikel aus, die (noch) nicht als in diesem Geschäft
-/// verfügbar gelten (siehe ``ArtikelVerfuegbarkeitService``). Besitzt das Geschäft
-/// eigene Kategorien (``Geschaeft/verfuegbareKategorien``, direkt oder über ein
-/// Regal zugeordnet), ergibt sich die Verfügbarkeit daraus; besitzt es keine, lernt
-/// die App die Verfügbarkeit erst durch Abhaken der Artikel — ``alle`` ist dort
-/// nötig, um bislang unbekannte Artikel überhaupt abhaken zu können.
-enum ArtikelFilterModus: String, Codable, CaseIterable, Identifiable {
-    case nurVerfuegbare
-    case alle
-
-    var id: String { rawValue }
-
-    var anzeigename: String {
-        switch self {
-        case .nurVerfuegbare: return "Nur verfügbare"
-        case .alle: return "Alle"
-        }
-    }
-}
-
 /// Ein Geschäft, das der Anwender zum Einkaufen aufsucht.
 ///
 /// Kategorien sind wichtiger als Regale: Ein Geschäft kann ``ArtikelKategorie``n
@@ -126,16 +105,6 @@ final class Geschaeft {
     var regalSortierModus: RegalSortierModus {
         get { regalSortierModusRaw.flatMap(RegalSortierModus.init(rawValue:)) ?? .manuell }
         set { regalSortierModusRaw = newValue.rawValue }
-    }
-    /// Rohwert für ``artikelFilterModus``. Optional gespeichert, damit vor Einführung
-    /// dieses Attributs angelegte Geschäfte beim automatischen Laden nicht abstürzen —
-    /// ein `nil`-Rohwert wird als ``ArtikelFilterModus/nurVerfuegbare`` interpretiert.
-    private var artikelFilterModusRaw: String?
-    /// Welche Artikel der Einkaufsliste beim Einkaufen in diesem Geschäft angezeigt
-    /// werden — siehe ``ArtikelFilterModus``.
-    var artikelFilterModus: ArtikelFilterModus {
-        get { artikelFilterModusRaw.flatMap(ArtikelFilterModus.init(rawValue:)) ?? .nurVerfuegbare }
-        set { artikelFilterModusRaw = newValue.rawValue }
     }
     /// Regale dieses Geschäfts. Wird ein Geschäft gelöscht, werden auch seine Regale
     /// gelöscht.

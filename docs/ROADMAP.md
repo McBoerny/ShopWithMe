@@ -80,3 +80,6 @@ vollständig umgesetzt; weitere Ideen siehe „Zukünftig“ unten.
   nötige Ablösung von `KaufEintrag`s operativer Rolle (laufender Einkaufsvorgang,
   `ShelfOrderLearningService`) ein eigenständiges, größeres Vorhaben wäre. Details/
   erwogene Alternativen siehe `docs/PREISHISTORIE_BEREINIGUNG.md`.
+- **Nutzungs-Tracking/Analytics**: anonymisiertes Tracking-Framework zur Analyse der
+  App-Nutzung — erfassen, welche Funktionen wie häufig genutzt werden, um die Roadmap
+  datengestützt priorisieren zu können.

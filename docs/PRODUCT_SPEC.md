@@ -72,19 +72,22 @@ auf die Einkaufsliste kommt.
   eigenen „Sonstige“-Sektion.
 - Ein Einkauf startet automatisch beim Öffnen des Einkaufen-Tabs (für das gewählte
   Geschäft, bzw. ohne Geschäft) — kein manueller „Start“ nötig.
-- Pro Geschäft legt ``ArtikelFilterModus`` fest, ob beim Einkaufen nur dort verfügbare
-  Artikel angezeigt werden (Standard) oder alle Artikel der Einkaufsliste unabhängig
-  von der Verfügbarkeit. Verfügbarkeit ergibt sich entweder aus den Kategorien des
-  Geschäfts oder — besitzt es keine eigenen Kategorien — aus der Kaufhistorie
+- Beim Einkaufen werden standardmäßig nur die im gewählten Geschäft verfügbaren Artikel
+  angezeigt. Verfügbarkeit ergibt sich entweder aus den Kategorien des Geschäfts oder —
+  besitzt es keine eigenen Kategorien — aus der Kaufhistorie
   (``ArtikelVerfuegbarkeitService``): ein Artikel gilt als verfügbar, sobald er dort
-  einmal gekauft wurde.
-- Während eines laufenden Einkaufs kann der Anwender per Anzeige-Umschalter zwischen
-  „Nur offene“, „Auch abgehakte Artikel“ und einem „Lernmodus“ (zeigt alle Artikel der
-  Einkaufsliste, auch nicht als verfügbar geltende — zum Entdecken/Abhaken bislang
-  unbekannter Artikel, wodurch sie für dieses Geschäft als verfügbar gelernt werden)
-  wählen. Abgehakte Artikel bleiben im Modus „Auch abgehakte Artikel“ sichtbar
-  (durchgestrichen) und lassen sich per Antippen wieder zurückholen, falls versehentlich
-  abgehakt.
+  einmal gekauft wurde. Der Anwender kann diesen Filter jederzeit direkt im laufenden
+  Einkauf per Umschalter übergehen, um alle Artikel der Einkaufsliste zu sehen — das
+  ist eine reine Anzeigeentscheidung für diesen Einkauf, keine dauerhafte
+  Geschäfts-Einstellung.
+- Während eines laufenden Einkaufs bündelt eine Schnellauswahl neben „Einkauf
+  abschließen“ zwei Anzeigeentscheidungen in einem Button: ein kurzer Tap blendet
+  zusätzlich zu den offenen auch die bereits abgehakten Artikel ein (durchgestrichen,
+  per Antippen wieder zurückholbar, falls versehentlich abgehakt). Ein langer Tap öffnet
+  ein Kontextmenü zum Umschalten des Lernmodus, der alle Artikel der Einkaufsliste
+  einblendet, auch bislang nicht als verfügbar geltende — zum Entdecken/Abhaken bislang
+  unbekannter Artikel, wodurch sie für dieses Geschäft als verfügbar gelernt werden. Der
+  Lernmodus ist nur verfügbar, wenn ein Geschäft gewählt ist.
 - Per Wischgeste kann ein bereits abgehakter Artikel dauerhaft aus der Ansicht dieses
   Einkaufs entfernt werden — anders als das normale Rückgängigmachen landet er dabei
   nicht wieder auf der offenen Liste.
