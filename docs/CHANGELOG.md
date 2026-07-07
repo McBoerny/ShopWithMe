@@ -42,6 +42,15 @@
   `EinkaufenView`, sobald dort ein Geschäft gewählt ist. Ein `Einkaufsvorgang` ohne
   gewähltes Geschäft übernimmt das erkannte/gewählte Geschäft rückwirkend. Details
   in `docs/BELEGSCAN.md` → „Automatischer Geschäfts-Abgleich“.
+- **`docs/RELEASE_CHECKLIST.md`** (neu): gestaffelte Release-Checkliste für
+  Minor-/Major-Versionssprünge (Code-Review, Security-Check, Build/Tests,
+  Migrationscheck, Doku-Abgleich bei jedem Bump; zusätzlich voller
+  Security-Review, Regressionstest, Accessibility-Vollcheck,
+  App-Store/TestFlight-Vorbereitung nur bei Major-Bumps). Details siehe
+  `docs/BUILD_WORKFLOW.md`.
+- **`MKMapItem.placemark`-Deprecation behoben**: `GeschaeftErkennungService`
+  nutzt jetzt die seit iOS 26 aktuelle `MKMapItem`-API (`location`,
+  `address?.fullAddress`) statt des deprecated `placemark`.
 
 ## v0.4 (Build 40) — Automatische Bereinigung der Preishistorie
 
@@ -549,7 +558,7 @@
 - Hilfe-Eintrag „Belegscan & Preishistorie“ in `HelpView` an den Wegfall der
   Kamera-Option angepasst.
 
-## v0.7 — Belegscan & Preishistorie
+## v0.7 (Build 45) — Belegscan & Preishistorie
 
 - `Services/ReceiptScanService.swift`: Protokoll + `VisionFoundationModelsReceiptScanner`
   (Vision-OCR + FoundationModels-Strukturextraktion) erkennt Artikel und Preise auf

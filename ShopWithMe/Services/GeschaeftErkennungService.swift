@@ -52,10 +52,10 @@ enum GeschaeftErkennungService {
         let geschaeft = Geschaeft(
             name: mapItem.name ?? "Neues Geschäft",
             typ: typVorschlag(fuer: mapItem.pointOfInterestCategory),
-            adresse: mapItem.placemark.title
+            adresse: mapItem.address?.fullAddress
         )
-        geschaeft.breitengrad = mapItem.placemark.coordinate.latitude
-        geschaeft.laengengrad = mapItem.placemark.coordinate.longitude
+        geschaeft.breitengrad = mapItem.location.coordinate.latitude
+        geschaeft.laengengrad = mapItem.location.coordinate.longitude
         return geschaeft
     }
 
@@ -106,15 +106,13 @@ enum GeschaeftErkennungService {
         }
         if let breitengrad = geschaeft.breitengrad, let laengengrad = geschaeft.laengengrad {
             let gespeicherterOrt = CLLocation(latitude: breitengrad, longitude: laengengrad)
-            let itemOrt = CLLocation(latitude: item.placemark.coordinate.latitude, longitude: item.placemark.coordinate.longitude)
-            if gespeicherterOrt.distance(from: itemOrt) < koordinatenTreffertoleranz { return true }
+            if gespeicherterOrt.distance(from: item.location) < koordinatenTreffertoleranz { return true }
         }
         return false
     }
 
     static func entfernung(zu item: MKMapItem, von standort: CLLocation) -> CLLocationDistance {
-        let itemOrt = CLLocation(latitude: item.placemark.coordinate.latitude, longitude: item.placemark.coordinate.longitude)
-        return standort.distance(from: itemOrt)
+        standort.distance(from: item.location)
     }
 }
 
