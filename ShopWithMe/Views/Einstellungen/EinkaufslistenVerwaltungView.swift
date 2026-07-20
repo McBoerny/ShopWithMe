@@ -8,6 +8,7 @@ struct EinkaufslistenVerwaltungView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Einkaufsliste.erstelltAm) private var listen: [Einkaufsliste]
     @State private var zeigeNeueListe = false
+    @State private var zeigeMilkForUsImport = false
 
     var body: some View {
         SessionLeaseGate { listInhalt }
@@ -38,12 +39,22 @@ struct EinkaufslistenVerwaltungView: View {
                     Label("Liste hinzufügen", systemImage: "plus")
                 }
             }
+            ToolbarItem(placement: .secondaryAction) {
+                Button {
+                    zeigeMilkForUsImport = true
+                } label: {
+                    Label("MilkForUs importieren", systemImage: "square.and.arrow.down.on.square")
+                }
+            }
             ToolbarItem(placement: .cancellationAction) {
                 EditButton()
             }
         }
         .sheet(isPresented: $zeigeNeueListe) {
             NeueEinkaufslisteVerwaltungSheet()
+        }
+        .sheet(isPresented: $zeigeMilkForUsImport) {
+            MilkForUsImportView()
         }
     }
 

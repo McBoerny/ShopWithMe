@@ -96,6 +96,19 @@ Preisvergleich vor der Kaufentscheidung, ohne auf den Kassenbon zu warten.
 Alle erfassten Preise findest du als Preishistorie in der Artikel- bzw.
 Geschäfts-Detailansicht.
 
+## MilkForUs-Textimport
+
+In der Einkaufslisten-Verwaltung (Einstellungen) importierst du über „MilkForUs
+importieren“ eine aus der Shopping-App „MilkForUs“ exportierte Textdatei — entweder
+per Datei-Auswahl, oder direkt über die Teilen-Funktion eines anderen Apps (z.B.
+eine per Chat empfangene Datei per „Teilen“ → „ShopWithMe“). In der Vorschau siehst
+du je MilkForUs-Kategorie, ob eine bestehende Kategorie automatisch erkannt wurde
+(exakter Name oder KI-Vorschlag), oder ob eine neue angelegt würde — per Antippen
+lässt sich das auf eine andere bestehende Kategorie oder „Sonstiges“ umstellen.
+Bereits vorhandene Artikel werden nur auf die gewählte Liste gesetzt, nie
+dupliziert; einzelne Artikel lassen sich vor dem Übernehmen per Wischgeste aus dem
+Import ausschließen.
+
 ## Einstellungen
 
 - **Hilfe & Anleitungen** — kuratierte Kurzhilfe zu den komplexeren Funktionen

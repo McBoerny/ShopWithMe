@@ -9,7 +9,7 @@ settings:
   base:
     SWIFT_VERSION: "6.0"
     MARKETING_VERSION: "0.6"
-    CURRENT_PROJECT_VERSION: "56"
+    CURRENT_PROJECT_VERSION: "57"
     TARGETED_DEVICE_FAMILY: "1,2"
 
 targets:
@@ -35,6 +35,10 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
+        CFBundleURLTypes:
+          - CFBundleURLName: com.made4me.ShopWithMe
+            CFBundleURLSchemes:
+              - shopwithme
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.made4me.ShopWithMe
@@ -42,6 +46,46 @@ targets:
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: CBYLYH36PT
+    entitlements:
+      path: ShopWithMe/ShopWithMe.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.made4me.ShopWithMe
+    dependencies:
+      - target: ShopWithMeShareExtension
+        embed: true
+
+  ShopWithMeShareExtension:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: ShopWithMeShareExtension
+      - path: ShopWithMe/Services/MilkForUsPendingImportStore.swift
+    info:
+      path: ShopWithMeShareExtension/Info.plist
+      properties:
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleDisplayName: ShopWithMe
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsText: true
+              NSExtensionActivationSupportsFileWithMaxCount: 1
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.made4me.ShopWithMe.ShareExtension
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: CBYLYH36PT
+        SKIP_INSTALL: YES
+    entitlements:
+      path: ShopWithMeShareExtension/ShopWithMeShareExtension.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.made4me.ShopWithMe
 
   ShopWithMeTests:
     type: bundle.unit-test

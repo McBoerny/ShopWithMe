@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.6 (Build 57) — MilkForUs-Textimport (Datei-Import + Share Extension)
+
+- **Neu: MilkForUs-Textimport** (`MilkForUsImportService`, `MilkForUsImportView`):
+  importiert eine aus der Shopping-App "MilkForUs" exportierte Textdatei (Kategorien
+  + Artikel) auf eine gewählte Einkaufsliste. Kategorie-Abgleich per exaktem
+  Namenstreffer, sonst KI-Best-Match gegen den bestehenden Kategoriebestand (z.B.
+  "Brot" → "Brot & Backwaren"), sonst Vorschlag zur Neuanlage — in der Vorschau pro
+  Kategorie umstellbar auf eine andere bestehende Kategorie oder "Sonstiges".
+  Bestehende Artikel gleicher Namen werden nur auf die Liste gesetzt, nie dupliziert.
+  Einstiegspunkt: „MilkForUs importieren“ in der Einkaufslisten-Verwaltung.
+- **Neu: `ShopWithMeShareExtension`** — dieselbe Import-Vorschau lässt sich jetzt auch
+  direkt über die iOS-Teilen-Funktion anstoßen (z.B. eine per Chat empfangene
+  MilkForUs-Datei). Die Extension selbst hat keinen Zugriff auf den SwiftData-Store,
+  sie übergibt den geteilten Text nur über eine App-Group-Containerdatei an die
+  Haupt-App, die den Import wie gewohnt öffnet (`shopwithme://milkforus-import`).
+- Details, Ablauf und bewusste Einschränkungen in `docs/MILKFORUS_IMPORT.md`.
+
 ## v0.6 (Build 55) — Bedienungsanleitung eingeführt, Build-Workflow-Doku-Duplikat aufgelöst
 
 - **Neu: `docs/BEDIENUNGSANLEITUNG.md`** — kompakte End-Nutzer-Anleitung, ein

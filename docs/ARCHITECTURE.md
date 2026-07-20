@@ -22,11 +22,13 @@ ShopWithMe/
     Models/                   # SwiftData @Model Typen + Seed-Daten
     Services/                 # AISuggestionService, ReceiptScanService,
                                # PriceTagScanService, ShelfOrderLearningService,
-                               # DatabaseLocationService
+                               # DatabaseLocationService, MilkForUsImportService
     DesignSystem/              # Liquid-Glass-Wrapper, Symbol/Farb-Picker
     Views/                    # nach Feature gruppiert: Artikel, Geschaefte,
                                # Einkaufen, Historie, Einstellungen
     Resources/                # Assets.xcassets
+  ShopWithMeShareExtension/    # Share Extension (MilkForUs-Textimport per Teilen-
+                               # Funktion, siehe docs/MILKFORUS_IMPORT.md)
   ShopWithMe.docc/             # DocC-Landing-Page (Kommentare leben im Code)
   ShopWithMeTests/
 ```
@@ -128,6 +130,13 @@ Verfügbarkeit.
   `Einkaufsvorgang` die `KategorieBesuchsStatistik` und leitet daraus sowohl eine
   vorgeschlagene automatische Regal-Reihenfolge als auch (für Geschäfte ohne Regale
   bzw. für Kategorien ohne Regal-Zuordnung) eine reine Kategorie-Reihenfolge ab.
+- **MilkForUsImportService**: importiert eine aus der Shopping-App "MilkForUs"
+  exportierte Textdatei (Kategorien + Artikel) — Kategorie-Abgleich per exaktem
+  Namenstreffer, sonst KI-Best-Match (`AISuggestionService.kategorieMatch`) gegen den
+  bestehenden Kategoriebestand, sonst Vorschlag zur Neuanlage. Zwei Einstiegspunkte:
+  manueller Datei-Picker (`MilkForUsImportView`, aus der Einkaufslisten-Verwaltung)
+  und eine eigene Share Extension (`ShopWithMeShareExtension`) für die iOS-
+  Teilen-Funktion. Details in `docs/MILKFORUS_IMPORT.md`.
 - **ArtikelVerfuegbarkeitService**: bestimmt, ob ein `Artikel` in einem `Geschaeft`
   verfügbar ist — über `Geschaeft.verfuegbareKategorien`, oder (besitzt das Geschäft
   keine eigenen Kategorien) gelernt aus der Kaufhistorie (`KaufEintrag`). Grundlage für

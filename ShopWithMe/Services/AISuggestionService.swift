@@ -46,4 +46,35 @@ enum AISuggestionService {
         let antwort = try await session.respond(to: "Artikel: \(name)", generating: ArtikelVorschlag.self)
         return antwort.content
     }
+
+    /// Ermittelt für einen importierten Kategorienamen (z.B. aus einer fremden
+    /// Shopping-App) die inhaltlich am besten passende bestehende
+    /// ``ArtikelKategorie`` — genutzt vom MilkForUs-Textimport
+    /// (``MilkForUsImportService``), um z.B. "Brot" auf "Brot & Backwaren"
+    /// abzubilden statt eine Dublette anzulegen.
+    static func kategorieMatch(
+        fuerName name: String,
+        bekannteKategorien: [String]
+    ) async throws -> KategorieMatchVorschlag {
+        let anweisungen = """
+        Du hilfst dabei, Kategorienamen aus dem Export einer anderen Einkaufs-App auf \
+        die Kategorien einer Einkaufs-App abzubilden. Wähle aus dieser Liste \
+        bestehender Kategorien diejenige, die inhaltlich am besten zum genannten \
+        Namen passt: \(bekannteKategorien.joined(separator: ", ")). Antworte mit \
+        einem leeren String, falls wirklich keine davon passt — erfinde keine neue \
+        Kategorie.
+        """
+        let session = LanguageModelSession(instructions: anweisungen)
+        let antwort = try await session.respond(to: "Kategorie: \(name)", generating: KategorieMatchVorschlag.self)
+        return antwort.content
+    }
+}
+
+/// Von der lokalen Apple-KI vorgeschlagene, am besten passende bestehende
+/// ``ArtikelKategorie`` für einen importierten Kategorienamen — siehe
+/// ``AISuggestionService/kategorieMatch(fuerName:bekannteKategorien:)``.
+@Generable
+struct KategorieMatchVorschlag {
+    @Guide(description: "Name der am besten passenden bestehenden Kategorie, oder ein leerer String, falls keine davon wirklich passt")
+    var passendeKategorie: String
 }

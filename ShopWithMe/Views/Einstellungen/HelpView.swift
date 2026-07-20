@@ -76,6 +76,18 @@ private struct HilfeThema: Identifiable {
             """
         ),
         HilfeThema(
+            titel: "MilkForUs-Textimport",
+            text: """
+            In den Einstellungen unter „Einkaufslisten“ kannst du über „MilkForUs \
+            importieren“ eine aus der Shopping-App „MilkForUs“ exportierte Textdatei \
+            einlesen — per Datei-Auswahl oder direkt über die Teilen-Funktion eines \
+            anderen Apps (z.B. eine per Chat empfangene Datei). Kategorien werden \
+            automatisch mit deinem Bestand abgeglichen (exakter Name oder \
+            KI-Vorschlag); in der Vorschau kannst du das vor dem Übernehmen noch \
+            ändern oder einzelne Artikel ausschließen.
+            """
+        ),
+        HilfeThema(
             titel: "Datenbank-Speicherort ändern",
             text: """
             In den Einstellungen unter „Datenbank & Speicherort“ kannst du einen \
