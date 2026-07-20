@@ -749,7 +749,7 @@ echte Bugs in der v0.5-Ladenerkennung auf, beide jetzt behoben:
 - Toter Platzhalter-Code in `RootView` entfernt, da alle vier Tabs jetzt echte
   Views zeigen.
 
-## v0.5 — Lern-Algorithmus für Regal-Reihenfolge
+## v0.5 (Build 56) — Lern-Algorithmus für Regal-Reihenfolge
 
 - `Services/ShelfOrderLearningService.swift`: wertet abgeschlossene
   Einkaufsvorgänge aus, pflegt `RegalBesuchsStatistik` je Regal und leitet daraus
