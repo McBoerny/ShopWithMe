@@ -2,7 +2,9 @@
 
 Praktische Checkliste für jeden Checkpoint/Commit in diesem Projekt. Die Begründung
 hinter den einzelnen Regeln steht in `docs/DECISIONS.md` — dieses Dokument ist bewusst
-knapp und handlungsorientiert gehalten.
+knapp und handlungsorientiert gehalten. **Maßgebliche Quelle** für den
+Checkpoint-Ablauf/das Versionsschema (auch für den Claude-Skill
+`shopwithme-conventions`, der hierher verweist statt den Inhalt zu duplizieren).
 
 ## Checkpoint-Ablauf (bei jedem inhaltlich größeren Änderungsblock)
 

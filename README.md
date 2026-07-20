@@ -4,9 +4,11 @@ iOS-App (SwiftUI, iOS 26+) zum täglichen Einkaufen: Artikel, Geschäfte, Regale
 Kategorie-Zuordnung, lernende Regal-Reihenfolge, KI-gestützte Artikelanlage und
 Belegscan mit Preishistorie.
 
-Siehe [docs/PRODUCT_SPEC.md](docs/PRODUCT_SPEC.md) für die vollständige Spezifikation,
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) für die technische Umsetzung und
-[docs/ROADMAP.md](docs/ROADMAP.md) für den Checkpoint-Fortschritt.
+Siehe [docs/BEDIENUNGSANLEITUNG.md](docs/BEDIENUNGSANLEITUNG.md) für die Bedienung
+der App, [docs/PRODUCT_SPEC.md](docs/PRODUCT_SPEC.md) für die vollständige
+Spezifikation, [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) für die technische
+Umsetzung, [docs/ROADMAP.md](docs/ROADMAP.md) für den Checkpoint-Fortschritt und
+[docs/CHANGELOG.md](docs/CHANGELOG.md) für die Versionshistorie.
 
 ## Projekt öffnen
 

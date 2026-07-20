@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.6 (Build 55) — Bedienungsanleitung eingeführt, Build-Workflow-Doku-Duplikat aufgelöst
+
+- **Neu: `docs/BEDIENUNGSANLEITUNG.md`** — kompakte End-Nutzer-Anleitung, ein
+  Abschnitt je Funktionsbereich. Maßgeblich gegenüber der kuratierten In-App-Hilfe
+  (`HelpView.swift`). `README.md` verlinkt jetzt zusätzlich darauf sowie auf
+  `docs/CHANGELOG.md`.
+- **Skill-Aufräumung:** Die „Checkpoint-/Versionierungs-Workflow“-Sektion im
+  projekteigenen Claude-Skill (`shopwithme-conventions`) duplizierte fast wortgleich
+  `docs/BUILD_WORKFLOW.md` — jetzt aufgelöst, `docs/BUILD_WORKFLOW.md` bleibt die
+  einzige maßgebliche Quelle, der Skill verweist nur noch darauf.
+- **Neue generische Skill-Regel** (`ios-swift-engineering`): Nutzer-Bedienungsanleitungen
+  werden künftig bei jedem Feature/jeder sichtbaren Funktionsänderung im selben
+  Arbeitsschritt mitgepflegt, nicht nachträglich.
+
 ## v0.6 (Build 54) — Geschäftsadresse beim Belegscan erkennen, Kurzadresse bei Namensduplikaten
 
 - **`ReceiptScanService`**: `BelegErgebnis` erkennt jetzt zusätzlich zum Namen auch
