@@ -257,6 +257,11 @@ wie oben beschrieben.
   `kategorieEntfernen`) benötigen **keine eigene** Lease-Behandlung — sie
   passieren, während die Session-Lease dieses Bildschirms ohnehin schon
   gehalten wird.
+- `EinkaufenView.standortFuerGeschaeftUebernehmen`/`adresseGeocodierenUndUebernehmen`
+  und `AdresseEingebenSheet.sichern` (Koordinaten/Adresse nachträglich an einem
+  bereits bestehenden `Geschaeft` ergänzen, siehe `docs/GESCHAEFTSERKENNUNG.md` →
+  „Standort nachträglich für ein bereits genutztes Geschäft ergänzen“) — gleiche
+  Kategorie wie `ignorierenVorschlag`.
 
 **Gebündelte Aktionen (teilen sich einen Lease statt einen eigenen zu bekommen):**
 - Einkaufsvorgang **abschließen** (`endZeit` setzen) und der direkt im selben

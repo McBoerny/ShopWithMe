@@ -223,11 +223,43 @@ enum GeschaeftErkennungService {
     /// ermittelt werden konnte.
     @MainActor
     static func entwurfAusAktuellemStandort() async -> Geschaeft? {
-        guard let standort = await EinmaligerStandortAbruf().standortErmitteln() else { return nil }
+        guard let koordinaten = await standortKoordinaten() else { return nil }
         let geschaeft = Geschaeft(name: "", typ: .lebensmittel)
-        geschaeft.breitengrad = standort.coordinate.latitude
-        geschaeft.laengengrad = standort.coordinate.longitude
+        geschaeft.breitengrad = koordinaten.breitengrad
+        geschaeft.laengengrad = koordinaten.laengengrad
         return geschaeft
+    }
+
+    /// Koordinaten des aktuellen Standorts — für ein bereits bestehendes
+    /// ``Geschaeft``, dem nachträglich ein Standort ergänzt werden soll (im
+    /// Unterschied zu ``entwurfAusAktuellemStandort()``, das einen komplett neuen
+    /// Entwurf baut). `nil`, wenn keine Standortberechtigung erteilt wurde oder der
+    /// Standort nicht ermittelt werden konnte.
+    @MainActor
+    static func koordinatenAusAktuellerPosition() async -> (breitengrad: Double, laengengrad: Double)? {
+        await standortKoordinaten()
+    }
+
+    /// Ermittelt Koordinaten für eine vom Anwender eingegebene oder bereits
+    /// hinterlegte ``Geschaeft/adresse`` per Geocoding (`MKGeocodingRequest` — die
+    /// seit iOS 26 vorgesehene Ablösung des deprecateten `CLGeocoder`) —
+    /// Alternative zum GPS-Standort für den Fall, dass der Anwender sich nicht am
+    /// Ort des Geschäfts befindet oder keine Standortberechtigung erteilen möchte.
+    /// `nil` bei leerem Text, ohne Treffer oder bei Geocoding-Fehler (z.B. kein
+    /// Netzwerk).
+    @MainActor
+    static func koordinaten(fuerAdresse adresse: String) async -> (breitengrad: Double, laengengrad: Double)? {
+        let getrimmt = adresse.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !getrimmt.isEmpty, let anfrage = MKGeocodingRequest(addressString: getrimmt) else { return nil }
+        guard let treffer = try? await anfrage.mapItems, let erster = treffer.first else { return nil }
+        let koordinate = erster.location.coordinate
+        return (koordinate.latitude, koordinate.longitude)
+    }
+
+    @MainActor
+    private static func standortKoordinaten() async -> (breitengrad: Double, laengengrad: Double)? {
+        guard let standort = await EinmaligerStandortAbruf().standortErmitteln() else { return nil }
+        return (standort.coordinate.latitude, standort.coordinate.longitude)
     }
 
     private static func typVorschlag(fuer kategorie: MKPointOfInterestCategory?) -> GeschaeftTyp {

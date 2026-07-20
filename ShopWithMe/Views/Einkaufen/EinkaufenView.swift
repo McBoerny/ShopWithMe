@@ -30,6 +30,11 @@ struct EinkaufenView: View {
     @State private var geschaeftVorschlag: GeschaeftVorschlag?
     @State private var geschaeftEntwurfAusVorschlag: Geschaeft?
     @State private var zeigeAlleInDerNaehe = false
+    /// Treibt die Nachfrage „Standort für <Name> speichern?“ nach Auswahl eines
+    /// Geschäfts ohne Koordinaten (siehe ``pruefeStandortErgaenzung(fuer:)``).
+    @State private var geschaeftFuerStandortErgaenzung: Geschaeft?
+    @State private var geschaeftFuerAdresseEingabe: Geschaeft?
+    @State private var zeigeStandortErgaenzenFehler = false
 
     private var aktuellerEinkauf: Einkaufsvorgang? {
         guard let ausgewaehlteListe else { return nil }
@@ -126,7 +131,10 @@ struct EinkaufenView: View {
                 await geschaeftErkennungPruefen()
             }
         }
-        .onChange(of: ausgewaehltesGeschaeft) { _, _ in Task { await einkaufSicherstellen() } }
+        .onChange(of: ausgewaehltesGeschaeft) { _, neu in
+            Task { await einkaufSicherstellen() }
+            pruefeStandortErgaenzung(fuer: neu)
+        }
         .onChange(of: ausgewaehlteListe) { _, _ in Task { await einkaufSicherstellen() } }
         // Reagiert darauf, dass ein Einkaufsvorgang abgeschlossen wurde (verschwindet
         // dadurch aus `offeneEinkaufsvorgaenge`): legt sofort den nächsten an, damit die
@@ -154,6 +162,40 @@ struct EinkaufenView: View {
                 hinzufuegenMitStandort: { entwurf in geschaeftEntwurfAusVorschlag = entwurf },
                 wiederAufnehmen: { vorschlag in wiederAufnehmenVorschlag(vorschlag) }
             )
+        }
+        .confirmationDialog(
+            "Standort für „\(geschaeftFuerStandortErgaenzung?.name ?? "")“ speichern?",
+            isPresented: Binding(
+                get: { geschaeftFuerStandortErgaenzung != nil },
+                set: { neu in if !neu { geschaeftFuerStandortErgaenzung = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Aktuellen Standort verwenden") {
+                guard let ziel = geschaeftFuerStandortErgaenzung else { return }
+                Task { await standortFuerGeschaeftUebernehmen(ziel) }
+            }
+            if let ziel = geschaeftFuerStandortErgaenzung, ziel.adresse != nil {
+                Button("Aus hinterlegter Adresse ermitteln") {
+                    guard let adresse = ziel.adresse else { return }
+                    Task { await adresseGeocodierenUndUebernehmen(adresse, fuer: ziel) }
+                }
+            } else {
+                Button("Adresse eingeben") {
+                    geschaeftFuerAdresseEingabe = geschaeftFuerStandortErgaenzung
+                }
+            }
+            Button("Nicht jetzt", role: .cancel) {}
+        } message: {
+            Text("Für die automatische Ladenerkennung an diesem Ort fehlen noch Koordinaten.")
+        }
+        .sheet(item: $geschaeftFuerAdresseEingabe) { geschaeft in
+            AdresseEingebenSheet(geschaeft: geschaeft)
+        }
+        .alert("Standort nicht verfügbar", isPresented: $zeigeStandortErgaenzenFehler) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Der Standort konnte nicht ermittelt werden. Prüfe den Standortzugriff bzw. die hinterlegte Adresse.")
         }
     }
 
@@ -203,6 +245,44 @@ struct EinkaufenView: View {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
                 for eintrag in treffer { modelContext.delete(eintrag) }
             }
+        }
+    }
+
+    /// Prüft nach jeder Auswahl eines Geschäfts (Toolbar-Picker, Standort-Vorschlag,
+    /// „Alle Geschäfte in der Nähe“ oder direkt nach dem Anlegen über
+    /// ``GeschaeftStammdatenEditView``), ob dafür noch keine Koordinaten hinterlegt
+    /// sind, und bietet in diesem Fall über ``geschaeftFuerStandortErgaenzung`` eine
+    /// Nachfrage an, sie nachträglich zu ergänzen — siehe
+    /// `docs/GESCHAEFTSERKENNUNG.md`.
+    private func pruefeStandortErgaenzung(fuer geschaeft: Geschaeft?) {
+        guard let geschaeft, geschaeft.breitengrad == nil else { return }
+        geschaeftFuerStandortErgaenzung = geschaeft
+    }
+
+    /// Übernimmt den aktuellen GPS-Standort als Koordinaten für ein bereits
+    /// bestehendes Geschäft (im Unterschied zu ``GeschaeftErkennungService/entwurfAusAktuellemStandort()``,
+    /// das einen neuen Entwurf baut). Diskrete Einzelaktion → Micro-Lease.
+    private func standortFuerGeschaeftUebernehmen(_ geschaeft: Geschaeft) async {
+        guard let koordinaten = await GeschaeftErkennungService.koordinatenAusAktuellerPosition() else {
+            zeigeStandortErgaenzenFehler = true
+            return
+        }
+        await DatabaseLeaseService.performMicroLease(context: modelContext) {
+            geschaeft.breitengrad = koordinaten.breitengrad
+            geschaeft.laengengrad = koordinaten.laengengrad
+        }
+    }
+
+    /// Geocodiert eine bereits am Geschäft hinterlegte Adresse und übernimmt die
+    /// ermittelten Koordinaten. Diskrete Einzelaktion → Micro-Lease.
+    private func adresseGeocodierenUndUebernehmen(_ adresse: String, fuer geschaeft: Geschaeft) async {
+        guard let koordinaten = await GeschaeftErkennungService.koordinaten(fuerAdresse: adresse) else {
+            zeigeStandortErgaenzenFehler = true
+            return
+        }
+        await DatabaseLeaseService.performMicroLease(context: modelContext) {
+            geschaeft.breitengrad = koordinaten.breitengrad
+            geschaeft.laengengrad = koordinaten.laengengrad
         }
     }
 
@@ -271,6 +351,64 @@ private struct NeueEinkaufslisteSheet: View {
                 }
             }
         }
+    }
+}
+
+/// Sheet zum Eingeben einer Adresse für ein bereits bestehendes ``Geschaeft`` ohne
+/// Koordinaten (siehe ``EinkaufenView/pruefeStandortErgaenzung(fuer:)``) —
+/// geocodiert die eingegebene Adresse (``GeschaeftErkennungService/koordinaten(fuerAdresse:)``)
+/// und übernimmt bei Erfolg sowohl die Adresse als auch die ermittelten
+/// Koordinaten. Arbeitet mit lokalem Entwurfs-Zustand (analog
+/// `NeueEinkaufslisteSheet`), Übernahme erst bei „Sichern“ in einem Micro-Lease.
+private struct AdresseEingebenSheet: View {
+    let geschaeft: Geschaeft
+
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+    @State private var adresse = ""
+    @State private var ermittleKoordinaten = false
+    @State private var zeigeFehler = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("Adresse, z.B. „Marktstraße 1, 12345 Musterstadt“", text: $adresse, axis: .vertical)
+            }
+            .navigationTitle(geschaeft.name)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Abbrechen") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Sichern") {
+                        Task { await sichern() }
+                    }
+                    .disabled(adresse.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || ermittleKoordinaten)
+                }
+            }
+            .alert("Adresse nicht gefunden", isPresented: $zeigeFehler) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Für diese Adresse konnten keine Koordinaten ermittelt werden. Bitte prüfe die Eingabe.")
+            }
+        }
+    }
+
+    private func sichern() async {
+        ermittleKoordinaten = true
+        defer { ermittleKoordinaten = false }
+        let getrimmteAdresse = adresse.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let koordinaten = await GeschaeftErkennungService.koordinaten(fuerAdresse: getrimmteAdresse) else {
+            zeigeFehler = true
+            return
+        }
+        await DatabaseLeaseService.performMicroLease(context: modelContext) {
+            geschaeft.adresse = getrimmteAdresse
+            geschaeft.breitengrad = koordinaten.breitengrad
+            geschaeft.laengengrad = koordinaten.laengengrad
+        }
+        dismiss()
     }
 }
 

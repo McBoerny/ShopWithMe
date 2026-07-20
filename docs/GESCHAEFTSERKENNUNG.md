@@ -202,6 +202,46 @@ Koordinaten) stand zur Verfügung.
   (`koordinatenTreffertoleranz`) zur Verfügung. Schlägt die Standortermittlung fehl,
   erscheint statt eines stillen No-Ops ein Hinweis-Alert.
 
+## Standort nachträglich für ein bereits genutztes Geschäft ergänzen
+
+**Status: Umgesetzt** (`EinkaufenView.pruefeStandortErgaenzung(fuer:)`,
+`GeschaeftErkennungService.koordinatenAusAktuellerPosition()`/`koordinaten(fuerAdresse:)`).
+
+Geschäfte, die ohne Standortbezug angelegt wurden (z.B. über „Neues Geschäft
+hinzufügen“ oder den „neu anlegen“-Weg beim Belegscan, `GeschaeftWahlSheet`),
+blieben bislang dauerhaft unsichtbar für die automatische Ladenerkennung, auch wenn
+der Anwender später tatsächlich dort einkauft — bewusst wird der Standort dafür
+NICHT automatisch beim Belegscan erfasst (der Scan passiert oft nicht am Ort des
+Ladens), sondern erst nachgefragt, sobald der Anwender ein solches Geschäft beim
+Einkaufen tatsächlich auswählt.
+
+- `EinkaufenView.onChange(of: ausgewaehltesGeschaeft)` prüft nach jeder Auswahl
+  (Toolbar-Picker, Standort-Vorschlag, „Alle Geschäfte in der Nähe“, direkt nach dem
+  Anlegen) über `pruefeStandortErgaenzung(fuer:)`, ob `breitengrad` fehlt, und zeigt
+  in diesem Fall ein `.confirmationDialog` „Standort für „<Name>“ speichern?“.
+- **Ohne hinterlegte `adresse`:** „Aktuellen Standort verwenden“ (über neues
+  `GeschaeftErkennungService.koordinatenAusAktuellerPosition()`, dünner Wrapper um
+  dieselbe private Standort-Hilfsfunktion wie `entwurfAusAktuellemStandort()`) oder
+  „Adresse eingeben“ (öffnet `AdresseEingebenSheet`, ein kleines Sheet mit
+  Entwurfs-Zustand analog `NeueEinkaufslisteSheet`, das die eingegebene Adresse
+  geocodiert und bei Erfolg sowohl `adresse` als auch die Koordinaten übernimmt).
+- **Mit bereits hinterlegter `adresse`, aber ohne Koordinaten:** „Aktuelle Position
+  verwenden“ oder „Aus hinterlegter Adresse ermitteln“ (geocodiert direkt, kein
+  Textfeld nötig) — für den Fall, dass keine Standortberechtigung erteilt werden
+  soll.
+- „Nicht jetzt“ (Cancel) schließt ohne dauerhaftes Merken — erscheint bei erneuter
+  Auswahl desselben Geschäfts wieder, da die Nachfrage nur bei bewusster Auswahl
+  ausgelöst wird (kein Hintergrund-Nerv-Faktor).
+- **Geocoding:** `GeschaeftErkennungService.koordinaten(fuerAdresse:)` nutzt
+  `MKGeocodingRequest` (MapKit) statt des seit iOS 26 deprecateten `CLGeocoder` —
+  kein Standortzugriff nötig, nur Netzwerk. `nil` bei leerem Text, ohne Treffer oder
+  bei Geocoding-Fehler.
+- `Geschaeft.adresse` bleibt bewusst ein optionales Feld — keine neue Pflichtangabe
+  in `GeschaeftStammdatenEditView` oder anderen Anlage-Flows, nur über diese
+  Nachfrage opportunistisch eingesammelt.
+- Fehlschläge (keine Standortberechtigung/-ermittlung, Geocoding ohne Treffer)
+  zeigen einen Alert statt eines stillen No-Ops.
+
 ## Löschen eines Geschäfts löscht seine Preishistorie
 
 `Geschaeft` bekommt eine neue `@Relationship(deleteRule: .cascade, inverse:

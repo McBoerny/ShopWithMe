@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.6 (Build 53) — Standort nachträglich für ein bereits genutztes Geschäft ergänzen
+
+- **Nachfrage beim Auswählen eines Geschäfts ohne Koordinaten** (`EinkaufenView`,
+  siehe `docs/GESCHAEFTSERKENNUNG.md`): „Aktuellen Standort verwenden“ oder
+  „Adresse eingeben“ (neues `AdresseEingebenSheet`, geocodiert per
+  `GeschaeftErkennungService.koordinaten(fuerAdresse:)`) — bzw. bei bereits
+  hinterlegter Adresse „Aktuelle Position verwenden“ oder „Aus hinterlegter Adresse
+  ermitteln“. Betrifft Geschäfte, die ohne Standortbezug angelegt wurden (z.B. über
+  „Neues Geschäft hinzufügen“ oder beim Belegscan neu angelegt) und damit bislang
+  dauerhaft unsichtbar für die automatische Ladenerkennung blieben.
+- **`GeschaeftErkennungService.koordinaten(fuerAdresse:)`** (neu) nutzt
+  `MKGeocodingRequest` (MapKit) statt des seit iOS 26 deprecateten `CLGeocoder`.
+- **`GeschaeftErkennungService.koordinatenAusAktuellerPosition()`** (neu): dünner
+  Wrapper um dieselbe private Standort-Hilfsfunktion wie
+  `entwurfAusAktuellemStandort()` (dafür intern extrahiert), für die Verwendung an
+  einem bereits bestehenden `Geschaeft`.
+- `Geschaeft.adresse` bleibt bewusst optional — keine neue Pflichtangabe, nur
+  opportunistisch über diese Nachfrage eingesammelt.
+
 ## v0.6 (Build 52) — Neues Geschäft ohne Apple-Maps-Treffer am aktuellen Ort protokollieren
 
 - **`GeschaeftErkennungService.entwurfAusAktuellemStandort()`** (neu): baut einen
