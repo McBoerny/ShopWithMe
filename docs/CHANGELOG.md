@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.6 (Build 52) — Neues Geschäft ohne Apple-Maps-Treffer am aktuellen Ort protokollieren
+
+- **`GeschaeftErkennungService.entwurfAusAktuellemStandort()`** (neu): baut einen
+  leeren `Geschaeft`-Entwurf mit den Koordinaten des aktuellen Standorts, ganz ohne
+  `MKMapItem` — für den Fall, dass Apple Maps den Laden nicht kennt.
+- **Leer-Zustand „Keine Geschäfte gefunden“** in `GeschaeftAlleInDerNaeheSheet`
+  (siehe `docs/GESCHAEFTSERKENNUNG.md`) bekommt einen Button „Diesen Ort als neues
+  Geschäft anlegen“, der darüber den bestehenden `GeschaeftStammdatenEditView`-Anlage-
+  Flow mit bereits gesetzten Koordinaten öffnet — die vorher nur standortunabhängig
+  verfügbare manuelle Anlage funktioniert damit jetzt auch direkt am erkannten Ort,
+  inkl. Koordinaten für künftiges Matching. Schlägt die Standortermittlung fehl, zeigt
+  ein Alert statt eines stillen No-Ops.
+
 ## v0.6 (Build 51) — Release-Review: Matching-Logik konsolidiert, zwei Bugs behoben
 
 Review vor dem Minor-Bump auf v0.6 (siehe `docs/RELEASE_CHECKLIST.md`) deckte zwei

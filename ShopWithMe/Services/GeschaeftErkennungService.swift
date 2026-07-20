@@ -215,6 +215,21 @@ enum GeschaeftErkennungService {
         return geschaeft
     }
 
+    /// Baut einen leeren Geschäfts-Entwurf mit den Koordinaten des aktuellen
+    /// Standorts (ohne Apple-Maps-Treffer) — für den Fall, dass an einem Ort kein
+    /// bekannter Laden gefunden wurde, der Anwender ihn aber trotzdem für künftiges
+    /// Koordinaten-Matching (``koordinatenTreffertoleranz``) protokollieren möchte.
+    /// `nil`, wenn keine Standortberechtigung erteilt wurde oder der Standort nicht
+    /// ermittelt werden konnte.
+    @MainActor
+    static func entwurfAusAktuellemStandort() async -> Geschaeft? {
+        guard let standort = await EinmaligerStandortAbruf().standortErmitteln() else { return nil }
+        let geschaeft = Geschaeft(name: "", typ: .lebensmittel)
+        geschaeft.breitengrad = standort.coordinate.latitude
+        geschaeft.laengengrad = standort.coordinate.longitude
+        return geschaeft
+    }
+
     private static func typVorschlag(fuer kategorie: MKPointOfInterestCategory?) -> GeschaeftTyp {
         switch kategorie {
         case .pharmacy: return .apotheke

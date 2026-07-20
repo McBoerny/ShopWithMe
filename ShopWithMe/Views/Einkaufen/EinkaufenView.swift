@@ -151,6 +151,7 @@ struct EinkaufenView: View {
                 hinzufuegen: { mapItem in
                     geschaeftEntwurfAusVorschlag = GeschaeftErkennungService.entwurf(aus: mapItem)
                 },
+                hinzufuegenMitStandort: { entwurf in geschaeftEntwurfAusVorschlag = entwurf },
                 wiederAufnehmen: { vorschlag in wiederAufnehmenVorschlag(vorschlag) }
             )
         }
@@ -352,11 +353,17 @@ private struct GeschaeftAlleInDerNaeheSheet: View {
     let ignorierteVorschlaege: [IgnorierterGeschaeftsVorschlag]
     let auswaehlen: (Geschaeft) -> Void
     let hinzufuegen: (MKMapItem) -> Void
+    /// Übernimmt einen per ``GeschaeftErkennungService/entwurfAusAktuellemStandort()``
+    /// gebauten leeren Entwurf mit den aktuellen Standort-Koordinaten — für den Fall,
+    /// dass hier kein Laden gefunden wurde, siehe Leer-Zustand unten in ``body``.
+    let hinzufuegenMitStandort: (Geschaeft) -> Void
     let wiederAufnehmen: (GeschaeftVorschlag) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var eintraege: [GeschaeftInDerNaeheEintrag]?
     @State private var laeuft = true
+    @State private var ermittleStandort = false
+    @State private var zeigeStandortFehler = false
 
     var body: some View {
         NavigationStack {
@@ -390,11 +397,16 @@ private struct GeschaeftAlleInDerNaeheSheet: View {
                         )
                     }
                 } else {
-                    ContentUnavailableView(
-                        "Keine Geschäfte gefunden",
-                        systemImage: "location.slash",
-                        description: Text("Im Umkreis von 100m wurde kein Laden gefunden. Prüfe, ob der Standortzugriff erlaubt ist.")
-                    )
+                    ContentUnavailableView {
+                        Label("Keine Geschäfte gefunden", systemImage: "location.slash")
+                    } description: {
+                        Text("Im Umkreis von 100m wurde kein Laden gefunden. Prüfe, ob der Standortzugriff erlaubt ist.")
+                    } actions: {
+                        Button("Diesen Ort als neues Geschäft anlegen") {
+                            Task { await neuesGeschaeftAnAktuellemStandort() }
+                        }
+                        .disabled(ermittleStandort)
+                    }
                 }
             }
             .navigationTitle("Geschäfte in der Nähe")
@@ -412,6 +424,28 @@ private struct GeschaeftAlleInDerNaeheSheet: View {
             )
             laeuft = false
         }
+        .alert("Standort nicht verfügbar", isPresented: $zeigeStandortFehler) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Der aktuelle Standort konnte nicht ermittelt werden. Prüfe, ob der Standortzugriff für ShopWithMe erlaubt ist.")
+        }
+    }
+
+    /// Ermittelt den aktuellen Standort erneut (unabhängig vom Ergebnis der Suche
+    /// oben) und übergibt einen leeren Geschäfts-Entwurf mit dessen Koordinaten an
+    /// ``hinzufuegenMitStandort`` — für den Fall, dass an diesem Ort kein Laden über
+    /// Apple Maps gefunden wurde, der Anwender ihn aber trotzdem protokollieren und
+    /// manuell anlegen möchte. Zeigt bei fehlender Standortberechtigung/-ermittlung
+    /// einen Hinweis statt still nichts zu tun.
+    private func neuesGeschaeftAnAktuellemStandort() async {
+        ermittleStandort = true
+        defer { ermittleStandort = false }
+        guard let entwurf = await GeschaeftErkennungService.entwurfAusAktuellemStandort() else {
+            zeigeStandortFehler = true
+            return
+        }
+        hinzufuegenMitStandort(entwurf)
+        dismiss()
     }
 }
 

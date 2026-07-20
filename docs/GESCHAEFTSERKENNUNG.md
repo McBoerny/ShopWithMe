@@ -178,6 +178,30 @@ SwiftUI problematisch): `RootView` umschließt den Tab-Aufruf jetzt selbst mit e
 vorhandenen `NavigationStack` hinein — analog zu `KategorienVerwaltungView`/
 `EinkaufslistenVerwaltungView`.
 
+## Neues Geschäft ohne Apple-Maps-Treffer am aktuellen Ort protokollieren
+
+**Status: Umgesetzt** (`GeschaeftErkennungService.entwurfAusAktuellemStandort()`,
+Leer-Zustand in `GeschaeftAlleInDerNaeheSheet`).
+
+Findet „Alle Geschäfte in der Nähe“ im 100m-Umkreis keinen Treffer (z.B. weil Apple
+Maps den Laden nicht kennt oder gar keine Standortberechtigung erteilt wurde), bot der
+Leer-Zustand bislang keine Möglichkeit, den aktuellen Ort trotzdem festzuhalten — nur
+die vom Standort komplett unabhängige „Neues Geschäft hinzufügen“-Aktion (ohne
+Koordinaten) stand zur Verfügung.
+
+- `GeschaeftErkennungService.entwurfAusAktuellemStandort()` fragt (analog
+  `vorschlag`/`alleInDerNaehe`) einmalig den aktuellen Standort ab und baut daraus
+  einen leeren `Geschaeft`-Entwurf (`name: ""`, `typ: .lebensmittel`) mit gesetzten
+  `breitengrad`/`laengengrad` — ohne dass dafür ein `MKMapItem` vorliegen muss.
+  Liefert `nil` ohne Standortberechtigung/-ermittlung.
+- Der Leer-Zustand („Keine Geschäfte gefunden“) in `GeschaeftAlleInDerNaeheSheet`
+  bietet dafür einen zusätzlichen Button „Diesen Ort als neues Geschäft anlegen“
+  (`ContentUnavailableView` mit `actions`-Closure). Erfolgreich ermittelt, öffnet sich
+  darüber derselbe `GeschaeftStammdatenEditView`-Anlage-Flow wie bei allen anderen
+  Wegen; die Koordinaten stehen von Anfang an für künftiges Koordinaten-Matching
+  (`koordinatenTreffertoleranz`) zur Verfügung. Schlägt die Standortermittlung fehl,
+  erscheint statt eines stillen No-Ops ein Hinweis-Alert.
+
 ## Löschen eines Geschäfts löscht seine Preishistorie
 
 `Geschaeft` bekommt eine neue `@Relationship(deleteRule: .cascade, inverse:
