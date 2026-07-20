@@ -91,21 +91,33 @@ sowie ein `.einkaufsvorgang` ohne gewähltes Geschäft (Picker-Option „Kein Ge
 in `EinkaufenView`) decken diesen Fall ab:
 
 1. **Erkennung**: `ReceiptScanService` liefert zusätzlich zu den Positionen einen
-   rohen `geschaeftName: String` (auf einem Kassenbon meist in der Kopfzeile
-   vorhanden).
-2. **Abgleich** (`BelegScanView.geschaeftAbgleichen(erkannterName:)`): sucht per
-   `Geschaeft.passendes(fuerErkannterName:unter:)` unter allen vorhandenen
-   Geschäften nach einem Treffer — sowohl gegen `Geschaeft.name` als auch gegen
-   dessen gelernte `alternativeNamen` (beidseitiger
+   rohen `geschaeftName: String` sowie eine rohe `geschaeftAdresse: String` (beide
+   auf einem Kassenbon meist in der Kopf-/Fußzeile vorhanden, sonst leerer String).
+2. **Abgleich** (`BelegScanView.geschaeftAbgleichen(erkannterName:erkannteAdresse:)`):
+   sucht per `Geschaeft.passendes(fuerErkannterName:erkannteAdresse:unter:)` unter
+   allen vorhandenen Geschäften nach einem Treffer — sowohl gegen `Geschaeft.name`
+   als auch gegen dessen gelernte `alternativeNamen` (beidseitiger
    `localizedCaseInsensitiveContains`-Abgleich, analog
-   `KaufEintrag.gelernteZuordnung`).
+   `KaufEintrag.gelernteZuordnung`). **Mehrere namensgleiche Geschäfte** (z.B. zwei
+   „Rewe“-Filialen): die erkannte Adresse dient als automatischer Tie-Breaker
+   (gleicher Abgleich gegen `Geschaeft.adresse`) — **ohne Rückfrage**. Bleibt danach
+   mehr als ein Kandidat übrig oder wurde keine/keine passende Adresse erkannt,
+   fällt die Funktion auf den ersten Namens-Kandidaten zurück (wie vor dieser
+   Erweiterung), statt den Anwender zu unterbrechen.
 3. **Kein Treffer → Anwenderauswahl** (`GeschaeftWahlSheet`): öffnet sich
    automatisch, sobald kein Treffer gefunden wurde. Bietet Suche unter
    bestehenden Geschäften, „Kein Geschäft“ (bewusstes Überspringen — die
    entstehenden `KaufEintrag`e bleiben dann ohne `geschaeft`, wie bisher) sowie
    „„<Suchtext>“ neu anlegen“ (öffnet `GeschaeftStammdatenEditView`, vorausgefüllt
-   mit dem erkannten Namen). Der Anwender kann das erkannte/gewählte Geschäft in
-   der Ergebnisansicht jederzeit über die „Geschäft“-Zeile ändern.
+   mit dem erkannten Namen **und** der erkannten Adresse). Die Adresse wird dabei
+   sofort über `GeschaeftErkennungService.koordinaten(fuerAdresse:)` geocodiert und
+   die ermittelten Koordinaten am Entwurf gesetzt — bewusst **nicht** der aktuelle
+   GPS-Standort des Anwenders (unverändert gegenüber der Entscheidung, den Standort
+   nie automatisch beim Belegscan zu erfassen, siehe „Standort nachträglich für ein
+   bereits genutztes Geschäft ergänzen“ in `docs/GESCHAEFTSERKENNUNG.md`); schlägt
+   das Geocoding fehl, öffnet sich der Entwurf trotzdem, nur ohne Koordinaten. Der
+   Anwender kann das erkannte/gewählte Geschäft in der Ergebnisansicht jederzeit
+   über die „Geschäft“-Zeile ändern.
 4. **Mitlernen** (`Geschaeft.alternativenNamenLernen(_:)`, aufgerufen in
    `uebernehmen()`): der rohe erkannte Name wird als zusätzlicher
    `alternativeNamen`-Eintrag des (automatisch erkannten oder manuell gewählten)
@@ -121,6 +133,25 @@ in `EinkaufenView`) decken diesen Fall ab:
 Bei `.geschaeft(Geschaeft)` (Scan direkt aus der Geschäfts-Detailansicht) entfällt
 dieser gesamte Abgleich — das Geschäft steht bereits fest, die „Geschäft“-Zeile
 erscheint dort nicht.
+
+## Kurzadresse bei namensgleichen Geschäften
+
+**Status: Umgesetzt** (`Geschaeft.kurzeAdresse`, `Geschaeft.namenMitDuplikaten(unter:)`).
+
+Da es mehrere Geschäfte mit demselben Namen geben kann (s.o.), zeigen sowohl
+`GeschaeftWahlSheet` (Geschäftsauswahl beim Belegscan-Abgleich) als auch
+`GeschaeftListView` (allgemeine Geschäfteliste) unter dem Namen zusätzlich
+`Geschaeft.kurzeAdresse` in kleiner, sekundärer Schrift — **aber nur**, wenn der
+Name laut `Geschaeft.namenMitDuplikaten(unter:)` (einmal pro Ansicht berechnete,
+kleingeschriebene Menge mehrfach vorkommender Namen) tatsächlich mehrdeutig ist;
+bei eindeutigen Namen bleibt die Zeile unverändert einzeilig.
+
+`kurzeAdresse` ist Straße + Ort ohne Postleitzahl (z.B. „Marktstraße 1,
+Musterstadt“ aus „Marktstraße 1, 12345 Musterstadt“) — der Teil vor dem ersten
+Komma bleibt unverändert, die vierstellige (AT) oder fünfstellige (DE)
+Postleitzahl danach wird per Regex entfernt. Enthält `adresse` kein Komma, wird
+sie unverändert zurückgegeben; ohne hinterlegte `adresse` liefert die Property
+`nil` (Zeile bleibt einzeilig, auch bei Namensduplikat).
 
 ## Datenmodell: `KaufEintrag`
 

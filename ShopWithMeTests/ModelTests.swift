@@ -370,6 +370,62 @@ struct ModelTests {
     }
 
     @Test
+    func passendesNutztAdresseAlsTieBreakerBeiMehrerenNamensgleichenGeschaeften() {
+        let filialeA = Geschaeft(name: "Rewe", typ: .lebensmittel, adresse: "Marktstraße 1, 12345 Musterstadt")
+        let filialeB = Geschaeft(name: "Rewe", typ: .lebensmittel, adresse: "Bahnhofstraße 9, 12345 Musterstadt")
+
+        let treffer = Geschaeft.passendes(
+            fuerErkannterName: "Rewe",
+            erkannteAdresse: "Bahnhofstraße 9, 12345 Musterstadt",
+            unter: [filialeA, filialeB]
+        )
+
+        #expect(treffer === filialeB)
+    }
+
+    @Test
+    func passendesFaelltBeiMehrdeutigerAdresseAufErstenNamensKandidatenZurueck() {
+        let filialeA = Geschaeft(name: "Rewe", typ: .lebensmittel, adresse: "Marktstraße 1, 12345 Musterstadt")
+        let filialeB = Geschaeft(name: "Rewe", typ: .lebensmittel)
+
+        // Keine erkannte Adresse → kein Tie-Break möglich, erster Namens-Kandidat gewinnt.
+        #expect(Geschaeft.passendes(fuerErkannterName: "Rewe", unter: [filialeA, filialeB]) === filialeA)
+        // Erkannte Adresse passt zu keiner der beiden Filialen → ebenfalls Fallback.
+        #expect(Geschaeft.passendes(
+            fuerErkannterName: "Rewe", erkannteAdresse: "Ganz andere Straße 5, 99999 Woanders", unter: [filialeA, filialeB]
+        ) === filialeA)
+    }
+
+    @Test
+    func kurzeAdresseEntferntPostleitzahl() {
+        let geschaeft = Geschaeft(name: "Rewe", typ: .lebensmittel, adresse: "Marktstraße 1, 12345 Musterstadt")
+        #expect(geschaeft.kurzeAdresse == "Marktstraße 1, Musterstadt")
+    }
+
+    @Test
+    func kurzeAdresseOhneKommaWirdUnveraendertDurchgereicht() {
+        let geschaeft = Geschaeft(name: "Rewe", typ: .lebensmittel, adresse: "Musterstadt")
+        #expect(geschaeft.kurzeAdresse == "Musterstadt")
+    }
+
+    @Test
+    func kurzeAdresseIstNilOhneHinterlegteAdresse() {
+        let geschaeft = Geschaeft(name: "Rewe", typ: .lebensmittel)
+        #expect(geschaeft.kurzeAdresse == nil)
+    }
+
+    @Test
+    func namenMitDuplikatenErkenntCaseInsensitiveDuplikateUndIgnoriertEindeutigeNamen() {
+        let reweA = Geschaeft(name: "Rewe", typ: .lebensmittel)
+        let reweB = Geschaeft(name: "REWE", typ: .lebensmittel)
+        let edeka = Geschaeft(name: "Edeka", typ: .lebensmittel)
+
+        let duplikate = Geschaeft.namenMitDuplikaten(unter: [reweA, reweB, edeka])
+
+        #expect(duplikate == ["rewe"])
+    }
+
+    @Test
     func alternativenNamenLernenIgnoriertLeereUndBereitsBekannteNamen() {
         let rewe = Geschaeft(name: "Rewe", typ: .lebensmittel)
 

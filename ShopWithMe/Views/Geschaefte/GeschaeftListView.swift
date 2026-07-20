@@ -19,11 +19,18 @@ struct GeschaeftListView: View {
     @State private var neuesGeschaeftEntwurf: Geschaeft?
     @State private var zeigeBelegScan = false
 
+    /// Namen, die mehrfach vorkommen — steuert, ob ``GeschaeftZeile`` zusätzlich die
+    /// Kurzadresse anzeigt, um namensgleiche Geschäfte unterscheidbar zu machen
+    /// (analog `GeschaeftWahlSheet`, siehe `docs/BELEGSCAN.md`).
+    private var namenMitDuplikaten: Set<String> {
+        Geschaeft.namenMitDuplikaten(unter: geschaefte)
+    }
+
     var body: some View {
         List {
             ForEach(geschaefte) { geschaeft in
                 NavigationLink(value: geschaeft) {
-                    GeschaeftZeile(geschaeft: geschaeft)
+                    GeschaeftZeile(geschaeft: geschaeft, istDuplikat: namenMitDuplikaten.contains(geschaeft.name.lowercased()))
                 }
             }
             .onDelete(perform: geschaeftLoeschen)
@@ -77,9 +84,12 @@ struct GeschaeftListView: View {
     }
 }
 
-/// Eine Zeile in der Geschäfte-Liste.
+/// Eine Zeile in der Geschäfte-Liste. Zeigt zusätzlich die Kurzadresse
+/// (``Geschaeft/kurzeAdresse``), wenn ``istDuplikat`` gesetzt ist — d.h. mindestens
+/// ein weiteres Geschäft denselben Namen trägt (siehe ``GeschaeftListView/namenMitDuplikaten``).
 private struct GeschaeftZeile: View {
     let geschaeft: Geschaeft
+    var istDuplikat: Bool = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -89,6 +99,11 @@ private struct GeschaeftZeile: View {
                 Text("\(geschaeft.typ.anzeigename) · \(geschaeft.regale.count) Regal(e)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if istDuplikat, let kurzeAdresse = geschaeft.kurzeAdresse {
+                    Text(kurzeAdresse)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
     }

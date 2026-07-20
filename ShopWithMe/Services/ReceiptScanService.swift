@@ -25,6 +25,8 @@ struct BelegPosition {
 struct BelegErgebnis {
     @Guide(description: "Name des Geschäfts, falls auf dem Bon erkennbar, sonst ein leerer String")
     var geschaeftName: String
+    @Guide(description: "Adresse des Geschäfts (Straße, Hausnummer, ggf. Postleitzahl und Ort), meist in der Kopf- oder Fußzeile des Kassenbons, falls erkennbar, sonst ein leerer String")
+    var geschaeftAdresse: String
     @Guide(description: "Datum des Einkaufs im Format JJJJ-MM-TT (z.B. 2026-03-24), falls auf dem Bon erkennbar, sonst ein leerer String")
     var datum: String
     @Guide(description: "Alle erkannten Artikelpositionen mit Menge und Einzelpreis, ohne Zwischensummen/Pfand/MwSt.-Zeilen")

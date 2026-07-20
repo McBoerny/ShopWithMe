@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.6 (Build 54) — Geschäftsadresse beim Belegscan erkennen, Kurzadresse bei Namensduplikaten
+
+- **`ReceiptScanService`**: `BelegErgebnis` erkennt jetzt zusätzlich zum Namen auch
+  die Adresse des Geschäfts vom Kassenbon (`geschaeftAdresse`).
+- **`Geschaeft.passendes(fuerErkannterName:erkannteAdresse:unter:)`**: gibt es zum
+  erkannten Namen mehrere Geschäfte (z.B. zwei Filialen derselben Kette), wird die
+  erkannte Adresse automatisch als Tie-Breaker genutzt — ohne Rückfrage. Bleibt die
+  Zuordnung mehrdeutig, Fallback auf den ersten Namens-Kandidaten wie bisher.
+- **„neu anlegen“ in `GeschaeftWahlSheet`**: übernimmt jetzt automatisch die
+  erkannte Adresse und geocodiert sie sofort zu Koordinaten
+  (`GeschaeftErkennungService.koordinaten(fuerAdresse:)`) — bewusst nicht der
+  aktuelle GPS-Standort des Anwenders.
+- **Kurzadresse bei Namensduplikaten** (`Geschaeft.kurzeAdresse`,
+  `Geschaeft.namenMitDuplikaten(unter:)`): `GeschaeftWahlSheet` und
+  `GeschaeftListView` zeigen unter dem Namen zusätzlich die Adresse (Straße + Ort,
+  ohne PLZ) in kleiner Schrift — nur bei tatsächlich namensgleichen Geschäften.
+
 ## v0.6 (Build 53) — Standort nachträglich für ein bereits genutztes Geschäft ergänzen
 
 - **Nachfrage beim Auswählen eines Geschäfts ohne Koordinaten** (`EinkaufenView`,

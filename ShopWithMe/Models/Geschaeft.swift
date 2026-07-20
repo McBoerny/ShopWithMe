@@ -160,15 +160,61 @@ final class Geschaeft {
     /// ``KaufEintrag/gelernteZuordnung(fuerErkannterName:in:)``). `nil`, falls
     /// `erkannterName` leer ist oder kein Treffer existiert — dann fragt die
     /// aufrufende Scan-Ansicht über `GeschaeftWahlSheet` nach.
-    static func passendes(fuerErkannterName erkannterName: String, unter geschaefte: [Geschaeft]) -> Geschaeft? {
+    ///
+    /// Gibt es zum Namen **mehrere** Kandidaten (z.B. zwei Filialen derselben
+    /// Kette), wird die ebenfalls vom Kassenbon erkannte `erkannteAdresse` als
+    /// automatischer Tie-Breaker genutzt (beidseitiger Teilstring-Abgleich gegen
+    /// ``adresse``) — bewusst ohne Rückfrage. Bleibt danach mehr als ein oder gar
+    /// kein Kandidat übrig (keine/nicht passende Adresse erkannt), fällt die
+    /// Funktion auf den ersten Namens-Kandidaten zurück (unverändertes
+    /// Vorher-Verhalten), statt den Anwender zu unterbrechen.
+    static func passendes(
+        fuerErkannterName erkannterName: String,
+        erkannteAdresse: String = "",
+        unter geschaefte: [Geschaeft]
+    ) -> Geschaeft? {
         let erkannterName = erkannterName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !erkannterName.isEmpty else { return nil }
-        func passt(_ bekannterName: String) -> Bool {
+        func nameTrifftZu(_ bekannterName: String) -> Bool {
             guard !bekannterName.isEmpty else { return false }
             return bekannterName.localizedCaseInsensitiveContains(erkannterName)
                 || erkannterName.localizedCaseInsensitiveContains(bekannterName)
         }
-        return geschaefte.first { passt($0.name) || $0.alternativeNamen.contains(where: passt) }
+        let kandidaten = geschaefte.filter { nameTrifftZu($0.name) || $0.alternativeNamen.contains(where: nameTrifftZu) }
+        guard kandidaten.count > 1 else { return kandidaten.first }
+
+        let getrimmteAdresse = erkannteAdresse.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !getrimmteAdresse.isEmpty else { return kandidaten.first }
+        let anhandAdresse = kandidaten.filter { kandidat in
+            guard let adresse = kandidat.adresse, !adresse.isEmpty else { return false }
+            return adresse.localizedCaseInsensitiveContains(getrimmteAdresse)
+                || getrimmteAdresse.localizedCaseInsensitiveContains(adresse)
+        }
+        return anhandAdresse.count == 1 ? anhandAdresse.first : kandidaten.first
+    }
+
+    /// Kurzform von ``adresse`` (Straße + Ort, ohne Postleitzahl) — z.B. „Marktstraße
+    /// 1, Musterstadt“ aus „Marktstraße 1, 12345 Musterstadt“. Dient zur
+    /// Unterscheidung namensgleicher Geschäfte in `GeschaeftWahlSheet`/
+    /// `GeschaeftListView` (siehe ``namenMitDuplikaten(unter:)``). `nil` ohne
+    /// hinterlegte ``adresse``; enthält die Adresse kein Komma, wird sie
+    /// unverändert zurückgegeben (kein erkennbares Straße/Ort-Format).
+    var kurzeAdresse: String? {
+        guard let adresse, !adresse.isEmpty else { return nil }
+        let teile = adresse.split(separator: ",", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+        guard teile.count == 2 else { return adresse }
+        let ort = teile[1].replacingOccurrences(of: #"^\d{4,5}\s*"#, with: "", options: .regularExpression)
+        return "\(teile[0]), \(ort)"
+    }
+
+    /// Liefert die (kleingeschriebenen) Namen aller Geschäfte, die mehrfach unter
+    /// `geschaefte` vorkommen — Grundlage dafür, ob ``kurzeAdresse`` zur
+    /// Unterscheidung angezeigt werden soll. `GeschaeftWahlSheet`/`GeschaeftListView`
+    /// nutzen diese eine gemeinsame Funktion statt eigener Duplikat-Erkennung.
+    static func namenMitDuplikaten(unter geschaefte: [Geschaeft]) -> Set<String> {
+        let namenLower = geschaefte.map { $0.name.lowercased() }
+        let anzahl = Dictionary(namenLower.map { ($0, 1) }, uniquingKeysWith: +)
+        return Set(anzahl.filter { $0.value > 1 }.keys)
     }
 
     /// Alle Artikelkategorien, die in diesem Geschäft verfügbar sind.

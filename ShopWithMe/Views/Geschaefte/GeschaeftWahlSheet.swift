@@ -2,28 +2,42 @@ import SwiftUI
 import SwiftData
 
 /// Sheet zur Auswahl eines Geschäfts für einen Belegscan, dessen Geschäft nicht
-/// automatisch über ``Geschaeft/passendes(fuerErkannterName:unter:)`` zugeordnet
-/// werden konnte — siehe `docs/BELEGSCAN.md` → „Automatischer Geschäfts-Abgleich“.
+/// automatisch über ``Geschaeft/passendes(fuerErkannterName:erkannteAdresse:unter:)``
+/// zugeordnet werden konnte — siehe `docs/BELEGSCAN.md` → „Automatischer
+/// Geschäfts-Abgleich“.
 ///
 /// Existiert das gewünschte Geschäft noch nicht, lässt es sich direkt hier über die
 /// bestehende ``GeschaeftStammdatenEditView`` anlegen (vorausgefüllt mit dem
-/// erkannten Namen) und wird danach automatisch ausgewählt — analog
+/// erkannten Namen und der erkannten Adresse, deren Koordinaten dafür automatisch
+/// geocodiert werden) und wird danach automatisch ausgewählt — analog
 /// ``KaufEintragZuordnenSheet``s Artikel-Neuanlage.
 struct GeschaeftWahlSheet: View {
     /// Der auf dem Beleg erkannte Geschäftsname, falls vorhanden — nur zur Anzeige
     /// und als Vorbelegung der Suche/Neuanlage.
     let erkannterName: String
+    /// Die auf dem Beleg erkannte Geschäftsadresse, falls vorhanden — Vorbelegung
+    /// für „neu anlegen“ (siehe ``neuesGeschaeftAnlegen()``).
+    let erkannteAdresse: String
     let onAuswahl: (Geschaeft?) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \Geschaeft.name) private var alleGeschaefte: [Geschaeft]
     @State private var suchtext: String
     @State private var neuesGeschaeftEntwurf: Geschaeft?
+    @State private var erstelleGeschaeft = false
 
-    init(erkannterName: String, onAuswahl: @escaping (Geschaeft?) -> Void) {
+    init(erkannterName: String, erkannteAdresse: String = "", onAuswahl: @escaping (Geschaeft?) -> Void) {
         self.erkannterName = erkannterName
+        self.erkannteAdresse = erkannteAdresse
         self.onAuswahl = onAuswahl
         _suchtext = State(initialValue: erkannterName)
+    }
+
+    /// Namen, die unter allen Geschäften mehrfach vorkommen — steuert, ob
+    /// ``GeschaeftZeile`` (unten) zusätzlich die Kurzadresse anzeigt, um
+    /// namensgleiche Geschäfte unterscheidbar zu machen.
+    private var namenMitDuplikaten: Set<String> {
+        Geschaeft.namenMitDuplikaten(unter: alleGeschaefte)
     }
 
     private var getrimmterSuchtext: String {
@@ -67,6 +81,7 @@ struct GeschaeftWahlSheet: View {
                         } label: {
                             Label("„\(getrimmterSuchtext)“ neu anlegen", systemImage: "plus.circle.fill")
                         }
+                        .disabled(erstelleGeschaeft)
                     }
 
                     ForEach(gefilterteGeschaefte) { geschaeft in
@@ -74,8 +89,15 @@ struct GeschaeftWahlSheet: View {
                             onAuswahl(geschaeft)
                             dismiss()
                         } label: {
-                            Text(geschaeft.name)
-                                .foregroundStyle(.primary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(geschaeft.name)
+                                    .foregroundStyle(.primary)
+                                if namenMitDuplikaten.contains(geschaeft.name.lowercased()), let kurzeAdresse = geschaeft.kurzeAdresse {
+                                    Text(kurzeAdresse)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
                         }
                         .buttonStyle(.plain)
                     }
@@ -100,8 +122,29 @@ struct GeschaeftWahlSheet: View {
         }
     }
 
+    /// Baut den Entwurf für ein neues Geschäft, vorbelegt mit dem Suchtext als Name
+    /// und (falls vorhanden) der erkannten Adresse. Wurde eine Adresse erkannt, wird
+    /// sie sofort geocodiert (``GeschaeftErkennungService/koordinaten(fuerAdresse:)``)
+    /// — bewusst NICHT der aktuelle GPS-Standort des Anwenders, siehe
+    /// `docs/BELEGSCAN.md`. Schlägt das Geocoding fehl, öffnet sich der Entwurf
+    /// trotzdem, nur ohne Koordinaten (``Geschaeft/adresse`` bleibt optional).
     private func neuesGeschaeftAnlegen() {
-        neuesGeschaeftEntwurf = Geschaeft(name: getrimmterSuchtext, typ: .lebensmittel)
+        let getrimmteAdresse = erkannteAdresse.trimmingCharacters(in: .whitespacesAndNewlines)
+        Task {
+            erstelleGeschaeft = true
+            defer { erstelleGeschaeft = false }
+            let entwurf = Geschaeft(
+                name: getrimmterSuchtext,
+                typ: .lebensmittel,
+                adresse: getrimmteAdresse.isEmpty ? nil : getrimmteAdresse
+            )
+            if !getrimmteAdresse.isEmpty,
+               let koordinaten = await GeschaeftErkennungService.koordinaten(fuerAdresse: getrimmteAdresse) {
+                entwurf.breitengrad = koordinaten.breitengrad
+                entwurf.laengengrad = koordinaten.laengengrad
+            }
+            neuesGeschaeftEntwurf = entwurf
+        }
     }
 }
 

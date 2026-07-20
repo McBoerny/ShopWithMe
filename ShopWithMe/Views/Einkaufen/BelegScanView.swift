@@ -77,6 +77,10 @@ struct BelegScanView: View {
     /// — Grundlage sowohl für den automatischen Abgleich als auch fürs Mitlernen
     /// (``Geschaeft/alternativenNamenLernen(_:)``) beim Übernehmen.
     @State private var erkannterGeschaeftName = ""
+    /// Die auf dem Beleg erkannte, rohe Geschäftsadresse (``BelegErgebnis/geschaeftAdresse``)
+    /// — Tie-Breaker bei mehreren namensgleichen Geschäften (``Geschaeft/passendes(fuerErkannterName:erkannteAdresse:unter:)``)
+    /// und Vorbelegung beim „neu anlegen“ in ``GeschaeftWahlSheet``.
+    @State private var erkannteGeschaeftAdresse = ""
     @State private var zeigeGeschaeftWahl = false
 
     private let scanner: ReceiptScanService = VisionFoundationModelsReceiptScanner()
@@ -144,7 +148,7 @@ struct BelegScanView: View {
             }
         }
         .sheet(isPresented: $zeigeGeschaeftWahl) {
-            GeschaeftWahlSheet(erkannterName: erkannterGeschaeftName) { gewaehlt in
+            GeschaeftWahlSheet(erkannterName: erkannterGeschaeftName, erkannteAdresse: erkannteGeschaeftAdresse) { gewaehlt in
                 erkanntesGeschaeft = gewaehlt
             }
         }
@@ -169,7 +173,7 @@ struct BelegScanView: View {
                 if let erkanntesDatum = ergebnis.erkanntesDatum {
                     belegDatum = erkanntesDatum
                 }
-                geschaeftAbgleichen(erkannterName: ergebnis.geschaeftName)
+                geschaeftAbgleichen(erkannterName: ergebnis.geschaeftName, erkannteAdresse: ergebnis.geschaeftAdresse)
                 let bekannterVerlauf = (try? modelContext.fetch(FetchDescriptor<KaufEintrag>())) ?? []
                 bearbeitbarePositionen = ergebnis.positionen.map { position in
                     let gelernt = KaufEintrag.gelernteZuordnung(
@@ -191,17 +195,19 @@ struct BelegScanView: View {
 
     /// Bestimmt ``erkanntesGeschaeft`` nach dem Scan: bei bereits feststehendem
     /// ``kontext``-Geschäft unverändert übernommen, sonst per
-    /// ``Geschaeft/passendes(fuerErkannterName:unter:)`` gegen alle vorhandenen
-    /// Geschäfte (inkl. gelernter ``Geschaeft/alternativeNamen``) abgeglichen. Ohne
+    /// ``Geschaeft/passendes(fuerErkannterName:erkannteAdresse:unter:)`` gegen alle
+    /// vorhandenen Geschäfte (inkl. gelernter ``Geschaeft/alternativeNamen``, inkl.
+    /// Adress-Tie-Break bei mehreren namensgleichen Geschäften) abgeglichen. Ohne
     /// Treffer öffnet sich sofort ``GeschaeftWahlSheet`` (weiterhin abbrechbar, dann
     /// bleibt ``erkanntesGeschaeft`` `nil` — wie bisher bei Käufen ohne Geschäft).
-    private func geschaeftAbgleichen(erkannterName: String) {
+    private func geschaeftAbgleichen(erkannterName: String, erkannteAdresse: String) {
         erkannterGeschaeftName = erkannterName
+        erkannteGeschaeftAdresse = erkannteAdresse
         guard geschaeftAbgleichNoetig else {
             erkanntesGeschaeft = kontext.geschaeft
             return
         }
-        if let treffer = Geschaeft.passendes(fuerErkannterName: erkannterName, unter: alleGeschaefte) {
+        if let treffer = Geschaeft.passendes(fuerErkannterName: erkannterName, erkannteAdresse: erkannteAdresse, unter: alleGeschaefte) {
             erkanntesGeschaeft = treffer
         } else {
             erkanntesGeschaeft = nil
