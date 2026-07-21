@@ -35,6 +35,7 @@ enum SchemaV1: VersionedSchema {
             Einkaufsliste.self,
             EinkaufslistenEintrag.self,
             IgnorierterGeschaeftsVorschlag.self,
+            IgnorierterArtikel.self,
         ]
     }
 }

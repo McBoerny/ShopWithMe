@@ -11,7 +11,7 @@ struct ModelTests {
         let schema = Schema([
             Artikel.self, ArtikelKategorie.self, Regal.self, Geschaeft.self,
             Einkaufsvorgang.self, KaufEintrag.self, KategorieBesuchsStatistik.self,
-            Einkaufsliste.self, EinkaufslistenEintrag.self,
+            Einkaufsliste.self, EinkaufslistenEintrag.self, IgnorierterArtikel.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
@@ -444,5 +444,24 @@ struct ModelTests {
         // Leerer Name wird ignoriert.
         rewe.alternativenNamenLernen("   ")
         #expect(rewe.alternativeNamen == ["REWE Center Musterstadt"])
+    }
+
+    @Test
+    func istIgnoriertErkenntTrefferBeiGleichemGeschaeftUndPassendemNamen() {
+        let rewe = Geschaeft(name: "Rewe", typ: .lebensmittel)
+        let ignoriert = IgnorierterArtikel(erkannterName: "Pfand", geschaeft: rewe)
+
+        #expect(IgnorierterArtikel.istIgnoriert("Pfand", geschaeft: rewe, unter: [ignoriert]))
+        #expect(IgnorierterArtikel.istIgnoriert("PFAND 0,25", geschaeft: rewe, unter: [ignoriert]))
+    }
+
+    @Test
+    func istIgnoriertLiefertFalseBeiAnderemGeschaeftOderOhneGeschaeft() {
+        let rewe = Geschaeft(name: "Rewe", typ: .lebensmittel)
+        let edeka = Geschaeft(name: "Edeka", typ: .lebensmittel)
+        let ignoriert = IgnorierterArtikel(erkannterName: "Pfand", geschaeft: rewe)
+
+        #expect(!IgnorierterArtikel.istIgnoriert("Pfand", geschaeft: edeka, unter: [ignoriert]))
+        #expect(!IgnorierterArtikel.istIgnoriert("Pfand", geschaeft: nil, unter: [ignoriert]))
     }
 }

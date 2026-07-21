@@ -68,6 +68,29 @@ enum AISuggestionService {
         let antwort = try await session.respond(to: "Kategorie: \(name)", generating: KategorieMatchVorschlag.self)
         return antwort.content
     }
+    /// Ermittelt für einen auf einem Kassenbon erkannten, oft abgekürzten oder
+    /// markenspezifischen Artikelnamen (z.B. „COL-ZAH“ oder „Bio Vollmilch 3,5%“)
+    /// den inhaltlich am besten passenden bestehenden, generischen ``Artikel`` —
+    /// genutzt von ``ArtikelZuordnungsService/zuordnen(erkannterName:bekannterVerlauf:alleArtikel:)``
+    /// als letzte Stufe, nur falls einfacherer Textabgleich erfolglos war (siehe
+    /// `docs/BELEGSCAN.md`).
+    static func artikelMatch(
+        fuerName name: String,
+        bekannteArtikel: [String]
+    ) async throws -> ArtikelMatchVorschlag {
+        let anweisungen = """
+        Du hilfst dabei, auf einem Kassenbon einer Einkaufs-App erkannte, oft \
+        abgekürzte oder markenspezifische Artikelnamen (z.B. „COL-ZAH“ oder „Bio \
+        Vollmilch 3,5%“) auf bereits vorhandene, generische Artikel abzubilden. \
+        Wähle aus dieser Liste bestehender Artikel denjenigen, der inhaltlich am \
+        besten passt: \(bekannteArtikel.joined(separator: ", ")). Antworte mit \
+        einem leeren String, falls wirklich keiner davon passt — erfinde keinen \
+        neuen Artikel.
+        """
+        let session = LanguageModelSession(instructions: anweisungen)
+        let antwort = try await session.respond(to: "Artikel: \(name)", generating: ArtikelMatchVorschlag.self)
+        return antwort.content
+    }
 }
 
 /// Von der lokalen Apple-KI vorgeschlagene, am besten passende bestehende
@@ -77,4 +100,13 @@ enum AISuggestionService {
 struct KategorieMatchVorschlag {
     @Guide(description: "Name der am besten passenden bestehenden Kategorie, oder ein leerer String, falls keine davon wirklich passt")
     var passendeKategorie: String
+}
+
+/// Von der lokalen Apple-KI vorgeschlagene, am besten passende bestehende
+/// ``Artikel``-Zuordnung für einen auf einem Kassenbon erkannten Namen — siehe
+/// ``AISuggestionService/artikelMatch(fuerName:bekannteArtikel:)``.
+@Generable
+struct ArtikelMatchVorschlag {
+    @Guide(description: "Name des am besten passenden bestehenden Artikels, oder ein leerer String, falls keiner wirklich passt")
+    var passenderArtikel: String
 }

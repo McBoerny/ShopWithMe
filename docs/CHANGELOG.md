@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.6 (Build 63) — Automatische Artikel-Zuordnung im Belegscan, Inline-Autocomplete, dauerhaftes Ignorieren
+
+- **Dreistufige automatische Artikel-Zuordnung** (neuer `ArtikelZuordnungsService`):
+  gelernter Alias → Teilstring-Abgleich → nur bei Erfolglosigkeit + verfügbarer
+  lokaler KI ein KI-Best-Match (`AISuggestionService.artikelMatch`, exaktes Vorbild
+  `kategorieMatch`). Jetzt konsistent für alle drei `BelegScanKontext`e beim
+  Einlesen angewandt (`.einkaufsvorgang` bekam bislang gar keine
+  Katalog-Zuordnung); ersetzt die alte, nur zwei Kontexte abdeckende und erst beim
+  Speichern wirkende `passendesArtikel(fuer:)`.
+- **Simultane Anzeige** von generischem Artikelnamen und Original-Beleg-Text in
+  `PositionsZeile`, plus Status-Label „Wird verknüpft mit …“/„Neu erkannt“.
+- **Inline-Autocomplete**: Tippen ins Artikelfeld zeigt passende vorhandene Artikel
+  zum Antippen sowie eine „neu anlegen“-Option (`ArtikelEditView`, wie in
+  `KaufEintragZuordnenSheet`) — direkt im Scan-Review, ohne separaten Bildschirm.
+- **Dauerhaft ignorierte Artikel pro Geschäft** (neues Modell `IgnorierterArtikel`):
+  Wischen nach rechts auf einer Position blendet sie künftig bei Scans desselben
+  Geschäfts automatisch aus. Wischen nach links (Löschen) bleibt unverändert nur
+  für diesen einen Scan.
+- **`BearbeitbarePosition.effektivZugeordneterArtikel`** (neu): Single Source of
+  Truth für „ist zugeordnet“ zwischen Anzeige und Speichern — verwirft die
+  automatische Zuordnung rein reaktiv, sobald der Nutzer den Namen frei
+  weiterbearbeitet, ohne neu auszuwählen.
+
 ## v0.6 (Build 62) — Eigener Scannen-Tab
 
 - **Neuer dritter Tab „Scannen“** (`RootView`, zwischen „Einkaufen“ und

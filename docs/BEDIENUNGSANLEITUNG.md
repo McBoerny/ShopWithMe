@@ -89,10 +89,16 @@ gewählte Geschäft, oder direkt in der Geschäfts-Detailansicht — z.B. für �
 nachträglich gefundene Bons.
 
 Lokale KI erkennt Geschäft, Datum, Artikel und Preise (Foto oder aus der
-Mediathek) und trägt sie in die passenden Positionen ein — nicht zuordenbare
-Positionen werden trotzdem mit Namen und Preis gespeichert. Vor der Übernahme
-kannst du jede Position prüfen, den Namen korrigieren (z.B. „Colgate“ statt
-„COL-ZAH“) und das erkannte Datum anpassen.
+Mediathek) und trägt sie in die passenden Positionen ein. Für jede Position
+versucht die App automatisch, den auf dem Bon erkannten (oft abgekürzten) Namen
+einem deiner vorhandenen Artikel zuzuordnen — gelingt das, zeigt das Feld den
+generischen Namen (z.B. „Zahnpasta“) mit dem Original-Beleg-Text „COL-ZAH“ klein
+darunter; gelingt es nicht, ist die Position als „Neu erkannt“ markiert. Tippst du
+ins Namensfeld, schlägt dir die App passende vorhandene Artikel zum Antippen vor,
+oder du legst über „„…“ neu anlegen“ direkt einen neuen Artikel an. Nicht
+benötigte Positionen kannst du vor der Übernahme entfernen: Wischen nach links
+löscht eine Position nur für diesen Scan, Wischen nach rechts ignoriert sie
+dauerhaft für dieses Geschäft (z.B. für wiederkehrende Pfand-/Rabattzeilen).
 
 Wird das Geschäft auf dem Bon nicht erkannt (oder gibt es mehrere Geschäfte mit
 demselben Namen), fragt dich die App danach, ggf. mit Kurzadresse zur

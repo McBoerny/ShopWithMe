@@ -119,6 +119,11 @@ final class Geschaeft {
     /// `docs/GESCHAEFTSERKENNUNG.md`.
     @Relationship(deleteRule: .cascade, inverse: \KaufEintrag.geschaeft)
     var kaufEintraege: [KaufEintrag] = []
+    /// Beim Belegscan dauerhaft ignorierte Artikelnamen für dieses Geschäft (siehe
+    /// ``IgnorierterArtikel``). Wird das Geschäft gelöscht, verschwinden auch seine
+    /// Ignorier-Einträge.
+    @Relationship(deleteRule: .cascade, inverse: \IgnorierterArtikel.geschaeft)
+    var ignorierteArtikel: [IgnorierterArtikel] = []
     /// Rohwert für ``alternativeNamen`` — durch `\n` getrennt gespeichert. Optional,
     /// damit vor Einführung dieses Attributs angelegte Geschäfte beim automatischen
     /// Laden nicht abstürzen (siehe `docs/BELEGSCAN.md`).

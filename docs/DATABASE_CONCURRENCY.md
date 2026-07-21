@@ -262,6 +262,9 @@ wie oben beschrieben.
   bereits bestehenden `Geschaeft` ergänzen, siehe `docs/GESCHAEFTSERKENNUNG.md` →
   „Standort nachträglich für ein bereits genutztes Geschäft ergänzen“) — gleiche
   Kategorie wie `ignorierenVorschlag`.
+- `BelegScanView.artikelDauerhaftIgnorieren` (Wischen nach rechts auf einer
+  Belegposition, siehe `docs/BELEGSCAN.md` → „Dauerhaft ignorierte Artikel pro
+  Geschäft“) — gleiche Kategorie wie `ignorierenVorschlag`.
 
 **Gebündelte Aktionen (teilen sich einen Lease statt einen eigenen zu bekommen):**
 - Einkaufsvorgang **abschließen** (`endZeit` setzen) und der direkt im selben

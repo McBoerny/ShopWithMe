@@ -59,35 +59,30 @@ Belegscans hinweg.
    - Beide Typen sind reine, flüchtige KI-Transfertypen — **kein** eigenes
      SwiftData-Model für Belegpositionen. `auswerten(bild:)` liefert `BelegErgebnis`
      zusammen mit den `ErkannteZeile`n als `BelegScanErgebnis`.
-4. **Mitlern-Vorbelegung** (`BelegScanView.verarbeite(bild:)`): für jede erkannte
-   Position sucht `KaufEintrag.gelernteZuordnung(fuerErkannterName:in:)` unter allen
-   vorhandenen `KaufEintrag`en nach dem jüngsten, dessen erkannter Name
-   (`produktName`/`artikelNameSnapshot`) zum aktuell erkannten Text passt und der
-   bereits einen `alternativerName` (Alias) trägt. Treffer liefert Alias + den ggf.
-   verknüpften `Artikel` — siehe „Mitlernen“ unten. Zusätzlich ermittelt
+4. **Ignorier-Filter + Artikel-Zuordnung** (`BelegScanView.verarbeite(bild:)`): pro
+   erkannter Position erst `IgnorierterArtikel.istIgnoriert(...)` (Position
+   verschwindet komplett, siehe „Dauerhaft ignorierte Artikel pro Geschäft“ unten),
+   sonst `ArtikelZuordnungsService.zuordnen(...)` (siehe „Automatische
+   Artikel-Zuordnung“ unten). Zusätzlich ermittelt
    `[ErkannteZeile].boundingBox(fuerArtikelName:)` per beidseitigem
    Teilstring-Abgleich die zur Position passende OCR-Zeile (`nil` ohne eindeutigen
    Treffer).
-5. **Prüfen/Korrigieren** (`ErgebnisListe` in `BelegScanView.swift`): editierbare Kopie
-   jeder Position (`BearbeitbarePosition`: `erkannterName` unveränderlich,
-   `artikelName`/`preisText` editierbar, `gelernterArtikel` aus Schritt 4,
-   `boundingBox` aus Schritt 4) plus editierbares `belegDatum` (vorbelegt aus
-   `erkanntesDatum`, sonst Startzeit des Einkaufsvorgangs bzw. heute). War eine
-   Position bereits bekannt, zeigt das Namensfeld direkt den Alias (statt
-   „COL-ZAH“ z.B. „Colgate“) und ein Hinweis „Wird verknüpft mit „Zahnpasta““
-   erscheint darunter. Der Nutzer kann den Namen weiterhin frei korrigieren (z.B.
-   OCR-Tippfehler).
-6. **Übernahme** (`BelegScanView.uebernehmen()`): abhängig vom `BelegScanKontext`:
+5. **Prüfen/Korrigieren** (`ErgebnisListe`/`PositionsZeile` in `BelegScanView.swift`):
+   editierbare Kopie jeder Position (`BearbeitbarePosition`: `erkannterName`
+   unveränderlich, `artikelName`/`preisText` editierbar, `zugeordneterArtikel` aus
+   Schritt 4, `boundingBox` aus Schritt 4) plus editierbares `belegDatum` (vorbelegt
+   aus `erkanntesDatum`, sonst Startzeit des Einkaufsvorgangs bzw. heute). Details
+   zur Anzeige/Korrektur der Zuordnung siehe „Automatische Artikel-Zuordnung“ unten.
+6. **Übernahme** (`BelegScanView.uebernehmen()`): abhängig vom `BelegScanKontext`,
+   in allen drei Fällen mit `position.effektivZugeordneterArtikel` verknüpft (siehe
+   „Automatische Artikel-Zuordnung“ unten):
    - `.einkaufsvorgang(Einkaufsvorgang)`: Preise werden nach Namensabgleich
      (`passtZu`) bereits abgehakten `KaufEintrag`en dieses Einkaufsvorgangs
      zugeordnet (dort bleibt eine bestehende `Artikel`-Verknüpfung unverändert,
      nur Preis/Datum/Alias werden aktualisiert). Ohne Treffer entsteht ein neuer,
-     eigenständiger `KaufEintrag`, direkt verknüpft mit `position.gelernterArtikel`
-     (aus Schritt 4), falls vorhanden.
+     eigenständiger `KaufEintrag`.
    - `.geschaeft(Geschaeft)`: unabhängig von einem laufenden Einkauf, direkt aus der
-     Geschäfts-Detailansicht. Jede Position wird als neuer `KaufEintrag` angelegt,
-     verknüpft mit `position.gelernterArtikel` — ansonsten sucht `passendesArtikel(fuer:)`
-     per Namensabgleich unter allen `Artikel`n einen Treffer als Fallback.
+     Geschäfts-Detailansicht. Jede Position wird als neuer `KaufEintrag` angelegt.
    - `.unbekannt`: geschäftsloser Scan (siehe „Automatischer Geschäfts-Abgleich“
      unten) — verhält sich sonst wie `.geschaeft`, nur dass das Geschäft erst nach
      dem Scan feststeht (`erkanntesGeschaeft` statt eines fest übergebenen Werts).
@@ -237,6 +232,81 @@ Komma bleibt unverändert, die vierstellige (AT) oder fünfstellige (DE)
 Postleitzahl danach wird per Regex entfernt. Enthält `adresse` kein Komma, wird
 sie unverändert zurückgegeben; ohne hinterlegte `adresse` liefert die Property
 `nil` (Zeile bleibt einzeilig, auch bei Namensduplikat).
+
+## Automatische Artikel-Zuordnung
+
+**Status: Umgesetzt** (`ArtikelZuordnungsService.swift`, `PositionsZeile` in
+`BelegScanView.swift`).
+
+Jeder auf einem Kassenbon erkannte Artikelname ist die Original-Bezeichnung des
+Händlers (oft abgekürzt, z.B. „COL-ZAH“) — er wird konsistent über alle drei
+`BelegScanKontext`e (vorher inkonsistent, siehe unten) beim Einlesen einem
+bestehenden, generischen `Artikel` zugeordnet, dreistufig:
+
+1. **Gelernter Alias**: `KaufEintrag.gelernteZuordnung(fuerErkannterName:in:)`
+   (unverändert, siehe „Mitlernen zwischen Belegscans“ unten).
+2. **Teilstring-Abgleich**: einfacher, beidseitiger
+   `localizedCaseInsensitiveContains`-Vergleich gegen alle vorhandenen `Artikel`.
+3. **KI-Best-Match** — nur falls Stufe 1+2 erfolglos **und** lokale KI verfügbar
+   (`AISuggestionService.istVerfuegbar`): `AISuggestionService.artikelMatch(fuerName:bekannteArtikel:)`
+   (`@Generable ArtikelMatchVorschlag`, exaktes Vorbild
+   `AISuggestionService.kategorieMatch(fuerName:bekannteKategorien:)`, bereits
+   identisch genutzt in `MilkForUsImportService`). Antwortet die KI mit einem
+   leeren String oder einem Namen, der zu keinem `Artikel` exakt passt, gilt die
+   Stufe als erfolglos.
+
+Bleiben alle drei Stufen erfolglos, gilt die Position als **neu erkannt**.
+`ArtikelZuordnungsService.textBasierteZuordnung(...)` bündelt Stufe 1+2 als
+eigene, ohne KI direkt testbare Funktion (analog
+`GeschaeftErkennungService.passendenVorschlag(...)`); `zuordnen(...)` ergänzt
+Stufe 3 und ist die volle, von `BelegScanView.verarbeite(bild:)` genutzte
+Pipeline. Ersetzt die frühere, nur für `.geschaeft`/`.unbekannt` beim **Speichern**
+(nicht in der Prüf-Ansicht sichtbare) `passendesArtikel(fuer:)`-Methode — `.einkaufsvorgang`
+bekam bislang gar keine Katalog-Zuordnung.
+
+**Anzeige/Korrektur (`PositionsZeile`):**
+- Das Artikel-Textfeld zeigt den gefundenen generischen Namen (`alias` bzw.
+  `artikel.name`). Weicht das vom rohen Beleg-Text (`erkannterName`) ab, erscheint
+  dieser zusätzlich klein darunter als „Original: „<Text>““ — beide Namen sind
+  damit gleichzeitig sichtbar.
+- Ein Status-Label darunter zeigt „Wird verknüpft mit „<Artikel>““ (Treffer) oder
+  „Neu erkannt“ (keine Stufe erfolgreich).
+- **`BearbeitbarePosition.effektivZugeordneterArtikel`**: liefert die automatische
+  Zuordnung nur, solange der Text im Feld noch exakt zum zugeordneten Artikelnamen
+  passt — bearbeitet der Nutzer das Feld frei weiter, ohne neu auszuwählen, gilt
+  die Position wieder als „neu erkannt“, rein reaktiv ohne `onChange`-Seiteneffekt.
+  Sowohl Anzeige als auch `BelegScanView.uebernehmen()` nutzen ausschließlich diese
+  Property.
+- **Inline-Autocomplete**: solange das Textfeld fokussiert ist, erscheinen bis zu 5
+  nach Teilstring gefilterte Vorschläge aus allen vorhandenen `Artikel`n direkt
+  darunter; Antippen übernimmt Name + Zuordnung. Passt der eingegebene Text zu
+  keinem bestehenden Artikel, erscheint zusätzlich „„<Text>“ neu anlegen“ — öffnet
+  `ArtikelEditView(artikel: entwurf, istNeu: true)` als Sheet (identisches Muster
+  wie `KaufEintragZuordnenSheet.neuenArtikelAnlegen()`), übernimmt den neu
+  gesicherten Artikel danach automatisch als Zuordnung.
+
+## Dauerhaft ignorierte Artikel pro Geschäft
+
+**Status: Umgesetzt** (`IgnorierterArtikel.swift`).
+
+Wischen auf einer Position in `ErgebnisListe`:
+- **Nach links** (`.onDelete`, unverändert): löscht die Position nur für diesen
+  einen Scan.
+- **Nach rechts**: „Dauerhaft ignorieren“ — legt einen `IgnorierterArtikel`
+  (`erkannterName`, `geschaeft: erkanntesGeschaeft`) an; künftige Scans desselben
+  Geschäfts filtern passende Positionen bereits in `verarbeite(bild:)` heraus
+  (`IgnorierterArtikel.istIgnoriert(...)`, Namensgleichheit ODER beidseitiger
+  Teilstring, analog den übrigen Namens-Abgleichen im Projekt), noch bevor sie in
+  der Prüf-Ansicht erscheinen. Nur sichtbar, solange `erkanntesGeschaeft` gesetzt
+  ist — ohne Geschäft gibt es keine sinnvolle Skalierung.
+
+**Bewusst pro Geschäft, nicht global**: Artikelbezeichnungen auf Kassenbons sind je
+Geschäft unterschiedlich formatiert (anders als bei
+`IgnorierterGeschaeftsVorschlag`, das mangels Relationship auch noch unbekannte
+Läden abdecken muss, referenziert `IgnorierterArtikel.geschaeft` eine echte,
+bereits persistierte `Geschaeft`-Relationship — zum Zeitpunkt des Ignorierens
+steht das Geschäft immer schon fest). Cascade-Delete: Wird das Geschäft gelöscht,
+verschwinden auch seine Ignorier-Einträge (`Geschaeft.ignorierteArtikel`).
 
 ## Datenmodell: `KaufEintrag`
 

@@ -56,12 +56,14 @@ enum BelegScanKontext {
 /// so lassen sich verschiedene Marken desselben generischen Artikels weiterhin
 /// getrennt in der Preishistorie nachverfolgen.
 ///
-/// **Mitlernen:** Wurde eine erkannte Position schon einmal (in einem früheren Beleg
-/// oder über ``KaufEintragZuordnenSheet``) mit einem Alias-Namen und/oder einem
-/// ``Artikel`` versehen, schlägt ``KaufEintrag/gelernteZuordnung(fuerErkannterName:in:)``
-/// beides bereits beim Einlesen vor: das Textfeld zeigt direkt den Alias statt des
-/// rohen Kassenbon-Texts, und die Position wird beim Übernehmen automatisch mit dem
-/// gelernten ``Artikel`` verknüpft — siehe `docs/BELEGSCAN.md`.
+/// **Automatische Artikel-Zuordnung (``ArtikelZuordnungsService``):** Beim Einlesen
+/// wird jede erkannte Position dreistufig einem bestehenden, generischen ``Artikel``
+/// zugeordnet — gelernter Alias, sonst Teilstring-Abgleich, sonst (nur falls lokale
+/// KI verfügbar) ein KI-Best-Match. Das Textfeld zeigt dabei den gefundenen
+/// generischen Namen, der ursprüngliche Beleg-Text bleibt zusätzlich sichtbar
+/// (``ErgebnisListe``). Bleibt jede Stufe erfolglos, gilt die Position als „neu
+/// erkannt“ — der Anwender kann dann per Autocomplete einen bestehenden Artikel
+/// wählen oder direkt einen neuen anlegen. Siehe `docs/BELEGSCAN.md`.
 ///
 /// **Originalbeleg prüfen:** Solange die Ergebnis-Prüfung läuft, bleibt das
 /// aufgenommene Foto in-memory verfügbar (``erfasstesBild``, nie persistiert) und
@@ -84,6 +86,8 @@ struct BelegScanView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \Geschaeft.name) private var alleGeschaefte: [Geschaeft]
+    @Query(sort: \Artikel.name) private var alleArtikel: [Artikel]
+    @Query private var alleIgnoriertenArtikel: [IgnorierterArtikel]
 
     @State private var ausgewaehltesFoto: PhotosPickerItem?
     @State private var zeigeKamera = false
@@ -150,7 +154,9 @@ struct BelegScanView: View {
                         geschaeftAbgleichNoetig: geschaeftAbgleichNoetig,
                         erkanntesGeschaeft: erkanntesGeschaeft,
                         belegFoto: erfasstesBild,
+                        alleArtikel: alleArtikel,
                         geschaeftWaehlen: { zeigeGeschaeftWahl = true },
+                        artikelDauerhaftIgnorieren: artikelDauerhaftIgnorieren,
                         uebernehmen: uebernehmen
                     )
                 } else {
@@ -213,19 +219,25 @@ struct BelegScanView: View {
                 }
                 geschaeftAbgleichen(erkannterName: ergebnis.geschaeftName, erkannteAdresse: ergebnis.geschaeftAdresse)
                 let bekannterVerlauf = (try? modelContext.fetch(FetchDescriptor<KaufEintrag>())) ?? []
-                bearbeitbarePositionen = ergebnis.positionen.map { position in
-                    let gelernt = KaufEintrag.gelernteZuordnung(
-                        fuerErkannterName: position.artikelName,
-                        in: bekannterVerlauf
-                    )
-                    return BearbeitbarePosition(
+                var neuePositionen: [BearbeitbarePosition] = []
+                for position in ergebnis.positionen {
+                    if IgnorierterArtikel.istIgnoriert(position.artikelName, geschaeft: erkanntesGeschaeft, unter: alleIgnoriertenArtikel) {
+                        continue
+                    }
+                    let zuordnung = await ArtikelZuordnungsService.zuordnen(
                         erkannterName: position.artikelName,
-                        artikelName: gelernt?.alias ?? position.artikelName,
-                        preisText: "\(position.einzelpreis)",
-                        gelernterArtikel: gelernt?.artikel,
-                        boundingBox: scanErgebnis.ocrZeilen.boundingBox(fuerArtikelName: position.artikelName)
+                        bekannterVerlauf: bekannterVerlauf,
+                        alleArtikel: alleArtikel
                     )
+                    neuePositionen.append(BearbeitbarePosition(
+                        erkannterName: position.artikelName,
+                        artikelName: zuordnung.alias ?? zuordnung.artikel?.name ?? position.artikelName,
+                        preisText: "\(position.einzelpreis)",
+                        zugeordneterArtikel: zuordnung.artikel,
+                        boundingBox: scanErgebnis.ocrZeilen.boundingBox(fuerArtikelName: position.artikelName)
+                    ))
                 }
+                bearbeitbarePositionen = neuePositionen
             } catch {
                 fehlermeldung = error.localizedDescription
             }
@@ -285,7 +297,7 @@ struct BelegScanView: View {
                             vorhandenerEintrag.produktName = produktName
                             vorhandenerEintrag.alternativerName = neuerAlternativerName
                         } else {
-                            let artikel = position.gelernterArtikel
+                            let artikel = position.effektivZugeordneterArtikel
                             let neuerEintrag = KaufEintrag(
                                 artikel: artikel,
                                 geschaeft: einkaufsvorgang.geschaeft,
@@ -300,7 +312,7 @@ struct BelegScanView: View {
                             neuerEintrag.einkaufsvorgang = einkaufsvorgang
                         }
                     case .geschaeft, .unbekannt:
-                        let artikel = position.gelernterArtikel ?? passendesArtikel(fuer: name)
+                        let artikel = position.effektivZugeordneterArtikel
                         let neuerEintrag = KaufEintrag(
                             artikel: artikel,
                             geschaeft: erkanntesGeschaeft,
@@ -352,14 +364,19 @@ struct BelegScanView: View {
         return artikelName.localizedCaseInsensitiveContains(name) || name.localizedCaseInsensitiveContains(artikelName)
     }
 
-    /// Sucht unter allen vorhandenen Artikeln einen, dessen Name zum erkannten
-    /// Belegtext passt, damit ein beim Geschäft-Scan (ohne laufenden Einkauf) neu
-    /// angelegter ``KaufEintrag`` in der Preishistorie dieses ``Artikel``s auftaucht
-    /// statt nur als Namens-Schnappschuss zu existieren.
-    private func passendesArtikel(fuer name: String) -> Artikel? {
-        let alleArtikel = (try? modelContext.fetch(FetchDescriptor<Artikel>())) ?? []
-        return alleArtikel.first {
-            $0.name.localizedCaseInsensitiveContains(name) || name.localizedCaseInsensitiveContains($0.name)
+    /// Entfernt `position` sofort aus der Prüf-Ansicht und merkt sich ihren
+    /// erkannten Namen dauerhaft als ignoriert für ``erkanntesGeschaeft`` (siehe
+    /// ``IgnorierterArtikel``) — künftige Scans desselben Geschäfts zeigen diese
+    /// Position dann gar nicht erst an. Diskrete Einzelaktion → Micro-Lease (siehe
+    /// `docs/DATABASE_CONCURRENCY.md`).
+    private func artikelDauerhaftIgnorieren(_ position: BearbeitbarePosition) {
+        let name = position.erkannterName
+        let geschaeft = erkanntesGeschaeft
+        bearbeitbarePositionen?.removeAll { $0.id == position.id }
+        Task {
+            await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                modelContext.insert(IgnorierterArtikel(erkannterName: name, geschaeft: geschaeft))
+            }
         }
     }
 }
@@ -372,20 +389,35 @@ struct BelegScanView: View {
 /// „Colgate Total“ → „Zahnpasta“. `erkannterName` bleibt dabei unverändert der
 /// ursprünglich erkannte Produktname und wird als ``KaufEintrag/produktName``
 /// übernommen, damit die Preishistorie weiterhin nach Marke/Produkt unterscheidet.
-/// `gelernterArtikel` ist bereits beim Einlesen aus einer früheren, gleichartigen
-/// Position übernommen (siehe ``BelegScanView/verarbeite(bild:)``) und wird beim
-/// Übernehmen direkt verknüpft, ohne erneut über den Namen abgeglichen zu werden.
+/// `zugeordneterArtikel` ist bereits beim Einlesen über
+/// ``ArtikelZuordnungsService/zuordnen(erkannterName:bekannterVerlauf:alleArtikel:)``
+/// ermittelt (siehe ``BelegScanView/verarbeite(bild:)``).
 private struct BearbeitbarePosition: Identifiable {
     let id = UUID()
     let erkannterName: String
     var artikelName: String
     var preisText: String
-    var gelernterArtikel: Artikel?
+    var zugeordneterArtikel: Artikel?
     /// Position dieser Zeile im Original-Beleg (Visions normalisiertes
     /// Koordinatensystem), ermittelt über ``ErkannteZeile/boundingBox(fuerArtikelName:)``
     /// — `nil`, wenn sich keine OCR-Zeile eindeutig zuordnen ließ (dann bietet
     /// ``ErgebnisListe`` für diese Zeile keinen „im Beleg zeigen“-Button an).
     var boundingBox: CGRect?
+
+    /// ``zugeordneterArtikel``, aber nur solange ``artikelName`` noch exakt zu
+    /// dessen Namen passt. Bearbeitet der Anwender das Textfeld frei weiter, ohne
+    /// einen neuen Vorschlag/neu angelegten Artikel auszuwählen, gilt die Position
+    /// wieder als „neu erkannt“ statt die ursprüngliche automatische Zuordnung
+    /// stillschweigend beizubehalten — rein reaktiv über die Bindings, ohne
+    /// `onChange`-Seiteneffekt. Sowohl die Anzeige (``PositionsZeile``) als auch
+    /// das Speichern (``BelegScanView/uebernehmen()``) nutzen ausschließlich diese
+    /// Property als Single Source of Truth für „ist zugeordnet“.
+    var effektivZugeordneterArtikel: Artikel? {
+        guard let zugeordneterArtikel,
+              zugeordneterArtikel.name.localizedCaseInsensitiveCompare(artikelName) == .orderedSame
+        else { return nil }
+        return zugeordneterArtikel
+    }
 }
 
 /// Aufforderung, ein Beleg-Foto aufzunehmen oder aus der Mediathek zu wählen.
@@ -473,7 +505,13 @@ private struct ErgebnisListe: View {
     /// Das Originalfoto, direkt inline oben angezeigt (kein separater Bildschirm) —
     /// `nil`, falls (noch) kein Foto verfügbar (siehe ``BelegScanView/erfasstesBild``).
     let belegFoto: UIImage?
+    /// Grundlage für die Autocomplete-Vorschläge in ``PositionsZeile``.
+    let alleArtikel: [Artikel]
     let geschaeftWaehlen: () -> Void
+    /// Wischen nach rechts auf einer Position (siehe ``PositionsZeile``) — nur
+    /// verfügbar, solange ``erkanntesGeschaeft`` gesetzt ist (Skalierung braucht ein
+    /// Geschäft, siehe ``IgnorierterArtikel``).
+    let artikelDauerhaftIgnorieren: (BearbeitbarePosition) -> Void
     let uebernehmen: () -> Void
 
     /// Aktuell im Beleg-Foto hervorgehobene Position — `nil` bis der Anwender das
@@ -519,30 +557,17 @@ private struct ErgebnisListe: View {
 
                 Section {
                     ForEach($positionen) { $position in
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                TextField("Artikel", text: $position.artikelName)
-                                Spacer()
-                                TextField("Preis", text: $position.preisText)
-                                    .keyboardType(.decimalPad)
-                                    .multilineTextAlignment(.trailing)
-                                    .frame(width: 70)
-                                Text("€")
-                                    .foregroundStyle(.secondary)
-                                if let boundingBox = position.boundingBox {
-                                    Button {
-                                        positionMarkieren(boundingBox, proxy: proxy)
-                                    } label: {
-                                        Image(systemName: "viewfinder")
-                                    }
-                                    .buttonStyle(.plain)
-                                    .foregroundStyle(.secondary)
+                        PositionsZeile(position: $position, alleArtikel: alleArtikel) { boundingBox in
+                            positionMarkieren(boundingBox, proxy: proxy)
+                        }
+                        .swipeActions(edge: .leading) {
+                            if erkanntesGeschaeft != nil {
+                                Button {
+                                    artikelDauerhaftIgnorieren(position)
+                                } label: {
+                                    Label("Dauerhaft ignorieren", systemImage: "eye.slash")
                                 }
-                            }
-                            if let artikel = position.gelernterArtikel {
-                                Label("Wird verknüpft mit „\(artikel.name)“", systemImage: "checkmark.circle")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                .tint(.orange)
                             }
                         }
                     }
@@ -550,7 +575,7 @@ private struct ErgebnisListe: View {
                 } header: {
                     Text("Erkannte Positionen")
                 } footer: {
-                    Text("Prüfe Name und Preis, bevor du übernimmst. Bereits bekannte Produkte werden automatisch dem passenden Artikel zugeordnet. Nicht benötigte Positionen kannst du löschen. Das Lupen-Symbol markiert die erkannte Stelle im Beleg-Foto oben, sofern eindeutig zuordenbar.")
+                    Text("Prüfe Name und Preis, bevor du übernimmst. Bereits bekannte Produkte werden automatisch dem passenden Artikel zugeordnet. Wischen nach links löscht eine Position nur für diesen Scan, nach rechts ignoriert sie dauerhaft für dieses Geschäft. Das Lupen-Symbol markiert die erkannte Stelle im Beleg-Foto oben, sofern eindeutig zuordenbar.")
                 }
             }
             .safeAreaInset(edge: .bottom) {
@@ -568,5 +593,132 @@ private struct ErgebnisListe: View {
         withAnimation {
             proxy.scrollTo(belegFotoAnkerID, anchor: .top)
         }
+    }
+}
+
+/// Eine Zeile in ``ErgebnisListe`` für eine einzelne erkannte Belegposition —
+/// Artikel-/Preisfeld, Original-Beleg-Name (falls abweichend), Zuordnungs-Status
+/// sowie Inline-Autocomplete gegen ``alleArtikel``, solange das Artikelfeld
+/// fokussiert ist. Tippen auf einen Vorschlag oder Neuanlegen eines Artikels
+/// (``ArtikelEditView``, identisches Muster wie `KaufEintragZuordnenSheet`)
+/// aktualisiert `position` direkt — siehe `docs/BELEGSCAN.md` → „Automatische
+/// Artikel-Zuordnung“.
+private struct PositionsZeile: View {
+    @Binding var position: BearbeitbarePosition
+    let alleArtikel: [Artikel]
+    let belegFotoAnzeigen: (CGRect) -> Void
+
+    @FocusState private var istFokussiert: Bool
+    @State private var neuerArtikelEntwurf: Artikel?
+
+    private var getrimmterName: String {
+        position.artikelName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Bis zu 5 nach Teilstring gefilterte Vorschläge — kompakt gehalten, damit die
+    /// Liste nicht unübersichtlich wird.
+    private var vorschlaege: [Artikel] {
+        guard !getrimmterName.isEmpty else { return [] }
+        return Array(alleArtikel.filter { $0.name.localizedCaseInsensitiveContains(getrimmterName) }.prefix(5))
+    }
+
+    private var zeigtNeuAnlegenOption: Bool {
+        guard !getrimmterName.isEmpty else { return false }
+        return !alleArtikel.contains { $0.name.localizedCaseInsensitiveCompare(getrimmterName) == .orderedSame }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    TextField("Artikel", text: $position.artikelName)
+                        .focused($istFokussiert)
+                    if !position.erkannterName.isEmpty,
+                       position.artikelName.localizedCaseInsensitiveCompare(position.erkannterName) != .orderedSame {
+                        Text("Original: „\(position.erkannterName)“")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+                TextField("Preis", text: $position.preisText)
+                    .keyboardType(.decimalPad)
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 70)
+                Text("€")
+                    .foregroundStyle(.secondary)
+                if let boundingBox = position.boundingBox {
+                    Button {
+                        belegFotoAnzeigen(boundingBox)
+                    } label: {
+                        Image(systemName: "viewfinder")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                }
+            }
+
+            if let artikel = position.effektivZugeordneterArtikel {
+                Label("Wird verknüpft mit „\(artikel.name)“", systemImage: "checkmark.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Label("Neu erkannt", systemImage: "sparkles")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+
+            if istFokussiert, position.effektivZugeordneterArtikel == nil, !vorschlaege.isEmpty || zeigtNeuAnlegenOption {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(vorschlaege) { artikel in
+                        Button {
+                            artikelZuweisen(artikel)
+                        } label: {
+                            Text(artikel.name)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    if zeigtNeuAnlegenOption {
+                        Button {
+                            neuenArtikelAnlegen()
+                        } label: {
+                            Label("„\(getrimmterName)“ neu anlegen", systemImage: "plus.circle.fill")
+                        }
+                    }
+                }
+                .font(.subheadline)
+                .foregroundStyle(Color.accentColor)
+                .padding(.top, 2)
+            }
+        }
+        .sheet(item: $neuerArtikelEntwurf, onDismiss: nachNeuanlageAufraeumen) { entwurf in
+            ArtikelEditView(artikel: entwurf, istNeu: true)
+        }
+    }
+
+    private func artikelZuweisen(_ artikel: Artikel) {
+        position.artikelName = artikel.name
+        position.zugeordneterArtikel = artikel
+        istFokussiert = false
+    }
+
+    private func neuenArtikelAnlegen() {
+        neuerArtikelEntwurf = Artikel(
+            name: getrimmterName,
+            symbolName: SymbolPalette.alle[0],
+            farbeHex: Color.artikelPalette[0]
+        )
+    }
+
+    /// Wurde der Entwurf tatsächlich gesichert (also in den Model-Context
+    /// eingefügt), übernimmt diese Zeile ihn direkt als Zuordnung — siehe
+    /// `KaufEintragZuordnenSheet.nachNeuanlageAufraeumen()` für dasselbe Muster.
+    private func nachNeuanlageAufraeumen() {
+        guard let entwurf = neuerArtikelEntwurf, entwurf.modelContext != nil else {
+            neuerArtikelEntwurf = nil
+            return
+        }
+        artikelZuweisen(entwurf)
+        neuerArtikelEntwurf = nil
     }
 }
