@@ -82,6 +82,9 @@ struct BelegScanView: View {
     /// und Vorbelegung beim „neu anlegen“ in ``GeschaeftWahlSheet``.
     @State private var erkannteGeschaeftAdresse = ""
     @State private var zeigeGeschaeftWahl = false
+    /// Zeigt eine Rückfrage, bevor ``bearbeitbarePositionen`` beim Abbrechen
+    /// verworfen werden — siehe ``abbrechenGetappt()``.
+    @State private var zeigeAbbruchBestaetigung = false
 
     private let scanner: ReceiptScanService = VisionFoundationModelsReceiptScanner()
 
@@ -137,9 +140,19 @@ struct BelegScanView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Fertig") { dismiss() }
+                    Button("Abbrechen") { abbrechenGetappt() }
                 }
             }
+        }
+        .confirmationDialog(
+            "Scan verwerfen?",
+            isPresented: $zeigeAbbruchBestaetigung,
+            titleVisibility: .visible
+        ) {
+            Button("Verwerfen", role: .destructive) { dismiss() }
+            Button("Weiter bearbeiten", role: .cancel) {}
+        } message: {
+            Text("Die erkannten Positionen werden nicht übernommen.")
         }
         .sheet(isPresented: $zeigeKamera) {
             KameraAufnahmeView { bild in
@@ -212,6 +225,18 @@ struct BelegScanView: View {
         } else {
             erkanntesGeschaeft = nil
             zeigeGeschaeftWahl = true
+        }
+    }
+
+    /// Reaktion auf den „Abbrechen“-Button: sind bereits Positionen zur Prüfung
+    /// vorhanden, würde ein direktes Schließen sie stillschweigend verwerfen — dafür
+    /// erst eine Rückfrage (``zeigeAbbruchBestaetigung``). In der reinen
+    /// Aufnahme-Ansicht gibt es noch nichts zu verlieren, daher sofortiges Schließen.
+    private func abbrechenGetappt() {
+        if bearbeitbarePositionen != nil {
+            zeigeAbbruchBestaetigung = true
+        } else {
+            dismiss()
         }
     }
 

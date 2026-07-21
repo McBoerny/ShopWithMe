@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.6 (Build 58) — Belegscan: „Abbrechen“ statt „Fertig“, Rückfrage vor Verwerfen
+
+- **`BelegScanView`/`PreisschildScanView`**: Der bisherige „Fertig“-Button in der
+  Toolbar war irreführend benannt — er hat schon immer nur den Scan verworfen
+  (`dismiss()`, kein Speichern), was für Anwender nicht von „Preise übernehmen“/
+  „Preis übernehmen“ zu unterscheiden war (GitHub #3). Jetzt heißt er „Abbrechen“;
+  sind bereits Positionen zur Prüfung vorhanden, fragt eine Bestätigung
+  („Scan verwerfen?“) nach, bevor sie verloren gehen. In der reinen
+  Aufnahme-Ansicht (noch nichts erkannt) bricht „Abbrechen“ weiterhin sofort ab.
+
 ## v0.6 (Build 57) — MilkForUs-Textimport (Datei-Import + Share Extension)
 
 - **Neu: MilkForUs-Textimport** (`MilkForUsImportService`, `MilkForUsImportView`):

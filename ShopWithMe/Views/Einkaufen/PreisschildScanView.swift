@@ -30,6 +30,9 @@ struct PreisschildScanView: View {
     @State private var laeuft = false
     @State private var fehlermeldung: String?
     @State private var bearbeitbarePosition: BearbeitbarePreisschildPosition?
+    /// Zeigt eine Rückfrage, bevor ``bearbeitbarePosition`` beim Abbrechen verworfen
+    /// wird — siehe ``abbrechenGetappt()``.
+    @State private var zeigeAbbruchBestaetigung = false
 
     private let scanner: PriceTagScanService = VisionFoundationModelsPriceTagScanner()
 
@@ -62,9 +65,19 @@ struct PreisschildScanView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Fertig") { dismiss() }
+                    Button("Abbrechen") { abbrechenGetappt() }
                 }
             }
+        }
+        .confirmationDialog(
+            "Scan verwerfen?",
+            isPresented: $zeigeAbbruchBestaetigung,
+            titleVisibility: .visible
+        ) {
+            Button("Verwerfen", role: .destructive) { dismiss() }
+            Button("Weiter bearbeiten", role: .cancel) {}
+        } message: {
+            Text("Die erkannte Position wird nicht übernommen.")
         }
         .sheet(isPresented: $zeigeKamera) {
             KameraAufnahmeView { bild in
@@ -104,6 +117,17 @@ struct PreisschildScanView: View {
             } catch {
                 fehlermeldung = error.localizedDescription
             }
+        }
+    }
+
+    /// Reaktion auf den „Abbrechen“-Button: analog
+    /// ``BelegScanView/abbrechenGetappt()`` — Rückfrage nur, wenn bereits eine
+    /// Position zur Prüfung vorliegt.
+    private func abbrechenGetappt() {
+        if bearbeitbarePosition != nil {
+            zeigeAbbruchBestaetigung = true
+        } else {
+            dismiss()
         }
     }
 
