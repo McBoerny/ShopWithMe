@@ -1,16 +1,20 @@
 import SwiftUI
 
-/// Frei zoom- und schwenkbare Vollbild-Ansicht eines Fotos (Pinch-to-Zoom + Ziehen,
-/// Doppel-Tap setzt Zoom/Position zurück) — optional mit einem hervorgehobenen
-/// Rechteck (``markierung``, Visions normalisiertes Koordinatensystem: Ursprung
-/// unten links, 0–1). Genutzt vom Belegscan, um das Originalfoto zu einer erkannten
-/// Position zu zeigen (siehe `docs/BELEGSCAN.md`) — bewusst ohne automatisches
-/// Heran-Zoomen zur Markierung, der Anwender zoomt bei Bedarf selbst.
+/// Frei zoom- und schwenkbare Bild-Ansicht (Pinch-to-Zoom + Ziehen, Doppel-Tap
+/// setzt Zoom/Position zurück) — optional mit einem hervorgehobenen Rechteck
+/// (``markierung``, Visions normalisiertes Koordinatensystem: Ursprung unten
+/// links, 0–1). Reine Inhaltsansicht ohne eigene Navigation/Sheet-Chrome, damit sie
+/// sich direkt einbetten lässt — genutzt inline in ``ErgebnisListe`` (Belegscan,
+/// siehe `docs/BELEGSCAN.md`), bewusst ohne automatisches Heran-Zoomen zur
+/// Markierung, der Anwender zoomt bei Bedarf selbst.
+///
+/// Die Zieh-Geste greift nur, solange tatsächlich gezoomt wurde
+/// (``aktuellerZoom`` `> 1`) — bei Zoom 1 soll ein Ziehen stattdessen die
+/// umgebende Liste scrollen können, kein Gesten-Konflikt.
 struct ZoombareBildAnsicht: View {
     let bild: UIImage
     var markierung: CGRect?
 
-    @Environment(\.dismiss) private var dismiss
     @GestureState private var laufenderZoom: CGFloat = 1
     @GestureState private var laufenderVersatz: CGSize = .zero
     @State private var aktuellerZoom: CGFloat = 1
@@ -20,34 +24,23 @@ struct ZoombareBildAnsicht: View {
     private let maximalerZoom: CGFloat = 5
 
     var body: some View {
-        NavigationStack {
-            GeometryReader { geo in
-                Image(uiImage: bild)
-                    .resizable()
-                    .scaledToFit()
-                    .overlay {
-                        if let markierung {
-                            MarkierungsRechteck(markierung: markierung, bildGroesse: bild.size, containerGroesse: geo.size)
-                        }
+        GeometryReader { geo in
+            Image(uiImage: bild)
+                .resizable()
+                .scaledToFit()
+                .overlay {
+                    if let markierung {
+                        MarkierungsRechteck(markierung: markierung, bildGroesse: bild.size, containerGroesse: geo.size)
                     }
-                    .frame(width: geo.size.width, height: geo.size.height)
-                    .scaleEffect(aktuellerZoom * laufenderZoom)
-                    .offset(x: versatz.width + laufenderVersatz.width, y: versatz.height + laufenderVersatz.height)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .contentShape(Rectangle())
-                    .gesture(magnificationGesture)
-                    .simultaneousGesture(dragGesture)
-                    .onTapGesture(count: 2) { zoomZuruecksetzen() }
-            }
-            .background(Color.black)
-            .ignoresSafeArea()
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Fertig") { dismiss() }
-                        .tint(.white)
                 }
-            }
-            .toolbarBackground(.hidden, for: .navigationBar)
+                .frame(width: geo.size.width, height: geo.size.height)
+                .scaleEffect(aktuellerZoom * laufenderZoom)
+                .offset(x: versatz.width + laufenderVersatz.width, y: versatz.height + laufenderVersatz.height)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .gesture(magnificationGesture)
+                .simultaneousGesture(dragGesture, including: aktuellerZoom > minimalerZoom ? .all : .none)
+                .onTapGesture(count: 2) { zoomZuruecksetzen() }
         }
     }
 

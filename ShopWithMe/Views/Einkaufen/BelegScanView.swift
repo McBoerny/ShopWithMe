@@ -58,10 +58,11 @@ enum BelegScanKontext {
 ///
 /// **Originalbeleg prüfen:** Solange die Ergebnis-Prüfung läuft, bleibt das
 /// aufgenommene Foto in-memory verfügbar (``erfasstesBild``, nie persistiert) und
-/// lässt sich über „Beleg anzeigen“ bzw. je Position über das Lupen-Symbol
-/// zoombar öffnen (``ZoombareBildAnsicht``) — mit hervorgehobener Markierung der per
-/// Textabgleich zugeordneten OCR-Zeile (``ErkannteZeile/boundingBox(fuerArtikelName:)``),
-/// um die KI-Erkennung visuell zu verifizieren.
+/// wird direkt inline oben in ``ErgebnisListe`` angezeigt (zoom-/schwenkbar,
+/// ``ZoombareBildAnsicht``) — kein separater Bildschirm. Das Lupen-Symbol je
+/// Position scrollt zu dieser Vorschau und hebt die per Textabgleich zugeordnete
+/// OCR-Zeile darin hervor (``ErkannteZeile/boundingBox(fuerArtikelName:)``), um die
+/// KI-Erkennung visuell zu verifizieren.
 struct BelegScanView: View {
     let kontext: BelegScanKontext
 
@@ -76,12 +77,8 @@ struct BelegScanView: View {
     @State private var bearbeitbarePositionen: [BearbeitbarePosition]?
     /// Das gescannte Originalfoto, ausschließlich in-memory für die Dauer dieser
     /// Prüf-Ansicht gehalten (nie auf Platte oder ins SwiftData-Model geschrieben) —
-    /// ermöglicht die Anzeige in ``ZoombareBildAnsicht`` (siehe ``belegFotoAnsicht``).
+    /// wird direkt inline über ``ZoombareBildAnsicht`` in ``ErgebnisListe`` angezeigt.
     @State private var erfasstesBild: UIImage?
-    /// Steuert die ``ZoombareBildAnsicht``-Vollbildanzeige des Originalfotos —
-    /// `markierung` ist gesetzt, wenn über eine einzelne Position geöffnet
-    /// (siehe ``ErgebnisListe``), sonst `nil` für die allgemeine „Beleg anzeigen“-Ansicht.
-    @State private var belegFotoAnsicht: BelegFotoAnsichtEingabe?
     @State private var belegDatum: Date
     /// Das für die Übernahme zu verwendende Geschäft — bei ``BelegScanKontext/geschaeft(_:)``
     /// sofort feststehend, sonst nach dem Scan automatisch erkannt
@@ -97,9 +94,6 @@ struct BelegScanView: View {
     /// und Vorbelegung beim „neu anlegen“ in ``GeschaeftWahlSheet``.
     @State private var erkannteGeschaeftAdresse = ""
     @State private var zeigeGeschaeftWahl = false
-    /// Zeigt eine Rückfrage, bevor ``bearbeitbarePositionen`` beim Abbrechen
-    /// verworfen werden — siehe ``abbrechenGetappt()``.
-    @State private var zeigeAbbruchBestaetigung = false
 
     private let scanner: ReceiptScanService = VisionFoundationModelsReceiptScanner()
 
@@ -138,9 +132,8 @@ struct BelegScanView: View {
                         belegDatum: $belegDatum,
                         geschaeftAbgleichNoetig: geschaeftAbgleichNoetig,
                         erkanntesGeschaeft: erkanntesGeschaeft,
-                        hatBelegFoto: erfasstesBild != nil,
+                        belegFoto: erfasstesBild,
                         geschaeftWaehlen: { zeigeGeschaeftWahl = true },
-                        belegFotoAnzeigen: { markierung in belegFotoAnsicht = BelegFotoAnsichtEingabe(markierung: markierung) },
                         uebernehmen: uebernehmen
                     )
                 } else {
@@ -157,19 +150,9 @@ struct BelegScanView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Abbrechen") { abbrechenGetappt() }
+                    Button("Abbrechen") { dismiss() }
                 }
             }
-        }
-        .confirmationDialog(
-            "Scan verwerfen?",
-            isPresented: $zeigeAbbruchBestaetigung,
-            titleVisibility: .visible
-        ) {
-            Button("Verwerfen", role: .destructive) { dismiss() }
-            Button("Weiter bearbeiten", role: .cancel) {}
-        } message: {
-            Text("Die erkannten Positionen werden nicht übernommen.")
         }
         .sheet(isPresented: $zeigeKamera) {
             KameraAufnahmeView { bild in
@@ -180,11 +163,6 @@ struct BelegScanView: View {
         .sheet(isPresented: $zeigeGeschaeftWahl) {
             GeschaeftWahlSheet(erkannterName: erkannterGeschaeftName, erkannteAdresse: erkannteGeschaeftAdresse) { gewaehlt in
                 erkanntesGeschaeft = gewaehlt
-            }
-        }
-        .fullScreenCover(item: $belegFotoAnsicht) { eingabe in
-            if let erfasstesBild {
-                ZoombareBildAnsicht(bild: erfasstesBild, markierung: eingabe.markierung)
             }
         }
         .onChange(of: ausgewaehltesFoto) { _, neuesFoto in
@@ -250,18 +228,6 @@ struct BelegScanView: View {
         } else {
             erkanntesGeschaeft = nil
             zeigeGeschaeftWahl = true
-        }
-    }
-
-    /// Reaktion auf den „Abbrechen“-Button: sind bereits Positionen zur Prüfung
-    /// vorhanden, würde ein direktes Schließen sie stillschweigend verwerfen — dafür
-    /// erst eine Rückfrage (``zeigeAbbruchBestaetigung``). In der reinen
-    /// Aufnahme-Ansicht gibt es noch nichts zu verlieren, daher sofortiges Schließen.
-    private func abbrechenGetappt() {
-        if bearbeitbarePositionen != nil {
-            zeigeAbbruchBestaetigung = true
-        } else {
-            dismiss()
         }
     }
 
@@ -381,13 +347,6 @@ private struct BearbeitbarePosition: Identifiable {
     var boundingBox: CGRect?
 }
 
-/// Steuert ``BelegScanView/belegFotoAnsicht`` — `markierung` ist gesetzt, wenn die
-/// Ansicht über eine einzelne Position geöffnet wurde (siehe ``ErgebnisListe``).
-private struct BelegFotoAnsichtEingabe: Identifiable {
-    let id = UUID()
-    let markierung: CGRect?
-}
-
 /// Aufforderung, ein Beleg-Foto aufzunehmen oder aus der Mediathek zu wählen.
 private struct AufnahmeAnsicht: View {
     let laeuft: Bool
@@ -457,6 +416,10 @@ private struct KameraAufnahmeView: UIViewControllerRepresentable {
     }
 }
 
+/// Anker-ID für den ``ScrollViewReader`` in ``ErgebnisListe``, um beim Antippen des
+/// Lupen-Symbols einer Position zur Beleg-Vorschau hochzuscrollen.
+private let belegFotoAnkerID = "belegfoto"
+
 /// Editierbare Liste der erkannten Positionen zur Kontrolle vor dem Übernehmen.
 private struct ErgebnisListe: View {
     @Binding var positionen: [BearbeitbarePosition]
@@ -466,92 +429,103 @@ private struct ErgebnisListe: View {
     /// Geschäfts-Zeile unten ein.
     let geschaeftAbgleichNoetig: Bool
     let erkanntesGeschaeft: Geschaeft?
-    /// Ob das Originalfoto verfügbar ist — blendet den „Beleg anzeigen“-Button ein
-    /// (siehe ``BelegScanView/erfasstesBild``).
-    let hatBelegFoto: Bool
+    /// Das Originalfoto, direkt inline oben angezeigt (kein separater Bildschirm) —
+    /// `nil`, falls (noch) kein Foto verfügbar (siehe ``BelegScanView/erfasstesBild``).
+    let belegFoto: UIImage?
     let geschaeftWaehlen: () -> Void
-    /// Öffnet ``ZoombareBildAnsicht`` — `nil` für die allgemeine Ansicht, oder die
-    /// Bounding-Box einer einzelnen Position, um sie darin hervorzuheben.
-    let belegFotoAnzeigen: (CGRect?) -> Void
     let uebernehmen: () -> Void
 
+    /// Aktuell im Beleg-Foto hervorgehobene Position — `nil` bis der Anwender das
+    /// Lupen-Symbol einer Position antippt (``positionMarkieren(_:proxy:)``).
+    @State private var aktiveMarkierung: CGRect?
+
     var body: some View {
-        List {
-            if hatBelegFoto {
-                Section {
-                    Button {
-                        belegFotoAnzeigen(nil)
-                    } label: {
-                        Label("Beleg anzeigen", systemImage: "doc.text.magnifyingglass")
+        ScrollViewReader { proxy in
+            List {
+                if let belegFoto {
+                    Section {
+                        ZoombareBildAnsicht(bild: belegFoto, markierung: aktiveMarkierung)
+                            .frame(height: 320)
+                            .listRowInsets(EdgeInsets())
                     }
+                    .id(belegFotoAnkerID)
                 }
-            }
 
-            if geschaeftAbgleichNoetig {
-                Section {
-                    Button(action: geschaeftWaehlen) {
-                        HStack {
-                            Text("Geschäft")
-                                .foregroundStyle(.primary)
-                            Spacer()
-                            Text(erkanntesGeschaeft?.name ?? "Wählen")
-                                .foregroundStyle(erkanntesGeschaeft == nil ? Color.accentColor : .secondary)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                } footer: {
-                    Text(erkanntesGeschaeft == nil
-                         ? "Auf dem Beleg wurde kein bekanntes Geschäft erkannt — bitte auswählen, damit die Preise diesem Geschäft zugeordnet werden."
-                         : "Automatisch anhand des Belegs erkannt. Bei Bedarf antippen, um ein anderes Geschäft zu wählen.")
-                }
-            }
-
-            Section {
-                DatePicker("Einkaufsdatum", selection: $belegDatum, displayedComponents: .date)
-            } footer: {
-                Text("Von der KI erkannt, falls auf dem Bon vorhanden — bei Bedarf korrigieren.")
-            }
-
-            Section {
-                ForEach($positionen) { $position in
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            TextField("Artikel", text: $position.artikelName)
-                            Spacer()
-                            TextField("Preis", text: $position.preisText)
-                                .keyboardType(.decimalPad)
-                                .multilineTextAlignment(.trailing)
-                                .frame(width: 70)
-                            Text("€")
-                                .foregroundStyle(.secondary)
-                            if let boundingBox = position.boundingBox {
-                                Button {
-                                    belegFotoAnzeigen(boundingBox)
-                                } label: {
-                                    Image(systemName: "viewfinder")
-                                }
-                                .buttonStyle(.plain)
-                                .foregroundStyle(.secondary)
+                if geschaeftAbgleichNoetig {
+                    Section {
+                        Button(action: geschaeftWaehlen) {
+                            HStack {
+                                Text("Geschäft")
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                Text(erkanntesGeschaeft?.name ?? "Wählen")
+                                    .foregroundStyle(erkanntesGeschaeft == nil ? Color.accentColor : .secondary)
                             }
                         }
-                        if let artikel = position.gelernterArtikel {
-                            Label("Wird verknüpft mit „\(artikel.name)“", systemImage: "checkmark.circle")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                        .buttonStyle(.plain)
+                    } footer: {
+                        Text(erkanntesGeschaeft == nil
+                             ? "Auf dem Beleg wurde kein bekanntes Geschäft erkannt — bitte auswählen, damit die Preise diesem Geschäft zugeordnet werden."
+                             : "Automatisch anhand des Belegs erkannt. Bei Bedarf antippen, um ein anderes Geschäft zu wählen.")
                     }
                 }
-                .onDelete { positionen.remove(atOffsets: $0) }
-            } header: {
-                Text("Erkannte Positionen")
-            } footer: {
-                Text("Prüfe Name und Preis, bevor du übernimmst. Bereits bekannte Produkte werden automatisch dem passenden Artikel zugeordnet. Nicht benötigte Positionen kannst du löschen. Das Lupen-Symbol zeigt die erkannte Stelle im Original-Beleg, sofern eindeutig zuordenbar.")
+
+                Section {
+                    DatePicker("Einkaufsdatum", selection: $belegDatum, displayedComponents: .date)
+                } footer: {
+                    Text("Von der KI erkannt, falls auf dem Bon vorhanden — bei Bedarf korrigieren.")
+                }
+
+                Section {
+                    ForEach($positionen) { $position in
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                TextField("Artikel", text: $position.artikelName)
+                                Spacer()
+                                TextField("Preis", text: $position.preisText)
+                                    .keyboardType(.decimalPad)
+                                    .multilineTextAlignment(.trailing)
+                                    .frame(width: 70)
+                                Text("€")
+                                    .foregroundStyle(.secondary)
+                                if let boundingBox = position.boundingBox {
+                                    Button {
+                                        positionMarkieren(boundingBox, proxy: proxy)
+                                    } label: {
+                                        Image(systemName: "viewfinder")
+                                    }
+                                    .buttonStyle(.plain)
+                                    .foregroundStyle(.secondary)
+                                }
+                            }
+                            if let artikel = position.gelernterArtikel {
+                                Label("Wird verknüpft mit „\(artikel.name)“", systemImage: "checkmark.circle")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .onDelete { positionen.remove(atOffsets: $0) }
+                } header: {
+                    Text("Erkannte Positionen")
+                } footer: {
+                    Text("Prüfe Name und Preis, bevor du übernimmst. Bereits bekannte Produkte werden automatisch dem passenden Artikel zugeordnet. Nicht benötigte Positionen kannst du löschen. Das Lupen-Symbol markiert die erkannte Stelle im Beleg-Foto oben, sofern eindeutig zuordenbar.")
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                Button("Preise übernehmen", action: uebernehmen)
+                    .buttonStyle(.glass)
+                    .padding()
             }
         }
-        .safeAreaInset(edge: .bottom) {
-            Button("Preise übernehmen", action: uebernehmen)
-                .buttonStyle(.glass)
-                .padding()
+    }
+
+    /// Hebt `boundingBox` im inline angezeigten Beleg-Foto hervor und scrollt die
+    /// Liste dorthin — Ersatz für das frühere Öffnen einer eigenen Vollbild-Ansicht.
+    private func positionMarkieren(_ boundingBox: CGRect, proxy: ScrollViewProxy) {
+        aktiveMarkierung = boundingBox
+        withAnimation {
+            proxy.scrollTo(belegFotoAnkerID, anchor: .top)
         }
     }
 }

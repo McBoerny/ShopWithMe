@@ -90,10 +90,11 @@ Wird das Geschäft auf dem Bon nicht erkannt (oder gibt es mehrere Geschäfte mi
 demselben Namen), fragt dich die App danach, ggf. mit Kurzadresse zur
 Unterscheidung namensgleicher Filialen.
 
-Über „Beleg anzeigen“ siehst du in der Prüf-Ansicht jederzeit das Original-Foto
-zoombar in Vollbild — praktisch, um die KI-Erkennung visuell zu verifizieren. Das
-Lupen-Symbol neben einer Position (falls vorhanden) öffnet dieselbe Ansicht direkt
-mit einer Markierung der erkannten Stelle im Beleg.
+Das Original-Foto wird in der Prüf-Ansicht direkt oben angezeigt (zoom-/schwenkbar
+per Pinch-/Zieh-Geste) — praktisch, um die KI-Erkennung visuell zu verifizieren.
+Das Lupen-Symbol neben einer Position (falls vorhanden) scrollt dorthin und hebt
+die erkannte Stelle im Beleg farblich hervor. „Abbrechen“ schließt die Prüf-Ansicht
+immer sofort, ohne Rückfrage.
 
 Der **Preisschild-Scan** (Geschäfts-Detailansicht oder während des Einkaufens)
 erfasst stattdessen ein einzelnes Regal-Preisschild — nützlich für einen

@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.6 (Build 61) — Belegscan: Abbrechen ohne Rückfrage, Beleg inline, Bounding-Box-Fix
+
+- **Abbrechen ohne Rückfrage:** Der „Scan verwerfen?“-`confirmationDialog` beim
+  Antippen von „Abbrechen“ in `BelegScanView` ist entfernt — schließt jetzt immer
+  sofort.
+- **Beleg inline statt eigener Bildschirm:** `ZoombareBildAnsicht` (Original-Foto,
+  zoom-/schwenkbar) erscheint jetzt direkt als erste Section in `ErgebnisListe`,
+  kein `.fullScreenCover`/Button „Beleg anzeigen“ mehr. `ZoombareBildAnsicht` wurde
+  dafür von seiner bisherigen `NavigationStack`/Toolbar-Chrome befreit; die
+  Zieh-Geste greift jetzt nur bei aktivem Zoom, damit das Scrollen der Liste bei
+  Zoom 1 nicht blockiert wird. Das Lupen-Symbol je Position scrollt jetzt per
+  `ScrollViewReader` zur Vorschau hoch, statt eine eigene Ansicht zu öffnen.
+- **Bugfix: Bounding Boxes passten nicht zum Foto.** `VNImageRequestHandler` in
+  `ReceiptScanService.erkenneText` berücksichtigte `UIImage.imageOrientation`
+  nicht — Kamerafotos mit Rotations-Metadaten (statt physisch gedrehter Pixel)
+  führten zu falsch positionierten Markierungen. Fix: `CGImagePropertyOrientation`
+  aus `imageOrientation` ableiten und an Vision übergeben.
+
 ## v0.6 (Build 60) — Belegscan: Originalfoto zoombar prüfen
 
 - **Neu: Originalbeleg anzeigen** (GitHub #2): In der Ergebnis-Prüfung nach einem

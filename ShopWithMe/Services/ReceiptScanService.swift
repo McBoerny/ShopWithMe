@@ -104,6 +104,25 @@ protocol ReceiptScanService: Sendable {
     func auswerten(bild: UIImage) async throws -> BelegScanErgebnis
 }
 
+private extension CGImagePropertyOrientation {
+    /// Konvertiert `UIImage.imageOrientation` in Visions Orientierungstyp — die
+    /// Rohwerte beider Enums stimmen nicht überein, daher explizite Zuordnung statt
+    /// `rawValue`-Cast.
+    init(_ uiOrientation: UIImage.Orientation) {
+        switch uiOrientation {
+        case .up: self = .up
+        case .upMirrored: self = .upMirrored
+        case .down: self = .down
+        case .downMirrored: self = .downMirrored
+        case .left: self = .left
+        case .leftMirrored: self = .leftMirrored
+        case .right: self = .right
+        case .rightMirrored: self = .rightMirrored
+        @unknown default: self = .up
+        }
+    }
+}
+
 /// Belegscan auf Basis von Vision-Texterkennung (OCR) kombiniert mit
 /// FoundationModels-Strukturextraktion — beides reale, mit iOS 26 ausgelieferte APIs.
 struct VisionFoundationModelsReceiptScanner: ReceiptScanService {
@@ -123,7 +142,15 @@ struct VisionFoundationModelsReceiptScanner: ReceiptScanService {
         anfrage.usesLanguageCorrection = true
         anfrage.recognitionLanguages = ["de-DE", "en-US"]
 
-        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+        // Ohne explizite `orientation` interpretiert Vision den rohen, oft gedrehten
+        // Kamera-Pixelpuffer — die zurückgegebenen `boundingBox`en passen dann nicht
+        // zum per `imageOrientation` korrekt gedreht angezeigten Bild
+        // (`Image(uiImage:)`/``ZoombareBildAnsicht``).
+        let handler = VNImageRequestHandler(
+            cgImage: cgImage,
+            orientation: CGImagePropertyOrientation(bild.imageOrientation),
+            options: [:]
+        )
         try handler.perform([anfrage])
 
         let zeilen: [ErkannteZeile] = (anfrage.results ?? []).compactMap { beobachtung in

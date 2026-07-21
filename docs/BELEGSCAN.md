@@ -30,8 +30,9 @@ Belegscans hinweg.
   `ArtikelPreisSpanneZeile`/`ArtikelPreisVerlaufView` (Drill-down).
 - `ShopWithMe/Views/Geschaefte/GeschaeftListView.swift` — geschäftsloser
   Scan-Einstieg (Toolbar-Menü „Scannen“).
-- `ShopWithMe/DesignSystem/ZoombareBildAnsicht.swift` — zoombare Vollbildansicht des
-  Original-Belegs mit optionaler Positions-Markierung (siehe unten).
+- `ShopWithMe/DesignSystem/ZoombareBildAnsicht.swift` — zoom-/schwenkbare,
+  einbettbare Inhaltsansicht des Original-Belegs mit optionaler
+  Positions-Markierung, inline in `ErgebnisListe` (siehe unten).
 - `ShopWithMeTests/ReceiptScanServiceTests.swift`, `ShopWithMeTests/ModelTests.swift`.
 
 ## Ablauf
@@ -94,7 +95,8 @@ Belegscans hinweg.
 
 ## Originalbeleg anzeigen
 
-**Status: Umgesetzt** (GitHub #2).
+**Status: Umgesetzt** (GitHub #2, seit 2026-07-21 inline statt als eigener
+Bildschirm — siehe unten).
 
 Solange die Ergebnis-Prüfung (`ErgebnisListe`) läuft, hält `BelegScanView` das
 aufgenommene Foto zusätzlich in `erfasstesBild: UIImage?` — ausschließlich in-memory
@@ -102,19 +104,43 @@ für die Dauer dieser Ansicht, **nie auf Platte oder ins SwiftData-Model
 geschrieben**; verschwindet mit dem Schließen des Sheets wie jeder andere
 View-State auch.
 
-- **„Beleg anzeigen“**-Button (Kopfbereich der Liste, nur sichtbar wenn ein Foto
-  vorliegt) öffnet `ZoombareBildAnsicht` als `.fullScreenCover` ohne Markierung —
-  freies Zoomen/Schwenken per Pinch-/Drag-Geste, Doppel-Tap setzt zurück.
+- **Inline statt eigener Bildschirm:** `ZoombareBildAnsicht` erscheint direkt als
+  erste Section von `ErgebnisListe` (feste Höhe 320pt), sobald ein Foto vorliegt —
+  kein Button/Sheet/`.fullScreenCover` mehr nötig, das Original ist sofort
+  sichtbar. `ZoombareBildAnsicht` selbst wurde dafür von der bisherigen
+  `NavigationStack`/Toolbar/„Fertig“-Chrome befreit und ist jetzt eine reine,
+  einbettbare Inhaltsansicht (weiterhin frei zoom-/schwenkbar per Pinch-/Drag-Geste,
+  Doppel-Tap setzt zurück). Die Zieh-Geste greift dabei bewusst nur, solange
+  tatsächlich gezoomt wurde (`aktuellerZoom > 1`, per `simultaneousGesture(_:including:)`)
+  — bei Zoom 1 soll ein Ziehen stattdessen die umgebende Liste scrollen können,
+  kein Gesten-Konflikt.
 - Je Position mit ermittelter `boundingBox` (siehe Schritt 4 oben) erscheint ein
-  Lupen-Symbol (`viewfinder`), das dieselbe Ansicht mit einem gelb hervorgehobenen
-  Rechteck um die erkannte OCR-Zeile öffnet. Positionen ohne eindeutig zuordenbare
-  Zeile zeigen bewusst **kein** Symbol, statt eine falsche Markierung zu raten.
+  Lupen-Symbol (`viewfinder`), das per `ScrollViewReader` zur Beleg-Vorschau
+  hochscrollt und darin ein gelb hervorgehobenes Rechteck um die erkannte OCR-Zeile
+  setzt (`ErgebnisListe.positionMarkieren(_:proxy:)`). Positionen ohne eindeutig
+  zuordenbare Zeile zeigen bewusst **kein** Symbol, statt eine falsche Markierung
+  zu raten.
 - Kein automatisches Heran-Zoomen zur Markierung (bewusste Scope-Entscheidung,
   siehe „Bewusst nicht umgesetzt“) — der Anwender zoomt bei Bedarf selbst.
 - `ZoombareBildAnsicht` (`ShopWithMe/DesignSystem/ZoombareBildAnsicht.swift`) ist
-  eine generische, wiederverwendbare Komponente, nicht Belegscan-spezifisch:
+  weiterhin eine generische, wiederverwendbare Komponente, nicht Belegscan-spezifisch:
   rechnet Visions normalisierte Bounding-Box-Koordinaten (Ursprung unten links)
   unter Berücksichtigung des Aspect-Fit-Scalings in Bildschirmkoordinaten um.
+
+**Bugfix (2026-07-21): Bounding Boxes passten nicht zum angezeigten Foto.**
+`VisionFoundationModelsReceiptScanner.erkenneText` rief `VNImageRequestHandler`
+bisher ohne `orientation`-Parameter auf — Vision interpretierte damit den rohen,
+oft gedrehten Kamera-Pixelpuffer (`UIImage.imageOrientation` meist `.right` bei
+Fotos aus `UIImagePickerController`), während `Image(uiImage:)` das Foto korrekt
+orientiert anzeigt. Die berechneten `boundingBox`en passten dadurch nicht zur
+sichtbaren Position. Fix: `CGImagePropertyOrientation(bild.imageOrientation)`
+(manuelle Zuordnung statt `rawValue`-Cast, da die Rohwerte beider Enums nicht
+übereinstimmen) wird jetzt an `VNImageRequestHandler` übergeben.
+
+**Abbrechen ohne Rückfrage (seit 2026-07-21):** Der „Abbrechen“-Button schließt
+`BelegScanView` jetzt immer sofort, auch wenn bereits Positionen zur Prüfung
+vorliegen — die vorherige Rückfrage „Scan verwerfen?“ (`confirmationDialog`) wurde
+auf Nutzerwunsch entfernt.
 
 ## Automatischer Geschäfts-Abgleich
 
