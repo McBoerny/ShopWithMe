@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.6 (Build 62) — Eigener Scannen-Tab
+
+- **Neuer dritter Tab „Scannen“** (`RootView`, zwischen „Einkaufen“ und
+  „Einstellungen“) bettet `BelegScanView` dauerhaft ein (`istEigenerTab: true`,
+  immer im geschäftslosen `.unbekannt`-Kontext) — zusätzlich zu, nicht anstelle
+  der bisherigen vier Sheet-Einstiegspunkte (alle bleiben unverändert bestehen,
+  Nutzer-Entscheidung).
+- **`BelegScanView.istEigenerTab`** (neu, Default `false`): Als Tab-Inhalt gibt es
+  keine Präsentation, die `@Environment(\.dismiss)` schließen könnte — „Verwerfen“
+  (ersetzt „Abbrechen“ im Tab-Kontext) und erfolgreiches Übernehmen setzen
+  stattdessen über die neue `zuruecksetzen()` den kompletten Scan-Zustand zurück,
+  der Tab ist danach sofort wieder bereit für den nächsten Scan.
+
 ## v0.6 (Build 61) — Belegscan: Abbrechen ohne Rückfrage, Beleg inline, Bounding-Box-Fix
 
 - **Abbrechen ohne Rückfrage:** Der „Scan verwerfen?“-`confirmationDialog` beim

@@ -30,6 +30,8 @@ Belegscans hinweg.
   `ArtikelPreisSpanneZeile`/`ArtikelPreisVerlaufView` (Drill-down).
 - `ShopWithMe/Views/Geschaefte/GeschaeftListView.swift` — geschäftsloser
   Scan-Einstieg (Toolbar-Menü „Scannen“).
+- `ShopWithMe/App/RootView.swift` — eigener „Scannen“-Tab, bettet `BelegScanView`
+  dauerhaft ein (siehe „Eigener Scannen-Tab“ unten).
 - `ShopWithMe/DesignSystem/ZoombareBildAnsicht.swift` — zoom-/schwenkbare,
   einbettbare Inhaltsansicht des Original-Belegs mit optionaler
   Positions-Markierung, inline in `ErgebnisListe` (siehe unten).
@@ -141,6 +143,28 @@ sichtbaren Position. Fix: `CGImagePropertyOrientation(bild.imageOrientation)`
 `BelegScanView` jetzt immer sofort, auch wenn bereits Positionen zur Prüfung
 vorliegen — die vorherige Rückfrage „Scan verwerfen?“ (`confirmationDialog`) wurde
 auf Nutzerwunsch entfernt.
+
+## Eigener Scannen-Tab
+
+**Status: Umgesetzt (2026-07-21).** `BelegScanView` ist jetzt zusätzlich als
+eigener, dritter Tab in `RootView` (zwischen „Einkaufen“ und „Einstellungen“,
+`camera.viewfinder`) dauerhaft eingebettet — immer im
+`BelegScanKontext/unbekannt`-Kontext (automatischer Geschäfts-Abgleich bzw.
+`GeschaeftWahlSheet`, siehe unten), analog zum bisherigen geschäftslosen
+Scan-Einstieg in `GeschaeftListView`. Alle vier bisherigen Sheet-Einstiegspunkte
+(Einkaufen-Menü, nach Einkaufsabschluss, Geschäfts-Detail, Geschäfte-Liste) bleiben
+unverändert bestehen — der Tab ist nur ein zusätzlicher, schnellerer Weg, keine
+Ablösung (Nutzer-Entscheidung, siehe Rückfrage in `docs/CHANGELOG.md` v0.6).
+
+**Technische Besonderheit:** Als Tab-Inhalt (statt Sheet/`.fullScreenCover`) gibt es
+keine umgebende Präsentation, die sich per `@Environment(\.dismiss)` schließen
+ließe — ein Aufruf würde ins Leere laufen. `BelegScanView.istEigenerTab` (Default
+`false`, unverändert an allen bestehenden Sheet-Aufrufstellen) schaltet deshalb bei
+`true` auf `zuruecksetzen()` um: sowohl nach „Verwerfen“ (ersetzt „Abbrechen“ im
+Tab-Kontext, nur sichtbar solange Positionen vorliegen) als auch nach erfolgreichem
+`uebernehmen()` wird der komplette Scan-Zustand (Foto, Positionen, erkanntes
+Geschäft, Datum) zurückgesetzt, statt zu dismissen — der Tab ist danach sofort
+wieder bereit für den nächsten Scan, ohne Tab-Wechsel.
 
 ## Automatischer Geschäfts-Abgleich
 

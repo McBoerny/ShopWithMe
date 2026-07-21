@@ -9,13 +9,17 @@ Diese Anleitung ist die maßgebliche, vollständige Quelle — die kuratierte In
 („Hilfe & Anleitungen“ in den Einstellungen) deckt bewusst nur eine Auswahl der
 komplexeren Funktionen ab und darf dieser Anleitung inhaltlich nicht widersprechen.
 
-## Die zwei Bereiche der App
+## Die drei Bereiche der App
 
 Die App startet immer direkt mit der Einkaufsliste.
 
 - **Einkaufen** — die eigentliche Einkaufsliste, Standort-Erkennung, Abhaken.
+- **Scannen** — direkter Belegscan ohne vorherige Geschäftswahl, jederzeit über den
+  mittleren Tab erreichbar (siehe „Belegscan & Preisschild-Scan“ unten). Ergänzt,
+  ersetzt aber nicht die weiteren Belegscan-Wege aus dem Einkaufen-Tab bzw. aus der
+  Geschäfts-Detailansicht.
 - **Einstellungen** — Hilfe, Artikel- und Geschäfte-Verwaltung (inkl. Regale,
-  Kategorien pro Geschäft, Belegscan), Datenbank-Speicherort.
+  Kategorien pro Geschäft), Datenbank-Speicherort.
 
 ## Artikel
 
@@ -77,14 +81,18 @@ manueller Start nötig.
 
 ## Belegscan & Preisschild-Scan
 
-Nach dem Abschließen eines Einkaufs bietet dir die App an, den Kassenbon zu
-scannen (Foto oder aus der Mediathek). Lokale KI erkennt Geschäft, Datum, Artikel
-und Preise und trägt sie in die passenden Positionen ein — nicht zuordenbare
+Vier gleichwertige Wege zum Belegscan: nach dem Abschließen eines Einkaufs (Angebot,
+den Kassenbon direkt zu scannen), über den **Scannen-Tab** (jederzeit, ohne
+vorherige Geschäftswahl — nach dem Übernehmen bzw. „Verwerfen“ direkt wieder bereit
+für den nächsten Scan), über das Scannen-Menü beim Einkaufen für das gerade
+gewählte Geschäft, oder direkt in der Geschäfts-Detailansicht — z.B. für ältere,
+nachträglich gefundene Bons.
+
+Lokale KI erkennt Geschäft, Datum, Artikel und Preise (Foto oder aus der
+Mediathek) und trägt sie in die passenden Positionen ein — nicht zuordenbare
 Positionen werden trotzdem mit Namen und Preis gespeichert. Vor der Übernahme
 kannst du jede Position prüfen, den Namen korrigieren (z.B. „Colgate“ statt
-„COL-ZAH“) und das erkannte Datum anpassen. Ein Beleg lässt sich auch unabhängig
-von einem laufenden Einkauf direkt in der Geschäfts-Detailansicht scannen — z.B.
-für ältere, nachträglich gefundene Bons.
+„COL-ZAH“) und das erkannte Datum anpassen.
 
 Wird das Geschäft auf dem Bon nicht erkannt (oder gibt es mehrere Geschäfte mit
 demselben Namen), fragt dich die App danach, ggf. mit Kurzadresse zur

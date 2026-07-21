@@ -5,7 +5,11 @@ import SwiftData
 ///
 /// Die App startet immer direkt auf „Einkaufen“ (erster Tab) — Artikel- und
 /// Geschäfte-Verwaltung sind bewusst keine eigenen Tabs mehr, sondern nur noch über
-/// ``SettingsView`` erreichbar (GitHub #1).
+/// ``SettingsView`` erreichbar (GitHub #1). „Scannen“ (mittlerer Tab) bettet
+/// ``BelegScanView`` dauerhaft ein (``BelegScanView/istEigenerTab``) — zusätzlich zu
+/// den weiterhin bestehenden, kontextspezifischen Sheet-Einstiegspunkten (Einkaufen-
+/// Menü, nach Einkaufsabschluss, Geschäfts-Detail, Geschäfte-Liste), siehe
+/// `docs/BELEGSCAN.md`.
 ///
 /// Stößt außerdem bei jedem App-Start und Rückkehr aus dem Hintergrund die
 /// automatische Preishistorie-Bereinigung an (siehe
@@ -24,6 +28,9 @@ struct RootView: View {
         TabView {
             Tab("Einkaufen", systemImage: "checklist") {
                 EinkaufenView()
+            }
+            Tab("Scannen", systemImage: "camera.viewfinder") {
+                BelegScanView(istEigenerTab: true)
             }
             Tab("Einstellungen", systemImage: "gearshape.fill") {
                 SettingsView()

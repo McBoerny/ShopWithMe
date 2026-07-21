@@ -34,6 +34,13 @@ enum BelegScanKontext {
 /// Scannt einen Kassenbon und trägt die erkannten Einzelpreise als ``KaufEintrag``e
 /// ein — siehe ``BelegScanKontext`` für die beiden möglichen Aufrufsituationen.
 ///
+/// Neben den bestehenden Sheet-Einstiegspunkten (Einkaufen-Menü, nach
+/// Einkaufsabschluss, Geschäfts-Detail, geschäftsloser Scan in `GeschaeftListView`)
+/// ist diese Ansicht seit 2026-07-21 zusätzlich als eigener Tab in ``RootView``
+/// dauerhaft eingebettet (``istEigenerTab``, immer im ``BelegScanKontext/unbekannt``-
+/// Kontext) — alle bisherigen Zugänge bleiben unverändert bestehen, der Tab ist nur
+/// ein zusätzlicher, schnellerer Weg.
+///
 /// Erkannte Positionen, die sich keinem bestehenden ``Artikel`` zuordnen lassen,
 /// werden trotzdem als eigenständiger ``KaufEintrag`` ohne ``Artikel``-Verknüpfung
 /// gespeichert — der Artikelname bleibt über `artikelNameSnapshot` trotzdem in der
@@ -65,6 +72,14 @@ enum BelegScanKontext {
 /// KI-Erkennung visuell zu verifizieren.
 struct BelegScanView: View {
     let kontext: BelegScanKontext
+    /// `true`, wenn diese Ansicht als dauerhafter Tab-Inhalt eingebettet ist
+    /// (``RootView``) statt als Sheet/FullScreenCover — dann gibt es nichts zu
+    /// „dismissen“ (`@Environment(\.dismiss)` liefe ohne umgebende Präsentation
+    /// ins Leere): Abbrechen/erfolgreiches Übernehmen setzen stattdessen den
+    /// internen Zustand über ``zuruecksetzen()`` zurück, damit der Tab sofort
+    /// wieder bereit für den nächsten Scan ist. `false` (Standard) an allen
+    /// bestehenden Sheet-Einstiegspunkten unverändert.
+    var istEigenerTab = false
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -114,9 +129,11 @@ struct BelegScanView: View {
     }
 
     /// Scannt einen Beleg, ohne vorher ein Geschäft festzulegen — z.B. wenn der Beleg
-    /// nachträglich zuhause gescannt wird. Siehe ``geschaeftAbgleichNoetig``.
-    init() {
+    /// nachträglich zuhause gescannt wird, oder dauerhaft über den Scannen-Tab
+    /// (``istEigenerTab``). Siehe ``geschaeftAbgleichNoetig``.
+    init(istEigenerTab: Bool = false) {
         self.kontext = .unbekannt
+        self.istEigenerTab = istEigenerTab
         _belegDatum = State(initialValue: .now)
     }
 
@@ -149,8 +166,14 @@ struct BelegScanView: View {
             .navigationTitle("Beleg scannen")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Abbrechen") { dismiss() }
+                if !istEigenerTab {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Abbrechen") { dismiss() }
+                    }
+                } else if bearbeitbarePositionen != nil {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Verwerfen") { zuruecksetzen() }
+                    }
                 }
             }
         }
@@ -292,8 +315,26 @@ struct BelegScanView: View {
                     }
                 }
             }
-            dismiss()
+            if istEigenerTab {
+                zuruecksetzen()
+            } else {
+                dismiss()
+            }
         }
+    }
+
+    /// Setzt den kompletten Scan-Zustand zurück auf ``AufnahmeAnsicht`` — Ersatz für
+    /// `dismiss()` im Tab-Kontext (``istEigenerTab``), sowohl nach „Verwerfen“ als
+    /// auch nach erfolgreichem ``uebernehmen()``.
+    private func zuruecksetzen() {
+        bearbeitbarePositionen = nil
+        erfasstesBild = nil
+        ausgewaehltesFoto = nil
+        fehlermeldung = nil
+        erkanntesGeschaeft = nil
+        erkannterGeschaeftName = ""
+        erkannteGeschaeftAdresse = ""
+        belegDatum = .now
     }
 
     /// Der Text im „Artikel“-Feld weicht vom rohen erkannten Namen ab (manuell
