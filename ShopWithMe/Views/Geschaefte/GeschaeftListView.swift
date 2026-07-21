@@ -2,10 +2,9 @@ import SwiftUI
 import SwiftData
 
 /// Zeigt alle Geschäfte als Liste und erlaubt Anlegen, Bearbeiten und Löschen —
-/// sowohl als Tab-Wurzel (``RootView``) als auch, per `NavigationLink`, aus der
-/// Geschäftsverwaltung in ``SettingsView``. Erwartet einen umgebenden
-/// `NavigationStack` beim Aufrufer statt selbst einen anzulegen, damit beide
-/// Einbindungen ohne verschachtelte `NavigationStack`s funktionieren.
+/// erreichbar über die Geschäfte-Verwaltung in ``SettingsView`` (kein eigener Tab
+/// mehr, siehe GitHub #1). Erwartet einen umgebenden `NavigationStack` beim
+/// Aufrufer statt selbst einen anzulegen.
 ///
 /// Bietet außerdem den geschäftslosen Scan-Einstieg für Belege, die nachträglich
 /// (z.B. zuhause, ohne vorher ein Geschäft zu wählen) gescannt werden —

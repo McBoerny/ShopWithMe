@@ -9,12 +9,13 @@ Diese Anleitung ist die maßgebliche, vollständige Quelle — die kuratierte In
 („Hilfe & Anleitungen“ in den Einstellungen) deckt bewusst nur eine Auswahl der
 komplexeren Funktionen ab und darf dieser Anleitung inhaltlich nicht widersprechen.
 
-## Die vier Bereiche der App
+## Die zwei Bereiche der App
 
-- **Artikel** — Artikel anlegen/durchsuchen/bearbeiten.
-- **Geschäfte** — Geschäfte, Regale, Kategorien pro Geschäft, Belegscan.
+Die App startet immer direkt mit der Einkaufsliste.
+
 - **Einkaufen** — die eigentliche Einkaufsliste, Standort-Erkennung, Abhaken.
-- **Einstellungen** — Hilfe, Verwaltung, Datenbank-Speicherort.
+- **Einstellungen** — Hilfe, Artikel- und Geschäfte-Verwaltung (inkl. Regale,
+  Kategorien pro Geschäft, Belegscan), Datenbank-Speicherort.
 
 ## Artikel
 
@@ -22,8 +23,8 @@ Jeder Artikel hat einen Namen, eine Kategorie (z.B. Obst, Milchprodukte), eine
 Einheit (Stück, kg, g, l, ml) und eine Standardmenge — die zugleich die
 Schrittweite ist, um die die Menge beim Einkaufen erhöht/verringert wird. Neue
 Artikel legst du meist direkt beim Einkaufen an (landen dann automatisch auf der
-Liste); im Artikel-Tab per „+“ angelegte Artikel landen nicht automatisch auf der
-Liste. Beim Anlegen schlägt Apple Intelligence (sofern auf deinem Gerät verfügbar)
+Liste); in der Artikel-Verwaltung (Einstellungen) per „+“ angelegte Artikel landen
+nicht automatisch auf der Liste. Beim Anlegen schlägt Apple Intelligence (sofern auf deinem Gerät verfügbar)
 automatisch eine passende Kategorie vor, sobald du einen Namen eingibst — eine
 bereits von dir gewählte Kategorie wird dabei nie überschrieben. Ist Apple
 Intelligence nicht verfügbar, bleibt die manuelle Auswahl jederzeit möglich.
@@ -113,8 +114,9 @@ Import ausschließen.
 
 - **Hilfe & Anleitungen** — kuratierte Kurzhilfe zu den komplexeren Funktionen
   (Ergänzung zu dieser Anleitung, siehe oben).
-- **Geschäfte / Kategorien / Einkaufslisten** — dieselbe Verwaltung wie in den
-  jeweiligen Tabs, zusätzlich zentral erreichbar.
+- **Artikel / Geschäfte / Kategorien / Einkaufslisten** — die vollständige
+  Verwaltung (Anlegen/Bearbeiten/Löschen); die App startet immer direkt mit der
+  Einkaufsliste, Artikel und Geschäfte sind daher nur noch hier erreichbar.
 - **Preishistorie** — Aufbewahrungsdauer/Bereinigung alter Preiseinträge.
 - **Datenbank & Speicherort** — verlegt deine Daten in einen selbst gewählten
   Ordner, z.B. einen lokal gespiegelten Cloud-Ordner. Kein automatischer

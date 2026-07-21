@@ -3,6 +3,10 @@ import SwiftData
 
 /// Wurzel-Ansicht der App: Tab-Navigation zwischen den Hauptbereichen.
 ///
+/// Die App startet immer direkt auf „Einkaufen“ (erster Tab) — Artikel- und
+/// Geschäfte-Verwaltung sind bewusst keine eigenen Tabs mehr, sondern nur noch über
+/// ``SettingsView`` erreichbar (GitHub #1).
+///
 /// Stößt außerdem bei jedem App-Start und Rückkehr aus dem Hintergrund die
 /// automatische Preishistorie-Bereinigung an (siehe
 /// ``PreisHistorieBereinigungService/automatischBereinigenFallsFaellig(context:)``).
@@ -18,14 +22,6 @@ struct RootView: View {
 
     var body: some View {
         TabView {
-            Tab("Artikel", systemImage: "carrot.fill") {
-                ArtikelListView()
-            }
-            Tab("Geschäfte", systemImage: "cart.fill") {
-                NavigationStack {
-                    GeschaeftListView()
-                }
-            }
             Tab("Einkaufen", systemImage: "checklist") {
                 EinkaufenView()
             }

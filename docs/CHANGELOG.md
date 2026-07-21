@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.6 (Build 59) — App startet direkt mit der Einkaufsliste
+
+- **`RootView`**: Nur noch zwei Tabs, „Einkaufen“ (immer der Start-Tab) und
+  „Einstellungen“ — die bisherigen „Artikel“- und „Geschäfte“-Tabs entfallen
+  (GitHub #1).
+- **`SettingsView`**: neuer Eintrag „Artikel“ (analog zum bereits bestehenden
+  „Geschäfte“-Eintrag) — beide verlinken direkt auf `ArtikelListView`/
+  `GeschaeftListView`, die dafür jetzt konsistent keinen eigenen `NavigationStack`
+  mehr anlegen, sondern den der Einstellungen nutzen.
+- Bedienungsanleitung, In-App-Hilfe und Produktspezifikation an die neue
+  Navigation angepasst (keine „Artikel-Tab“/„Geschäfte-Tab“-Verweise mehr).
+
 ## v0.6 (Build 58) — Belegscan: „Abbrechen“ statt „Fertig“, Rückfrage vor Verwerfen
 
 - **`BelegScanView`/`PreisschildScanView`**: Der bisherige „Fertig“-Button in der

@@ -30,7 +30,7 @@ private struct HilfeThema: Identifiable {
         HilfeThema(
             titel: "Kategorien & Regale pro Geschäft",
             text: """
-            Im Geschäfte-Tab kannst du einem Geschäft direkt Kategorien zuordnen \
+            Unter Einstellungen → Geschäfte kannst du einem Geschäft direkt Kategorien zuordnen \
             („Kategorien“-Abschnitt → „Kategorie hinzufügen“) — ganz ohne ein Regal \
             anzulegen. Nur zugeordnete Kategorien gelten in diesem Geschäft als \
             verfügbar und tauchen beim Einkaufen dort auf. So zeigt dir die App im \
@@ -43,7 +43,7 @@ private struct HilfeThema: Identifiable {
             titel: "Automatische Regal-Reihenfolge",
             text: """
             Du kannst die Reihenfolge der Regale eines Geschäfts jederzeit manuell \
-            per Drag & Drop festlegen (Geschäfte-Tab → Geschäft → „Bearbeiten“). \
+            per Drag & Drop festlegen (Einstellungen → Geschäfte → Geschäft → „Bearbeiten“). \
             Zusätzlich merkt sich die App, in welcher Reihenfolge du beim Einkaufen \
             tatsächlich durch die Regale läufst. Nach 5 abgeschlossenen Einkäufen in \
             einem Geschäft bietet sie dir eine automatische Reihenfolge an — deine \

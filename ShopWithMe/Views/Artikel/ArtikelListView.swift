@@ -19,7 +19,10 @@ private enum ArtikelSortierung: String, CaseIterable, Identifiable {
     }
 }
 
-/// Zeigt alle Artikel als Liste und erlaubt Anlegen, Bearbeiten und Löschen.
+/// Zeigt alle Artikel als Liste und erlaubt Anlegen, Bearbeiten und Löschen —
+/// erreichbar über die Artikel-Verwaltung in ``SettingsView``. Erwartet einen
+/// umgebenden `NavigationStack` beim Aufrufer statt selbst einen anzulegen (analog
+/// ``GeschaeftListView``), seit sie keine eigene Tab-Wurzel mehr ist (GitHub #1).
 struct ArtikelListView: View {
     @Query(sort: \Artikel.name) private var artikel: [Artikel]
     @Environment(\.modelContext) private var modelContext
@@ -51,66 +54,64 @@ struct ArtikelListView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            List {
-                switch sortierung {
-                case .alphabetisch:
-                    ForEach(artikel) { eintrag in
-                        artikelZeile(eintrag)
-                    }
-                    .onDelete { offsets in
-                        artikelLoeschen(offsets.map { artikel[$0] })
-                    }
-                case .kategorie:
-                    ForEach(kategorieGruppen) { gruppe in
-                        Section(gruppe.kategorie.name) {
-                            ForEach(gruppe.artikel) { eintrag in
-                                artikelZeile(eintrag)
-                            }
-                            .onDelete { offsets in
-                                artikelLoeschen(offsets.map { gruppe.artikel[$0] })
-                            }
+        List {
+            switch sortierung {
+            case .alphabetisch:
+                ForEach(artikel) { eintrag in
+                    artikelZeile(eintrag)
+                }
+                .onDelete { offsets in
+                    artikelLoeschen(offsets.map { artikel[$0] })
+                }
+            case .kategorie:
+                ForEach(kategorieGruppen) { gruppe in
+                    Section(gruppe.kategorie.name) {
+                        ForEach(gruppe.artikel) { eintrag in
+                            artikelZeile(eintrag)
+                        }
+                        .onDelete { offsets in
+                            artikelLoeschen(offsets.map { gruppe.artikel[$0] })
                         }
                     }
                 }
             }
-            .overlay {
-                if artikel.isEmpty {
-                    ContentUnavailableView(
-                        "Keine Artikel",
-                        systemImage: "carrot.fill",
-                        description: Text("Lege deinen ersten Artikel mit dem Plus-Symbol an.")
+        }
+        .overlay {
+            if artikel.isEmpty {
+                ContentUnavailableView(
+                    "Keine Artikel",
+                    systemImage: "carrot.fill",
+                    description: Text("Lege deinen ersten Artikel mit dem Plus-Symbol an.")
+                )
+            }
+        }
+        .navigationTitle("Artikel")
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Picker("Sortierung", selection: $sortierung) {
+                    ForEach(ArtikelSortierung.allCases) { modus in
+                        Text(modus.anzeigename).tag(modus)
+                    }
+                }
+                .pickerStyle(.menu)
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    neuerArtikelEntwurf = Artikel(
+                        name: "",
+                        symbolName: SymbolPalette.alle[0],
+                        farbeHex: Color.artikelPalette[0]
                     )
+                } label: {
+                    Label("Artikel hinzufügen", systemImage: "plus")
                 }
             }
-            .navigationTitle("Artikel")
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Picker("Sortierung", selection: $sortierung) {
-                        ForEach(ArtikelSortierung.allCases) { modus in
-                            Text(modus.anzeigename).tag(modus)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                }
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        neuerArtikelEntwurf = Artikel(
-                            name: "",
-                            symbolName: SymbolPalette.alle[0],
-                            farbeHex: Color.artikelPalette[0]
-                        )
-                    } label: {
-                        Label("Artikel hinzufügen", systemImage: "plus")
-                    }
-                }
-            }
-            .sheet(item: $neuerArtikelEntwurf) { entwurf in
-                ArtikelEditView(artikel: entwurf, istNeu: true)
-            }
-            .sheet(item: $bearbeiteterArtikel) { eintrag in
-                ArtikelEditView(artikel: eintrag, istNeu: false)
-            }
+        }
+        .sheet(item: $neuerArtikelEntwurf) { entwurf in
+            ArtikelEditView(artikel: entwurf, istNeu: true)
+        }
+        .sheet(item: $bearbeiteterArtikel) { eintrag in
+            ArtikelEditView(artikel: eintrag, istNeu: false)
         }
     }
 
@@ -160,6 +161,8 @@ private struct ArtikelZeile: View {
 }
 
 #Preview {
-    ArtikelListView()
-        .modelContainer(for: [Artikel.self, ArtikelKategorie.self, Einkaufsliste.self, EinkaufslistenEintrag.self], inMemory: true)
+    NavigationStack {
+        ArtikelListView()
+    }
+    .modelContainer(for: [Artikel.self, ArtikelKategorie.self, Einkaufsliste.self, EinkaufslistenEintrag.self], inMemory: true)
 }

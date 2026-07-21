@@ -1,11 +1,13 @@
 import SwiftUI
 
-/// Einstiegspunkt für Einstellungen: Hilfe/Anleitungen, Geschäfte-, Kategorien- und
-/// Einkaufslisten-Verwaltung, Datenbank-Speicherort und App-Informationen.
+/// Einstiegspunkt für Einstellungen: Hilfe/Anleitungen, Artikel-, Geschäfte-,
+/// Kategorien- und Einkaufslisten-Verwaltung, Datenbank-Speicherort und
+/// App-Informationen.
 ///
-/// „Geschäfte“ verlinkt auf dieselbe ``GeschaeftListView`` wie der gleichnamige Tab
-/// (``RootView``) — sie erwartet deshalb einen umgebenden `NavigationStack` beim
-/// Aufrufer statt selbst einen anzulegen, siehe deren Dokumentation.
+/// „Artikel“ und „Geschäfte“ sind seit GitHub #1 keine eigenen Tabs mehr (die App
+/// startet immer direkt auf „Einkaufen“, siehe ``RootView``) — beide verlinken
+/// direkt auf ``ArtikelListView``/``GeschaeftListView``, die deshalb bewusst
+/// keinen eigenen `NavigationStack` anlegen, sondern den von hier erwarten.
 struct SettingsView: View {
     var body: some View {
         NavigationStack {
@@ -15,6 +17,11 @@ struct SettingsView: View {
                         HelpView()
                     } label: {
                         Label("Hilfe & Anleitungen", systemImage: "questionmark.circle")
+                    }
+                    NavigationLink {
+                        ArtikelListView()
+                    } label: {
+                        Label("Artikel", systemImage: "carrot")
                     }
                     NavigationLink {
                         GeschaeftListView()

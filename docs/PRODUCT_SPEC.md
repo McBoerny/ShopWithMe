@@ -41,8 +41,9 @@ dem Gerät keine Apple Intelligence verfügbar, bleibt die Kategorie einfach lee
 
 Artikel werden ausschließlich aus der Einkaufsliste-Ansicht heraus neu angelegt und
 kommen dabei automatisch auf die Liste (siehe „Einkaufsvorgang“ unten); der
-Artikel-Tab dient primär dem Durchsuchen/Bearbeiten/Löschen, legt aber ebenfalls einen
-„+“-Button zum Anlegen bereit (Artikel landen dabei nicht automatisch auf der Liste).
+Artikel-Verwaltung (Einstellungen) dient primär dem Durchsuchen/Bearbeiten/Löschen,
+legt aber ebenfalls einen „+“-Button zum Anlegen bereit (Artikel landen dabei nicht
+automatisch auf der Liste).
 
 ## Menge, Einheit & Einkaufslisten-Interaktion
 
@@ -131,6 +132,9 @@ lassen.
 
 ## Einstellungen
 
+- Die App startet immer direkt mit der Einkaufsliste (kein eigener Artikel-/
+  Geschäfte-Tab mehr) — Artikel- und Geschäfte-Verwaltung sind ausschließlich über
+  die Einstellungen erreichbar.
 - Hilfe-/Anleitungstexte für die komplexeren Funktionen (Lern-Algorithmus,
   KI-Vorschläge, Belegscan, Datenbank-Speicherort).
 - Datenbank-Speicherort: kann auf einen vom Anwender gewählten Ordner (z.B. lokal
