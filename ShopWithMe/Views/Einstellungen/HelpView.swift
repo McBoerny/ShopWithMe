@@ -71,8 +71,10 @@ private struct HilfeThema: Identifiable {
             Lokale KI erkennt Artikel und Preise auf dem Beleg und trägt sie in \
             die passenden Positionen deines Einkaufs ein — Positionen, die sich \
             keinem Artikel zuordnen lassen, werden trotzdem mit Namen und Preis \
-            gespeichert. Die erfassten Preise findest du als Preishistorie in der \
-            Artikel- bzw. Geschäfts-Detailansicht.
+            gespeichert. Über „Beleg anzeigen“ kannst du das Original-Foto zoombar \
+            prüfen; das Lupen-Symbol neben einer Position zeigt die erkannte Stelle \
+            direkt im Beleg. Die erfassten Preise findest du als Preishistorie in \
+            der Artikel- bzw. Geschäfts-Detailansicht.
             """
         ),
         HilfeThema(

@@ -48,6 +48,38 @@ extension BelegErgebnis {
     }
 }
 
+/// Eine von Vision (OCR) erkannte Textzeile samt ihrer Position im Originalbild.
+///
+/// `boundingBox` ist Visions normalisiertes Koordinatensystem (0–1, Ursprung unten
+/// links) — siehe ``ZoombareBildAnsicht`` für die Umrechnung in Bildschirm-Koordinaten.
+struct ErkannteZeile: Equatable {
+    let text: String
+    let boundingBox: CGRect
+}
+
+extension Array where Element == ErkannteZeile {
+    /// Findet die ``ErkannteZeile``, deren Text am besten zu `artikelName` passt
+    /// (beidseitiger, Groß-/Kleinschreibung ignorierender Teilstring-Abgleich, analog
+    /// `BelegScanView.passtZu`/`passendesArtikel`) — oder `nil`, wenn keine Zeile
+    /// passt. Grundlage für die Positions-Markierung im Original-Beleg
+    /// (`docs/BELEGSCAN.md`).
+    func boundingBox(fuerArtikelName artikelName: String) -> CGRect? {
+        first {
+            $0.text.localizedCaseInsensitiveContains(artikelName)
+                || artikelName.localizedCaseInsensitiveContains($0.text)
+        }?.boundingBox
+    }
+}
+
+/// Ergebnis eines vollständigen Belegscans: die strukturierten Daten (``BelegErgebnis``)
+/// zusammen mit den roh erkannten OCR-Zeilen inkl. Position — letztere ausschließlich
+/// dafür, im Original-Beleg auf die erkannte Stelle einer Position zu verweisen
+/// (``ErgebnisListe`` in ``BelegScanView``), keine weitere Verwendung.
+struct BelegScanErgebnis {
+    let ergebnis: BelegErgebnis
+    let ocrZeilen: [ErkannteZeile]
+}
+
 /// Fehler beim Scannen/Auswerten eines Kassenbons.
 enum ReceiptScanError: LocalizedError {
     case ungueltigesBild
@@ -69,18 +101,19 @@ enum ReceiptScanError: LocalizedError {
 /// On-Device-Beleg-Scan-API (sobald mit verifizierten APIs verfügbar) ohne
 /// UI-Änderungen als Ersatz eingesetzt werden kann (siehe `docs/DECISIONS.md`).
 protocol ReceiptScanService: Sendable {
-    func auswerten(bild: UIImage) async throws -> BelegErgebnis
+    func auswerten(bild: UIImage) async throws -> BelegScanErgebnis
 }
 
 /// Belegscan auf Basis von Vision-Texterkennung (OCR) kombiniert mit
 /// FoundationModels-Strukturextraktion — beides reale, mit iOS 26 ausgelieferte APIs.
 struct VisionFoundationModelsReceiptScanner: ReceiptScanService {
-    func auswerten(bild: UIImage) async throws -> BelegErgebnis {
-        let text = try erkenneText(in: bild)
-        return try await extrahiere(aus: text)
+    func auswerten(bild: UIImage) async throws -> BelegScanErgebnis {
+        let zeilen = try erkenneText(in: bild)
+        let ergebnis = try await extrahiere(aus: zeilen)
+        return BelegScanErgebnis(ergebnis: ergebnis, ocrZeilen: zeilen)
     }
 
-    private func erkenneText(in bild: UIImage) throws -> String {
+    private func erkenneText(in bild: UIImage) throws -> [ErkannteZeile] {
         guard let cgImage = bild.cgImage else {
             throw ReceiptScanError.ungueltigesBild
         }
@@ -93,14 +126,17 @@ struct VisionFoundationModelsReceiptScanner: ReceiptScanService {
         let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
         try handler.perform([anfrage])
 
-        let zeilen = (anfrage.results ?? []).compactMap { $0.topCandidates(1).first?.string }
+        let zeilen: [ErkannteZeile] = (anfrage.results ?? []).compactMap { beobachtung in
+            guard let text = beobachtung.topCandidates(1).first?.string else { return nil }
+            return ErkannteZeile(text: text, boundingBox: beobachtung.boundingBox)
+        }
         guard !zeilen.isEmpty else {
             throw ReceiptScanError.keinTextErkannt
         }
-        return zeilen.joined(separator: "\n")
+        return zeilen
     }
 
-    private func extrahiere(aus text: String) async throws -> BelegErgebnis {
+    private func extrahiere(aus zeilen: [ErkannteZeile]) async throws -> BelegErgebnis {
         let anweisungen = """
         Du extrahierst Kassenbon-Daten aus rohem OCR-Text einer deutschen \
         Einkaufs-App. Ignoriere Zwischensummen, Pfand-Sammel-Zeilen, \
@@ -111,6 +147,7 @@ struct VisionFoundationModelsReceiptScanner: ReceiptScanService {
         Einzelpreis (Gesamtpreis geteilt durch die Menge) statt den Gesamtpreis zu \
         übernehmen.
         """
+        let text = zeilen.map(\.text).joined(separator: "\n")
         let session = LanguageModelSession(instructions: anweisungen)
         let antwort = try await session.respond(to: text, generating: BelegErgebnis.self)
         return antwort.content

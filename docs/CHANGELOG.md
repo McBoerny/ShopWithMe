@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.6 (Build 60) — Belegscan: Originalfoto zoombar prüfen
+
+- **Neu: Originalbeleg anzeigen** (GitHub #2): In der Ergebnis-Prüfung nach einem
+  Belegscan lässt sich über „Beleg anzeigen“ das Original-Foto in einer neuen
+  zoombaren Vollbildansicht (`ZoombareBildAnsicht`, Pinch-to-Zoom + Schwenken)
+  prüfen. Je Position mit eindeutig zuordenbarer OCR-Zeile öffnet ein
+  Lupen-Symbol dieselbe Ansicht mit einer Markierung der erkannten Stelle —
+  hilft, die KI-Erkennung visuell zu verifizieren. Kein automatisches
+  Heran-Zoomen (bewusste Vereinfachung), das Foto wird ausschließlich in-memory
+  für die Dauer der Prüfung gehalten, nie gespeichert.
+- **`ReceiptScanService`**: OCR-Zeilen (`ErkannteZeile`) behalten jetzt ihre
+  Position im Bild (Vision-Bounding-Box) statt nur den reinen Text — Grundlage für
+  die neue Markierung.
+- Details in `docs/BELEGSCAN.md`.
+
 ## v0.6 (Build 59) — App startet direkt mit der Einkaufsliste
 
 - **`RootView`**: Nur noch zwei Tabs, „Einkaufen“ (immer der Start-Tab) und

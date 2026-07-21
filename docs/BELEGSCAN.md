@@ -30,6 +30,8 @@ Belegscans hinweg.
   `ArtikelPreisSpanneZeile`/`ArtikelPreisVerlaufView` (Drill-down).
 - `ShopWithMe/Views/Geschaefte/GeschaeftListView.swift` — geschäftsloser
   Scan-Einstieg (Toolbar-Menü „Scannen“).
+- `ShopWithMe/DesignSystem/ZoombareBildAnsicht.swift` — zoombare Vollbildansicht des
+  Original-Belegs mit optionaler Positions-Markierung (siehe unten).
 - `ShopWithMeTests/ReceiptScanServiceTests.swift`, `ShopWithMeTests/ModelTests.swift`.
 
 ## Ablauf
@@ -37,9 +39,13 @@ Belegscans hinweg.
 1. **Aufnahme** (`AufnahmeAnsicht` in `BelegScanView.swift`): Foto per Kamera oder aus
    der Mediathek (`PhotosPicker`).
 2. **OCR** (`VisionFoundationModelsReceiptScanner.erkenneText`): `VNRecognizeTextRequest`
-   (Vision, `.accurate`, Sprachen `de-DE`/`en-US`) liefert den rohen Zeilentext des Bons.
+   (Vision, `.accurate`, Sprachen `de-DE`/`en-US`) liefert pro Zeile Text **und**
+   Position im Bild als `ErkannteZeile` (`text`, `boundingBox` — Visions
+   normalisiertes Koordinatensystem, Ursprung unten links, 0–1). Grundlage für die
+   Positions-Markierung im Original-Beleg (siehe „Originalbeleg anzeigen“ unten).
 3. **Strukturextraktion** (`VisionFoundationModelsReceiptScanner.extrahiere`): Eine
-   `LanguageModelSession` (FoundationModels, on-device) wandelt den OCR-Text in ein
+   `LanguageModelSession` (FoundationModels, on-device) bekommt nur die
+   zusammengefügten Texte der `ErkannteZeile`n und wandelt sie in ein
    `@Generable`-Ergebnis um:
    - `BelegPosition`: `artikelName: String`, `menge: Double`, `einzelpreis: Decimal`.
      Bei Mehrfachpositionen mit nur einem Gesamtpreis auf dem Bon (z.B. „3 x 1.50 =
@@ -48,21 +54,26 @@ Belegscans hinweg.
    - `BelegErgebnis`: `geschaeftName`, `datum` (Format `JJJJ-MM-TT`, geparst über
      `erkanntesDatum: Date?`), `positionen: [BelegPosition]`.
    - Beide Typen sind reine, flüchtige KI-Transfertypen — **kein** eigenes
-     SwiftData-Model für Belegpositionen.
+     SwiftData-Model für Belegpositionen. `auswerten(bild:)` liefert `BelegErgebnis`
+     zusammen mit den `ErkannteZeile`n als `BelegScanErgebnis`.
 4. **Mitlern-Vorbelegung** (`BelegScanView.verarbeite(bild:)`): für jede erkannte
    Position sucht `KaufEintrag.gelernteZuordnung(fuerErkannterName:in:)` unter allen
    vorhandenen `KaufEintrag`en nach dem jüngsten, dessen erkannter Name
    (`produktName`/`artikelNameSnapshot`) zum aktuell erkannten Text passt und der
    bereits einen `alternativerName` (Alias) trägt. Treffer liefert Alias + den ggf.
-   verknüpften `Artikel` — siehe „Mitlernen“ unten.
+   verknüpften `Artikel` — siehe „Mitlernen“ unten. Zusätzlich ermittelt
+   `[ErkannteZeile].boundingBox(fuerArtikelName:)` per beidseitigem
+   Teilstring-Abgleich die zur Position passende OCR-Zeile (`nil` ohne eindeutigen
+   Treffer).
 5. **Prüfen/Korrigieren** (`ErgebnisListe` in `BelegScanView.swift`): editierbare Kopie
    jeder Position (`BearbeitbarePosition`: `erkannterName` unveränderlich,
-   `artikelName`/`preisText` editierbar, `gelernterArtikel` aus Schritt 4) plus
-   editierbares `belegDatum` (vorbelegt aus `erkanntesDatum`, sonst Startzeit des
-   Einkaufsvorgangs bzw. heute). War eine Position bereits bekannt, zeigt das
-   Namensfeld direkt den Alias (statt „COL-ZAH“ z.B. „Colgate“) und ein Hinweis
-   „Wird verknüpft mit „Zahnpasta““ erscheint darunter. Der Nutzer kann den Namen
-   weiterhin frei korrigieren (z.B. OCR-Tippfehler).
+   `artikelName`/`preisText` editierbar, `gelernterArtikel` aus Schritt 4,
+   `boundingBox` aus Schritt 4) plus editierbares `belegDatum` (vorbelegt aus
+   `erkanntesDatum`, sonst Startzeit des Einkaufsvorgangs bzw. heute). War eine
+   Position bereits bekannt, zeigt das Namensfeld direkt den Alias (statt
+   „COL-ZAH“ z.B. „Colgate“) und ein Hinweis „Wird verknüpft mit „Zahnpasta““
+   erscheint darunter. Der Nutzer kann den Namen weiterhin frei korrigieren (z.B.
+   OCR-Tippfehler).
 6. **Übernahme** (`BelegScanView.uebernehmen()`): abhängig vom `BelegScanKontext`:
    - `.einkaufsvorgang(Einkaufsvorgang)`: Preise werden nach Namensabgleich
      (`passtZu`) bereits abgehakten `KaufEintrag`en dieses Einkaufsvorgangs
@@ -80,6 +91,30 @@ Belegscans hinweg.
    - In allen Fällen: weicht der (ggf. korrigierte) Anzeigetext vom rohen erkannten
      Namen ab, wird er als `alternativerName` übernommen (`leiteAlternativenNamenAb`)
      — das ist zugleich die Quelle für das Mitlernen beim nächsten Scan.
+
+## Originalbeleg anzeigen
+
+**Status: Umgesetzt** (GitHub #2).
+
+Solange die Ergebnis-Prüfung (`ErgebnisListe`) läuft, hält `BelegScanView` das
+aufgenommene Foto zusätzlich in `erfasstesBild: UIImage?` — ausschließlich in-memory
+für die Dauer dieser Ansicht, **nie auf Platte oder ins SwiftData-Model
+geschrieben**; verschwindet mit dem Schließen des Sheets wie jeder andere
+View-State auch.
+
+- **„Beleg anzeigen“**-Button (Kopfbereich der Liste, nur sichtbar wenn ein Foto
+  vorliegt) öffnet `ZoombareBildAnsicht` als `.fullScreenCover` ohne Markierung —
+  freies Zoomen/Schwenken per Pinch-/Drag-Geste, Doppel-Tap setzt zurück.
+- Je Position mit ermittelter `boundingBox` (siehe Schritt 4 oben) erscheint ein
+  Lupen-Symbol (`viewfinder`), das dieselbe Ansicht mit einem gelb hervorgehobenen
+  Rechteck um die erkannte OCR-Zeile öffnet. Positionen ohne eindeutig zuordenbare
+  Zeile zeigen bewusst **kein** Symbol, statt eine falsche Markierung zu raten.
+- Kein automatisches Heran-Zoomen zur Markierung (bewusste Scope-Entscheidung,
+  siehe „Bewusst nicht umgesetzt“) — der Anwender zoomt bei Bedarf selbst.
+- `ZoombareBildAnsicht` (`ShopWithMe/DesignSystem/ZoombareBildAnsicht.swift`) ist
+  eine generische, wiederverwendbare Komponente, nicht Belegscan-spezifisch:
+  rechnet Visions normalisierte Bounding-Box-Koordinaten (Ursprung unten links)
+  unter Berücksichtigung des Aspect-Fit-Scalings in Bildschirmkoordinaten um.
 
 ## Automatischer Geschäfts-Abgleich
 
@@ -291,3 +326,8 @@ zuordnen muss.
 - **Ablösen von `ReceiptScanService`/`VisionFoundationModelsReceiptScanner`** durch
   eine spätere, spezifischere On-Device-Scan-API ist als offene Idee in
   `docs/ROADMAP.md` vermerkt, noch nicht umgesetzt.
+- **Kein automatisches Heran-Zoomen** zur Positions-Markierung im Originalbeleg —
+  bewusst einfacher gehalten, der Anwender zoomt selbst per Pinch-Geste (siehe
+  „Originalbeleg anzeigen“ oben).
+- **Keine Übertragung auf `PreisschildScanView`** — die Originalfoto-Anzeige ist
+  bislang nur für den Belegscan umgesetzt (GitHub #2 nannte nur diesen Fall).

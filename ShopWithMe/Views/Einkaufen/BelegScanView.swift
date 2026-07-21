@@ -55,6 +55,13 @@ enum BelegScanKontext {
 /// beides bereits beim Einlesen vor: das Textfeld zeigt direkt den Alias statt des
 /// rohen Kassenbon-Texts, und die Position wird beim Übernehmen automatisch mit dem
 /// gelernten ``Artikel`` verknüpft — siehe `docs/BELEGSCAN.md`.
+///
+/// **Originalbeleg prüfen:** Solange die Ergebnis-Prüfung läuft, bleibt das
+/// aufgenommene Foto in-memory verfügbar (``erfasstesBild``, nie persistiert) und
+/// lässt sich über „Beleg anzeigen“ bzw. je Position über das Lupen-Symbol
+/// zoombar öffnen (``ZoombareBildAnsicht``) — mit hervorgehobener Markierung der per
+/// Textabgleich zugeordneten OCR-Zeile (``ErkannteZeile/boundingBox(fuerArtikelName:)``),
+/// um die KI-Erkennung visuell zu verifizieren.
 struct BelegScanView: View {
     let kontext: BelegScanKontext
 
@@ -67,6 +74,14 @@ struct BelegScanView: View {
     @State private var laeuft = false
     @State private var fehlermeldung: String?
     @State private var bearbeitbarePositionen: [BearbeitbarePosition]?
+    /// Das gescannte Originalfoto, ausschließlich in-memory für die Dauer dieser
+    /// Prüf-Ansicht gehalten (nie auf Platte oder ins SwiftData-Model geschrieben) —
+    /// ermöglicht die Anzeige in ``ZoombareBildAnsicht`` (siehe ``belegFotoAnsicht``).
+    @State private var erfasstesBild: UIImage?
+    /// Steuert die ``ZoombareBildAnsicht``-Vollbildanzeige des Originalfotos —
+    /// `markierung` ist gesetzt, wenn über eine einzelne Position geöffnet
+    /// (siehe ``ErgebnisListe``), sonst `nil` für die allgemeine „Beleg anzeigen“-Ansicht.
+    @State private var belegFotoAnsicht: BelegFotoAnsichtEingabe?
     @State private var belegDatum: Date
     /// Das für die Übernahme zu verwendende Geschäft — bei ``BelegScanKontext/geschaeft(_:)``
     /// sofort feststehend, sonst nach dem Scan automatisch erkannt
@@ -123,7 +138,9 @@ struct BelegScanView: View {
                         belegDatum: $belegDatum,
                         geschaeftAbgleichNoetig: geschaeftAbgleichNoetig,
                         erkanntesGeschaeft: erkanntesGeschaeft,
+                        hatBelegFoto: erfasstesBild != nil,
                         geschaeftWaehlen: { zeigeGeschaeftWahl = true },
+                        belegFotoAnzeigen: { markierung in belegFotoAnsicht = BelegFotoAnsichtEingabe(markierung: markierung) },
                         uebernehmen: uebernehmen
                     )
                 } else {
@@ -165,6 +182,11 @@ struct BelegScanView: View {
                 erkanntesGeschaeft = gewaehlt
             }
         }
+        .fullScreenCover(item: $belegFotoAnsicht) { eingabe in
+            if let erfasstesBild {
+                ZoombareBildAnsicht(bild: erfasstesBild, markierung: eingabe.markierung)
+            }
+        }
         .onChange(of: ausgewaehltesFoto) { _, neuesFoto in
             guard let neuesFoto else { return }
             Task {
@@ -182,7 +204,9 @@ struct BelegScanView: View {
         Task {
             defer { laeuft = false }
             do {
-                let ergebnis = try await scanner.auswerten(bild: bild)
+                let scanErgebnis = try await scanner.auswerten(bild: bild)
+                let ergebnis = scanErgebnis.ergebnis
+                erfasstesBild = bild
                 if let erkanntesDatum = ergebnis.erkanntesDatum {
                     belegDatum = erkanntesDatum
                 }
@@ -197,7 +221,8 @@ struct BelegScanView: View {
                         erkannterName: position.artikelName,
                         artikelName: gelernt?.alias ?? position.artikelName,
                         preisText: "\(position.einzelpreis)",
-                        gelernterArtikel: gelernt?.artikel
+                        gelernterArtikel: gelernt?.artikel,
+                        boundingBox: scanErgebnis.ocrZeilen.boundingBox(fuerArtikelName: position.artikelName)
                     )
                 }
             } catch {
@@ -349,6 +374,18 @@ private struct BearbeitbarePosition: Identifiable {
     var artikelName: String
     var preisText: String
     var gelernterArtikel: Artikel?
+    /// Position dieser Zeile im Original-Beleg (Visions normalisiertes
+    /// Koordinatensystem), ermittelt über ``ErkannteZeile/boundingBox(fuerArtikelName:)``
+    /// — `nil`, wenn sich keine OCR-Zeile eindeutig zuordnen ließ (dann bietet
+    /// ``ErgebnisListe`` für diese Zeile keinen „im Beleg zeigen“-Button an).
+    var boundingBox: CGRect?
+}
+
+/// Steuert ``BelegScanView/belegFotoAnsicht`` — `markierung` ist gesetzt, wenn die
+/// Ansicht über eine einzelne Position geöffnet wurde (siehe ``ErgebnisListe``).
+private struct BelegFotoAnsichtEingabe: Identifiable {
+    let id = UUID()
+    let markierung: CGRect?
 }
 
 /// Aufforderung, ein Beleg-Foto aufzunehmen oder aus der Mediathek zu wählen.
@@ -429,11 +466,27 @@ private struct ErgebnisListe: View {
     /// Geschäfts-Zeile unten ein.
     let geschaeftAbgleichNoetig: Bool
     let erkanntesGeschaeft: Geschaeft?
+    /// Ob das Originalfoto verfügbar ist — blendet den „Beleg anzeigen“-Button ein
+    /// (siehe ``BelegScanView/erfasstesBild``).
+    let hatBelegFoto: Bool
     let geschaeftWaehlen: () -> Void
+    /// Öffnet ``ZoombareBildAnsicht`` — `nil` für die allgemeine Ansicht, oder die
+    /// Bounding-Box einer einzelnen Position, um sie darin hervorzuheben.
+    let belegFotoAnzeigen: (CGRect?) -> Void
     let uebernehmen: () -> Void
 
     var body: some View {
         List {
+            if hatBelegFoto {
+                Section {
+                    Button {
+                        belegFotoAnzeigen(nil)
+                    } label: {
+                        Label("Beleg anzeigen", systemImage: "doc.text.magnifyingglass")
+                    }
+                }
+            }
+
             if geschaeftAbgleichNoetig {
                 Section {
                     Button(action: geschaeftWaehlen) {
@@ -471,6 +524,15 @@ private struct ErgebnisListe: View {
                                 .frame(width: 70)
                             Text("€")
                                 .foregroundStyle(.secondary)
+                            if let boundingBox = position.boundingBox {
+                                Button {
+                                    belegFotoAnzeigen(boundingBox)
+                                } label: {
+                                    Image(systemName: "viewfinder")
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(.secondary)
+                            }
                         }
                         if let artikel = position.gelernterArtikel {
                             Label("Wird verknüpft mit „\(artikel.name)“", systemImage: "checkmark.circle")
@@ -483,7 +545,7 @@ private struct ErgebnisListe: View {
             } header: {
                 Text("Erkannte Positionen")
             } footer: {
-                Text("Prüfe Name und Preis, bevor du übernimmst. Bereits bekannte Produkte werden automatisch dem passenden Artikel zugeordnet. Nicht benötigte Positionen kannst du löschen.")
+                Text("Prüfe Name und Preis, bevor du übernimmst. Bereits bekannte Produkte werden automatisch dem passenden Artikel zugeordnet. Nicht benötigte Positionen kannst du löschen. Das Lupen-Symbol zeigt die erkannte Stelle im Original-Beleg, sofern eindeutig zuordenbar.")
             }
         }
         .safeAreaInset(edge: .bottom) {
