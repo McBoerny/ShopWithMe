@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.6 (Build 71) — Geschäftsname direkt neben dem Warenkorb-Icon
+
+- `EinkaufslisteView` zeigte den Geschäftsnamen bislang als große Überschrift
+  über der Liste (`.navigationTitle(geschaeft?.name ?? einkaufsliste.name)`),
+  redundant zum bereits vorhandenen Geschäfts-Menü im `EinkaufenView`-Toolbar.
+  Titel zeigt jetzt immer den Listennamen; das Menü daneben stellt Icon und
+  Geschäftsname jetzt über ein explizites `HStack` statt `Label` dar, damit
+  der Name zuverlässig sichtbar ist statt je nach Platz nur das Icon
+  (GitHub #16).
+
 ## v0.6 (Build 70) — Belegscan-/Preisschild-Preise auf Cent gerundet
 
 - **`Decimal.aufCentGerundet`** (neu, `Decimal+CentRundung.swift`): rundet

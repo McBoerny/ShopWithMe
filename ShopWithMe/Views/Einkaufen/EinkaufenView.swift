@@ -117,7 +117,14 @@ struct EinkaufenView: View {
                             Label("Geschäfte in der Nähe…", systemImage: "location.magnifyingglass")
                         }
                     } label: {
-                        Label(ausgewaehltesGeschaeft?.name ?? "Geschäft", systemImage: "cart.fill")
+                        // Explizites HStack statt `Label(_:systemImage:)`, damit der
+                        // Geschäftsname zuverlässig direkt neben dem Icon erscheint
+                        // (ein `Label` in `.principal`-Platzierung zeigt je nach
+                        // verfügbarem Platz sonst nur das Icon an, siehe GitHub #16).
+                        HStack(spacing: 4) {
+                            Image(systemName: "cart.fill")
+                            Text(ausgewaehltesGeschaeft?.name ?? "Geschäft")
+                        }
                     }
                 }
             }
@@ -835,7 +842,10 @@ private struct EinkaufslisteView: View {
             .frame(maxWidth: .infinity)
             .padding()
         }
-        .navigationTitle(geschaeft?.name ?? einkaufsliste.name)
+        // Zeigt bewusst immer den Listennamen, nicht den Geschäftsnamen — der
+        // erscheint stattdessen direkt neben dem Einkaufswagen-Icon im
+        // `EinkaufenView`-Toolbar (siehe dort, GitHub #16).
+        .navigationTitle(einkaufsliste.name)
         .toolbar {
             if geschaeft != nil {
                 ToolbarItem(placement: .topBarTrailing) {
