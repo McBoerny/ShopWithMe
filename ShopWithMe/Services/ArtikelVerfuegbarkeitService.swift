@@ -7,7 +7,8 @@ import SwiftData
 ///
 /// Besitzt das Geschäft eigene Kategorien (``Geschaeft/verfuegbareKategorien`` —
 /// direkt zugeordnet oder über ein Regal, ein Regal ist dafür nicht erforderlich),
-/// ist ein Artikel verfügbar, wenn seine effektive Kategorie darin enthalten ist.
+/// ist ein Artikel verfügbar, wenn mindestens eine seiner Kategorien darin
+/// enthalten ist (ein Artikel kann mehreren Kategorien angehören).
 /// Besitzt das Geschäft keine eigenen Kategorien, lernt die App stattdessen aus der
 /// Kaufhistorie: ein Artikel gilt als verfügbar, sobald er dort mindestens einmal
 /// abgehakt/gekauft wurde (``KaufEintrag``) — das Abhaken eines bislang unbekannten
@@ -16,8 +17,8 @@ import SwiftData
 enum ArtikelVerfuegbarkeitService {
     static func istVerfuegbar(_ artikel: Artikel, in geschaeft: Geschaeft, context: ModelContext) -> Bool {
         guard geschaeft.verfuegbareKategorien.isEmpty else {
-            let kategorie = artikel.effektiveKategorie(context: context)
-            return geschaeft.verfuegbareKategorien.contains(kategorie)
+            let kategorien = artikel.effektiveKategorien(context: context)
+            return kategorien.contains(where: geschaeft.verfuegbareKategorien.contains)
         }
 
         let artikelID = artikel.persistentModelID

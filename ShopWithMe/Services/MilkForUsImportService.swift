@@ -183,7 +183,7 @@ enum MilkForUsImportService {
                             name: artikelName,
                             symbolName: SymbolPalette.alle[0],
                             farbeHex: Color.artikelPalette[0],
-                            kategorie: kategorie
+                            kategorien: [kategorie]
                         )
                         context.insert(neuer)
                         return neuer

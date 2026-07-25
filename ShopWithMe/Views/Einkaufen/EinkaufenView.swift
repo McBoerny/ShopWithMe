@@ -685,16 +685,20 @@ private struct EinkaufslisteView: View {
     /// Eine Gruppe von Artikeln derselben Artikelkategorie, die sich keinem Regal
     /// zuordnen lässt — z.B. weil das Geschäft keine Regale besitzt oder die
     /// Kategorie darin keinem Regal zugeordnet ist. Artikel ohne eigene Kategorie
-    /// fallen dabei automatisch in die Kategorie "Sonstiges" (siehe
-    /// ``Artikel/effektiveKategorie(context:)``).
+    /// fallen dabei automatisch in die Kategorie "Sonstiges".
     private struct KategorieGruppe: Identifiable {
         let kategorie: ArtikelKategorie
         var artikel: [Artikel]
         var id: PersistentIdentifier { kategorie.persistentModelID }
     }
 
+    /// Die für ``geschaeft`` führende Kategorie eines Artikels (siehe
+    /// ``Artikel/fuehrendeKategorie(inGeschaeft:context:)``) — hat ein Artikel
+    /// mehrere Kategorien, entscheidet das (nicht eine Duplizierung über mehrere
+    /// Regal-Bereiche), welchem Regal/welcher Sektion er beim Einkaufen zugeordnet
+    /// wird.
     private func effektiveKategorie(fuer artikel: Artikel) -> ArtikelKategorie {
-        artikel.effektiveKategorie(context: modelContext)
+        artikel.fuehrendeKategorie(inGeschaeft: geschaeft, context: modelContext)
     }
 
     /// Artikel, die sich keinem Regal zuordnen lassen (kein Geschäft gewählt oder

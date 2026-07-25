@@ -284,6 +284,92 @@ struct ModelTests {
     }
 
     @Test
+    func kategorienSetzenHaeltKategorieAlsFuehrendeKategorieSynchron() {
+        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        let drogerie = ArtikelKategorie(name: "Drogerie", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
+        let artikel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759")
+        #expect(artikel.kategorie == nil)
+
+        artikel.kategorien = [obst, drogerie]
+        #expect(artikel.kategorien == [obst, drogerie])
+        #expect(artikel.kategorie == obst)
+    }
+
+    @Test
+    func effektiveKategorienFaelltAufAlteKategorieDannAufSonstigesZurueck() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        context.insert(obst)
+
+        let mitMehrfachauswahl = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst])
+        #expect(mitMehrfachauswahl.effektiveKategorien(context: context) == [obst])
+
+        // Simuliert einen vor der Mehrfachauswahl angelegten Artikel: nur die alte,
+        // einzelwertige `kategorie` ist gesetzt, `kategorien` bleibt leer.
+        let legacyArtikel = Artikel(name: "Birne", symbolName: "carrot.fill", farbeHex: "#34C759")
+        legacyArtikel.kategorie = obst
+        #expect(legacyArtikel.kategorien.isEmpty)
+        #expect(legacyArtikel.effektiveKategorien(context: context) == [obst])
+
+        let ohneKategorie = Artikel(name: "Nudeln", symbolName: "carrot.fill", farbeHex: "#34C759")
+        #expect(ohneKategorie.effektiveKategorien(context: context).map(\.name) == ["Sonstiges"])
+    }
+
+    @Test
+    func fuehrendeKategorieBevorzugtRegalZuordnungImGeschaeft() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        let drogerie = ArtikelKategorie(name: "Drogerie", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
+        context.insert(obst)
+        context.insert(drogerie)
+
+        let geschaeft = Geschaeft(name: "Testladen", typen: [.lebensmittel])
+        context.insert(geschaeft)
+        let regal = Regal(name: "Drogerieregal", geschaeft: geschaeft)
+        regal.kategorien = [drogerie]
+        context.insert(regal)
+
+        let artikel = Artikel(name: "Duschgel", symbolName: "sparkles", farbeHex: "#AF52DE", kategorien: [obst, drogerie])
+        #expect(artikel.fuehrendeKategorie(inGeschaeft: geschaeft, context: context) == drogerie)
+    }
+
+    @Test
+    func fuehrendeKategorieOhneRegalTrefferNutztNurVerfuegbareKategorie() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        let drogerie = ArtikelKategorie(name: "Drogerie", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
+        context.insert(obst)
+        context.insert(drogerie)
+
+        let geschaeft = Geschaeft(name: "Testladen", typen: [.lebensmittel])
+        context.insert(geschaeft)
+        geschaeft.kategorien = [drogerie]
+
+        let artikel = Artikel(name: "Duschgel", symbolName: "sparkles", farbeHex: "#AF52DE", kategorien: [obst, drogerie])
+        #expect(artikel.fuehrendeKategorie(inGeschaeft: geschaeft, context: context) == drogerie)
+    }
+
+    @Test
+    func fuehrendeKategorieFaelltOhneJedenTrefferAufErsteKategorieZurueck() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        let drogerie = ArtikelKategorie(name: "Drogerie", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
+        context.insert(obst)
+        context.insert(drogerie)
+
+        let geschaeft = Geschaeft(name: "Testladen", typen: [.lebensmittel])
+        context.insert(geschaeft)
+
+        let artikel = Artikel(name: "Duschgel", symbolName: "sparkles", farbeHex: "#AF52DE", kategorien: [obst, drogerie])
+        #expect(artikel.fuehrendeKategorie(inGeschaeft: geschaeft, context: context) == obst)
+        #expect(artikel.fuehrendeKategorie(inGeschaeft: nil, context: context) == obst)
+    }
+
+    @Test
     func mengenSchrittBeimAnlegenBestimmtStartmenge() {
         let artikel = Artikel(name: "Mehl", symbolName: "carrot.fill", farbeHex: "#34C759", einheit: .kilogramm, mengenSchritt: 0.5)
         #expect(artikel.einheit == .kilogramm)

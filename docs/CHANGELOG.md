@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.6 (Build 65) — Artikel kann mehreren Warengruppen angehören
+
+- **`Artikel.kategorien: [ArtikelKategorie]`** (neu) ersetzt die bisherige
+  Einzelauswahl — ein Artikel kann jetzt mehreren Kategorien gleichzeitig
+  angehören (z.B. „Süßigkeiten“ und „Geschenke“). `ArtikelEditView` bietet dafür
+  eine Mehrfachauswahl-Liste statt des bisherigen Pickers.
+- **`Artikel.fuehrendeKategorie(inGeschaeft:context:)`** (neu): hat ein Artikel
+  mehrere Kategorien, gilt pro Geschäft **eine** als führend für Regal-Zuordnung/
+  Gruppierung beim Einkaufen und für den Regal-Lernalgorithmus — kein Duplizieren
+  des Artikels über mehrere Regal-Bereiche. Priorität: Kategorie mit
+  Regal-Zuordnung im Geschäft > im Geschäft verfügbare Kategorie > erste
+  zugeordnete Kategorie. Genutzt in `EinkaufenView`, `Einkaufsvorgang.artikelAbhaken`,
+  `BelegScanView`/`PreisschildScanView`/`KaufEintragZuordnenSheet`.
+  `ArtikelVerfuegbarkeitService.istVerfuegbar` prüft dagegen bewusst **alle**
+  Kategorien (ODER-Verknüpfung, keine „führende“ Auswahl nötig).
+- Migration rein additiv (`kategorienRaw`-Relationship + Fallback auf das
+  unverändert bestehende `kategorie`-Feld), keine neue `SchemaVN`/`MigrationStage`
+  nötig. `kategorie` bleibt als führende (erste) Kategorie synchron.
+
 ## v0.6 (Build 64) — Geschäft: mehrere Typen möglich
 
 - **`Geschaeft.typen: [GeschaeftTyp]`** (neu) ersetzt die bisherige

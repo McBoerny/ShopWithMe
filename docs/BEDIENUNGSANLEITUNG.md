@@ -23,14 +23,18 @@ Die App startet immer direkt mit der Einkaufsliste.
 
 ## Artikel
 
-Jeder Artikel hat einen Namen, eine Kategorie (z.B. Obst, Milchprodukte), eine
-Einheit (Stück, kg, g, l, ml) und eine Standardmenge — die zugleich die
-Schrittweite ist, um die die Menge beim Einkaufen erhöht/verringert wird. Neue
-Artikel legst du meist direkt beim Einkaufen an (landen dann automatisch auf der
-Liste); in der Artikel-Verwaltung (Einstellungen) per „+“ angelegte Artikel landen
-nicht automatisch auf der Liste. Beim Anlegen schlägt Apple Intelligence (sofern auf deinem Gerät verfügbar)
-automatisch eine passende Kategorie vor, sobald du einen Namen eingibst — eine
-bereits von dir gewählte Kategorie wird dabei nie überschrieben. Ist Apple
+Jeder Artikel hat einen Namen, eine oder mehrere Kategorien (z.B. Obst,
+Milchprodukte — Mehrfachauswahl beim Bearbeiten), eine Einheit (Stück, kg, g, l,
+ml) und eine Standardmenge — die zugleich die Schrittweite ist, um die die Menge
+beim Einkaufen erhöht/verringert wird. Hat ein Artikel mehrere Kategorien,
+entscheidet pro Geschäft automatisch eine davon über seine Regal-Zuordnung beim
+Einkaufen (die mit eigenem Regal in diesem Geschäft, sonst die im Geschäft
+verfügbare). Neue Artikel legst du meist direkt beim Einkaufen an (landen dann
+automatisch auf der Liste); in der Artikel-Verwaltung (Einstellungen) per „+“
+angelegte Artikel landen nicht automatisch auf der Liste. Beim Anlegen schlägt
+Apple Intelligence (sofern auf deinem Gerät verfügbar) automatisch eine passende
+Kategorie vor, sobald du einen Namen eingibst — eine bereits von dir gewählte
+Kategorie wird dabei nie überschrieben. Ist Apple
 Intelligence nicht verfügbar, bleibt die manuelle Auswahl jederzeit möglich.
 
 ## Geschäfte

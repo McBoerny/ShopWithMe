@@ -154,7 +154,7 @@ private struct ArtikelAuswahlZeile: View {
     let istAusgewaehlt: Bool
     let bereitsAufListe: Bool
 
-    private var kategorie: ArtikelKategorie? { artikel.kategorie }
+    private var kategorie: ArtikelKategorie? { artikel.kategorien.first }
 
     var body: some View {
         HStack(spacing: 12) {

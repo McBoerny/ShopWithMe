@@ -118,7 +118,7 @@ struct MilkForUsImportServiceTests {
         _ = container
         let milchprodukte = ArtikelKategorie(name: "Milchprodukte & Eier", standardSymbol: "refrigerator.fill", standardFarbeHex: "#5AC8FA")
         context.insert(milchprodukte)
-        let bestehenderArtikel = Artikel(name: "Gouda", symbolName: "cart.fill", farbeHex: "#FF3B30", kategorie: milchprodukte)
+        let bestehenderArtikel = Artikel(name: "Gouda", symbolName: "cart.fill", farbeHex: "#FF3B30", kategorien: [milchprodukte])
         context.insert(bestehenderArtikel)
         let liste = Einkaufsliste(name: "Test")
         context.insert(liste)

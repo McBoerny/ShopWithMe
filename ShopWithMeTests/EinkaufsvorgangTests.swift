@@ -30,7 +30,7 @@ struct EinkaufsvorgangTests {
         context.insert(regal)
         let liste = Einkaufsliste(name: "Einkaufsliste")
         context.insert(liste)
-        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorie: obst, einheit: .stueck, mengenSchritt: 3)
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst], einheit: .stueck, mengenSchritt: 3)
         context.insert(apfel)
         liste.artikelHinzufuegen(apfel, context: context)
 
@@ -70,9 +70,9 @@ struct EinkaufsvorgangTests {
         drogerieregal.kategorien = [drogerie]
         context.insert(drogerieregal)
 
-        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorie: obst)
-        let birne = Artikel(name: "Birne", symbolName: "carrot.fill", farbeHex: "#34C759", kategorie: obst)
-        let shampoo = Artikel(name: "Shampoo", symbolName: "sparkles", farbeHex: "#AF52DE", kategorie: drogerie)
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst])
+        let birne = Artikel(name: "Birne", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst])
+        let shampoo = Artikel(name: "Shampoo", symbolName: "sparkles", farbeHex: "#AF52DE", kategorien: [drogerie])
         context.insert(apfel)
         context.insert(birne)
         context.insert(shampoo)
@@ -103,7 +103,7 @@ struct EinkaufsvorgangTests {
         let geschaeft = Geschaeft(name: "Testladen", typen: [.lebensmittel])
         context.insert(geschaeft)
         let ohneKategorie = Artikel(name: "Mysteriöses Ding", symbolName: "questionmark", farbeHex: "#8E8E93")
-        let explizitSonstiges = Artikel(name: "Kerzen", symbolName: "flame.fill", farbeHex: "#8E8E93", kategorie: sonstiges)
+        let explizitSonstiges = Artikel(name: "Kerzen", symbolName: "flame.fill", farbeHex: "#8E8E93", kategorien: [sonstiges])
         context.insert(ohneKategorie)
         context.insert(explizitSonstiges)
 
@@ -136,7 +136,7 @@ struct EinkaufsvorgangTests {
         context.insert(regal)
         let liste = Einkaufsliste(name: "Einkaufsliste")
         context.insert(liste)
-        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorie: obst, mengenSchritt: 2)
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst], mengenSchritt: 2)
         context.insert(apfel)
         let listenEintrag = liste.artikelHinzufuegen(apfel, context: context)
 
@@ -171,7 +171,7 @@ struct EinkaufsvorgangTests {
         context.insert(geschaeft)
         let liste = Einkaufsliste(name: "Einkaufsliste")
         context.insert(liste)
-        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorie: obst)
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst])
         context.insert(apfel)
         liste.artikelHinzufuegen(apfel, context: context)
 

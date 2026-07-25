@@ -23,9 +23,16 @@ final class ArtikelKategorie {
     /// Reihenfolge für die Anzeige in Auswahllisten.
     var sortIndex: Int
 
-    /// Artikel, die dieser Kategorie zugeordnet sind.
+    /// Artikel, die dieser Kategorie über das alte, einzelwertige ``Artikel/kategorie``
+    /// zugeordnet sind — Migrations-Fallback, seit Einführung der Mehrfachzuordnung
+    /// nicht mehr die maßgebliche Quelle (siehe ``zugeordneteArtikel``).
     @Relationship(deleteRule: .nullify, inverse: \Artikel.kategorie)
     var artikel: [Artikel] = []
+    /// Artikel, die dieser Kategorie über ``Artikel/kategorien`` (Mehrfachzuordnung)
+    /// zugeordnet sind — die maßgebliche Quelle. Inverse wird auf der
+    /// ``Artikel/kategorienRaw``-Seite deklariert (analog ``regale``/``geschaefte``
+    /// unten, die ebenfalls nur einseitig `inverse:` tragen).
+    var zugeordneteArtikel: [Artikel] = []
 
     /// Regale (über alle Geschäfte hinweg), denen diese Kategorie zugeordnet ist.
     var regale: [Regal] = []

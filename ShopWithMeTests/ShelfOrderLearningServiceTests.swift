@@ -37,8 +37,8 @@ struct ShelfOrderLearningServiceTests {
         context.insert(drogerieregal)
         context.insert(obstregal)
 
-        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorie: obst)
-        let shampoo = Artikel(name: "Shampoo", symbolName: "sparkles", farbeHex: "#AF52DE", kategorie: drogerie)
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst])
+        let shampoo = Artikel(name: "Shampoo", symbolName: "sparkles", farbeHex: "#AF52DE", kategorien: [drogerie])
         context.insert(apfel)
         context.insert(shampoo)
 
@@ -87,8 +87,8 @@ struct ShelfOrderLearningServiceTests {
         context.insert(drogerieregal)
         context.insert(obstregal)
 
-        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorie: obst)
-        let shampoo = Artikel(name: "Shampoo", symbolName: "sparkles", farbeHex: "#AF52DE", kategorie: drogerie)
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst])
+        let shampoo = Artikel(name: "Shampoo", symbolName: "sparkles", farbeHex: "#AF52DE", kategorien: [drogerie])
         context.insert(apfel)
         context.insert(shampoo)
 
@@ -144,8 +144,8 @@ struct ShelfOrderLearningServiceTests {
         let geschaeft = Geschaeft(name: "Kiosk", typen: [.sonstiges])
         context.insert(geschaeft)
 
-        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorie: obst)
-        let shampoo = Artikel(name: "Shampoo", symbolName: "sparkles", farbeHex: "#AF52DE", kategorie: drogerie)
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst])
+        let shampoo = Artikel(name: "Shampoo", symbolName: "sparkles", farbeHex: "#AF52DE", kategorien: [drogerie])
         context.insert(apfel)
         context.insert(shampoo)
 

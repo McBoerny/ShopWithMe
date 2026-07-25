@@ -57,8 +57,9 @@ id: UUID                             id: UUID                   id: UUID
 name: String                         geschaeft: Geschaeft?      artikel: Artikel?
 symbolName: String (UI-los)          einkaufsliste: Einkaufsliste? einkaufsvorgang: Einkaufsvorgang?
 farbeHex: String (UI-los)            startZeit: Date            geschaeft: Geschaeft?  (denormalisiert)
-kategorie: ArtikelKategorie?         endZeit: Date?             datum: Date
-erstelltAm: Date                     kaufEintraege: [KaufEintrag]  preis: Decimal?
+kategorie: ArtikelKategorie? (führend) endZeit: Date?           datum: Date
+kategorienRaw: [ArtikelKategorie] (→kategorien)                  preis: Decimal?
+erstelltAm: Date                     kaufEintraege: [KaufEintrag]
 notiz: String?                                                   menge: Double
 einheitRaw: String?                                              produktName: String?
 mengenSchrittRaw: Double?                                        alternativerName: String?

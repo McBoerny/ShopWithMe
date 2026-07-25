@@ -37,8 +37,9 @@ enum Einheit: String, Codable, CaseIterable, Identifiable {
 
 /// Ein einkaufbarer Artikel (z.B. "Vollmilch").
 ///
-/// Jeder Artikel gehört zu genau einer ``ArtikelKategorie``. Die Kategorie kann jederzeit
-/// über die Bearbeiten-Bildschirme geändert werden.
+/// Ein Artikel kann mehreren ``ArtikelKategorie``n gleichzeitig angehören (siehe
+/// ``kategorien``) — die Kategorien können jederzeit über die
+/// Bearbeiten-Bildschirme geändert werden.
 @Model
 final class Artikel {
     /// Eindeutige Kennung.
@@ -52,8 +53,17 @@ final class Artikel {
     /// angezeigt/editierbar, bleibt als Feld für eine mögliche künftige
     /// Wiederverwendung erhalten.
     var farbeHex: String
-    /// Die Kategorie dieses Artikels.
+    /// Die (einzelne) Kategorie dieses Artikels — seit Einführung von
+    /// ``kategorien`` (Mehrfachzuordnung) nicht mehr direkt von außen gesetzt,
+    /// bleibt aber als Migrations-Fallback für vor diesem Zeitpunkt angelegte
+    /// Artikel sowie als führende (erste) Kategorie erhalten — von ``kategorien``
+    /// synchron gehalten.
     var kategorie: ArtikelKategorie?
+    /// Rohspeicher für ``kategorien`` — bewusst `internal` (nicht `private`),
+    /// damit ``ArtikelKategorie`` per `inverse:`-KeyPath darauf verweisen kann.
+    /// Nicht direkt verwenden, stattdessen ``kategorien``.
+    @Relationship(inverse: \ArtikelKategorie.zugeordneteArtikel)
+    var kategorienRaw: [ArtikelKategorie] = []
     /// Zeitpunkt der Anlage.
     var erstelltAm: Date
     /// Optionale, dauerhafte Notiz, z.B. bevorzugte Marke.
@@ -90,7 +100,7 @@ final class Artikel {
         name: String,
         symbolName: String,
         farbeHex: String,
-        kategorie: ArtikelKategorie? = nil,
+        kategorien: [ArtikelKategorie] = [],
         notiz: String? = nil,
         einheit: Einheit = .stueck,
         mengenSchritt: Double = 1
@@ -99,7 +109,8 @@ final class Artikel {
         self.name = name
         self.symbolName = symbolName
         self.farbeHex = farbeHex
-        self.kategorie = kategorie
+        self.kategorie = kategorien.first
+        self.kategorienRaw = kategorien
         self.erstelltAm = Date()
         self.notiz = notiz
         self.einheitRaw = einheit.rawValue
@@ -108,10 +119,46 @@ final class Artikel {
 }
 
 extension Artikel {
-    /// Die für Gruppierung, Regal-Zuordnung und Lernalgorithmus tatsächlich
-    /// wirksame Kategorie: ``kategorie``, oder — falls keine gesetzt ist —
-    /// automatisch "Sonstiges" (siehe ``ArtikelKategorie/sonstige(context:)``).
-    func effektiveKategorie(context: ModelContext) -> ArtikelKategorie {
-        kategorie ?? ArtikelKategorie.sonstige(context: context)
+    /// Kategorien, denen dieser Artikel zugeordnet ist — ein Artikel kann mehreren
+    /// gleichzeitig angehören (z.B. "Süßigkeiten" und "Geschenke"). Die erste
+    /// Kategorie gilt als führend und bleibt automatisch in ``kategorie``
+    /// gespiegelt (Migrations-Fallback, Grundlage für
+    /// ``fuehrendeKategorie(inGeschaeft:context:)``).
+    var kategorien: [ArtikelKategorie] {
+        get { kategorienRaw }
+        set {
+            kategorienRaw = newValue
+            kategorie = newValue.first
+        }
+    }
+
+    /// Die tatsächlich wirksamen Kategorien: ``kategorien``, falls gesetzt; sonst
+    /// (Migrations-Fallback für vor der Mehrfachauswahl angelegte Artikel, deren
+    /// `kategorienRaw` noch leer ist) das alte, einzelwertige ``kategorie``; sonst
+    /// automatisch "Sonstiges" (siehe ``ArtikelKategorie/sonstige(context:)``). Nie
+    /// leer.
+    func effektiveKategorien(context: ModelContext) -> [ArtikelKategorie] {
+        if !kategorien.isEmpty { return kategorien }
+        if let kategorie { return [kategorie] }
+        return [ArtikelKategorie.sonstige(context: context)]
+    }
+
+    /// Die für Gruppierung (Regal-Zuordnung beim Einkaufen) und Lernalgorithmus in
+    /// `geschaeft` **führende** Kategorie, falls ein Artikel mehreren Kategorien
+    /// zugeordnet ist — Nutzer-Entscheidung: pro Geschäft gewinnt genau eine
+    /// Kategorie, kein Duplizieren des Artikels über mehrere Regal-Bereiche.
+    /// Priorität: eine Kategorie mit Regal-Zuordnung in `geschaeft` > eine im
+    /// Geschäft überhaupt verfügbare Kategorie > die erste zugeordnete Kategorie
+    /// (ohne `geschaeft`, z.B. in der geschäftsunabhängigen Artikel-Verwaltung).
+    func fuehrendeKategorie(inGeschaeft geschaeft: Geschaeft?, context: ModelContext) -> ArtikelKategorie {
+        let kandidaten = effektiveKategorien(context: context)
+        guard let geschaeft else { return kandidaten[0] }
+        if let mitRegal = kandidaten.first(where: { geschaeft.regal(fuer: $0) != nil }) {
+            return mitRegal
+        }
+        if let verfuegbar = kandidaten.first(where: { geschaeft.verfuegbareKategorien.contains($0) }) {
+            return verfuegbar
+        }
+        return kandidaten[0]
     }
 }

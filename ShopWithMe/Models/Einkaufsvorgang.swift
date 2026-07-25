@@ -41,11 +41,11 @@ final class Einkaufsvorgang {
     /// Markiert einen Artikel als gekauft: legt einen ``KaufEintrag`` (zunächst ohne
     /// Preis) in diesem Einkaufsvorgang an und entfernt den Artikel von
     /// ``einkaufsliste`` (falls dort noch ein ``EinkaufslistenEintrag`` existiert).
-    /// Artikel derselben ``ArtikelKategorie`` erhalten denselben
+    /// Artikel mit derselben, für ``geschaeft`` führenden ``ArtikelKategorie``
+    /// (``Artikel/fuehrendeKategorie(inGeschaeft:context:)``) erhalten denselben
     /// ``KaufEintrag/kategorieBesuchsIndex``, neue Kategorien den jeweils nächsten
     /// Index — das ist die Rohdatenbasis für ``ShelfOrderLearningService``. Artikel
-    /// ohne eigene Kategorie fallen dabei automatisch unter "Sonstiges" (siehe
-    /// ``Artikel/effektiveKategorie(context:)``).
+    /// ohne eigene Kategorie fallen dabei automatisch unter "Sonstiges".
     func artikelAbhaken(_ artikel: Artikel, context: ModelContext) {
         // Dedupe-Schutz gegen das in `docs/DATABASE_CONCURRENCY.md` dokumentierte
         // Restrisiko (Sync-Latenz-Kollisionsfenster bei zeitgleichem Abhaken auf zwei
@@ -66,7 +66,7 @@ final class Einkaufsvorgang {
             return
         }
 
-        let kategorie = artikel.effektiveKategorie(context: context)
+        let kategorie = artikel.fuehrendeKategorie(inGeschaeft: geschaeft, context: context)
         let index = naechsterKategorieBesuchsIndex(fuer: kategorie)
         let eintrag = KaufEintrag(
             artikel: artikel,

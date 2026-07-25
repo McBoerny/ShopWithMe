@@ -4,8 +4,9 @@ import SwiftData
 /// Anlegen/Bearbeiten eines ``Artikel``s.
 ///
 /// Bei einem neuen Artikel (`istNeu == true`) wird er erst beim Sichern in den
-/// Model-Context eingefügt (Abbrechen verwirft ihn folgenlos). Die Kategorie ist
-/// sowohl beim Anlegen als auch danach frei wählbar.
+/// Model-Context eingefügt (Abbrechen verwirft ihn folgenlos). Die Kategorien
+/// (Mehrfachauswahl möglich) sind sowohl beim Anlegen als auch danach frei
+/// wählbar.
 struct ArtikelEditView: View {
     @Bindable var artikel: Artikel
     let istNeu: Bool
@@ -48,12 +49,21 @@ struct ArtikelEditView: View {
                 }
 
                 Section {
-                    Picker("Kategorie", selection: $artikel.kategorie) {
-                        Text("Keine Auswahl").tag(ArtikelKategorie?.none)
-                        ForEach(kategorien) { kategorie in
-                            Label(kategorie.name, systemImage: kategorie.standardSymbol)
-                                .tag(Optional(kategorie))
+                    ForEach(kategorien) { kategorie in
+                        Button {
+                            kategorieToggeln(kategorie)
+                        } label: {
+                            HStack {
+                                Label(kategorie.name, systemImage: kategorie.standardSymbol)
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                if artikel.kategorien.contains(kategorie) {
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(Color.accentColor)
+                                }
+                            }
                         }
+                        .buttonStyle(.plain)
                     }
 
                     Button {
@@ -81,7 +91,7 @@ struct ArtikelEditView: View {
                             .foregroundStyle(.orange)
                     }
                 } footer: {
-                    Text("Ohne Auswahl landet der Artikel automatisch in „Sonstiges“.")
+                    Text("Mehrfachauswahl möglich. Ohne Auswahl landet der Artikel automatisch in „Sonstiges“.")
                 }
 
                 Section("Menge & Einheit") {
@@ -148,10 +158,20 @@ struct ArtikelEditView: View {
             }
             .sheet(isPresented: $zeigeNeueKategorie) {
                 NeueKategorieSheet(naechsterSortIndex: (kategorien.map(\.sortIndex).max() ?? -1) + 1) { kategorie in
-                    artikel.kategorie = kategorie
+                    artikel.kategorien.append(kategorie)
                 }
             }
         }
+    }
+
+    private func kategorieToggeln(_ kategorie: ArtikelKategorie) {
+        var aktuelle = artikel.kategorien
+        if let index = aktuelle.firstIndex(of: kategorie) {
+            aktuelle.remove(at: index)
+        } else {
+            aktuelle.append(kategorie)
+        }
+        artikel.kategorien = aktuelle
     }
 
     /// Bestimmt automatisch (ohne manuellen Anstoß) eine Kategorie für einen neuen
@@ -161,12 +181,12 @@ struct ArtikelEditView: View {
     /// (`.task(id:)`). Überschreibt niemals eine bereits (manuell oder von einem
     /// vorherigen Durchlauf) gesetzte Kategorie.
     private func kategorieAutomatischVorschlagen() async {
-        guard istNeu, AISuggestionService.istVerfuegbar, artikel.kategorie == nil else { return }
+        guard istNeu, AISuggestionService.istVerfuegbar, artikel.kategorien.isEmpty else { return }
         let name = artikel.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return }
 
         try? await Task.sleep(for: .milliseconds(600))
-        guard !Task.isCancelled, artikel.kategorie == nil else { return }
+        guard !Task.isCancelled, artikel.kategorien.isEmpty else { return }
 
         kiVorschlagLaeuft = true
         kiFehlermeldung = nil
@@ -178,12 +198,12 @@ struct ArtikelEditView: View {
                 bekannteKategorien: kategorien.map(\.name),
                 bekannteRegale: Set(alleRegale.map(\.name)).sorted()
             )
-            guard !Task.isCancelled, artikel.kategorie == nil else { return }
+            guard !Task.isCancelled, artikel.kategorien.isEmpty else { return }
 
             if let passendeKategorie = kategorien.first(where: {
                 $0.name.localizedCaseInsensitiveCompare(vorschlag.kategorieName) == .orderedSame
             }) {
-                artikel.kategorie = passendeKategorie
+                artikel.kategorien = [passendeKategorie]
             }
             if !vorschlag.regalName.isEmpty {
                 kiRegalHinweis = "Vorschlag: Regal „\(vorschlag.regalName)“ — bitte in den Geschäften prüfen/zuordnen."

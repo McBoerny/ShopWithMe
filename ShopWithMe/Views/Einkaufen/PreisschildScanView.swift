@@ -147,7 +147,7 @@ struct PreisschildScanView: View {
                 let neuerEintrag = KaufEintrag(
                     artikel: artikel,
                     geschaeft: geschaeft,
-                    kategorie: artikel?.kategorie,
+                    kategorie: artikel?.fuehrendeKategorie(inGeschaeft: geschaeft, context: modelContext),
                     preis: preis,
                     datum: .now
                 )

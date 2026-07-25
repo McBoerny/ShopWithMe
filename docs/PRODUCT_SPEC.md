@@ -10,11 +10,16 @@ Geschäfte und den Einkaufsvorgang selbst intelligent unterstützt.
 
 ## Kernkonzepte
 
-- **Artikel**: hat Name, eine **Kategorie** (jederzeit änderbar) sowie **Menge** und
-  **Einheit** (Gewicht: kg/g, Volumen: ltr/ml, oder Stück) — die beim Anlegen
-  festgelegte Menge ist zugleich die Standard-Schrittweite für Erhöhen/Verringern auf
-  der Einkaufsliste. Symbol/Farbe existieren weiterhin als Datenfelder, werden aber in
-  keiner UI mehr angezeigt oder vom Anwender/der KI gesetzt.
+- **Artikel**: hat Name, eine oder mehrere **Kategorien** (jederzeit änderbar,
+  Mehrfachauswahl) sowie **Menge** und **Einheit** (Gewicht: kg/g, Volumen: ltr/ml,
+  oder Stück) — die beim Anlegen festgelegte Menge ist zugleich die
+  Standard-Schrittweite für Erhöhen/Verringern auf der Einkaufsliste. Hat ein Artikel
+  mehrere Kategorien, entscheidet pro Geschäft eine **führende** Kategorie
+  (`Artikel/fuehrendeKategorie(inGeschaeft:context:)`) über Regal-Zuordnung/
+  Gruppierung beim Einkaufen — bevorzugt eine Kategorie mit Regal-Zuordnung in
+  diesem Geschäft, sonst eine dort verfügbare, sonst die erste zugeordnete. Symbol/
+  Farbe existieren weiterhin als Datenfelder, werden aber in keiner UI mehr
+  angezeigt oder vom Anwender/der KI gesetzt.
 - **Artikelkategorie**: z.B. Obst, Milchprodukte, Drogerieartikel. Kategorien sind global,
   nicht pro Geschäft.
 - **Geschäft**: hat einen oder mehrere Typen (Lebensmittel, Drogerie, Baumarkt,

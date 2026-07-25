@@ -32,8 +32,8 @@ struct ArtikelVerfuegbarkeitServiceTests {
         obstregal.kategorien = [obst]
         context.insert(obstregal)
 
-        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorie: obst)
-        let shampoo = Artikel(name: "Shampoo", symbolName: "sparkles", farbeHex: "#AF52DE", kategorie: drogerie)
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst])
+        let shampoo = Artikel(name: "Shampoo", symbolName: "sparkles", farbeHex: "#AF52DE", kategorien: [drogerie])
         context.insert(apfel)
         context.insert(shampoo)
 
@@ -57,8 +57,8 @@ struct ArtikelVerfuegbarkeitServiceTests {
         context.insert(geschaeft)
         geschaeft.kategorien = [obst]
 
-        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorie: obst)
-        let shampoo = Artikel(name: "Shampoo", symbolName: "sparkles", farbeHex: "#AF52DE", kategorie: drogerie)
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst])
+        let shampoo = Artikel(name: "Shampoo", symbolName: "sparkles", farbeHex: "#AF52DE", kategorien: [drogerie])
         context.insert(apfel)
         context.insert(shampoo)
 
@@ -78,7 +78,7 @@ struct ArtikelVerfuegbarkeitServiceTests {
         let kiosk = Geschaeft(name: "Kiosk", typen: [.sonstiges])
         context.insert(kiosk)
 
-        let kaugummi = Artikel(name: "Kaugummi", symbolName: "shippingbox.fill", farbeHex: "#8E8E93", kategorie: sonstiges)
+        let kaugummi = Artikel(name: "Kaugummi", symbolName: "shippingbox.fill", farbeHex: "#8E8E93", kategorien: [sonstiges])
         context.insert(kaugummi)
 
         #expect(!ArtikelVerfuegbarkeitService.istVerfuegbar(kaugummi, in: kiosk, context: context))
@@ -103,7 +103,7 @@ struct ArtikelVerfuegbarkeitServiceTests {
         context.insert(kiosk)
         context.insert(anderesGeschaeft)
 
-        let kaugummi = Artikel(name: "Kaugummi", symbolName: "shippingbox.fill", farbeHex: "#8E8E93", kategorie: sonstiges)
+        let kaugummi = Artikel(name: "Kaugummi", symbolName: "shippingbox.fill", farbeHex: "#8E8E93", kategorien: [sonstiges])
         context.insert(kaugummi)
 
         let einkauf = Einkaufsvorgang(geschaeft: anderesGeschaeft)

@@ -301,7 +301,7 @@ struct BelegScanView: View {
                             let neuerEintrag = KaufEintrag(
                                 artikel: artikel,
                                 geschaeft: einkaufsvorgang.geschaeft,
-                                kategorie: artikel?.kategorie,
+                                kategorie: artikel?.fuehrendeKategorie(inGeschaeft: einkaufsvorgang.geschaeft, context: modelContext),
                                 preis: preis,
                                 datum: belegDatum
                             )
@@ -316,7 +316,7 @@ struct BelegScanView: View {
                         let neuerEintrag = KaufEintrag(
                             artikel: artikel,
                             geschaeft: erkanntesGeschaeft,
-                            kategorie: artikel?.kategorie,
+                            kategorie: artikel?.fuehrendeKategorie(inGeschaeft: erkanntesGeschaeft, context: modelContext),
                             preis: preis,
                             datum: belegDatum
                         )

@@ -37,13 +37,16 @@ struct ArtikelListView: View {
         var id: PersistentIdentifier { kategorie.persistentModelID }
     }
 
-    /// ``artikel``, gruppiert nach ``Artikel/effektiveKategorie(context:)`` und nach
-    /// ``ArtikelKategorie/sortIndex`` sortiert — nur relevant im
-    /// ``ArtikelSortierung/kategorie``-Modus.
+    /// ``artikel``, gruppiert nach der ersten ``Artikel/effektiveKategorien(context:)``
+    /// und nach ``ArtikelKategorie/sortIndex`` sortiert — nur relevant im
+    /// ``ArtikelSortierung/kategorie``-Modus. Rein geschäftsunabhängige
+    /// Verwaltungsansicht, daher (anders als beim Einkaufen) keine „führende
+    /// Kategorie pro Geschäft“-Auflösung nötig — einfach die erste zugeordnete
+    /// Kategorie.
     private var kategorieGruppen: [KategorieGruppe] {
         var nachKategorie: [PersistentIdentifier: KategorieGruppe] = [:]
         for eintrag in artikel {
-            let kategorie = eintrag.effektiveKategorie(context: modelContext)
+            let kategorie = eintrag.effektiveKategorien(context: modelContext)[0]
             nachKategorie[kategorie.persistentModelID, default: KategorieGruppe(kategorie: kategorie, artikel: [])].artikel.append(eintrag)
         }
         return nachKategorie.values.sorted {
@@ -145,8 +148,8 @@ private struct ArtikelZeile: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(artikel.name.isEmpty ? "Unbenannt" : artikel.name)
                     .foregroundStyle(.primary)
-                if let kategorie = artikel.kategorie {
-                    Text(kategorie.name)
+                if !artikel.kategorien.isEmpty {
+                    Text(artikel.kategorien.map(\.name).joined(separator: ", "))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

@@ -142,7 +142,7 @@ struct KaufEintragZuordnenSheet: View {
                 eintrag.alternativerName = getrimmterAlias.isEmpty ? nil : getrimmterAlias
                 eintrag.artikel = artikel
                 if let artikel {
-                    eintrag.kategorie = artikel.kategorie
+                    eintrag.kategorie = artikel.fuehrendeKategorie(inGeschaeft: eintrag.geschaeft, context: modelContext)
                 }
             }
             dismiss()
