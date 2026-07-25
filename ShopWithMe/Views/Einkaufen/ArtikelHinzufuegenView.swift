@@ -7,7 +7,8 @@ import SwiftData
 /// ganzen Artikeleintrag wählt ihn aus bzw. hebt die Auswahl wieder auf; erst
 /// „Hinzufügen“ übernimmt alle ausgewählten Artikel auf einmal. Findet die Suche
 /// keinen exakten Treffer, kann der gesuchte Artikel direkt hier angelegt werden —
-/// er landet danach automatisch in der Auswahl.
+/// er landet danach sofort auf ``einkaufsliste`` (GitHub #6), ganz ohne den
+/// zusätzlichen Tap auf „Hinzufügen“.
 struct ArtikelHinzufuegenView: View {
     let einkaufsliste: Einkaufsliste
 
@@ -136,12 +137,17 @@ struct ArtikelHinzufuegenView: View {
     }
 
     /// Wurde der Entwurf tatsächlich gesichert (also in den Model-Context
-    /// eingefügt), wandert er automatisch in die Auswahl — übernommen wird er wie
-    /// jeder andere ausgewählte Artikel erst beim Tap auf „Hinzufügen“.
+    /// eingefügt), landet er sofort auf ``einkaufsliste`` (GitHub #6) — ohne
+    /// zusätzlichen Tap auf „Hinzufügen”. Die Zeile zeigt danach automatisch „Auf
+    /// Liste” (``ArtikelAuswahlZeile``/``bereitsAufListe``).
     private func nachNeuanlageAufraeumen() {
         defer { zuletztAngelegterEntwurf = nil }
         guard let entwurf = zuletztAngelegterEntwurf, entwurf.modelContext != nil else { return }
-        ausgewaehlteObjectIDs.insert(ObjectIdentifier(entwurf))
+        Task {
+            await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                einkaufsliste.artikelHinzufuegen(entwurf, context: modelContext)
+            }
+        }
         suchtext = ""
     }
 }

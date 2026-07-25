@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.6 (Build 66) — Neu angelegter Artikel landet sofort auf der Einkaufsliste
+
+- Legt der Nutzer in `ArtikelHinzufuegenView` (Einkaufsliste → „Artikel
+  hinzufügen“ → unbekannten Namen neu anlegen) einen Artikel neu an, wird er
+  jetzt sofort über `Einkaufsliste.artikelHinzufuegen` auf die aktuelle
+  Einkaufsliste übernommen, statt nur in der Auswahl zu landen — kein
+  zusätzlicher Tap auf „Hinzufügen“ mehr nötig (GitHub #6). Die
+  Bedienungsanleitung beschrieb dieses Verhalten bereits, bevor es tatsächlich
+  umgesetzt war; jetzt stimmen Doku und Implementierung überein.
+
 ## v0.6 (Build 65) — Artikel kann mehreren Warengruppen angehören
 
 - **`Artikel.kategorien: [ArtikelKategorie]`** (neu) ersetzt die bisherige
