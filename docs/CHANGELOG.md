@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.6 (Build 74) — Mengeneinheit im Mengen-Sheet änderbar
+
+- `MengenNotizSheet` (Tap auf die Mengenangabe beim Einkaufen) bietet jetzt
+  neben Menge und Notiz auch einen Picker für die Mengeneinheit an. Da
+  ``Artikel/einheit`` (anders als Menge/Notiz) kein Feld von
+  `EinkaufslistenEintrag` ist, wirkt sich eine Änderung hier wie in
+  `ArtikelEditView` auf den Artikel insgesamt aus (GitHub #12).
+- Nebenbei die Bedienungsanleitung korrigiert: sie beschrieb noch
+  Tap/Doppel-Tap/Langes-Drücken-Gesten für die Menge, obwohl die App längst
+  auf Wischgesten umgestellt ist (siehe #11) — jetzt aktualisiert.
+
 ## v0.6 (Build 73) — Geschäftstyp-Warengruppen: alphabetisch, Auswahl zuerst
 
 - `GeschaeftsTypKategorienView` (neue `sortierteKategorien`-Property) zeigt die

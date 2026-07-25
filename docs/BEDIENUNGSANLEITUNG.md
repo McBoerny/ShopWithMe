@@ -74,8 +74,10 @@ passende Kategorie/Regal-Zuordnung erscheinen trotzdem, in einer eigenen
 „Sonstige“-Sektion. Ein Einkauf startet automatisch beim Öffnen des Tabs, kein
 manueller Start nötig.
 
-- **Tap** auf eine Zeile erhöht die Menge, **Doppel-Tap** verringert sie (nie unter
-  die Schrittweite). **Langes Drücken** öffnet ein Sheet für eine exakte Menge und
+- **Wischen nach rechts** verringert die Menge, **Wischen nach links** erhöht sie
+  (nie unter die Schrittweite) — bei noch offenen Artikeln löst ein vollständiger
+  Wisch die Aktion direkt aus, ganz ohne zusätzlichen Bestätigungs-Tap. **Tap auf
+  die Mengenangabe** öffnet ein Sheet für eine exakte Menge, die Mengeneinheit und
   eine temporäre Notiz.
 - **Abhaken** geschieht über die eigenständige Checkbox am Zeilenende.
 - Standardmäßig zeigt die App nur im gewählten Geschäft verfügbare Artikel. Die

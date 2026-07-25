@@ -1115,11 +1115,16 @@ private struct ArtikelAbhakZeile: View {
     }
 }
 
-/// Sheet zum exakten Vorgeben der Menge und einer temporären Notiz für einen
-/// ``EinkaufslistenEintrag`` (Tap auf die Mengenangabe in ``ArtikelAbhakZeile``).
-/// Arbeitet mit lokalem Entwurfs-Zustand (analog `NeueKategorieSheet`) — die
-/// Übernahme ins Modell geschieht erst bei „Sichern“, gekapselt in einem einzelnen
-/// Micro-Lease.
+/// Sheet zum exakten Vorgeben der Menge, der Mengeneinheit und einer temporären
+/// Notiz für einen ``EinkaufslistenEintrag`` (Tap auf die Mengenangabe in
+/// ``ArtikelAbhakZeile``). Arbeitet mit lokalem Entwurfs-Zustand (analog
+/// `NeueKategorieSheet`) — die Übernahme ins Modell geschieht erst bei „Sichern“,
+/// gekapselt in einem einzelnen Micro-Lease.
+///
+/// Die Einheit ist (anders als Menge/Notiz) kein Feld von
+/// ``EinkaufslistenEintrag``, sondern von ``Artikel/einheit`` — eine Änderung
+/// hier wirkt sich also, wie beim direkten Bearbeiten in ``ArtikelEditView``, auf
+/// den Artikel insgesamt aus, nicht nur auf diesen einen Eintrag (GitHub #12).
 private struct MengenNotizSheet: View {
     let eintrag: EinkaufslistenEintrag
 
@@ -1127,11 +1132,13 @@ private struct MengenNotizSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var mengeText: String
     @State private var notizText: String
+    @State private var einheitAuswahl: Einheit
 
     init(eintrag: EinkaufslistenEintrag) {
         self.eintrag = eintrag
         _mengeText = State(initialValue: eintrag.menge.formatted())
         _notizText = State(initialValue: eintrag.notiz ?? "")
+        _einheitAuswahl = State(initialValue: eintrag.artikel?.einheit ?? .stueck)
     }
 
     var body: some View {
@@ -1141,8 +1148,15 @@ private struct MengenNotizSheet: View {
                     HStack {
                         TextField("Menge", text: $mengeText)
                             .keyboardType(.decimalPad)
-                        Text(eintrag.artikel?.einheit.kurzform ?? "")
-                            .foregroundStyle(.secondary)
+                        if eintrag.artikel != nil {
+                            Picker("Einheit", selection: $einheitAuswahl) {
+                                ForEach(Einheit.allCases) { einheit in
+                                    Text(einheit.kurzform).tag(einheit)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                        }
                     }
                 }
                 Section("Notiz") {
@@ -1174,6 +1188,7 @@ private struct MengenNotizSheet: View {
                 if let neueMenge, neueMenge > 0 {
                     eintrag.menge = neueMenge
                 }
+                eintrag.artikel?.einheit = einheitAuswahl
                 eintrag.notiz = getrimmteNotiz.isEmpty ? nil : getrimmteNotiz
             }
             dismiss()
