@@ -26,7 +26,8 @@ struct GeschaeftsTypenVerwaltungView: View {
 
 /// Toggle-Liste aller ``ArtikelKategorie``n für einen ``GeschaeftTyp`` — Checkmark
 /// markiert die aktuell zugeordneten Standard-Warengruppen, analog dem
-/// Mehrfachauswahl-Muster in ``ArtikelEditView``.
+/// Mehrfachauswahl-Muster in ``ArtikelEditView``. Zeigt die Liste alphabetisch,
+/// mit bereits ausgewählten Kategorien zuerst (``sortierteKategorien``).
 private struct GeschaeftsTypKategorienView: View {
     let typ: GeschaeftTyp
 
@@ -36,6 +37,24 @@ private struct GeschaeftsTypKategorienView: View {
     @State private var kiVorschlagLaeuft = false
     @State private var kiFehlermeldung: String?
 
+    /// ``alleKategorien`` alphabetisch, aber mit den für ``typ`` bereits
+    /// ausgewählten Kategorien zuerst — eine sich beim Umschalten sofort dynamisch
+    /// anpassende Liste, in der auf einen Blick erkennbar ist, welche Warengruppen
+    /// diesem Geschäftstyp bereits zugeordnet sind (GitHub #14).
+    private var sortierteKategorien: [ArtikelKategorie] {
+        let (ausgewaehlt, uebrige) = alleKategorien.reduce(into: ([ArtikelKategorie](), [ArtikelKategorie]())) { ergebnis, kategorie in
+            if kategorie.geschaeftsTypen.contains(typ) {
+                ergebnis.0.append(kategorie)
+            } else {
+                ergebnis.1.append(kategorie)
+            }
+        }
+        func alphabetisch(_ kategorien: [ArtikelKategorie]) -> [ArtikelKategorie] {
+            kategorien.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        }
+        return alphabetisch(ausgewaehlt) + alphabetisch(uebrige)
+    }
+
     var body: some View {
         SessionLeaseGate { formInhalt }
     }
@@ -43,7 +62,7 @@ private struct GeschaeftsTypKategorienView: View {
     private var formInhalt: some View {
         Form {
             Section {
-                ForEach(alleKategorien) { kategorie in
+                ForEach(sortierteKategorien) { kategorie in
                     Button {
                         kategorieToggeln(kategorie)
                     } label: {

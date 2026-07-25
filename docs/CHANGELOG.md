@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.6 (Build 73) — Geschäftstyp-Warengruppen: alphabetisch, Auswahl zuerst
+
+- `GeschaeftsTypKategorienView` (neue `sortierteKategorien`-Property) zeigt die
+  Warengruppen jetzt alphabetisch, mit den für den jeweiligen Geschäftstyp
+  bereits ausgewählten zuerst — passt sich beim Umschalten sofort dynamisch
+  an, statt fest nach `ArtikelKategorie.sortIndex` sortiert zu bleiben
+  (GitHub #14).
+
 ## v0.6 (Build 72) — Belegscan: Preis-Markierung je Position korrigiert
 
 - **`Array<ErkannteZeile>.boundingBox(fuerArtikelName:)`** (`ReceiptScanService.swift`):
