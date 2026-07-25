@@ -56,7 +56,7 @@ struct PreisHistorieBereinigungServiceTests {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
-        let geschaeft = Geschaeft(name: "Testladen", typ: .lebensmittel)
+        let geschaeft = Geschaeft(name: "Testladen", typen: [.lebensmittel])
         context.insert(geschaeft)
         let laufenderEinkauf = Einkaufsvorgang(geschaeft: geschaeft)
         context.insert(laufenderEinkauf)
@@ -77,7 +77,7 @@ struct PreisHistorieBereinigungServiceTests {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
-        let geschaeft = Geschaeft(name: "Testladen", typ: .lebensmittel)
+        let geschaeft = Geschaeft(name: "Testladen", typen: [.lebensmittel])
         context.insert(geschaeft)
         let abgeschlossenerEinkauf = Einkaufsvorgang(geschaeft: geschaeft)
         abgeschlossenerEinkauf.abschliessen()

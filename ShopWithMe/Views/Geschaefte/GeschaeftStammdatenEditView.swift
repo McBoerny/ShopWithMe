@@ -29,11 +29,29 @@ struct GeschaeftStammdatenEditView: View {
             Form {
                 Section {
                     TextField("Name", text: $geschaeft.name)
-                    Picker("Typ", selection: $geschaeft.typ) {
-                        ForEach(GeschaeftTyp.allCases) { typ in
-                            Label(typ.anzeigename, systemImage: typ.symbolName).tag(typ)
+                }
+
+                Section {
+                    ForEach(GeschaeftTyp.allCases) { typ in
+                        Button {
+                            typToggeln(typ)
+                        } label: {
+                            HStack {
+                                Label(typ.anzeigename, systemImage: typ.symbolName)
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                if geschaeft.typen.contains(typ) {
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(Color.accentColor)
+                                }
+                            }
                         }
+                        .buttonStyle(.plain)
                     }
+                } header: {
+                    Text("Typ")
+                } footer: {
+                    Text("Mehrfachauswahl möglich, z.B. Drogerie + Lebensmittel. Mindestens ein Typ muss gewählt sein.")
                 }
 
                 Section("Adresse (optional)") {
@@ -67,14 +85,24 @@ struct GeschaeftStammdatenEditView: View {
                             dismiss()
                         }
                     }
-                    .disabled(geschaeft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(geschaeft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || geschaeft.typen.isEmpty)
                 }
             }
         }
     }
+
+    private func typToggeln(_ typ: GeschaeftTyp) {
+        var aktuelle = geschaeft.typen
+        if let index = aktuelle.firstIndex(of: typ) {
+            aktuelle.remove(at: index)
+        } else {
+            aktuelle.append(typ)
+        }
+        geschaeft.typen = aktuelle
+    }
 }
 
 #Preview {
-    GeschaeftStammdatenEditView(geschaeft: Geschaeft(name: "Rewe", typ: .lebensmittel), istNeu: true)
+    GeschaeftStammdatenEditView(geschaeft: Geschaeft(name: "Rewe", typen: [.lebensmittel]), istNeu: true)
         .modelContainer(for: [Geschaeft.self], inMemory: true)
 }

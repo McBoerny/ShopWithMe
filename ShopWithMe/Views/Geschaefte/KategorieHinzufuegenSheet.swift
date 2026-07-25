@@ -90,6 +90,6 @@ struct KategorieHinzufuegenSheet: View {
 }
 
 #Preview {
-    KategorieHinzufuegenSheet(geschaeft: Geschaeft(name: "Rewe", typ: .lebensmittel))
+    KategorieHinzufuegenSheet(geschaeft: Geschaeft(name: "Rewe", typen: [.lebensmittel]))
         .modelContainer(for: [Geschaeft.self, Regal.self, ArtikelKategorie.self], inMemory: true)
 }

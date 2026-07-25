@@ -135,7 +135,7 @@ struct GeschaeftWahlSheet: View {
             defer { erstelleGeschaeft = false }
             let entwurf = Geschaeft(
                 name: getrimmterSuchtext,
-                typ: .lebensmittel,
+                typen: [.lebensmittel],
                 adresse: getrimmteAdresse.isEmpty ? nil : getrimmteAdresse
             )
             if !getrimmteAdresse.isEmpty,

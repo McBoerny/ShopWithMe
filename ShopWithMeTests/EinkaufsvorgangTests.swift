@@ -23,7 +23,7 @@ struct EinkaufsvorgangTests {
 
         let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
         context.insert(obst)
-        let geschaeft = Geschaeft(name: "Testladen", typ: .lebensmittel)
+        let geschaeft = Geschaeft(name: "Testladen", typen: [.lebensmittel])
         context.insert(geschaeft)
         let regal = Regal(name: "Obstregal", geschaeft: geschaeft)
         regal.kategorien = [obst]
@@ -61,7 +61,7 @@ struct EinkaufsvorgangTests {
         context.insert(obst)
         context.insert(drogerie)
 
-        let geschaeft = Geschaeft(name: "Testladen", typ: .lebensmittel)
+        let geschaeft = Geschaeft(name: "Testladen", typen: [.lebensmittel])
         context.insert(geschaeft)
         let obstregal = Regal(name: "Obstregal", sortIndex: 0, geschaeft: geschaeft)
         obstregal.kategorien = [obst]
@@ -100,7 +100,7 @@ struct EinkaufsvorgangTests {
 
         let sonstiges = ArtikelKategorie(name: "Sonstiges", standardSymbol: "shippingbox.fill", standardFarbeHex: "#8E8E93")
         context.insert(sonstiges)
-        let geschaeft = Geschaeft(name: "Testladen", typ: .lebensmittel)
+        let geschaeft = Geschaeft(name: "Testladen", typen: [.lebensmittel])
         context.insert(geschaeft)
         let ohneKategorie = Artikel(name: "Mysteriöses Ding", symbolName: "questionmark", farbeHex: "#8E8E93")
         let explizitSonstiges = Artikel(name: "Kerzen", symbolName: "flame.fill", farbeHex: "#8E8E93", kategorie: sonstiges)
@@ -129,7 +129,7 @@ struct EinkaufsvorgangTests {
 
         let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
         context.insert(obst)
-        let geschaeft = Geschaeft(name: "Testladen", typ: .lebensmittel)
+        let geschaeft = Geschaeft(name: "Testladen", typen: [.lebensmittel])
         context.insert(geschaeft)
         let regal = Regal(name: "Obstregal", geschaeft: geschaeft)
         regal.kategorien = [obst]
@@ -167,7 +167,7 @@ struct EinkaufsvorgangTests {
 
         let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
         context.insert(obst)
-        let geschaeft = Geschaeft(name: "Testladen", typ: .lebensmittel)
+        let geschaeft = Geschaeft(name: "Testladen", typen: [.lebensmittel])
         context.insert(geschaeft)
         let liste = Einkaufsliste(name: "Einkaufsliste")
         context.insert(liste)

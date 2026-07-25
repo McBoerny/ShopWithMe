@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.6 (Build 64) — Geschäft: mehrere Typen möglich
+
+- **`Geschaeft.typen: [GeschaeftTyp]`** (neu) ersetzt die bisherige
+  Einzelauswahl — ein Geschäft kann jetzt mehrere Typen gleichzeitig haben (z.B.
+  Drogerie + Lebensmittel bei einem dm). `GeschaeftStammdatenEditView` bietet dafür
+  eine Mehrfachauswahl-Liste statt des bisherigen Pickers.
+- Migration rein additiv (`typenRaw: [String]?`, Fallback auf das unverändert
+  bestehende `typ`-Feld) — keine neue `SchemaVN`/`MigrationStage` nötig, gleiches
+  Muster wie `regalSortierModus`. `typ` bleibt als führender (erster) Typ
+  synchron, u.a. für die Icon-Anzeige.
+
 ## v0.6 (Build 63) — Automatische Artikel-Zuordnung im Belegscan, Inline-Autocomplete, dauerhaftes Ignorieren
 
 - **Dreistufige automatische Artikel-Zuordnung** (neuer `ArtikelZuordnungsService`):

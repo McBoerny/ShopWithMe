@@ -107,7 +107,7 @@ struct EinkaufenView: View {
                             }
                         }
                         Button {
-                            geschaeftEntwurfAusVorschlag = Geschaeft(name: "", typ: .lebensmittel)
+                            geschaeftEntwurfAusVorschlag = Geschaeft(name: "", typen: [.lebensmittel])
                         } label: {
                             Label("Neues Geschäft hinzufügen", systemImage: "plus")
                         }

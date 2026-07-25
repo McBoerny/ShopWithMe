@@ -36,7 +36,7 @@ struct ModelTests {
         context.insert(obst)
         context.insert(drogerie)
 
-        let geschaeft = Geschaeft(name: "Testladen", typ: .lebensmittel)
+        let geschaeft = Geschaeft(name: "Testladen", typen: [.lebensmittel])
         context.insert(geschaeft)
 
         let regal = Regal(name: "Regal 1", geschaeft: geschaeft)
@@ -56,7 +56,7 @@ struct ModelTests {
         let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
         context.insert(obst)
 
-        let geschaeft = Geschaeft(name: "Testladen", typ: .lebensmittel)
+        let geschaeft = Geschaeft(name: "Testladen", typen: [.lebensmittel])
         context.insert(geschaeft)
         geschaeft.kategorien = [obst]
 
@@ -71,7 +71,7 @@ struct ModelTests {
         let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
         context.insert(obst)
 
-        let geschaeft = Geschaeft(name: "Testladen", typ: .lebensmittel)
+        let geschaeft = Geschaeft(name: "Testladen", typen: [.lebensmittel])
         context.insert(geschaeft)
         geschaeft.kategorien = [obst]
 
@@ -91,7 +91,7 @@ struct ModelTests {
         let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
         context.insert(obst)
 
-        let geschaeft = Geschaeft(name: "Testladen", typ: .lebensmittel)
+        let geschaeft = Geschaeft(name: "Testladen", typen: [.lebensmittel])
         context.insert(geschaeft)
         geschaeft.kategorien = [obst]
 
@@ -112,7 +112,7 @@ struct ModelTests {
         let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
         context.insert(obst)
 
-        let geschaeft = Geschaeft(name: "Testladen", typ: .lebensmittel)
+        let geschaeft = Geschaeft(name: "Testladen", typen: [.lebensmittel])
         context.insert(geschaeft)
 
         let regal = Regal(name: "Regal 1", geschaeft: geschaeft)
@@ -138,7 +138,7 @@ struct ModelTests {
         context.insert(drogerie)
         context.insert(getraenke)
 
-        let geschaeft = Geschaeft(name: "Testladen", typ: .lebensmittel)
+        let geschaeft = Geschaeft(name: "Testladen", typen: [.lebensmittel])
         context.insert(geschaeft)
 
         let regal1 = Regal(name: "Regal 1", geschaeft: geschaeft)
@@ -181,7 +181,7 @@ struct ModelTests {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
-        let geschaeft = Geschaeft(name: "Testladen", typ: .lebensmittel)
+        let geschaeft = Geschaeft(name: "Testladen", typen: [.lebensmittel])
         context.insert(geschaeft)
 
         #expect(geschaeft.regalSortierModus == .manuell)
@@ -338,9 +338,9 @@ struct ModelTests {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
-        let geschaeft = Geschaeft(name: "Testladen", typ: .lebensmittel)
+        let geschaeft = Geschaeft(name: "Testladen", typen: [.lebensmittel])
         context.insert(geschaeft)
-        let anderesGeschaeft = Geschaeft(name: "Anderer Laden", typ: .lebensmittel)
+        let anderesGeschaeft = Geschaeft(name: "Anderer Laden", typen: [.lebensmittel])
         context.insert(anderesGeschaeft)
 
         let eintrag = KaufEintrag(artikel: nil, geschaeft: geschaeft, preis: 1.99)
@@ -359,9 +359,9 @@ struct ModelTests {
 
     @Test
     func passendesFindetGeschaeftAnhandDesNamensOderEinesAlternativenNamens() {
-        let rewe = Geschaeft(name: "Rewe", typ: .lebensmittel)
+        let rewe = Geschaeft(name: "Rewe", typen: [.lebensmittel])
         rewe.alternativeNamen = ["REWE Center Musterstadt"]
-        let edeka = Geschaeft(name: "Edeka", typ: .lebensmittel)
+        let edeka = Geschaeft(name: "Edeka", typen: [.lebensmittel])
 
         #expect(Geschaeft.passendes(fuerErkannterName: "REWE Musterstadt", unter: [rewe, edeka]) === rewe)
         #expect(Geschaeft.passendes(fuerErkannterName: "REWE Center Musterstadt Filiale 12", unter: [rewe, edeka]) === rewe)
@@ -371,8 +371,8 @@ struct ModelTests {
 
     @Test
     func passendesNutztAdresseAlsTieBreakerBeiMehrerenNamensgleichenGeschaeften() {
-        let filialeA = Geschaeft(name: "Rewe", typ: .lebensmittel, adresse: "Marktstraße 1, 12345 Musterstadt")
-        let filialeB = Geschaeft(name: "Rewe", typ: .lebensmittel, adresse: "Bahnhofstraße 9, 12345 Musterstadt")
+        let filialeA = Geschaeft(name: "Rewe", typen: [.lebensmittel], adresse: "Marktstraße 1, 12345 Musterstadt")
+        let filialeB = Geschaeft(name: "Rewe", typen: [.lebensmittel], adresse: "Bahnhofstraße 9, 12345 Musterstadt")
 
         let treffer = Geschaeft.passendes(
             fuerErkannterName: "Rewe",
@@ -385,8 +385,8 @@ struct ModelTests {
 
     @Test
     func passendesFaelltBeiMehrdeutigerAdresseAufErstenNamensKandidatenZurueck() {
-        let filialeA = Geschaeft(name: "Rewe", typ: .lebensmittel, adresse: "Marktstraße 1, 12345 Musterstadt")
-        let filialeB = Geschaeft(name: "Rewe", typ: .lebensmittel)
+        let filialeA = Geschaeft(name: "Rewe", typen: [.lebensmittel], adresse: "Marktstraße 1, 12345 Musterstadt")
+        let filialeB = Geschaeft(name: "Rewe", typen: [.lebensmittel])
 
         // Keine erkannte Adresse → kein Tie-Break möglich, erster Namens-Kandidat gewinnt.
         #expect(Geschaeft.passendes(fuerErkannterName: "Rewe", unter: [filialeA, filialeB]) === filialeA)
@@ -398,27 +398,27 @@ struct ModelTests {
 
     @Test
     func kurzeAdresseEntferntPostleitzahl() {
-        let geschaeft = Geschaeft(name: "Rewe", typ: .lebensmittel, adresse: "Marktstraße 1, 12345 Musterstadt")
+        let geschaeft = Geschaeft(name: "Rewe", typen: [.lebensmittel], adresse: "Marktstraße 1, 12345 Musterstadt")
         #expect(geschaeft.kurzeAdresse == "Marktstraße 1, Musterstadt")
     }
 
     @Test
     func kurzeAdresseOhneKommaWirdUnveraendertDurchgereicht() {
-        let geschaeft = Geschaeft(name: "Rewe", typ: .lebensmittel, adresse: "Musterstadt")
+        let geschaeft = Geschaeft(name: "Rewe", typen: [.lebensmittel], adresse: "Musterstadt")
         #expect(geschaeft.kurzeAdresse == "Musterstadt")
     }
 
     @Test
     func kurzeAdresseIstNilOhneHinterlegteAdresse() {
-        let geschaeft = Geschaeft(name: "Rewe", typ: .lebensmittel)
+        let geschaeft = Geschaeft(name: "Rewe", typen: [.lebensmittel])
         #expect(geschaeft.kurzeAdresse == nil)
     }
 
     @Test
     func namenMitDuplikatenErkenntCaseInsensitiveDuplikateUndIgnoriertEindeutigeNamen() {
-        let reweA = Geschaeft(name: "Rewe", typ: .lebensmittel)
-        let reweB = Geschaeft(name: "REWE", typ: .lebensmittel)
-        let edeka = Geschaeft(name: "Edeka", typ: .lebensmittel)
+        let reweA = Geschaeft(name: "Rewe", typen: [.lebensmittel])
+        let reweB = Geschaeft(name: "REWE", typen: [.lebensmittel])
+        let edeka = Geschaeft(name: "Edeka", typen: [.lebensmittel])
 
         let duplikate = Geschaeft.namenMitDuplikaten(unter: [reweA, reweB, edeka])
 
@@ -427,7 +427,7 @@ struct ModelTests {
 
     @Test
     func alternativenNamenLernenIgnoriertLeereUndBereitsBekannteNamen() {
-        let rewe = Geschaeft(name: "Rewe", typ: .lebensmittel)
+        let rewe = Geschaeft(name: "Rewe", typen: [.lebensmittel])
 
         rewe.alternativenNamenLernen("REWE Center Musterstadt")
         #expect(rewe.alternativeNamen == ["REWE Center Musterstadt"])
@@ -447,8 +447,29 @@ struct ModelTests {
     }
 
     @Test
+    func typenFaelltOhneGespeichertenRohwertAufTypZurueck() {
+        // Vor Einführung der Mehrfachauswahl angelegte Geschäfte kennen `typenRaw`
+        // nicht — `typen` muss trotzdem funktionieren (Fallback auf das alte,
+        // einzelwertige `typ`).
+        let geschaeft = Geschaeft(name: "Rewe", typen: [.lebensmittel])
+        #expect(geschaeft.typen == [.lebensmittel])
+    }
+
+    @Test
+    func typenSetzenHaeltTypAlsFuehrendenTypSynchron() {
+        let geschaeft = Geschaeft(name: "Rewe", typen: [.lebensmittel])
+
+        geschaeft.typen = [.drogerie, .lebensmittel]
+        #expect(geschaeft.typen == [.drogerie, .lebensmittel])
+        #expect(geschaeft.typ == .drogerie)
+
+        geschaeft.typen = []
+        #expect(geschaeft.typ == .sonstiges)
+    }
+
+    @Test
     func istIgnoriertErkenntTrefferBeiGleichemGeschaeftUndPassendemNamen() {
-        let rewe = Geschaeft(name: "Rewe", typ: .lebensmittel)
+        let rewe = Geschaeft(name: "Rewe", typen: [.lebensmittel])
         let ignoriert = IgnorierterArtikel(erkannterName: "Pfand", geschaeft: rewe)
 
         #expect(IgnorierterArtikel.istIgnoriert("Pfand", geschaeft: rewe, unter: [ignoriert]))
@@ -457,8 +478,8 @@ struct ModelTests {
 
     @Test
     func istIgnoriertLiefertFalseBeiAnderemGeschaeftOderOhneGeschaeft() {
-        let rewe = Geschaeft(name: "Rewe", typ: .lebensmittel)
-        let edeka = Geschaeft(name: "Edeka", typ: .lebensmittel)
+        let rewe = Geschaeft(name: "Rewe", typen: [.lebensmittel])
+        let edeka = Geschaeft(name: "Edeka", typen: [.lebensmittel])
         let ignoriert = IgnorierterArtikel(erkannterName: "Pfand", geschaeft: rewe)
 
         #expect(!IgnorierterArtikel.istIgnoriert("Pfand", geschaeft: edeka, unter: [ignoriert]))

@@ -26,7 +26,7 @@ struct ArtikelVerfuegbarkeitServiceTests {
         context.insert(obst)
         context.insert(drogerie)
 
-        let geschaeft = Geschaeft(name: "Rewe", typ: .lebensmittel)
+        let geschaeft = Geschaeft(name: "Rewe", typen: [.lebensmittel])
         context.insert(geschaeft)
         let obstregal = Regal(name: "Obstregal", sortIndex: 0, geschaeft: geschaeft)
         obstregal.kategorien = [obst]
@@ -53,7 +53,7 @@ struct ArtikelVerfuegbarkeitServiceTests {
         context.insert(obst)
         context.insert(drogerie)
 
-        let geschaeft = Geschaeft(name: "Rewe", typ: .lebensmittel)
+        let geschaeft = Geschaeft(name: "Rewe", typen: [.lebensmittel])
         context.insert(geschaeft)
         geschaeft.kategorien = [obst]
 
@@ -75,7 +75,7 @@ struct ArtikelVerfuegbarkeitServiceTests {
         let sonstiges = ArtikelKategorie(name: "Sonstiges", standardSymbol: "shippingbox.fill", standardFarbeHex: "#8E8E93")
         context.insert(sonstiges)
 
-        let kiosk = Geschaeft(name: "Kiosk", typ: .sonstiges)
+        let kiosk = Geschaeft(name: "Kiosk", typen: [.sonstiges])
         context.insert(kiosk)
 
         let kaugummi = Artikel(name: "Kaugummi", symbolName: "shippingbox.fill", farbeHex: "#8E8E93", kategorie: sonstiges)
@@ -98,8 +98,8 @@ struct ArtikelVerfuegbarkeitServiceTests {
         let sonstiges = ArtikelKategorie(name: "Sonstiges", standardSymbol: "shippingbox.fill", standardFarbeHex: "#8E8E93")
         context.insert(sonstiges)
 
-        let kiosk = Geschaeft(name: "Kiosk", typ: .sonstiges)
-        let anderesGeschaeft = Geschaeft(name: "Anderer Kiosk", typ: .sonstiges)
+        let kiosk = Geschaeft(name: "Kiosk", typen: [.sonstiges])
+        let anderesGeschaeft = Geschaeft(name: "Anderer Kiosk", typen: [.sonstiges])
         context.insert(kiosk)
         context.insert(anderesGeschaeft)
 

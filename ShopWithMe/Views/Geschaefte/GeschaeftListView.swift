@@ -50,7 +50,7 @@ struct GeschaeftListView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
-                    neuesGeschaeftEntwurf = Geschaeft(name: "", typ: .lebensmittel)
+                    neuesGeschaeftEntwurf = Geschaeft(name: "", typen: [.lebensmittel])
                 } label: {
                     Label("Geschäft hinzufügen", systemImage: "plus")
                 }
@@ -95,7 +95,7 @@ private struct GeschaeftZeile: View {
             GlassSymbolBadge(symbolName: geschaeft.typ.symbolName, farbe: .accentColor)
             VStack(alignment: .leading, spacing: 2) {
                 Text(geschaeft.name.isEmpty ? "Unbenannt" : geschaeft.name)
-                Text("\(geschaeft.typ.anzeigename) · \(geschaeft.regale.count) Regal(e)")
+                Text("\(geschaeft.typen.map(\.anzeigename).joined(separator: ", ")) · \(geschaeft.regale.count) Regal(e)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if istDuplikat, let kurzeAdresse = geschaeft.kurzeAdresse {

@@ -207,7 +207,7 @@ enum GeschaeftErkennungService {
     static func entwurf(aus mapItem: MKMapItem) -> Geschaeft {
         let geschaeft = Geschaeft(
             name: mapItem.name ?? "Neues Geschäft",
-            typ: typVorschlag(fuer: mapItem.pointOfInterestCategory),
+            typen: [typVorschlag(fuer: mapItem.pointOfInterestCategory)],
             adresse: mapItem.address?.fullAddress
         )
         geschaeft.breitengrad = mapItem.location.coordinate.latitude
@@ -224,7 +224,7 @@ enum GeschaeftErkennungService {
     @MainActor
     static func entwurfAusAktuellemStandort() async -> Geschaeft? {
         guard let koordinaten = await standortKoordinaten() else { return nil }
-        let geschaeft = Geschaeft(name: "", typ: .lebensmittel)
+        let geschaeft = Geschaeft(name: "", typen: [.lebensmittel])
         geschaeft.breitengrad = koordinaten.breitengrad
         geschaeft.laengengrad = koordinaten.laengengrad
         return geschaeft

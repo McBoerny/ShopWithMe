@@ -26,7 +26,7 @@ struct ShelfOrderLearningServiceTests {
         context.insert(obst)
         context.insert(drogerie)
 
-        let geschaeft = Geschaeft(name: "Testladen", typ: .lebensmittel)
+        let geschaeft = Geschaeft(name: "Testladen", typen: [.lebensmittel])
         context.insert(geschaeft)
 
         // Manuelle Reihenfolge (bewusst "falsch" gewählt): Drogerie vor Obst.
@@ -76,7 +76,7 @@ struct ShelfOrderLearningServiceTests {
         context.insert(obst)
         context.insert(drogerie)
 
-        let geschaeft = Geschaeft(name: "Testladen", typ: .lebensmittel)
+        let geschaeft = Geschaeft(name: "Testladen", typen: [.lebensmittel])
         context.insert(geschaeft)
 
         // Manuelle Reihenfolge (bewusst "falsch" gewählt): Drogerie vor Obst.
@@ -141,7 +141,7 @@ struct ShelfOrderLearningServiceTests {
         context.insert(drogerie)
 
         // Dieses Geschäft hat bewusst keine Regale.
-        let geschaeft = Geschaeft(name: "Kiosk", typ: .sonstiges)
+        let geschaeft = Geschaeft(name: "Kiosk", typen: [.sonstiges])
         context.insert(geschaeft)
 
         let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorie: obst)

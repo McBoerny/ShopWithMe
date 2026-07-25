@@ -83,8 +83,31 @@ final class Geschaeft {
     var id: UUID
     /// Anzeigename des Geschäfts, z.B. "Rewe am Markt".
     var name: String
-    /// Geschäftstyp (Lebensmittel, Drogerie, …).
+    /// Geschäftstyp (Lebensmittel, Drogerie, …) — seit Einführung von ``typen``
+    /// (Mehrfachauswahl) nicht mehr direkt von außen gesetzt, bleibt aber als
+    /// Migrations-Fallback für vor diesem Zeitpunkt angelegte Geschäfte sowie als
+    /// führender (erster) Typ erhalten — von ``typen`` synchron gehalten.
     var typ: GeschaeftTyp
+    /// Rohwert für ``typen``. Optional gespeichert, damit vor Einführung der
+    /// Mehrfachauswahl angelegte Geschäfte (deren Datensatz diese Spalte noch nicht
+    /// kennt) beim automatischen Laden nicht abstürzen — ein `nil`/leerer Rohwert
+    /// fällt auf `[typ]` zurück.
+    private var typenRaw: [String]?
+    /// Geschäftstypen (Lebensmittel, Drogerie, …) — ein Geschäft kann mehrere
+    /// gleichzeitig haben (z.B. Drogerie + Lebensmittel). Der erste Wert gilt als
+    /// führender Typ und bleibt zusätzlich in ``typ`` gespiegelt (Icon-Anzeige,
+    /// Migrations-Fallback).
+    var typen: [GeschaeftTyp] {
+        get {
+            guard let typenRaw, !typenRaw.isEmpty else { return [typ] }
+            let ergebnis = typenRaw.compactMap(GeschaeftTyp.init(rawValue:))
+            return ergebnis.isEmpty ? [typ] : ergebnis
+        }
+        set {
+            typenRaw = newValue.map(\.rawValue)
+            typ = newValue.first ?? .sonstiges
+        }
+    }
     /// Optionale Adresse.
     var adresse: String?
     /// Breitengrad — für die zukünftige, standortbasierte Ladenerkennung vorbereitet,
@@ -138,10 +161,11 @@ final class Geschaeft {
         set { alternativeNamenRaw = newValue.isEmpty ? nil : newValue.joined(separator: "\n") }
     }
 
-    init(name: String, typ: GeschaeftTyp, adresse: String? = nil) {
+    init(name: String, typen: [GeschaeftTyp], adresse: String? = nil) {
         self.id = UUID()
         self.name = name
-        self.typ = typ
+        self.typ = typen.first ?? .sonstiges
+        self.typenRaw = typen.map(\.rawValue)
         self.adresse = adresse
     }
 

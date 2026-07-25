@@ -40,13 +40,14 @@ ArtikelKategorie          Regal                      Geschaeft
 ────────────────          ─────                      ─────────
 id: UUID                  id: UUID                    id: UUID
 name: String              name: String                name: String
-standardSymbol: String    sortIndex: Int              typ: GeschaeftTyp
-standardFarbeHex: String  ┌─geschaeft: Geschaeft?      adresse: String?
-sortIndex: Int            │ kategorien: [ArtikelKategorie]  breitengrad/laengengrad: Double?
-┌─regale: [Regal] ────────┘                            regale: [Regal] ──┘
-└─geschaefte: [Geschaeft] ─────────────────────────────kategorien: [ArtikelKategorie]
-  (many-to-many, direkt —                              regalSortierModusRaw: String?
-   ohne Regal nötig)                                    alternativeNamenRaw: String?
+standardSymbol: String    sortIndex: Int              typ: GeschaeftTyp (führend)
+standardFarbeHex: String  ┌─geschaeft: Geschaeft?      typenRaw: [String]? (→ typen)
+sortIndex: Int            │ kategorien: [ArtikelKategorie]  adresse: String?
+┌─regale: [Regal] ────────┘                            breitengrad/laengengrad: Double?
+└─geschaefte: [Geschaeft] ─────────────────────────────regale: [Regal] ──┘
+  (many-to-many, direkt —                              kategorien: [ArtikelKategorie]
+   ohne Regal nötig)                                    regalSortierModusRaw: String?
+                                                         alternativeNamenRaw: String?
                                                          kaufEintraege: [KaufEintrag]
                                                            (cascade — siehe unten)
 

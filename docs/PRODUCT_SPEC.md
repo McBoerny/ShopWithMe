@@ -17,7 +17,8 @@ Geschäfte und den Einkaufsvorgang selbst intelligent unterstützt.
   keiner UI mehr angezeigt oder vom Anwender/der KI gesetzt.
 - **Artikelkategorie**: z.B. Obst, Milchprodukte, Drogerieartikel. Kategorien sind global,
   nicht pro Geschäft.
-- **Geschäft**: hat einen Typ (Lebensmittel, Drogerie, Baumarkt, Apotheke, …) sowie
+- **Geschäft**: hat einen oder mehrere Typen (Lebensmittel, Drogerie, Baumarkt,
+  Apotheke, …, z.B. Drogerie + Lebensmittel bei einem dm) sowie
   eigene **Kategorien** und (optional) eigene **Regale**. Kategorien sind wichtiger
   als Regale: ein Geschäft kann Kategorien direkt zugeordnet bekommen, ganz ohne ein
   Regal anzulegen — nur diese (bzw. über ein Regal zugeordneten) Kategorien werden

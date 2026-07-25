@@ -99,7 +99,7 @@ struct GeschaeftDetailView: View {
                             Text(geschaeft.name)
                                 .font(.title3.bold())
                                 .foregroundStyle(.primary)
-                            Text(geschaeft.typ.anzeigename)
+                            Text(geschaeft.typen.map(\.anzeigename).joined(separator: ", "))
                                 .foregroundStyle(.secondary)
                             if let adresse = geschaeft.adresse, !adresse.isEmpty {
                                 Text(adresse)
@@ -332,7 +332,7 @@ private struct ArtikelPreisVerlaufView: View {
 
 #Preview {
     NavigationStack {
-        GeschaeftDetailView(geschaeft: Geschaeft(name: "Rewe", typ: .lebensmittel))
+        GeschaeftDetailView(geschaeft: Geschaeft(name: "Rewe", typen: [.lebensmittel]))
     }
     .modelContainer(for: [Geschaeft.self, Regal.self, ArtikelKategorie.self], inMemory: true)
 }

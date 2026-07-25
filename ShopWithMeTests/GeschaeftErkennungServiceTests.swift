@@ -24,7 +24,7 @@ struct GeschaeftErkennungServiceTests {
     func erkenntBereitsAngelegtesGeschaeftAnhandDesNamens() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
-        let rewe = Geschaeft(name: "Rewe am Markt", typ: .lebensmittel)
+        let rewe = Geschaeft(name: "Rewe am Markt", typen: [.lebensmittel])
         context.insert(rewe)
 
         let standort = CLLocation(latitude: 52.5, longitude: 13.4)
@@ -45,7 +45,7 @@ struct GeschaeftErkennungServiceTests {
     func erkenntBereitsAngelegtesGeschaeftAnhandDerKoordinatenTrotzAbweichendemNamen() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
-        let geschaeft = Geschaeft(name: "Mein Supermarkt", typ: .lebensmittel)
+        let geschaeft = Geschaeft(name: "Mein Supermarkt", typen: [.lebensmittel])
         geschaeft.breitengrad = 52.5
         geschaeft.laengengrad = 13.4
         context.insert(geschaeft)
@@ -146,7 +146,7 @@ struct GeschaeftErkennungServiceTests {
     func dedupliziertDoppelteApppleMapsTrefferDesselbenBekanntenGeschaefts() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
-        let rewe = Geschaeft(name: "Rewe am Markt", typ: .lebensmittel)
+        let rewe = Geschaeft(name: "Rewe am Markt", typen: [.lebensmittel])
         context.insert(rewe)
 
         // Zwei Apple-Maps-Einträge für denselben physischen Laden (z.B. unter
@@ -198,7 +198,7 @@ struct GeschaeftErkennungServiceTests {
         // nicht greifen, nur der (Teilstring-)Namensabgleich. Vor der Konsolidierung
         // auf `istGleicherOrt` prüfte `istSelberLaden` nur exakte Namensgleichheit
         // und hätte diesen Fall fälschlich als zwei verschiedene Läden gelistet.
-        let bioEcke = Geschaeft(name: "Bio Ecke", typ: .lebensmittel)
+        let bioEcke = Geschaeft(name: "Bio Ecke", typen: [.lebensmittel])
         context.insert(bioEcke)
 
         // Ein zweiter Apple-Maps-Treffer für denselben physischen Laden, dessen Name

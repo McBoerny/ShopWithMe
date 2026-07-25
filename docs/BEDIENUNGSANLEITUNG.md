@@ -35,8 +35,9 @@ Intelligence nicht verfügbar, bleibt die manuelle Auswahl jederzeit möglich.
 
 ## Geschäfte
 
-Ein Geschäft hat einen Typ (Lebensmittel, Drogerie, Baumarkt, Apotheke, …) und
-optional eine Adresse. Kategorien sind der primäre Weg, Artikel für ein Geschäft
+Ein Geschäft hat einen oder mehrere Typen (Lebensmittel, Drogerie, Baumarkt,
+Apotheke, …, z.B. Drogerie + Lebensmittel bei einem dm — Mehrfachauswahl beim
+Bearbeiten der Stammdaten) und optional eine Adresse. Kategorien sind der primäre Weg, Artikel für ein Geschäft
 verfügbar zu machen — direkt im Geschäft zuordenbar, ganz ohne Regal. Regale sind
 zusätzlich optional und dienen vor allem dazu, die Reihenfolge beim Einkaufen zu
 organisieren; du kannst ihnen ebenfalls Kategorien zuordnen. Die Regal-Reihenfolge
