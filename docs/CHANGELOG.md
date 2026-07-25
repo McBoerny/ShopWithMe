@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.6 (Build 77) — Artikelauswahl: kompakter, alphabetisch, Sofort-Hinzufügen
+
+- `ArtikelHinzufuegenView` grundlegend überarbeitet (GitHub #8):
+  - **Sofort-Hinzufügen**: ein Tap auf einen Artikel fügt ihn direkt zur
+    Einkaufsliste hinzu, statt ihn nur auszuwählen — das bisherige
+    Mehrfachauswahl-Muster (markieren, dann per „Hinzufügen (N)“ übernehmen)
+    entfällt vollständig, analog zum bereits bestehenden Verhalten neu
+    angelegter Artikel (#6). Toolbar hat dafür nur noch einen „Fertig“-Button.
+  - **Alphabetische Gruppierung**: Artikel erscheinen in Abschnitten nach
+    Anfangsbuchstaben (``gruppierteArtikel``) — bei langen Listen zeigt iOS
+    dafür automatisch eine A–Z-Sprungleiste wie im Adressbuch.
+  - **Kompaktere Zeilen**: kleineres Kategorie-Icon, keine Kategorie-Unterzeile
+    mehr, kein Auswahl-Indikator (entfällt mit dem Sofort-Hinzufügen).
+
 ## v0.6 (Build 76) — Belegscan: Geschäftserkennung über die Adresse
 
 - **`Geschaeft.passendes(fuerErkannterName:erkannteAdresse:unter:)`** matcht

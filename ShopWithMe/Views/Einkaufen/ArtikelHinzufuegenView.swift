@@ -1,14 +1,16 @@
 import SwiftUI
 import SwiftData
 
-/// Sheet zum Hinzufügen mehrerer Artikel zu ``einkaufsliste`` in einem Durchgang.
+/// Sheet zum Hinzufügen von Artikeln zu ``einkaufsliste``.
 ///
-/// Bietet eine Suche über alle bereits angelegten Artikel an. Ein Tap auf einen
-/// ganzen Artikeleintrag wählt ihn aus bzw. hebt die Auswahl wieder auf; erst
-/// „Hinzufügen“ übernimmt alle ausgewählten Artikel auf einmal. Findet die Suche
-/// keinen exakten Treffer, kann der gesuchte Artikel direkt hier angelegt werden —
-/// er landet danach sofort auf ``einkaufsliste`` (GitHub #6), ganz ohne den
-/// zusätzlichen Tap auf „Hinzufügen“.
+/// Bietet eine Suche über alle bereits angelegten Artikel an, alphabetisch nach
+/// Anfangsbuchstaben gruppiert — bei vielen Artikeln zeigt iOS dafür automatisch
+/// eine A–Z-Sprungleiste am rechten Rand, wie im Adressbuch (GitHub #8). Ein Tap
+/// auf einen Artikel fügt ihn sofort zu ``einkaufsliste`` hinzu, ganz ohne
+/// zusätzlichen Bestätigungsschritt — die Zeile zeigt danach „Auf Liste“ und ist
+/// nicht mehr antippbar. Findet die Suche keinen exakten Treffer, kann der
+/// gesuchte Artikel direkt hier angelegt werden — er landet danach ebenfalls
+/// sofort auf der Liste (GitHub #6).
 struct ArtikelHinzufuegenView: View {
     let einkaufsliste: Einkaufsliste
 
@@ -23,7 +25,6 @@ struct ArtikelHinzufuegenView: View {
     // daher eine eigene, davon unabhängige Referenz auf den zuletzt angelegten
     // Entwurf, um ihn nach dem Schließen des Editier-Sheets noch verarbeiten zu können.
     @State private var zuletztAngelegterEntwurf: Artikel?
-    @State private var ausgewaehlteObjectIDs: Set<ObjectIdentifier> = []
 
     private var getrimmterSuchtext: String {
         suchtext.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -40,6 +41,16 @@ struct ArtikelHinzufuegenView: View {
         }
     }
 
+    /// ``gefilterteArtikel`` gruppiert nach Anfangsbuchstaben, alphabetisch — die
+    /// Grundlage für die automatische A–Z-Sprungleiste (GitHub #8).
+    private var gruppierteArtikel: [(buchstabe: String, artikel: [Artikel])] {
+        let gruppen = Dictionary(grouping: gefilterteArtikel) { artikel -> String in
+            guard let erstesZeichen = artikel.name.first else { return "#" }
+            return String(erstesZeichen).uppercased()
+        }
+        return gruppen.keys.sorted().map { buchstabe in (buchstabe, gruppen[buchstabe] ?? []) }
+    }
+
     var body: some View {
         NavigationStack {
             List {
@@ -53,23 +64,18 @@ struct ArtikelHinzufuegenView: View {
                     }
                 }
 
-                Section {
-                    ForEach(gefilterteArtikel) { artikel in
-                        let bereitsAufListe = einkaufsliste.enthaelt(artikel)
-                        Button {
-                            auswahlUmschalten(artikel)
-                        } label: {
-                            ArtikelAuswahlZeile(
-                                artikel: artikel,
-                                istAusgewaehlt: ausgewaehlteObjectIDs.contains(ObjectIdentifier(artikel)),
-                                bereitsAufListe: bereitsAufListe
-                            )
+                ForEach(gruppierteArtikel, id: \.buchstabe) { gruppe in
+                    Section(gruppe.buchstabe) {
+                        ForEach(gruppe.artikel) { artikel in
+                            let bereitsAufListe = einkaufsliste.enthaelt(artikel)
+                            Button {
+                                hinzufuegen(artikel)
+                            } label: {
+                                ArtikelAuswahlZeile(artikel: artikel, bereitsAufListe: bereitsAufListe)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(bereitsAufListe)
                         }
-                        .buttonStyle(.plain)
-                        .disabled(bereitsAufListe)
-                        .listRowBackground(
-                            ausgewaehlteObjectIDs.contains(ObjectIdentifier(artikel)) ? Color.accentColor.opacity(0.12) : nil
-                        )
                     }
                 }
 
@@ -85,17 +91,8 @@ struct ArtikelHinzufuegenView: View {
             .navigationTitle("Artikel hinzufügen")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Abbrechen") { dismiss() }
-                }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button {
-                        ausgewaehlteHinzufuegen()
-                    } label: {
-                        Text(ausgewaehlteObjectIDs.isEmpty ? "Hinzufügen" : "Hinzufügen (\(ausgewaehlteObjectIDs.count))")
-                    }
-                    .disabled(ausgewaehlteObjectIDs.isEmpty)
-                    .fontWeight(.semibold)
+                    Button("Fertig") { dismiss() }
                 }
             }
             .sheet(item: $neuerArtikelEntwurf, onDismiss: nachNeuanlageAufraeumen) { entwurf in
@@ -104,25 +101,11 @@ struct ArtikelHinzufuegenView: View {
         }
     }
 
-    private func auswahlUmschalten(_ artikel: Artikel) {
-        let id = ObjectIdentifier(artikel)
-        if ausgewaehlteObjectIDs.contains(id) {
-            ausgewaehlteObjectIDs.remove(id)
-        } else {
-            ausgewaehlteObjectIDs.insert(id)
-        }
-    }
-
-    private func ausgewaehlteHinzufuegen() {
-        let ausgewaehlteArtikel = alleArtikel.filter { ausgewaehlteObjectIDs.contains(ObjectIdentifier($0)) }
-        guard !ausgewaehlteArtikel.isEmpty else { return }
+    private func hinzufuegen(_ artikel: Artikel) {
         Task {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
-                for artikel in ausgewaehlteArtikel {
-                    einkaufsliste.artikelHinzufuegen(artikel, context: modelContext)
-                }
+                einkaufsliste.artikelHinzufuegen(artikel, context: modelContext)
             }
-            dismiss()
         }
     }
 
@@ -143,42 +126,31 @@ struct ArtikelHinzufuegenView: View {
     private func nachNeuanlageAufraeumen() {
         defer { zuletztAngelegterEntwurf = nil }
         guard let entwurf = zuletztAngelegterEntwurf, entwurf.modelContext != nil else { return }
-        Task {
-            await DatabaseLeaseService.performMicroLease(context: modelContext) {
-                einkaufsliste.artikelHinzufuegen(entwurf, context: modelContext)
-            }
-        }
+        hinzufuegen(entwurf)
         suchtext = ""
     }
 }
 
-/// Eine Zeile in der Artikelsuche: zeigt Kategorie-Icon/Farbe, den Auswahlstatus
-/// (Kreis/Haken rechts) und — falls der Artikel bereits auf der aktuellen
-/// Einkaufsliste steht — einen Hinweis statt der Auswahlmöglichkeit.
+/// Eine kompakte Zeile in der Artikelsuche: Kategorie-Icon/Farbe, Name und —
+/// falls der Artikel bereits auf der aktuellen Einkaufsliste steht — ein Hinweis
+/// statt der Möglichkeit, ihn erneut hinzuzufügen (GitHub #8).
 private struct ArtikelAuswahlZeile: View {
     let artikel: Artikel
-    let istAusgewaehlt: Bool
     let bereitsAufListe: Bool
 
     private var kategorie: ArtikelKategorie? { artikel.kategorien.first }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             GlassSymbolBadge(
                 symbolName: kategorie?.standardSymbol ?? "shippingbox.fill",
                 farbe: Color(hex: kategorie?.standardFarbeHex ?? "#8E8E93"),
-                groesse: 36
+                groesse: 28
             )
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(artikel.name)
-                    .foregroundStyle(.primary)
-                if let kategorie {
-                    Text(kategorie.name)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
+            Text(artikel.name)
+                .foregroundStyle(.primary)
+                .lineLimit(1)
 
             Spacer()
 
@@ -186,13 +158,8 @@ private struct ArtikelAuswahlZeile: View {
                 Text("Auf Liste")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-            } else {
-                Image(systemName: istAusgewaehlt ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
-                    .foregroundStyle(istAusgewaehlt ? Color.accentColor : Color.secondary.opacity(0.4))
             }
         }
-        .padding(.vertical, 2)
         .contentShape(Rectangle())
     }
 }
