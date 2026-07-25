@@ -1034,9 +1034,13 @@ private struct EinkaufslistenSektionHeader: View {
 /// - Swipe nach links (trailing): erhöht die Menge um ``Artikel/mengenSchritt``.
 /// - Swipe nach rechts (leading): verringert die Menge um ``Artikel/mengenSchritt``.
 ///
-/// Ist der Artikel bereits abgehakt, bietet die Trailing-Swipe-Aktion zusätzlich an, ihn
-/// dauerhaft aus dieser Ansicht zu entfernen (``dauerhaftEntfernen``, `nil` bei noch
-/// offenen Artikeln).
+/// Beide Wischgesten lösen bei vollständigem Swipe die jeweilige Aktion direkt aus
+/// (kein zusätzliches Bestätigen nötig, siehe GitHub #11) — **außer** bei bereits
+/// abgehakten Artikeln: dort bietet die Trailing-Swipe-Aktion zusätzlich an, den
+/// Artikel dauerhaft aus dieser Ansicht zu entfernen (``dauerhaftEntfernen``, `nil`
+/// bei noch offenen Artikeln), und ein voller Swipe löst dann bewusst **nicht**
+/// automatisch aus — sonst könnte ein schnelles Wischen versehentlich dauerhaft
+/// löschen statt nur die Menge zu erhöhen.
 private struct ArtikelAbhakZeile: View {
     let artikel: Artikel
     /// Der offene Einkaufslisten-Eintrag dieses Artikels — `nil`, wenn er bereits
@@ -1082,7 +1086,7 @@ private struct ArtikelAbhakZeile: View {
             }
             .tint(.orange)
         }
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+        .swipeActions(edge: .trailing, allowsFullSwipe: dauerhaftEntfernen == nil) {
             if let dauerhaftEntfernen {
                 Button(role: .destructive, action: dauerhaftEntfernen) {
                     Label("Dauerhaft entfernen", systemImage: "trash")

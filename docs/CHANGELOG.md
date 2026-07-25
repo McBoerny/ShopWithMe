@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.6 (Build 69) — Wischgeste zum Erhöhen ohne Bestätigung
+
+- `ArtikelAbhakZeile` (`EinkaufenView.swift`): die Trailing-Swipe-Aktion
+  „Menge erhöhen“ löst jetzt bei vollständigem Swipe direkt aus, analog zur
+  bereits so funktionierenden Leading-Swipe-Aktion „Menge verringern“
+  (GitHub #11). `allowsFullSwipe` ist jetzt an `dauerhaftEntfernen == nil`
+  gekoppelt statt hart auf `false` — bei bereits abgehakten Artikeln (dort
+  bietet dieselbe Trailing-Aktion zusätzlich destruktives „Dauerhaft
+  entfernen“ an) bleibt die Sicherheitsbremse gegen versehentliches Löschen
+  bei vollem Swipe bestehen.
+
 ## v0.6 (Build 68) — Geschäfte-Liste: NavigationLink vereinfacht
 
 - `GeschaeftListView` nutzte für die Zeilen-Navigation das wertbasierte
