@@ -246,16 +246,36 @@ final class Geschaeft {
         return Set(anzahl.filter { $0.value > 1 }.keys)
     }
 
-    /// Alle Artikelkategorien, die in diesem Geschäft verfügbar sind.
+    /// Alle Artikelkategorien, die in diesem Geschäft manuell verfügbar gemacht
+    /// wurden.
     ///
     /// Leitet sich aus der Vereinigung zweier Wege ab: direkt diesem Geschäft
     /// zugeordnete Kategorien (``kategorien``) sowie Kategorien, die einem seiner
     /// Regale zugeordnet sind (dedupliziert, sortiert nach
-    /// ``ArtikelKategorie/sortIndex``). Beim Einkaufen werden für dieses Geschäft nur
-    /// diese Kategorien angezeigt.
+    /// ``ArtikelKategorie/sortIndex``). Zeigt bewusst **nicht** die zusätzlich über
+    /// ``verfuegbareKategorien(alleKategorien:)`` einbezogenen, rein aus dem
+    /// Geschäftstyp abgeleiteten Kategorien — diese Variante ist die Grundlage für
+    /// die manuelle Verwaltung (``GeschaeftDetailView``, Entfernen einer Kategorie),
+    /// wo nur tatsächlich zugeordnete Kategorien entfernbar sein dürfen.
     var verfuegbareKategorien: [ArtikelKategorie] {
         var gesehen = Set<PersistentIdentifier>()
         return (kategorien + regale.flatMap(\.kategorien))
+            .filter { gesehen.insert($0.persistentModelID).inserted }
+            .sorted { $0.sortIndex < $1.sortIndex }
+    }
+
+    /// Wie ``verfuegbareKategorien``, ergänzt um Kategorien, die zwar keinem Regal
+    /// oder ``kategorien`` dieses Geschäfts zugeordnet sind, aber laut
+    /// ``ArtikelKategorie/geschaeftsTypen`` als typische Warengruppe für einen der
+    /// ``typen`` dieses Geschäfts gelten (GitHub #5). Wird für die tatsächliche
+    /// Verfügbarkeit beim Einkaufen genutzt (siehe ``ArtikelVerfuegbarkeitService``,
+    /// ``Artikel/fuehrendeKategorie(inGeschaeft:context:)``) — `alleKategorien`
+    /// kommt dort aus einem ``ModelContext``-Fetch bzw. einem bestehenden `@Query`.
+    func verfuegbareKategorien(alleKategorien: [ArtikelKategorie]) -> [ArtikelKategorie] {
+        let eigeneTypen = Set(typen)
+        let typBasiert = alleKategorien.filter { !Set($0.geschaeftsTypen).isDisjoint(with: eigeneTypen) }
+        var gesehen = Set<PersistentIdentifier>()
+        return (verfuegbareKategorien + typBasiert)
             .filter { gesehen.insert($0.persistentModelID).inserted }
             .sorted { $0.sortIndex < $1.sortIndex }
     }

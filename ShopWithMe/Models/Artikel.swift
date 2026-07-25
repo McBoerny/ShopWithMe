@@ -156,7 +156,9 @@ extension Artikel {
         if let mitRegal = kandidaten.first(where: { geschaeft.regal(fuer: $0) != nil }) {
             return mitRegal
         }
-        if let verfuegbar = kandidaten.first(where: { geschaeft.verfuegbareKategorien.contains($0) }) {
+        let alleKategorien = (try? context.fetch(FetchDescriptor<ArtikelKategorie>())) ?? []
+        let verfuegbareKategorien = geschaeft.verfuegbareKategorien(alleKategorien: alleKategorien)
+        if let verfuegbar = kandidaten.first(where: { verfuegbareKategorien.contains($0) }) {
             return verfuegbar
         }
         return kandidaten[0]

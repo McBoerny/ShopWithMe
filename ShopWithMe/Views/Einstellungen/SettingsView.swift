@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// Einstiegspunkt für Einstellungen: Hilfe/Anleitungen, Artikel-, Geschäfte-,
-/// Kategorien- und Einkaufslisten-Verwaltung, Datenbank-Speicherort und
-/// App-Informationen.
+/// Kategorien-, Geschäftstypen- und Einkaufslisten-Verwaltung, Datenbank-Speicherort
+/// und App-Informationen.
 ///
 /// „Artikel“ und „Geschäfte“ sind seit GitHub #1 keine eigenen Tabs mehr (die App
 /// startet immer direkt auf „Einkaufen“, siehe ``RootView``) — beide verlinken
@@ -32,6 +32,11 @@ struct SettingsView: View {
                         KategorienVerwaltungView()
                     } label: {
                         Label("Kategorien", systemImage: "tag")
+                    }
+                    NavigationLink {
+                        GeschaeftsTypenVerwaltungView()
+                    } label: {
+                        Label("Geschäftstypen", systemImage: "square.grid.2x2")
                     }
                     NavigationLink {
                         EinkaufslistenVerwaltungView()

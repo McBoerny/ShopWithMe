@@ -19,7 +19,7 @@ Die App startet immer direkt mit der Einkaufsliste.
   ersetzt aber nicht die weiteren Belegscan-Wege aus dem Einkaufen-Tab bzw. aus der
   Geschäfts-Detailansicht.
 - **Einstellungen** — Hilfe, Artikel- und Geschäfte-Verwaltung (inkl. Regale,
-  Kategorien pro Geschäft), Datenbank-Speicherort.
+  Kategorien pro Geschäft), Geschäftstypen-Verwaltung, Datenbank-Speicherort.
 
 ## Artikel
 
@@ -42,7 +42,12 @@ Intelligence nicht verfügbar, bleibt die manuelle Auswahl jederzeit möglich.
 Ein Geschäft hat einen oder mehrere Typen (Lebensmittel, Drogerie, Baumarkt,
 Apotheke, …, z.B. Drogerie + Lebensmittel bei einem dm — Mehrfachauswahl beim
 Bearbeiten der Stammdaten) und optional eine Adresse. Kategorien sind der primäre Weg, Artikel für ein Geschäft
-verfügbar zu machen — direkt im Geschäft zuordenbar, ganz ohne Regal. Regale sind
+verfügbar zu machen — direkt im Geschäft zuordenbar, ganz ohne Regal. Zusätzlich
+macht jeder Geschäftstyp automatisch seine in den Einstellungen hinterlegten
+Standard-Warengruppen verfügbar (siehe „Geschäftstypen“ unten) — ganz ohne sie dem
+einzelnen Geschäft manuell zuzuordnen; wählst du später dort noch weitere
+Kategorien manuell aus, betrifft das nur dieses eine Geschäft, nicht generell den
+Geschäftstyp. Regale sind
 zusätzlich optional und dienen vor allem dazu, die Reihenfolge beim Einkaufen zu
 organisieren; du kannst ihnen ebenfalls Kategorien zuordnen. Die Regal-Reihenfolge
 legst du entweder manuell per Drag & Drop fest, oder die App lernt sie automatisch
@@ -142,6 +147,11 @@ Import ausschließen.
 - **Artikel / Geschäfte / Kategorien / Einkaufslisten** — die vollständige
   Verwaltung (Anlegen/Bearbeiten/Löschen); die App startet immer direkt mit der
   Einkaufsliste, Artikel und Geschäfte sind daher nur noch hier erreichbar.
+- **Geschäftstypen** — legt je Geschäftstyp (Lebensmittel, Drogerie, …) fest,
+  welche Kategorien als Standard-Warengruppen gelten und dadurch automatisch in
+  jedem Geschäft dieses Typs verfügbar sind (siehe „Geschäfte“ oben). Ist Apple
+  Intelligence verfügbar, schlägt ein „KI-Vorschlag“-Knopf passende Warengruppen
+  vor, bevorzugt aus bereits vorhandenen Kategorien.
 - **Preishistorie** — Aufbewahrungsdauer/Bereinigung alter Preiseinträge.
 - **Datenbank & Speicherort** — verlegt deine Daten in einen selbst gewählten
   Ordner, z.B. einen lokal gespiegelten Cloud-Ordner. Kein automatischer

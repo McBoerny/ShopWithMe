@@ -5,8 +5,9 @@ import SwiftData
 /// Grundlage für den Standard-Filter beim Einkaufen (siehe
 /// `EinkaufslisteView.verfuegbarkeitsgefiltert(_:)`).
 ///
-/// Besitzt das Geschäft eigene Kategorien (``Geschaeft/verfuegbareKategorien`` —
-/// direkt zugeordnet oder über ein Regal, ein Regal ist dafür nicht erforderlich),
+/// Besitzt das Geschäft eigene Kategorien (``Geschaeft/verfuegbareKategorien(alleKategorien:)``
+/// — direkt zugeordnet, über ein Regal oder über den Geschäftstyp, siehe
+/// ``ArtikelKategorie/geschaeftsTypen``; ein Regal ist dafür nicht erforderlich),
 /// ist ein Artikel verfügbar, wenn mindestens eine seiner Kategorien darin
 /// enthalten ist (ein Artikel kann mehreren Kategorien angehören).
 /// Besitzt das Geschäft keine eigenen Kategorien, lernt die App stattdessen aus der
@@ -16,9 +17,11 @@ import SwiftData
 /// unmittelbar auch für künftige Einkäufe in diesem Geschäft "verfügbar".
 enum ArtikelVerfuegbarkeitService {
     static func istVerfuegbar(_ artikel: Artikel, in geschaeft: Geschaeft, context: ModelContext) -> Bool {
-        guard geschaeft.verfuegbareKategorien.isEmpty else {
+        let alleKategorien = (try? context.fetch(FetchDescriptor<ArtikelKategorie>())) ?? []
+        let verfuegbareKategorien = geschaeft.verfuegbareKategorien(alleKategorien: alleKategorien)
+        guard verfuegbareKategorien.isEmpty else {
             let kategorien = artikel.effektiveKategorien(context: context)
-            return kategorien.contains(where: geschaeft.verfuegbareKategorien.contains)
+            return kategorien.contains(where: verfuegbareKategorien.contains)
         }
 
         let artikelID = artikel.persistentModelID

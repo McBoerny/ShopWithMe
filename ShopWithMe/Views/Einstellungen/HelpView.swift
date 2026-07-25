@@ -32,11 +32,24 @@ private struct HilfeThema: Identifiable {
             text: """
             Unter Einstellungen → Geschäfte kannst du einem Geschäft direkt Kategorien zuordnen \
             („Kategorien“-Abschnitt → „Kategorie hinzufügen“) — ganz ohne ein Regal \
-            anzulegen. Nur zugeordnete Kategorien gelten in diesem Geschäft als \
-            verfügbar und tauchen beim Einkaufen dort auf. So zeigt dir die App im \
-            Baumarkt keine Milchprodukte an. Regale sind optional und dienen nur \
-            dazu, die Reihenfolge beim Einkaufen zu organisieren — du kannst ihnen \
-            zusätzlich Kategorien zuordnen (Regal antippen), musst es aber nicht.
+            anzulegen. Zusammen mit den unter Einstellungen → Geschäftstypen \
+            hinterlegten Standard-Warengruppen des Geschäftstyps ergibt das die \
+            verfügbaren Kategorien, die beim Einkaufen dort auftauchen. So zeigt dir \
+            die App im Baumarkt keine Milchprodukte an. Regale sind optional und \
+            dienen nur dazu, die Reihenfolge beim Einkaufen zu organisieren — du \
+            kannst ihnen zusätzlich Kategorien zuordnen (Regal antippen), musst es \
+            aber nicht.
+            """
+        ),
+        HilfeThema(
+            titel: "Geschäftstypen & Standard-Warengruppen",
+            text: """
+            Unter Einstellungen → Geschäftstypen legst du je Geschäftstyp (z.B. \
+            Drogerie) fest, welche Kategorien dort typischerweise geführt werden. \
+            Jedes Geschäft mit diesem Typ macht diese Kategorien automatisch \
+            verfügbar, ganz ohne sie dem einzelnen Geschäft manuell zuzuordnen. Ist \
+            Apple Intelligence verfügbar, schlägt „KI-Vorschlag“ passende \
+            Warengruppen vor.
             """
         ),
         HilfeThema(

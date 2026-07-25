@@ -21,9 +21,12 @@ struct KategorieHinzufuegenSheet: View {
         geschaeft.regale.sorted { $0.sortIndex < $1.sortIndex }
     }
 
-    /// Kategorien, die in diesem Geschäft noch nicht verfügbar sind.
+    /// Kategorien, die in diesem Geschäft noch nicht verfügbar sind — Kategorien,
+    /// die bereits über den Geschäftstyp automatisch verfügbar sind (siehe
+    /// ``Geschaeft/verfuegbareKategorien(alleKategorien:)``), werden hier nicht
+    /// nochmal zum manuellen Hinzufügen angeboten.
     private var nichtVerfuegbareKategorien: [ArtikelKategorie] {
-        let verfuegbareIDs = Set(geschaeft.verfuegbareKategorien.map(\.persistentModelID))
+        let verfuegbareIDs = Set(geschaeft.verfuegbareKategorien(alleKategorien: alleKategorien).map(\.persistentModelID))
         return alleKategorien.filter { !verfuegbareIDs.contains($0.persistentModelID) }
     }
 

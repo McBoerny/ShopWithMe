@@ -91,6 +91,36 @@ enum AISuggestionService {
         let antwort = try await session.respond(to: "Artikel: \(name)", generating: ArtikelMatchVorschlag.self)
         return antwort.content
     }
+
+    /// Schlägt für einen ``GeschaeftTyp`` (z.B. Drogerie) typische Warengruppen vor,
+    /// genutzt in der Typ-Verwaltung der Einstellungen (GitHub #5), um
+    /// ``ArtikelKategorie/geschaeftsTypen`` schneller zu befüllen. Bestehende
+    /// Kategorienamen werden als Kontext mitgegeben, damit das Modell bevorzugt
+    /// vorhandene wiederverwendet statt Dubletten vorzuschlagen.
+    static func vorschlag(
+        fuerGeschaeftsTyp typ: GeschaeftTyp,
+        bekannteKategorien: [String]
+    ) async throws -> WarengruppenVorschlag {
+        let anweisungen = """
+        Du hilfst in einer Einkaufs-App dabei, für einen Geschäftstyp typische \
+        Warengruppen vorzuschlagen. Nenne mehrere passende Warengruppen für den \
+        genannten Geschäftstyp. Verwende nach Möglichkeit vorhandene Namen aus \
+        dieser Liste, falls sie passen: \(bekannteKategorien.joined(separator: ", ")). \
+        Schlage nur dann neue Namen vor, wenn keine passende bestehende Warengruppe \
+        dabei ist.
+        """
+        let session = LanguageModelSession(instructions: anweisungen)
+        let antwort = try await session.respond(to: "Geschäftstyp: \(typ.anzeigename)", generating: WarengruppenVorschlag.self)
+        return antwort.content
+    }
+}
+
+/// Von der lokalen Apple-KI vorgeschlagene, typische Warengruppen für einen
+/// ``GeschaeftTyp`` — siehe ``AISuggestionService/vorschlag(fuerGeschaeftsTyp:bekannteKategorien:)``.
+@Generable
+struct WarengruppenVorschlag {
+    @Guide(description: "Namen typischer Warengruppen für diesen Geschäftstyp, bevorzugt aus den bekannten Namen")
+    var kategorieNamen: [String]
 }
 
 /// Von der lokalen Apple-KI vorgeschlagene, am besten passende bestehende

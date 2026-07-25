@@ -41,6 +41,21 @@ final class ArtikelKategorie {
     /// ist — siehe ``Geschaeft/kategorien``.
     var geschaefte: [Geschaeft] = []
 
+    /// Rohwert für ``geschaeftsTypen``. Optional gespeichert, damit vor Einführung
+    /// dieses Attributs angelegte Kategorien beim automatischen Laden nicht
+    /// abstürzen — ein `nil`-Rohwert fällt auf eine leere Liste zurück.
+    private var geschaeftsTypenRaw: [String]?
+    /// Geschäftstypen (z.B. ``GeschaeftTyp/drogerie``), für die diese Kategorie als
+    /// typische Warengruppe gilt — unabhängig von einer tatsächlichen Zuordnung zu
+    /// einem konkreten ``Geschaeft`` (siehe ``geschaefte``). Grundlage dafür, dass
+    /// ``Geschaeft/verfuegbareKategorien(alleKategorien:)`` diese Kategorie für jedes
+    /// Geschäft mit passendem Typ automatisch als verfügbar ansieht (GitHub #5),
+    /// ohne sie in ``geschaefte`` zu persistieren.
+    var geschaeftsTypen: [GeschaeftTyp] {
+        get { (geschaeftsTypenRaw ?? []).compactMap(GeschaeftTyp.init(rawValue:)) }
+        set { geschaeftsTypenRaw = newValue.map(\.rawValue) }
+    }
+
     init(name: String, standardSymbol: String, standardFarbeHex: String, sortIndex: Int = 0) {
         self.id = UUID()
         self.name = name

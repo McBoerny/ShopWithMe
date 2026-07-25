@@ -83,6 +83,31 @@ struct ModelTests {
     }
 
     @Test
+    func verfuegbareKategorienMitAlleKategorienEnthaeltTypBasierteWarengruppen() throws {
+        // GitHub #5: eine Kategorie ohne jede manuelle Zuordnung zum Geschäft gilt
+        // trotzdem als verfügbar, sobald sie einem der Geschäftstypen zugeordnet ist.
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        context.insert(obst)
+        let zahnpasta = ArtikelKategorie(name: "Zahnpasta", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
+        zahnpasta.geschaeftsTypen = [.drogerie]
+        context.insert(zahnpasta)
+        let werkzeug = ArtikelKategorie(name: "Werkzeug", standardSymbol: "hammer.fill", standardFarbeHex: "#8E8E93")
+        werkzeug.geschaeftsTypen = [.baumarkt]
+        context.insert(werkzeug)
+
+        let geschaeft = Geschaeft(name: "Testladen", typen: [.lebensmittel, .drogerie])
+        context.insert(geschaeft)
+        geschaeft.kategorien = [obst]
+
+        let alleKategorien = [obst, zahnpasta, werkzeug]
+        #expect(geschaeft.verfuegbareKategorien(alleKategorien: alleKategorien).map(\.name) == ["Obst", "Zahnpasta"])
+        // Die parameterlose Variante bleibt unverändert rein manuell:
+        #expect(geschaeft.verfuegbareKategorien.map(\.name) == ["Obst"])
+    }
+
+    @Test
     func kategorieDirektEntferntMachtSieNichtMehrVerfuegbar() throws {
         // Spiegelt `GeschaeftDetailView.kategorieEntfernen`: eine direkt (ohne Regal)
         // zugeordnete Kategorie wird über `Geschaeft.kategorien` entfernt.

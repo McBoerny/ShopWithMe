@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.6 (Build 67) — Geschäftstyp: Standard-Warengruppen
+
+- **`ArtikelKategorie.geschaeftsTypen: [GeschaeftTyp]`** (neu): eine Kategorie
+  kann als typische Warengruppe für einen oder mehrere Geschäftstypen markiert
+  werden — verwaltet über die neue Einstellungen-Seite „Geschäftstypen“
+  (`GeschaeftsTypenVerwaltungView`), inkl. optionalem KI-Vorschlag
+  (`AISuggestionService.vorschlag(fuerGeschaeftsTyp:bekannteKategorien:)`,
+  analog zum bestehenden Artikel-Kategorie-Vorschlag).
+- **`Geschaeft.verfuegbareKategorien(alleKategorien:)`** (neu): ergänzt die
+  bisherige, rein manuelle `verfuegbareKategorien` um automatisch aus den
+  Geschäftstypen abgeleitete Kategorien — ein Geschäft mit passendem Typ macht
+  diese Warengruppen verfügbar, ganz ohne sie manuell zuzuordnen. Genutzt von
+  `ArtikelVerfuegbarkeitService`, `Artikel.fuehrendeKategorie` und
+  `KategorieHinzufuegenSheet`; die parameterlose Variante bleibt unverändert
+  für die rein manuelle Verwaltung in `GeschaeftDetailView` (Entfernen einer
+  Kategorie darf nur dort greifen, wo sie tatsächlich zugeordnet ist).
+- Migration rein additiv (`geschaeftsTypenRaw: [String]?`), keine neue
+  `SchemaVN`/`MigrationStage` nötig.
+- GitHub #5, Teilumsetzung: die Apple-Maps-Typerkennung beim Anlegen eines
+  Geschäfts (`GeschaeftErkennungService.typVorschlag`) gab es bereits; die
+  automatische Warengruppen-Vorfilterung beim Einkaufen ganz ohne
+  Geschäftsauswahl ist bewusst nicht enthalten (separates Folge-Ticket).
+
 ## v0.6 (Build 66) — Neu angelegter Artikel landet sofort auf der Einkaufsliste
 
 - Legt der Nutzer in `ArtikelHinzufuegenView` (Einkaufsliste → „Artikel
