@@ -50,4 +50,17 @@ struct ReceiptScanServiceTests {
         #expect(zeilen.boundingBox(fuerArtikelName: "Vollmilch") == nil)
         #expect([ErkannteZeile]().boundingBox(fuerArtikelName: "Vollmilch") == nil)
     }
+
+    @Test
+    func boundingBoxIgnoriertSehrKurzeZeilenBeiUmgekehrterRichtung() {
+        // GitHub #17: eine sehr kurze OCR-Zeile (z.B. eine einzelne Trennziffer) darf
+        // nicht per umgekehrtem Teilstring-Abgleich fast jeden Artikelnamen treffen —
+        // sonst liefert `first` für jede Position dieselbe erste Zeile zurück.
+        let zeilen = [
+            ErkannteZeile(text: "1", boundingBox: CGRect(x: 0, y: 0.9, width: 1, height: 0.05)),
+            ErkannteZeile(text: "Vollmilch 1,5L", boundingBox: CGRect(x: 0, y: 0.5, width: 1, height: 0.05)),
+        ]
+        #expect(zeilen.boundingBox(fuerArtikelName: "Vollmilch") == CGRect(x: 0, y: 0.5, width: 1, height: 0.05))
+        #expect(zeilen.boundingBox(fuerArtikelName: "Butter") == nil)
+    }
 }

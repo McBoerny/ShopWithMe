@@ -63,10 +63,17 @@ extension Array where Element == ErkannteZeile {
     /// `BelegScanView.passtZu`/`passendesArtikel`) — oder `nil`, wenn keine Zeile
     /// passt. Grundlage für die Positions-Markierung im Original-Beleg
     /// (`docs/BELEGSCAN.md`).
+    ///
+    /// Die umgekehrte Richtung (`artikelName` enthält den Zeilentext) verlangt
+    /// mindestens 3 Zeichen Zeilentext — sonst matchen sehr kurze, generische
+    /// OCR-Fragmente (einzelne Ziffern, Trennzeichen) fast jeden Artikelnamen und
+    /// liefern für jede Position dieselbe (meist erste) Zeile zurück, statt für
+    /// jeden Preis eine eigene, korrekte Markierung zu finden (GitHub #17).
     func boundingBox(fuerArtikelName artikelName: String) -> CGRect? {
-        first {
-            $0.text.localizedCaseInsensitiveContains(artikelName)
-                || artikelName.localizedCaseInsensitiveContains($0.text)
+        first { zeile in
+            let text = zeile.text.trimmingCharacters(in: .whitespaces)
+            if text.localizedCaseInsensitiveContains(artikelName) { return true }
+            return text.count >= 3 && artikelName.localizedCaseInsensitiveContains(text)
         }?.boundingBox
     }
 }

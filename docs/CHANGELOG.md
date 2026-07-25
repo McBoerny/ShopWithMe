@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.6 (Build 72) — Belegscan: Preis-Markierung je Position korrigiert
+
+- **`Array<ErkannteZeile>.boundingBox(fuerArtikelName:)`** (`ReceiptScanService.swift`):
+  die umgekehrte Teilstring-Richtung (Artikelname enthält den OCR-Zeilentext)
+  verlangt jetzt mindestens 3 Zeichen Zeilentext. Grund (GitHub #17): sehr
+  kurze, generische OCR-Fragmente (einzelne Ziffern, Trennzeichen) matchten
+  zuvor fast jeden Artikelnamen — `first { ... }` lieferte dadurch für jede
+  Position dieselbe (meist erste) Zeile zurück, statt für jeden Preis die
+  tatsächlich passende Stelle im Beleg-Foto zu markieren.
+
 ## v0.6 (Build 71) — Geschäftsname direkt neben dem Warenkorb-Icon
 
 - `EinkaufslisteView` zeigte den Geschäftsnamen bislang als große Überschrift
