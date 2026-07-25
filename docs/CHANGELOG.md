@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.6 (Build 68) — Geschäfte-Liste: NavigationLink vereinfacht
+
+- `GeschaeftListView` nutzte für die Zeilen-Navigation das wertbasierte
+  `NavigationLink(value:)` + `.navigationDestination(for: Geschaeft.self)` —
+  umgestellt auf das im Rest der App übliche Closure-basierte
+  `NavigationLink { GeschaeftDetailView(geschaeft:) }`. Grund: GitHub #13
+  meldet, dass ein Tap auf ein Geschäft manchmal nicht zur Detailansicht
+  navigiert. Die Navigation ließ sich im Simulator (einzelnes Geschäft,
+  mehrere Geschäfte, direkt nach dem Anlegen, wiederholtes Antippen)
+  durchgehend nicht reproduzieren — die Vereinfachung entfernt trotzdem eine
+  Schicht (Hashable-basiertes Pfad-Matching), die in Edge-Cases fragiler ist
+  als eine direkte Destination-Closure, und ist unabhängig vom Bug eine
+  sinnvolle Angleichung an den Rest der Codebase.
+
 ## v0.6 (Build 67) — Geschäftstyp: Standard-Warengruppen
 
 - **`ArtikelKategorie.geschaeftsTypen: [GeschaeftTyp]`** (neu): eine Kategorie

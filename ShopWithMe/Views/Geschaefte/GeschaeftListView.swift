@@ -28,7 +28,9 @@ struct GeschaeftListView: View {
     var body: some View {
         List {
             ForEach(geschaefte) { geschaeft in
-                NavigationLink(value: geschaeft) {
+                NavigationLink {
+                    GeschaeftDetailView(geschaeft: geschaeft)
+                } label: {
                     GeschaeftZeile(geschaeft: geschaeft, istDuplikat: namenMitDuplikaten.contains(geschaeft.name.lowercased()))
                 }
             }
@@ -42,9 +44,6 @@ struct GeschaeftListView: View {
                     description: Text("Lege dein erstes Geschäft mit dem Plus-Symbol an.")
                 )
             }
-        }
-        .navigationDestination(for: Geschaeft.self) { geschaeft in
-            GeschaeftDetailView(geschaeft: geschaeft)
         }
         .navigationTitle("Geschäfte")
         .toolbar {
