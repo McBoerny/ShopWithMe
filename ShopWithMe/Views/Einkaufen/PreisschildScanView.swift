@@ -111,7 +111,7 @@ struct PreisschildScanView: View {
                 bearbeitbarePosition = BearbeitbarePreisschildPosition(
                     erkannterName: ergebnis.artikelName,
                     artikelName: gelernt?.alias ?? ergebnis.artikelName,
-                    preisText: "\(ergebnis.preis)",
+                    preisText: "\(ergebnis.preis.aufCentGerundet)",
                     gelernterArtikel: gelernt?.artikel
                 )
             } catch {

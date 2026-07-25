@@ -232,7 +232,7 @@ struct BelegScanView: View {
                     neuePositionen.append(BearbeitbarePosition(
                         erkannterName: position.artikelName,
                         artikelName: zuordnung.alias ?? zuordnung.artikel?.name ?? position.artikelName,
-                        preisText: "\(position.einzelpreis)",
+                        preisText: "\(position.einzelpreis.aufCentGerundet)",
                         zugeordneterArtikel: zuordnung.artikel,
                         boundingBox: scanErgebnis.ocrZeilen.boundingBox(fuerArtikelName: position.artikelName)
                     ))

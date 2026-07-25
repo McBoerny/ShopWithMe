@@ -17,6 +17,19 @@ struct ReceiptScanServiceTests {
         #expect(BelegErgebnis(geschaeftName: "", geschaeftAdresse: "", datum: "nicht erkennbar", positionen: []).erkanntesDatum == nil)
     }
 
+    // MARK: - Decimal.aufCentGerundet
+
+    @Test
+    func aufCentGerundetKorrigiertGleitkommaRundungsfehler() {
+        let fehlerhaft = Decimal(string: "2.4900000000512")!
+        #expect(fehlerhaft.aufCentGerundet == Decimal(string: "2.49")!)
+    }
+
+    @Test
+    func aufCentGerundetLaesstBereitsGerundeteWerteUnveraendert() {
+        #expect(Decimal(string: "9.99")!.aufCentGerundet == Decimal(string: "9.99")!)
+    }
+
     // MARK: - ErkannteZeile.boundingBox(fuerArtikelName:)
 
     @Test

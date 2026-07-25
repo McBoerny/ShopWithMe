@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.6 (Build 70) — Belegscan-/Preisschild-Preise auf Cent gerundet
+
+- **`Decimal.aufCentGerundet`** (neu, `Decimal+CentRundung.swift`): rundet
+  über `NSDecimalRound` auf zwei Nachkommastellen. Grund: die lokale KI
+  liefert bei Beleg-/Preisschild-Scans gelegentlich Preise mit
+  Gleitkomma-Rundungsfehlern (z.B. `2.4900000000512` statt `2.49`), die
+  bislang unverändert ins Bearbeiten-Textfeld übernommen wurden (GitHub #18).
+  Angewandt in `BelegScanView` (`position.einzelpreis`) und
+  `PreisschildScanView` (`ergebnis.preis`), jeweils direkt bei der Anzeige im
+  editierbaren Preisfeld.
+
 ## v0.6 (Build 69) — Wischgeste zum Erhöhen ohne Bestätigung
 
 - `ArtikelAbhakZeile` (`EinkaufenView.swift`): die Trailing-Swipe-Aktion
