@@ -112,9 +112,16 @@ benötigte Positionen kannst du vor der Übernahme entfernen: Wischen nach links
 löscht eine Position nur für diesen Scan, Wischen nach rechts ignoriert sie
 dauerhaft für dieses Geschäft (z.B. für wiederkehrende Pfand-/Rabattzeilen).
 
-Wird das Geschäft auf dem Bon nicht erkannt (oder gibt es mehrere Geschäfte mit
-demselben Namen), fragt dich die App danach, ggf. mit Kurzadresse zur
-Unterscheidung namensgleicher Filialen.
+Neben dem Namen erkennt die App auch die Geschäftsadresse vom Bon — hat ein
+bekanntes Geschäft dieselbe Adresse, wird es auch dann automatisch zugeordnet,
+wenn der Name auf dem Bon unklar oder abweichend ist. Fehlt einem so
+zugeordneten Geschäft noch eine Adresse, wird die erkannte automatisch
+übernommen. Wird das Geschäft auf dem Bon nicht erkannt (oder gibt es mehrere
+Geschäfte mit demselben Namen und passt auch die Adresse nicht eindeutig),
+fragt dich die App danach, ggf. mit Kurzadresse zur Unterscheidung
+namensgleicher Filialen — hat ein bereits vorhandenes, namensgleiches Geschäft
+eine andere Adresse als die erkannte, kannst du dort trotzdem eine neue,
+zweite Filiale mit der erkannten Adresse anlegen.
 
 Das Original-Foto wird in der Prüf-Ansicht direkt oben angezeigt (zoom-/schwenkbar
 per Pinch-/Zieh-Geste) — praktisch, um die KI-Erkennung visuell zu verifizieren.

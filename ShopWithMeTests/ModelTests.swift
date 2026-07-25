@@ -508,6 +508,26 @@ struct ModelTests {
     }
 
     @Test
+    func passendesFindetEindeutigenTrefferAlleinUeberDieAdresse() {
+        // GitHub #19: erkennt die KI den Namen nicht (leer) oder passt er zu keinem
+        // Geschäft, aber die Adresse ist einem bekannten Geschäft eindeutig
+        // zuzuordnen, soll das trotzdem als direkter Treffer zählen.
+        let rewe = Geschaeft(name: "Rewe", typen: [.lebensmittel], adresse: "Marktstraße 1, 12345 Musterstadt")
+        let edeka = Geschaeft(name: "Edeka", typen: [.lebensmittel], adresse: "Bahnhofstraße 9, 12345 Musterstadt")
+
+        #expect(Geschaeft.passendes(
+            fuerErkannterName: "", erkannteAdresse: "Marktstraße 1, 12345 Musterstadt", unter: [rewe, edeka]
+        ) === rewe)
+        #expect(Geschaeft.passendes(
+            fuerErkannterName: "Unbekannter Name XYZ", erkannteAdresse: "Bahnhofstraße 9, 12345 Musterstadt", unter: [rewe, edeka]
+        ) === edeka)
+        // Adresse passt zu keinem Geschäft → weiterhin nil.
+        #expect(Geschaeft.passendes(
+            fuerErkannterName: "", erkannteAdresse: "Ganz andere Straße 5, 99999 Woanders", unter: [rewe, edeka]
+        ) == nil)
+    }
+
+    @Test
     func kurzeAdresseEntferntPostleitzahl() {
         let geschaeft = Geschaeft(name: "Rewe", typen: [.lebensmittel], adresse: "Marktstraße 1, 12345 Musterstadt")
         #expect(geschaeft.kurzeAdresse == "Marktstraße 1, Musterstadt")

@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.6 (Build 76) — Belegscan: Geschäftserkennung über die Adresse
+
+- **`Geschaeft.passendes(fuerErkannterName:erkannteAdresse:unter:)`** matcht
+  jetzt auch **allein über die Adresse**, wenn der Name leer erkannt wurde
+  oder zu keinem Geschäft passt — vorher lieferte die Funktion in diesem Fall
+  sofort `nil`, ohne die Adresse überhaupt zu prüfen.
+- **`BelegScanView.uebernehmen()`**: hat das zugeordnete Geschäft (automatisch
+  oder manuell über `GeschaeftWahlSheet` gewählt) noch keine Adresse, wird die
+  auf dem Beleg erkannte übernommen und geocodiert.
+- **`GeschaeftWahlSheet`**: „neu anlegen“ bleibt jetzt auch bei einem exakt
+  namensgleichen Geschäft verfügbar, sofern dessen Adresse von der erkannten
+  abweicht — für eine zweite Filiale derselben Kette
+  (``zweiteFilialeMoeglich``).
+- GitHub #19.
+
 ## v0.6 (Build 75) — Kategorie-Editor zeigt zugeordnete Artikel
 
 - `KategorieBearbeitenView` (Einstellungen → Kategorien → Kategorie antippen)

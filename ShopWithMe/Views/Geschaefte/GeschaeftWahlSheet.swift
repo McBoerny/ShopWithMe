@@ -10,7 +10,10 @@ import SwiftData
 /// bestehende ``GeschaeftStammdatenEditView`` anlegen (vorausgefüllt mit dem
 /// erkannten Namen und der erkannten Adresse, deren Koordinaten dafür automatisch
 /// geocodiert werden) und wird danach automatisch ausgewählt — analog
-/// ``KaufEintragZuordnenSheet``s Artikel-Neuanlage.
+/// ``KaufEintragZuordnenSheet``s Artikel-Neuanlage. Existiert bereits ein exakt
+/// namensgleiches Geschäft mit einer **anderen** Adresse als der erkannten, bleibt
+/// „neu anlegen“ trotzdem verfügbar (``zweiteFilialeMoeglich``) — für den Fall
+/// einer zweiten Filiale derselben Kette (GitHub #19).
 struct GeschaeftWahlSheet: View {
     /// Der auf dem Beleg erkannte Geschäftsname, falls vorhanden — nur zur Anzeige
     /// und als Vorbelegung der Suche/Neuanlage.
@@ -55,6 +58,25 @@ struct GeschaeftWahlSheet: View {
         }
     }
 
+    private var getrimmteErkannteAdresse: String {
+        erkannteAdresse.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Ob trotz eines exakt namensgleichen Geschäfts weiterhin „neu anlegen“
+    /// angeboten wird — nur wenn dieses bestehende Geschäft bereits eine
+    /// **andere**, nicht-leere Adresse hat als die auf dem Beleg erkannte (z.B.
+    /// eine zweite Filiale derselben Kette, GitHub #19).
+    private var zweiteFilialeMoeglich: Bool {
+        guard !getrimmteErkannteAdresse.isEmpty,
+              let bestehendes = alleGeschaefte.first(where: {
+                  $0.name.localizedCaseInsensitiveCompare(getrimmterSuchtext) == .orderedSame
+              }),
+              let bestehendeAdresse = bestehendes.adresse, !bestehendeAdresse.isEmpty
+        else { return false }
+        return !bestehendeAdresse.localizedCaseInsensitiveContains(getrimmteErkannteAdresse)
+            && !getrimmteErkannteAdresse.localizedCaseInsensitiveContains(bestehendeAdresse)
+    }
+
     var body: some View {
         NavigationStack {
             List {
@@ -75,11 +97,16 @@ struct GeschaeftWahlSheet: View {
                     }
                     .buttonStyle(.plain)
 
-                    if !getrimmterSuchtext.isEmpty && !existiertGenau {
+                    if !getrimmterSuchtext.isEmpty && (!existiertGenau || zweiteFilialeMoeglich) {
                         Button {
                             neuesGeschaeftAnlegen()
                         } label: {
-                            Label("„\(getrimmterSuchtext)“ neu anlegen", systemImage: "plus.circle.fill")
+                            Label(
+                                existiertGenau
+                                    ? "„\(getrimmterSuchtext)“ mit dieser Adresse neu anlegen"
+                                    : "„\(getrimmterSuchtext)“ neu anlegen",
+                                systemImage: "plus.circle.fill"
+                            )
                         }
                         .disabled(erstelleGeschaeft)
                     }

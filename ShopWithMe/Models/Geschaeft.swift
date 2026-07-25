@@ -187,7 +187,7 @@ final class Geschaeft {
     /// zum per KI erkannten `erkannterName` eines Kassenbons passt (beidseitiger
     /// `localizedCaseInsensitiveContains`-Abgleich, analog
     /// ``KaufEintrag/gelernteZuordnung(fuerErkannterName:in:)``). `nil`, falls
-    /// `erkannterName` leer ist oder kein Treffer existiert — dann fragt die
+    /// weder Name noch Adresse zu einem eindeutigen Treffer führen — dann fragt die
     /// aufrufende Scan-Ansicht über `GeschaeftWahlSheet` nach.
     ///
     /// Gibt es zum Namen **mehrere** Kandidaten (z.B. zwei Filialen derselben
@@ -197,28 +197,43 @@ final class Geschaeft {
     /// kein Kandidat übrig (keine/nicht passende Adresse erkannt), fällt die
     /// Funktion auf den ersten Namens-Kandidaten zurück (unverändertes
     /// Vorher-Verhalten), statt den Anwender zu unterbrechen.
+    ///
+    /// Liefert der Name **keinen** Kandidaten (leer erkannt oder kein passendes
+    /// Geschäft), wird stattdessen versucht, allein über `erkannteAdresse` einen
+    /// **eindeutigen** Treffer zu finden (GitHub #19) — z.B. wenn die KI den
+    /// Namen nicht zuverlässig lesen konnte, die Adresse aber eindeutig einem
+    /// bekannten Geschäft zuzuordnen ist.
     static func passendes(
         fuerErkannterName erkannterName: String,
         erkannteAdresse: String = "",
         unter geschaefte: [Geschaeft]
     ) -> Geschaeft? {
         let erkannterName = erkannterName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !erkannterName.isEmpty else { return nil }
+        let getrimmteAdresse = erkannteAdresse.trimmingCharacters(in: .whitespacesAndNewlines)
+
         func nameTrifftZu(_ bekannterName: String) -> Bool {
-            guard !bekannterName.isEmpty else { return false }
+            guard !bekannterName.isEmpty, !erkannterName.isEmpty else { return false }
             return bekannterName.localizedCaseInsensitiveContains(erkannterName)
                 || erkannterName.localizedCaseInsensitiveContains(bekannterName)
         }
-        let kandidaten = geschaefte.filter { nameTrifftZu($0.name) || $0.alternativeNamen.contains(where: nameTrifftZu) }
+        func adresseTrifftZu(_ bekannteAdresse: String?) -> Bool {
+            guard let bekannteAdresse, !bekannteAdresse.isEmpty, !getrimmteAdresse.isEmpty else { return false }
+            return bekannteAdresse.localizedCaseInsensitiveContains(getrimmteAdresse)
+                || getrimmteAdresse.localizedCaseInsensitiveContains(bekannteAdresse)
+        }
+
+        let kandidaten = erkannterName.isEmpty
+            ? []
+            : geschaefte.filter { nameTrifftZu($0.name) || $0.alternativeNamen.contains(where: nameTrifftZu) }
+
+        guard !kandidaten.isEmpty else {
+            let adressTreffer = geschaefte.filter { adresseTrifftZu($0.adresse) }
+            return adressTreffer.count == 1 ? adressTreffer.first : nil
+        }
         guard kandidaten.count > 1 else { return kandidaten.first }
 
-        let getrimmteAdresse = erkannteAdresse.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !getrimmteAdresse.isEmpty else { return kandidaten.first }
-        let anhandAdresse = kandidaten.filter { kandidat in
-            guard let adresse = kandidat.adresse, !adresse.isEmpty else { return false }
-            return adresse.localizedCaseInsensitiveContains(getrimmteAdresse)
-                || getrimmteAdresse.localizedCaseInsensitiveContains(adresse)
-        }
+        let anhandAdresse = kandidaten.filter { adresseTrifftZu($0.adresse) }
         return anhandAdresse.count == 1 ? anhandAdresse.first : kandidaten.first
     }
 

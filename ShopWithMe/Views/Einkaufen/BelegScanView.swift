@@ -268,12 +268,32 @@ struct BelegScanView: View {
 
     private func uebernehmen() {
         Task {
+            // Geocoding braucht Netzwerk (async) und muss daher vor dem
+            // (synchronen) Micro-Lease abgeschlossen sein — analog
+            // `GeschaeftWahlSheet.neuesGeschaeftAnlegen()`.
+            let getrimmteErkannteAdresse = erkannteGeschaeftAdresse.trimmingCharacters(in: .whitespacesAndNewlines)
+            var gelernteKoordinaten: (breitengrad: Double, laengengrad: Double)?
+            if let erkanntesGeschaeft, erkanntesGeschaeft.adresse == nil, !getrimmteErkannteAdresse.isEmpty {
+                gelernteKoordinaten = await GeschaeftErkennungService.koordinaten(fuerAdresse: getrimmteErkannteAdresse)
+            }
+
             // Ein Micro-Lease um den gesamten Beleg-Vorgang statt pro Position —
             // fachlich eine einzige Aktion (siehe `docs/DATABASE_CONCURRENCY.md` →
             // „Vollständiger Schreibvorgang-Katalog“).
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
                 if !erkannterGeschaeftName.isEmpty {
                     erkanntesGeschaeft?.alternativenNamenLernen(erkannterGeschaeftName)
+                }
+                // Hat das zugeordnete Geschäft noch keine Adresse, wird die auf dem
+                // Beleg erkannte übernommen (GitHub #19) — unabhängig davon, ob das
+                // Geschäft automatisch oder manuell über `GeschaeftWahlSheet`
+                // zugeordnet wurde.
+                if let erkanntesGeschaeft, erkanntesGeschaeft.adresse == nil, !getrimmteErkannteAdresse.isEmpty {
+                    erkanntesGeschaeft.adresse = getrimmteErkannteAdresse
+                    if let gelernteKoordinaten {
+                        erkanntesGeschaeft.breitengrad = gelernteKoordinaten.breitengrad
+                        erkanntesGeschaeft.laengengrad = gelernteKoordinaten.laengengrad
+                    }
                 }
 
                 if case .einkaufsvorgang(let einkaufsvorgang) = kontext, einkaufsvorgang.geschaeft == nil {
