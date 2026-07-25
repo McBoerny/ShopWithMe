@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.6 (Build 75) — Kategorie-Editor zeigt zugeordnete Artikel
+
+- `KategorieBearbeitenView` (Einstellungen → Kategorien → Kategorie antippen)
+  zeigt jetzt eine Sektion „Artikel“ mit allen dieser Warengruppe
+  zugeordneten Artikeln (``ArtikelKategorie/zugeordneteArtikel``) — per
+  Wischgeste entfernbar, über die neue
+  `ArtikelZuKategorieHinzufuegenSheet` (Suche + Sofort-Zuordnung beim
+  Antippen) erweiterbar. Bislang musste man dafür jeden Artikel einzeln über
+  `ArtikelEditView` öffnen (GitHub #15).
+
 ## v0.6 (Build 74) — Mengeneinheit im Mengen-Sheet änderbar
 
 - `MengenNotizSheet` (Tap auf die Mengenangabe beim Einkaufen) bietet jetzt

@@ -70,9 +70,18 @@ struct KategorienVerwaltungView: View {
     }
 }
 
-/// Bearbeitet Name, Symbol und Farbe einer einzelnen ``ArtikelKategorie``.
+/// Bearbeitet Name, Symbol und Farbe einer einzelnen ``ArtikelKategorie`` sowie
+/// die ihr zugeordneten Artikel (GitHub #15) — direkt hier hinzufügbar/entfernbar,
+/// ohne für jeden Artikel einzeln über ``ArtikelEditView`` zu gehen.
 private struct KategorieBearbeitenView: View {
     @Bindable var kategorie: ArtikelKategorie
+    @State private var zeigeArtikelHinzufuegen = false
+
+    /// Artikel, die dieser Kategorie über ``ArtikelKategorie/zugeordneteArtikel``
+    /// (die maßgebliche Quelle für Mehrfachzuordnung) zugeordnet sind, alphabetisch.
+    private var zugeordneteArtikel: [Artikel] {
+        kategorie.zugeordneteArtikel.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
 
     var body: some View {
         Form {
@@ -85,9 +94,94 @@ private struct KategorieBearbeitenView: View {
                     Text("„Sonstiges“ ist die Auffangkategorie für Artikel ohne eigene Kategorie und kann nicht gelöscht werden.")
                 }
             }
+
+            Section {
+                ForEach(zugeordneteArtikel) { artikel in
+                    Text(artikel.name)
+                }
+                .onDelete(perform: artikelEntfernen)
+
+                Button {
+                    zeigeArtikelHinzufuegen = true
+                } label: {
+                    Label("Artikel hinzufügen", systemImage: "plus")
+                }
+            } header: {
+                Text("Artikel")
+            } footer: {
+                Text("Artikel, die dieser Warengruppe zugeordnet sind. Zum Entfernen nach links wischen.")
+            }
         }
         .navigationTitle(kategorie.name)
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $zeigeArtikelHinzufuegen) {
+            ArtikelZuKategorieHinzufuegenSheet(kategorie: kategorie)
+        }
+    }
+
+    private func artikelEntfernen(at offsets: IndexSet) {
+        for index in offsets {
+            let artikel = zugeordneteArtikel[index]
+            var aktuelle = artikel.kategorien
+            aktuelle.removeAll { $0 == kategorie }
+            artikel.kategorien = aktuelle
+        }
+    }
+}
+
+/// Sheet zum Zuordnen bestehender ``Artikel`` zu ``kategorie`` — aufrufbar aus
+/// ``KategorieBearbeitenView``. Tippen auf einen Artikel ordnet ihn sofort zu
+/// (kein zusätzlicher Bestätigungsschritt, analog ``KategorieHinzufuegenSheet``).
+private struct ArtikelZuKategorieHinzufuegenSheet: View {
+    let kategorie: ArtikelKategorie
+
+    @Environment(\.dismiss) private var dismiss
+    @Query(sort: \Artikel.name) private var alleArtikel: [Artikel]
+    @State private var suchtext = ""
+
+    private var nichtZugeordneteArtikel: [Artikel] {
+        let uebrige = alleArtikel.filter { !$0.kategorien.contains(kategorie) }
+        guard !suchtext.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return uebrige }
+        return uebrige.filter { $0.name.localizedCaseInsensitiveContains(suchtext) }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(nichtZugeordneteArtikel) { artikel in
+                    Button {
+                        zuordnen(artikel)
+                    } label: {
+                        Text(artikel.name)
+                            .foregroundStyle(.primary)
+                    }
+                }
+            }
+            .searchable(text: $suchtext, prompt: "Artikel suchen")
+            .overlay {
+                if nichtZugeordneteArtikel.isEmpty {
+                    ContentUnavailableView(
+                        "Keine weiteren Artikel",
+                        systemImage: "carrot.fill",
+                        description: Text("Alle Artikel sind dieser Warengruppe bereits zugeordnet.")
+                    )
+                }
+            }
+            .navigationTitle("Artikel hinzufügen")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Fertig") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func zuordnen(_ artikel: Artikel) {
+        var aktuelle = artikel.kategorien
+        guard !aktuelle.contains(kategorie) else { return }
+        aktuelle.append(kategorie)
+        artikel.kategorien = aktuelle
     }
 }
 
