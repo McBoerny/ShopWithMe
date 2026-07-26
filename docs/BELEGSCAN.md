@@ -26,8 +26,10 @@ Belegscans hinweg.
   Zuordnen-Sheet.
 - `ShopWithMe/Views/Historie/KaufEintragZuordnenSheet.swift` — Alias vergeben +
   Artikel zuordnen/neu anlegen.
-- `ShopWithMe/Views/Geschaefte/GeschaeftDetailView.swift` — Preisübersicht-Sektion +
-  `ArtikelPreisSpanneZeile`/`ArtikelPreisVerlaufView` (Drill-down).
+- `ShopWithMe/Views/Geschaefte/GeschaeftPreisUebersichtView.swift` — eigener View
+  für die Preisübersicht (GitHub #20), `ArtikelPreisSpanneZeile`/
+  `ArtikelPreisVerlaufView` (Drill-down mit Preisdiagramm, GitHub #21), aufrufbar
+  über einen Eintrag in `GeschaeftDetailView.swift`.
 - `ShopWithMe/Views/Geschaefte/GeschaeftListView.swift` — geschäftsloser
   Scan-Einstieg (Toolbar-Menü „Scannen“).
 - `ShopWithMe/App/RootView.swift` — eigener „Scannen“-Tab, bettet `BelegScanView`
@@ -349,9 +351,9 @@ Kassenbon) → `artikel?.name` → `artikelNameSnapshot`.
 
 Verwendet in `PreisHistorieZeile`, angezeigt in:
 
-- `GeschaeftDetailView` — sowohl in der „Preisübersicht“ (aggregiert pro Artikel, siehe
-  unten) als auch im Drill-down `ArtikelPreisVerlaufView` und im Abschnitt
-  „Ohne Artikel-Zuordnung“ (`zeigeArtikel: true`)
+- `GeschaeftPreisUebersichtView` — sowohl in der „Preisübersicht“ (aggregiert pro
+  Artikel, siehe unten) als auch im Drill-down `ArtikelPreisVerlaufView` und im
+  Abschnitt „Ohne Artikel-Zuordnung“ (`zeigeArtikel: true`)
 - `ArtikelEditView` (Preishistorie-Sektion eines Artikels, `zeigeArtikel: false` — zeigt
   dort den Geschäftsnamen statt des Artikelnamens; `alternativerName` bleibt trotzdem
   am `KaufEintrag` gesetzt, ist dort nur nicht die sichtbare Spalte)
@@ -379,8 +381,9 @@ Belegscans desselben Produkts (Schritt 4 oben).
 
 ## Preisübersicht eines Geschäfts: `ArtikelPreisSpanne`
 
-`GeschaeftDetailView` zeigt statt einer flachen Liste aller `KaufEintrag`e eine nach
-Artikel gruppierte **Preisübersicht**:
+`GeschaeftPreisUebersichtView` (eigener View, aufrufbar über einen Eintrag in
+`GeschaeftDetailView`, GitHub #20) zeigt statt einer flachen Liste aller
+`KaufEintrag`e eine nach Artikel gruppierte **Preisübersicht**:
 
 ```swift
 struct ArtikelPreisSpanne: Identifiable {
@@ -399,7 +402,11 @@ pro Artikel eine Preisspanne, alphabetisch sortiert. Jede Zeile
 Antippen (Info-/Drill-down-Funktion über `NavigationLink`) öffnet
 `ArtikelPreisVerlaufView`: eine eigene, live per `@Query` gefilterte Liste aller
 `KaufEintrag`e dieses Artikels **in diesem Geschäft**, sortiert nach Datum absteigend
-— die historische Kaufliste mit Einzelpreisen.
+— die historische Kaufliste mit Einzelpreisen. Gibt es mindestens einen erfassten
+Preis, zeigt ein `Charts`-Liniendiagramm zusätzlich den Preisverlauf chronologisch
+aufsteigend (GitHub #21). Jede Position lässt sich per Wischgeste (Standard-Löschen,
+`.onDelete`) dauerhaft entfernen — z.B. bei einer offensichtlich falsch erfassten
+Position, die die Preisspanne verzerrt.
 
 **Ohne Artikel-Zuordnung**: `KaufEintrag`e ohne `artikel` (z.B. weil beim Scan kein
 Namensabgleich griff und noch keine manuelle Zuordnung erfolgte) erscheinen weiterhin

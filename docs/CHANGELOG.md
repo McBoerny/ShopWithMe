@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.6 (Build 78) — Preisübersicht: eigener View, Diagramm, Einzelpreis löschen
+
+- **`GeschaeftPreisUebersichtView`** (neu, GitHub #20): die Preisübersicht eines
+  Geschäfts (Preisspanne je Artikel + Positionen ohne Artikel-Zuordnung) ist
+  jetzt ein eigener View statt zwei Sektionen direkt in `GeschaeftDetailView`
+  — aufrufbar über einen neuen „Preisübersicht“-Eintrag dort.
+- **`ArtikelPreisVerlaufView`** (GitHub #21): zeigt den Preisverlauf eines
+  Artikels in einem Geschäft jetzt zusätzlich als `Charts`-Liniendiagramm
+  (chronologisch aufsteigend, nur bei mindestens einem erfassten Preis).
+  Einzelne Positionen lassen sich per Standard-Wischgeste (`.onDelete`)
+  dauerhaft löschen — z.B. bei einer offensichtlich falsch erfassten Position,
+  die die Preisspanne verzerrt.
+- `ArtikelPreisSpanneZeile`/`ArtikelPreisVerlaufView` sind dafür aus
+  `GeschaeftDetailView.swift` in die neue Datei umgezogen.
+- Nur per Build + Unit-Tests verifiziert, ohne manuellen Simulator-Durchlauf
+  (siehe `ios-swift-engineering`-Skill, „Simulator-UI-Tests … optional“).
+
 ## v0.6 (Build 77) — Artikelauswahl: kompakter, alphabetisch, Sofort-Hinzufügen
 
 - `ArtikelHinzufuegenView` grundlegend überarbeitet (GitHub #8):

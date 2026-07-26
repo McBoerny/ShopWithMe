@@ -24,11 +24,9 @@ import SwiftData
 /// heutigem Datum, unabhängig davon, ob der Artikel tatsächlich gekauft wird (z.B.
 /// zum Preisvergleich vor der Kaufentscheidung). Siehe `docs/PREISSCHILD_SCAN.md`.
 ///
-/// „Preisübersicht“ zeigt, gruppiert über ``ArtikelPreisSpanne/gruppieren(_:)``, pro
-/// jemals hier gekauftem ``Artikel`` die Preisspanne (niedrigster–höchster erfasster
-/// Preis). Ein Antippen öffnet ``ArtikelPreisVerlaufView`` mit der historischen Liste
-/// aller zugrundeliegenden Belegpositionen. Positionen ohne Artikel-Zuordnung
-/// erscheinen separat darunter — siehe `docs/BELEGSCAN.md`.
+/// „Preisübersicht“ ist ein eigener View (``GeschaeftPreisUebersichtView``,
+/// GitHub #20) mit der Preisspanne pro Artikel sowie Positionen ohne
+/// Artikel-Zuordnung — siehe `docs/BELEGSCAN.md`.
 struct GeschaeftDetailView: View {
     @Bindable var geschaeft: Geschaeft
     @Environment(\.modelContext) private var modelContext
@@ -36,15 +34,9 @@ struct GeschaeftDetailView: View {
     @State private var zeigeBelegScan = false
     @State private var zeigePreisschildScan = false
     @State private var zeigeKategorieHinzufuegen = false
-    @Query private var kaufHistorie: [KaufEintrag]
 
     init(geschaeft: Geschaeft) {
         self.geschaeft = geschaeft
-        let geschaeftID = geschaeft.persistentModelID
-        _kaufHistorie = Query(
-            filter: #Predicate<KaufEintrag> { $0.geschaeft?.persistentModelID == geschaeftID },
-            sort: [SortDescriptor(\.datum, order: .reverse)]
-        )
     }
 
     private var regaleAnzeigen: [Regal] {
@@ -58,14 +50,6 @@ struct GeschaeftDetailView: View {
     private var verschiebenAktion: ((IndexSet, Int) -> Void)? {
         guard geschaeft.regalSortierModus == .manuell else { return nil }
         return regalVerschieben
-    }
-
-    private var artikelPreisSpannen: [ArtikelPreisSpanne] {
-        ArtikelPreisSpanne.gruppieren(kaufHistorie)
-    }
-
-    private var eintraegeOhneArtikel: [KaufEintrag] {
-        kaufHistorie.filter { $0.artikel == nil }
     }
 
     var body: some View {
@@ -177,31 +161,11 @@ struct GeschaeftDetailView: View {
                 Text("Erfasse Preise für dieses Geschäft direkt von einem Kassenbon, auch ohne laufenden Einkauf. „Preisschild scannen“ erfasst den Preis eines einzelnen Regal-Preisschilds, auch ohne Kauf — z.B. zum Preisvergleich.")
             }
 
-            if !artikelPreisSpannen.isEmpty {
-                Section {
-                    ForEach(artikelPreisSpannen) { spanne in
-                        NavigationLink {
-                            ArtikelPreisVerlaufView(artikel: spanne.artikel, geschaeft: geschaeft)
-                        } label: {
-                            ArtikelPreisSpanneZeile(spanne: spanne)
-                        }
-                    }
-                } header: {
-                    Text("Preisübersicht")
-                } footer: {
-                    Text("Zeigt pro Artikel die Preisspanne aller hier gescannten Käufe. Zum Verlauf einzelner Käufe antippen.")
-                }
-            }
-
-            if !eintraegeOhneArtikel.isEmpty {
-                Section {
-                    ForEach(eintraegeOhneArtikel) { eintrag in
-                        PreisHistorieZeile(eintrag: eintrag, zeigeArtikel: true)
-                    }
-                } header: {
-                    Text("Ohne Artikel-Zuordnung")
-                } footer: {
-                    Text("Diese Belegpositionen sind noch keinem Artikel zugeordnet. Nach links wischen, um sie über „Zuordnen“ einem (ggf. neuen) Artikel zuzuweisen.")
+            Section {
+                NavigationLink {
+                    GeschaeftPreisUebersichtView(geschaeft: geschaeft)
+                } label: {
+                    Label("Preisübersicht", systemImage: "chart.line.uptrend.xyaxis")
                 }
             }
         }
@@ -275,58 +239,6 @@ private struct RegalZeile: View {
                     .lineLimit(1)
             }
         }
-    }
-}
-
-/// Eine Zeile der Preisübersicht: Artikelname links, Preisspanne rechts.
-private struct ArtikelPreisSpanneZeile: View {
-    let spanne: ArtikelPreisSpanne
-
-    var body: some View {
-        HStack(spacing: 16) {
-            Text(spanne.artikel.name)
-                .foregroundStyle(.primary)
-            Spacer()
-            Text(preisspannenText)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private var preisspannenText: String {
-        guard let minimum = spanne.minimum else { return "Preis unbekannt" }
-        guard let maximum = spanne.maximum, maximum != minimum else {
-            return minimum.formatted(.currency(code: "EUR"))
-        }
-        return "\(minimum.formatted(.currency(code: "EUR"))) – \(maximum.formatted(.currency(code: "EUR")))"
-    }
-}
-
-/// Historische Liste aller Belegpositionen eines ``Artikel``s in einem bestimmten
-/// ``Geschaeft`` — Drill-down aus der Preisübersicht (``ArtikelPreisSpanneZeile``).
-private struct ArtikelPreisVerlaufView: View {
-    let artikel: Artikel
-    @Query private var eintraege: [KaufEintrag]
-
-    init(artikel: Artikel, geschaeft: Geschaeft) {
-        self.artikel = artikel
-        let artikelID = artikel.persistentModelID
-        let geschaeftID = geschaeft.persistentModelID
-        _eintraege = Query(
-            filter: #Predicate<KaufEintrag> {
-                $0.artikel?.persistentModelID == artikelID && $0.geschaeft?.persistentModelID == geschaeftID
-            },
-            sort: [SortDescriptor(\.datum, order: .reverse)]
-        )
-    }
-
-    var body: some View {
-        List {
-            ForEach(eintraege) { eintrag in
-                PreisHistorieZeile(eintrag: eintrag, zeigeArtikel: true)
-            }
-        }
-        .navigationTitle(artikel.name)
-        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
