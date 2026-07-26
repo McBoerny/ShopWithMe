@@ -1,3 +1,4 @@
+import CoreLocation
 import Foundation
 import SwiftData
 
@@ -110,11 +111,11 @@ final class Geschaeft {
     }
     /// Optionale Adresse.
     var adresse: String?
-    /// Breitengrad — für die zukünftige, standortbasierte Ladenerkennung vorbereitet,
-    /// aktuell ungenutzt.
+    /// Breitengrad — Grundlage der standortbasierten Ladenerkennung
+    /// (``GeschaeftErkennungService``) und der Kartenansicht in
+    /// ``GeschaeftStammdatenEditView`` (siehe ``koordinate``).
     var breitengrad: Double?
-    /// Längengrad — für die zukünftige, standortbasierte Ladenerkennung vorbereitet,
-    /// aktuell ungenutzt.
+    /// Längengrad — siehe ``breitengrad``.
     var laengengrad: Double?
     /// Rohwert für ``regalSortierModus``. Optional gespeichert, damit vor v1.4
     /// angelegte Geschäfte (deren Datensatz diese Spalte noch nicht kennt) beim
@@ -262,6 +263,20 @@ final class Geschaeft {
         guard teile.count == 2 else { return adresse }
         let ort = teile[1].replacingOccurrences(of: #"^\d{4,5}\s*"#, with: "", options: .regularExpression)
         return "\(teile[0]), \(ort)"
+    }
+
+    /// ``breitengrad``/``laengengrad`` als `CLLocationCoordinate2D`, `nil` solange
+    /// (noch) keine Koordinaten hinterlegt sind. Praktischer Zugriff für die
+    /// Kartenansicht in ``GeschaeftStammdatenEditView`` (GitHub #24).
+    var koordinate: CLLocationCoordinate2D? {
+        get {
+            guard let breitengrad, let laengengrad else { return nil }
+            return CLLocationCoordinate2D(latitude: breitengrad, longitude: laengengrad)
+        }
+        set {
+            breitengrad = newValue?.latitude
+            laengengrad = newValue?.longitude
+        }
     }
 
     /// Liefert die (kleingeschriebenen) Namen aller Geschäfte, die mehrfach unter

@@ -1,10 +1,22 @@
 import SwiftUI
 import SwiftData
+import MapKit
+import CoreLocation
 
-/// Anlegen/Bearbeiten der Stammdaten (Name, Typ, Adresse) eines ``Geschaeft``s.
+/// Anlegen/Bearbeiten der Stammdaten (Name, Typ, Adresse, Standort) eines
+/// ``Geschaeft``s.
 ///
 /// Bei einem neuen Geschäft (`istNeu == true`) wird es erst beim Sichern in den
 /// Model-Context eingefügt (Abbrechen verwirft es folgenlos).
+///
+/// Der Standort-Abschnitt (GitHub #24) zeigt eine Karte mit dem aktuellen Pin,
+/// sobald ``Geschaeft/koordinate`` gesetzt ist. Drei Wege dorthin: „Aktuellen
+/// Standort verwenden“ (GPS + Reverse-Geocoding füllt Adresse **und** Koordinaten),
+/// Adresse eintippen und mit dem Return-Key bestätigen (Geocoding füllt die
+/// Koordinaten, nur solange noch keine gesetzt sind — überschreibt keinen bereits
+/// manuell gesetzten Pin), oder direkt auf die Karte tippen, um den Pin exakt zu
+/// setzen (füllt die Adresse per Reverse-Geocoding nur nach, falls sie noch leer
+/// ist).
 struct GeschaeftStammdatenEditView: View {
     @Bindable var geschaeft: Geschaeft
     let istNeu: Bool
@@ -15,6 +27,7 @@ struct GeschaeftStammdatenEditView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @State private var standortWirdErmittelt = false
 
     var body: some View {
         if istNeu {
@@ -63,6 +76,48 @@ struct GeschaeftStammdatenEditView: View {
                         ),
                         axis: .vertical
                     )
+                    .onSubmit {
+                        Task { await adresseGeokodierenFallsNochOhneKoordinate() }
+                    }
+                }
+
+                Section {
+                    if let koordinate = geschaeft.koordinate {
+                        MapReader { proxy in
+                            Map(initialPosition: .region(
+                                MKCoordinateRegion(
+                                    center: koordinate,
+                                    latitudinalMeters: 500,
+                                    longitudinalMeters: 500
+                                )
+                            )) {
+                                Marker(geschaeft.name.isEmpty ? "Geschäft" : geschaeft.name, coordinate: koordinate)
+                            }
+                            .frame(height: 200)
+                            .onTapGesture { bildschirmPunkt in
+                                guard let neueKoordinate = proxy.convert(bildschirmPunkt, from: .local) else { return }
+                                pinSetzen(neueKoordinate)
+                            }
+                        }
+                        .listRowInsets(EdgeInsets())
+                    }
+
+                    Button {
+                        Task { await aktuellenStandortVerwenden() }
+                    } label: {
+                        if standortWirdErmittelt {
+                            ProgressView()
+                        } else {
+                            Label("Aktuellen Standort verwenden", systemImage: "location.fill")
+                        }
+                    }
+                    .disabled(standortWirdErmittelt)
+                } header: {
+                    Text("Standort")
+                } footer: {
+                    Text(geschaeft.koordinate == nil
+                         ? "Adresse eingeben und bestätigen oder den aktuellen Standort verwenden, um die Karte zu sehen."
+                         : "Tippe auf die Karte, um den Standort-Pin exakt zu setzen.")
                 }
 
                 if !istNeu {
@@ -112,6 +167,45 @@ struct GeschaeftStammdatenEditView: View {
             aktuelle.append(typ)
         }
         geschaeft.typen = aktuelle
+    }
+
+    /// Setzt den Standort-Pin auf `koordinate` und trägt — nur falls noch keine
+    /// Adresse hinterlegt ist — die per Reverse-Geocoding ermittelte Adresse nach,
+    /// ohne eine bereits vorhandene, ggf. bewusst abweichende Adresse zu
+    /// überschreiben.
+    private func pinSetzen(_ koordinate: CLLocationCoordinate2D) {
+        geschaeft.koordinate = koordinate
+        guard geschaeft.adresse == nil || geschaeft.adresse?.isEmpty == true else { return }
+        Task {
+            if let adresse = await GeschaeftErkennungService.adresse(fuerKoordinaten: koordinate) {
+                geschaeft.adresse = adresse
+            }
+        }
+    }
+
+    /// Ermittelt Koordinaten aus der eingegebenen ``Geschaeft/adresse`` per
+    /// Geocoding — nur solange noch kein Standort gesetzt ist, um einen bereits
+    /// manuell auf der Karte platzierten Pin nicht zu verwerfen.
+    private func adresseGeokodierenFallsNochOhneKoordinate() async {
+        guard geschaeft.koordinate == nil, let adresse = geschaeft.adresse, !adresse.isEmpty else { return }
+        guard let koordinatenPaar = await GeschaeftErkennungService.koordinaten(fuerAdresse: adresse) else { return }
+        geschaeft.koordinate = CLLocationCoordinate2D(latitude: koordinatenPaar.breitengrad, longitude: koordinatenPaar.laengengrad)
+    }
+
+    /// Übernimmt den aktuellen GPS-Standort als Koordinaten **und** überschreibt
+    /// die Adresse mit dem per Reverse-Geocoding ermittelten Ergebnis — anders als
+    /// ``pinSetzen(_:)``/``adresseGeokodierenFallsNochOhneKoordinate()`` bewusst
+    /// ohne Rückfrage, da der Anwender mit diesem Button explizit den aktuellen
+    /// Standort übernehmen möchte.
+    private func aktuellenStandortVerwenden() async {
+        standortWirdErmittelt = true
+        defer { standortWirdErmittelt = false }
+        guard let koordinatenPaar = await GeschaeftErkennungService.koordinatenAusAktuellerPosition() else { return }
+        let koordinate = CLLocationCoordinate2D(latitude: koordinatenPaar.breitengrad, longitude: koordinatenPaar.laengengrad)
+        geschaeft.koordinate = koordinate
+        if let adresse = await GeschaeftErkennungService.adresse(fuerKoordinaten: koordinate) {
+            geschaeft.adresse = adresse
+        }
     }
 }
 

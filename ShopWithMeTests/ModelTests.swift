@@ -1,3 +1,4 @@
+import CoreLocation
 import Foundation
 import SwiftData
 import Testing
@@ -525,6 +526,28 @@ struct ModelTests {
         #expect(Geschaeft.passendes(
             fuerErkannterName: "", erkannteAdresse: "Ganz andere Straße 5, 99999 Woanders", unter: [rewe, edeka]
         ) == nil)
+    }
+
+    @Test
+    func koordinateIstNilOhneBreitenUndLaengengrad() {
+        let geschaeft = Geschaeft(name: "Rewe", typen: [.lebensmittel])
+        #expect(geschaeft.koordinate == nil)
+    }
+
+    @Test
+    func koordinateLiestUndSchreibtBreitenUndLaengengrad() {
+        // GitHub #24: praktischer CLLocationCoordinate2D-Zugriff für die
+        // Kartenansicht in GeschaeftStammdatenEditView.
+        let geschaeft = Geschaeft(name: "Rewe", typen: [.lebensmittel])
+        geschaeft.koordinate = CLLocationCoordinate2D(latitude: 52.5, longitude: 13.4)
+        #expect(geschaeft.breitengrad == 52.5)
+        #expect(geschaeft.laengengrad == 13.4)
+        #expect(geschaeft.koordinate?.latitude == 52.5)
+        #expect(geschaeft.koordinate?.longitude == 13.4)
+
+        geschaeft.koordinate = nil
+        #expect(geschaeft.breitengrad == nil)
+        #expect(geschaeft.laengengrad == nil)
     }
 
     @Test

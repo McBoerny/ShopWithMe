@@ -55,6 +55,14 @@ aus deinen tatsächlichen Einkäufen (nach 5 Einkäufen in diesem Geschäft ange
 deine manuelle Reihenfolge bleibt so lange bestehen, bis du den Vorschlag explizit
 übernimmst).
 
+**Standort beim Anlegen/Bearbeiten:** Sobald ein Geschäft Koordinaten hat, zeigt
+das Bearbeiten-Formular eine kleine Karte mit einem Pin — durch Antippen der
+Karte lässt sich der Standort exakt setzen (die Adresse wird dabei automatisch
+nachgetragen, falls noch keine hinterlegt ist). Alternativ füllt „Aktuellen
+Standort verwenden“ Adresse und Koordinaten direkt aus deinem GPS-Standort, oder
+du tippst eine Adresse ein und bestätigst mit der Eingabetaste — die Koordinaten
+werden dann automatisch ermittelt, solange noch kein Standort gesetzt ist.
+
 **Favoriten:** Sowohl in der Geschäfte-Übersicht (Einstellungen) als auch in der
 Geschäftsauswahl beim Einkaufen erscheinen deine meistgenutzten Geschäfte vorab in
 einer eigenen „Favoriten“-Sektion — ermittelt aus abgeschlossenen Einkäufen

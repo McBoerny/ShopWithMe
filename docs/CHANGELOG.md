@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.6 (Build 84) — Geschäft anlegen: Standort per Karte, GPS oder Adresse
+
+- **`Geschaeft.koordinate`** (neu): `CLLocationCoordinate2D`-Zugriff auf
+  `breitengrad`/`laengengrad`.
+- **`GeschaeftErkennungService.adresse(fuerKoordinaten:)`** (neu):
+  Reverse-Geocoding (`MKReverseGeocodingRequest`) als Gegenstück zur
+  bestehenden Vorwärts-Geokodierung.
+- `GeschaeftStammdatenEditView` zeigt jetzt, sobald ein Standort gesetzt ist,
+  eine Karte mit Pin — antippen setzt den Standort exakt. „Aktuellen Standort
+  verwenden“ füllt Adresse und Koordinaten aus dem GPS-Standort; eine
+  eingegebene Adresse wird beim Bestätigen automatisch geokodiert, solange
+  noch kein Standort gesetzt ist — ein bereits manuell platzierter Pin wird
+  dabei nie überschrieben (GitHub #24).
+
 ## v0.6 (Build 83) — Favoriten: meistgenutzte Geschäfte priorisiert
 
 - **`GeschaeftHaeufigkeitService`** (neu): ermittelt die meistgenutzten

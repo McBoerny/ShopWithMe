@@ -256,6 +256,20 @@ enum GeschaeftErkennungService {
         return (koordinate.latitude, koordinate.longitude)
     }
 
+    /// Ermittelt eine textuelle Adresse für gegebene Koordinaten per
+    /// Reverse-Geocoding (`MKReverseGeocodingRequest`, das Gegenstück zu
+    /// ``koordinaten(fuerAdresse:)``) — genutzt, wenn der Anwender den
+    /// Standort-Pin manuell auf der Karte setzt oder den aktuellen GPS-Standort
+    /// übernimmt, damit das Adressfeld automatisch vorausgefüllt wird (GitHub #24).
+    /// `nil` ohne Treffer oder bei Geocoding-Fehler (z.B. kein Netzwerk).
+    @MainActor
+    static func adresse(fuerKoordinaten koordinate: CLLocationCoordinate2D) async -> String? {
+        guard let anfrage = MKReverseGeocodingRequest(location: CLLocation(latitude: koordinate.latitude, longitude: koordinate.longitude))
+        else { return nil }
+        guard let treffer = try? await anfrage.mapItems, let erster = treffer.first else { return nil }
+        return erster.address?.fullAddress
+    }
+
     @MainActor
     private static func standortKoordinaten() async -> (breitengrad: Double, laengengrad: Double)? {
         guard let standort = await EinmaligerStandortAbruf().standortErmitteln() else { return nil }
