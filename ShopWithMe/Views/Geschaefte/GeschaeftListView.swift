@@ -14,18 +14,28 @@ import SwiftData
 ///
 /// Gruppiert alphabetisch nach Anfangsbuchstaben — bei vielen Geschäften zeigt iOS
 /// dafür automatisch eine A–Z-Sprungleiste wie im Adressbuch (GitHub #29).
+///
+/// Zeigt zusätzlich eine „Favoriten“-Sektion mit den meistgenutzten Geschäften
+/// (``GeschaeftHaeufigkeitService``, GitHub #31) vor der vollständigen,
+/// alphabetischen Liste — konfigurierbar über den Zähler-Button im Toolbar.
 struct GeschaeftListView: View {
     @Query(sort: \Geschaeft.name) private var geschaefte: [Geschaeft]
+    @Query private var einkaufsvorgaenge: [Einkaufsvorgang]
     @Environment(\.modelContext) private var modelContext
 
     @State private var neuesGeschaeftEntwurf: Geschaeft?
     @State private var zeigeBelegScan = false
+    @State private var zeigeFavoritenEinstellungen = false
 
     /// Namen, die mehrfach vorkommen — steuert, ob ``GeschaeftZeile`` zusätzlich die
     /// Kurzadresse anzeigt, um namensgleiche Geschäfte unterscheidbar zu machen
     /// (analog `GeschaeftWahlSheet`, siehe `docs/BELEGSCAN.md`).
     private var namenMitDuplikaten: Set<String> {
         Geschaeft.namenMitDuplikaten(unter: geschaefte)
+    }
+
+    private var favoriten: [Geschaeft] {
+        GeschaeftHaeufigkeitService.favoriten(aus: einkaufsvorgaenge)
     }
 
     /// ``geschaefte`` gruppiert nach Anfangsbuchstaben, alphabetisch.
@@ -39,6 +49,18 @@ struct GeschaeftListView: View {
 
     var body: some View {
         List {
+            if !favoriten.isEmpty {
+                Section("Favoriten") {
+                    ForEach(favoriten) { geschaeft in
+                        NavigationLink {
+                            GeschaeftDetailView(geschaeft: geschaeft)
+                        } label: {
+                            GeschaeftZeile(geschaeft: geschaeft, istDuplikat: namenMitDuplikaten.contains(geschaeft.name.lowercased()))
+                        }
+                    }
+                }
+            }
+
             ForEach(gruppierteGeschaefte, id: \.buchstabe) { gruppe in
                 Section(gruppe.buchstabe) {
                     ForEach(gruppe.geschaefte) { geschaeft in
@@ -79,12 +101,22 @@ struct GeschaeftListView: View {
                     Label("Beleg scannen", systemImage: "doc.text.viewfinder")
                 }
             }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    zeigeFavoritenEinstellungen = true
+                } label: {
+                    Label("Favoriten-Einstellungen", systemImage: "star")
+                }
+            }
         }
         .sheet(item: $neuesGeschaeftEntwurf) { entwurf in
             GeschaeftStammdatenEditView(geschaeft: entwurf, istNeu: true)
         }
         .sheet(isPresented: $zeigeBelegScan) {
             BelegScanView()
+        }
+        .sheet(isPresented: $zeigeFavoritenEinstellungen) {
+            GeschaeftFavoritenEinstellungenSheet()
         }
     }
 
@@ -94,6 +126,42 @@ struct GeschaeftListView: View {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
                 for eintrag in zuLoeschende {
                     modelContext.delete(eintrag)
+                }
+            }
+        }
+    }
+}
+
+/// Sheet zum Einstellen von ``GeschaeftHaeufigkeitService/anzahlFavoriten`` und
+/// ``GeschaeftHaeufigkeitService/zeitfensterTage`` (GitHub #31).
+private struct GeschaeftFavoritenEinstellungenSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var anzahl = GeschaeftHaeufigkeitService.anzahlFavoriten
+    @State private var zeitfensterTage = GeschaeftHaeufigkeitService.zeitfensterTage
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Stepper("Anzahl Favoriten: \(anzahl)", value: $anzahl, in: 1...20)
+                } footer: {
+                    Text("Wie viele der meistgenutzten Geschäfte oben als Favoriten angezeigt werden.")
+                }
+                Section {
+                    Stepper("Zeitfenster: \(zeitfensterTage) Tage", value: $zeitfensterTage, in: 1...365, step: 5)
+                } footer: {
+                    Text("Nur Einkäufe innerhalb dieses Zeitraums zählen für die Favoriten-Ermittlung.")
+                }
+            }
+            .navigationTitle("Favoriten-Einstellungen")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Fertig") {
+                        GeschaeftHaeufigkeitService.anzahlFavoriten = anzahl
+                        GeschaeftHaeufigkeitService.zeitfensterTage = zeitfensterTage
+                        dismiss()
+                    }
                 }
             }
         }
@@ -129,5 +197,5 @@ private struct GeschaeftZeile: View {
     NavigationStack {
         GeschaeftListView()
     }
-    .modelContainer(for: [Geschaeft.self, Regal.self, ArtikelKategorie.self], inMemory: true)
+    .modelContainer(for: [Geschaeft.self, Regal.self, ArtikelKategorie.self, Einkaufsvorgang.self], inMemory: true)
 }

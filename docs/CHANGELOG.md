@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.6 (Build 83) — Favoriten: meistgenutzte Geschäfte priorisiert
+
+- **`GeschaeftHaeufigkeitService`** (neu): ermittelt die meistgenutzten
+  Geschäfte anhand abgeschlossener `Einkaufsvorgang`e innerhalb eines
+  konfigurierbaren Zeitfensters (Standard 30 Tage, Standard-Anzahl 5).
+- `GeschaeftListView` (Einstellungen → Geschäfte) zeigt eine „Favoriten“-Sektion
+  vor der vollständigen Liste, mit einem Stern-Button zum Einstellen von Anzahl
+  und Zeitfenster.
+- `EinkaufenView`s Geschäfts-Menü zeigt dieselben Favoriten priorisiert vor den
+  übrigen Geschäften (GitHub #31).
+
 ## v0.6 (Build 82) — Besuchsprotokoll je Geschäft
 
 - **`GeschaeftBesuchsProtokollView`** (neu, GitHub #32): listet alle

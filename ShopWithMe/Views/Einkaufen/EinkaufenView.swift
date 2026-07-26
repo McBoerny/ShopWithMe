@@ -15,11 +15,17 @@ import MapKit
 /// davon lässt sich im Geschäft-Menü der Toolbar jederzeit manuell ein neues
 /// Geschäft anlegen (analog ``GeschaeftListView``) oder „Geschäfte in der Nähe“
 /// öffnen — die Standort-Erkennung ist also nie der einzige Weg.
+///
+/// Das Geschäft-Menü zeigt die meistgenutzten Geschäfte
+/// (``GeschaeftHaeufigkeitService``, GitHub #31) vorab in einer eigenen
+/// „Favoriten“-Sektion, bevor die übrigen Geschäfte folgen.
 struct EinkaufenView: View {
     @Query(sort: \Geschaeft.name) private var geschaefte: [Geschaeft]
     @Query(sort: \Einkaufsliste.erstelltAm) private var einkaufslisten: [Einkaufsliste]
     @Query(filter: #Predicate<Einkaufsvorgang> { $0.endZeit == nil })
     private var offeneEinkaufsvorgaenge: [Einkaufsvorgang]
+    @Query(filter: #Predicate<Einkaufsvorgang> { $0.endZeit != nil })
+    private var abgeschlosseneEinkaufsvorgaenge: [Einkaufsvorgang]
     @Query(sort: \IgnorierterGeschaeftsVorschlag.ignoriertAm, order: .reverse)
     private var ignorierteVorschlaege: [IgnorierterGeschaeftsVorschlag]
     @Environment(\.modelContext) private var modelContext
@@ -41,6 +47,19 @@ struct EinkaufenView: View {
         return offeneEinkaufsvorgaenge.first {
             $0.geschaeft == ausgewaehltesGeschaeft && $0.einkaufsliste == ausgewaehlteListe
         }
+    }
+
+    /// Meistgenutzte Geschäfte für die priorisierte Anzeige im Geschäfts-Menü
+    /// (GitHub #31).
+    private var favoritenGeschaefte: [Geschaeft] {
+        GeschaeftHaeufigkeitService.favoriten(aus: abgeschlosseneEinkaufsvorgaenge)
+    }
+
+    /// ``geschaefte`` ohne die bereits in ``favoritenGeschaefte`` gezeigten — damit
+    /// das Menü keine Dubletten zeigt.
+    private var uebrigeGeschaefte: [Geschaeft] {
+        let favoritenIDs = Set(favoritenGeschaefte.map(\.persistentModelID))
+        return geschaefte.filter { !favoritenIDs.contains($0.persistentModelID) }
     }
 
     var body: some View {
@@ -101,7 +120,14 @@ struct EinkaufenView: View {
                         if !geschaefte.isEmpty {
                             Picker("Geschäft", selection: $ausgewaehltesGeschaeft) {
                                 Text("Kein Geschäft").tag(Optional<Geschaeft>.none)
-                                ForEach(geschaefte) { geschaeft in
+                                if !favoritenGeschaefte.isEmpty {
+                                    Section("Favoriten") {
+                                        ForEach(favoritenGeschaefte) { geschaeft in
+                                            Text(geschaeft.name).tag(Optional(geschaeft))
+                                        }
+                                    }
+                                }
+                                ForEach(uebrigeGeschaefte) { geschaeft in
                                     Text(geschaeft.name).tag(Optional(geschaeft))
                                 }
                             }

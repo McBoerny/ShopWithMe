@@ -55,6 +55,15 @@ aus deinen tatsächlichen Einkäufen (nach 5 Einkäufen in diesem Geschäft ange
 deine manuelle Reihenfolge bleibt so lange bestehen, bis du den Vorschlag explizit
 übernimmst).
 
+**Favoriten:** Sowohl in der Geschäfte-Übersicht (Einstellungen) als auch in der
+Geschäftsauswahl beim Einkaufen erscheinen deine meistgenutzten Geschäfte vorab in
+einer eigenen „Favoriten“-Sektion — ermittelt aus abgeschlossenen Einkäufen
+innerhalb eines Zeitfensters (Standard: 30 Tage). Anzahl und Zeitfenster stellst du
+über den Stern-Button in der Geschäfte-Übersicht ein. Jedes Geschäft zeigt
+außerdem in seiner Detailansicht (Bearbeiten) einen Zähler abgeschlossener
+Einkäufe, den du dort separat zurücksetzen kannst, sowie ein „Besuchsprotokoll“
+mit Zeitpunkt und Dauer jedes Einkaufs.
+
 **Standort-Erkennung:** Beim Öffnen des Einkaufen-Tabs prüft die App per einmaliger
 Standortabfrage, ob du dich in der Nähe eines bekannten oder von Apple Maps
 erkannten Ladens befindest, und schlägt ihn in einem Banner vor — direkt zur
