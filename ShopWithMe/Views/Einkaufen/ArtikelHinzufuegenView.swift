@@ -19,6 +19,11 @@ struct ArtikelHinzufuegenView: View {
     @Environment(\.modelContext) private var modelContext
 
     @State private var suchtext = ""
+    /// Explizit auf `false` initialisiert und an `.searchable(isPresented:)`
+    /// gebunden, damit das Suchfeld beim Öffnen dieses Sheets garantiert
+    /// unfokussiert startet (GitHub #23) — unabhängig von der genauen Ursache
+    /// eines gelegentlichen automatischen Aktivierens durch SwiftUI.
+    @State private var sucheAktiv = false
     @State private var neuerArtikelEntwurf: Artikel?
     // SwiftUI setzt die an `.sheet(item:)` gebundene Property bereits vor dem
     // Aufruf von `onDismiss` auf `nil` zurück — ``nachNeuanlageAufraeumen`` braucht
@@ -87,7 +92,7 @@ struct ArtikelHinzufuegenView: View {
                     )
                 }
             }
-            .searchable(text: $suchtext, prompt: "Artikel suchen oder anlegen")
+            .searchable(text: $suchtext, isPresented: $sucheAktiv, prompt: "Artikel suchen oder anlegen")
             .navigationTitle("Artikel hinzufügen")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

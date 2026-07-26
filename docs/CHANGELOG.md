@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.6 (Build 86) — Wischgesten-Hinweis korrigiert, Suchfeld startet inaktiv
+
+- Der Hinweistext zum Zuordnen unzugeordneter Belegpositionen
+  (`GeschaeftPreisUebersichtView`) nannte die falsche Wischrichtung („Nach
+  links“ statt „Nach rechts“) — korrigiert (GitHub #22).
+- `ArtikelHinzufuegenView` startet das Suchfeld jetzt explizit unfokussiert
+  (`.searchable(isPresented:)`), damit es sich beim Öffnen nicht mehr
+  automatisch aktiviert (GitHub #23).
+
 ## v0.6 (Build 85) — Geschäftstyp als eigenes, erweiterbares Modell
 
 - **`GeschaeftTyp`** (neu): bisher ein festes `enum` (Lebensmittel, Drogerie, …),

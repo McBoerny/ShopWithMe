@@ -56,7 +56,7 @@ struct GeschaeftPreisUebersichtView: View {
                 } header: {
                     Text("Ohne Artikel-Zuordnung")
                 } footer: {
-                    Text("Diese Belegpositionen sind noch keinem Artikel zugeordnet. Nach links wischen, um sie über „Zuordnen“ einem (ggf. neuen) Artikel zuzuweisen.")
+                    Text("Diese Belegpositionen sind noch keinem Artikel zugeordnet. Nach rechts wischen, um sie über „Zuordnen“ einem (ggf. neuen) Artikel zuzuweisen.")
                 }
             }
 
