@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.6 (Build 92) — Geschäft-Detail: auch äußere Preisübersicht-Navigation entschärft
+
+- Build 91 behob die Endlosschleife nur auf einer Ebene — `GeschaeftDetailView`
+  öffnete `GeschaeftPreisUebersichtView` (eigenes `@Query`) und
+  `GeschaeftBesuchsProtokollView` ebenfalls noch über die ältere closure-basierte
+  `NavigationLink { destination } label: {}`-Variante, die die Ziel-View eager bei
+  jedem Rendern von `GeschaeftDetailView` neu konstruiert — dieselbe Ursache wie
+  in Build 91, nur eine Ebene höher, und verschärfte das Problem nach dem
+  inneren Fix zusätzlich (Rückmeldung: App hing danach schon vor dem Öffnen der
+  Preisübersicht). Beide Zeilen nutzen jetzt `NavigationLink(value:)` mit einem
+  eigenen `Hashable`-Navigationsziel-Enum statt eines Datenwerts, analog zum
+  bereits bestehenden `Regal`-Muster (GitHub #33).
+
 ## v0.6 (Build 91) — Preisübersicht: Endlosschleife beim Navigieren behoben
 
 - Auch der Fix aus Build 90 behob den Hänger noch nicht vollständig — mit

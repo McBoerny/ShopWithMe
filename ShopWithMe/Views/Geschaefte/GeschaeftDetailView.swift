@@ -31,6 +31,19 @@ import SwiftData
 /// „Besuchsprotokoll“ (``GeschaeftBesuchsProtokollView``, GitHub #32) zeigt
 /// Zeitpunkt und Dauer aller abgeschlossenen ``Einkaufsvorgang``e in diesem
 /// Geschäft — ohne eigenes Datenmodell, direkt aus dessen `startZeit`/`endZeit`.
+/// Navigationsziele der beiden letzten Zeilen in ``GeschaeftDetailView``, die auf
+/// keinem konkreten Datenwert basieren (anders als z.B. ``Regal``) — als eigenes
+/// `Hashable`-Werteziel für `NavigationLink(value:)`/`.navigationDestination(for:)`,
+/// statt der älteren closure-basierten `NavigationLink { destination } label: {}`-
+/// Variante. Letztere konstruiert ihre Destination-View eager bei **jedem** Rendern
+/// von `GeschaeftDetailView`, nicht erst beim tatsächlichen Antippen — bei
+/// `GeschaeftPreisUebersichtView` (eigenes `@Query`) führte das zu einer
+/// Endlosschleife mit dessen verschachtelten Destinations (GitHub #33).
+private enum GeschaeftDetailNavigationsziel: Hashable {
+    case preisuebersicht
+    case besuchsprotokoll
+}
+
 struct GeschaeftDetailView: View {
     @Bindable var geschaeft: Geschaeft
     @Environment(\.modelContext) private var modelContext
@@ -166,14 +179,10 @@ struct GeschaeftDetailView: View {
             }
 
             Section {
-                NavigationLink {
-                    GeschaeftPreisUebersichtView(geschaeft: geschaeft)
-                } label: {
+                NavigationLink(value: GeschaeftDetailNavigationsziel.preisuebersicht) {
                     Label("Preisübersicht", systemImage: "chart.line.uptrend.xyaxis")
                 }
-                NavigationLink {
-                    GeschaeftBesuchsProtokollView(geschaeft: geschaeft)
-                } label: {
+                NavigationLink(value: GeschaeftDetailNavigationsziel.besuchsprotokoll) {
                     Label("Besuchsprotokoll", systemImage: "clock.arrow.circlepath")
                 }
             }
@@ -181,6 +190,14 @@ struct GeschaeftDetailView: View {
         .navigationTitle(geschaeft.name.isEmpty ? "Geschäft" : geschaeft.name)
         .navigationDestination(for: Regal.self) { regal in
             RegalDetailView(regal: regal)
+        }
+        .navigationDestination(for: GeschaeftDetailNavigationsziel.self) { ziel in
+            switch ziel {
+            case .preisuebersicht:
+                GeschaeftPreisUebersichtView(geschaeft: geschaeft)
+            case .besuchsprotokoll:
+                GeschaeftBesuchsProtokollView(geschaeft: geschaeft)
+            }
         }
         .toolbar {
             // Nur anzeigen, wenn er tatsächlich etwas bewirkt: Löschen funktioniert
