@@ -599,6 +599,30 @@ struct ModelTests {
     }
 
     @Test
+    func anzahlEinkaufsvorgaengeFaelltOhneGespeichertenRohwertAufNullZurueck() {
+        let geschaeft = Geschaeft(name: "Rewe", typen: [.lebensmittel])
+        #expect(geschaeft.anzahlEinkaufsvorgaenge == 0)
+    }
+
+    @Test
+    func abschliessenErhoehtAnzahlEinkaufsvorgaengeDesGeschaefts() throws {
+        // GitHub #30: der Zähler wird unabhängig von der Preishistorie geführt und
+        // lässt sich separat zurücksetzen.
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let geschaeft = Geschaeft(name: "Rewe", typen: [.lebensmittel])
+        context.insert(geschaeft)
+        let einkauf = Einkaufsvorgang(geschaeft: geschaeft)
+        context.insert(einkauf)
+
+        einkauf.abschliessen()
+        #expect(geschaeft.anzahlEinkaufsvorgaenge == 1)
+
+        geschaeft.anzahlEinkaufsvorgaenge = 0
+        #expect(geschaeft.anzahlEinkaufsvorgaenge == 0)
+    }
+
+    @Test
     func istIgnoriertErkenntTrefferBeiGleichemGeschaeftUndPassendemNamen() {
         let rewe = Geschaeft(name: "Rewe", typen: [.lebensmittel])
         let ignoriert = IgnorierterArtikel(erkannterName: "Pfand", geschaeft: rewe)

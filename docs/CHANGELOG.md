@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.6 (Build 81) — Zähler für abgeschlossene Einkäufe je Geschäft
+
+- **`Geschaeft.anzahlEinkaufsvorgaenge`** (neu): zählt, wie oft ein
+  Einkaufsvorgang in diesem Geschäft abgeschlossen wurde
+  (`Einkaufsvorgang.abschliessen(am:)` erhöht ihn) — unabhängig von der
+  Preishistorie und deren Aufbewahrungsfrist. In
+  `GeschaeftStammdatenEditView` sichtbar und manuell auf 0 zurücksetzbar,
+  ohne die Kaufhistorie zu löschen (GitHub #30).
+
 ## v0.6 (Build 80) — Edit-Button in Geschäft-Detail nur bei echtem Nutzen
 
 - `GeschaeftDetailView`: der Bearbeiten-Button oben rechts erscheint jetzt nur

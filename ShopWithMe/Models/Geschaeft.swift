@@ -160,6 +160,19 @@ final class Geschaeft {
         get { (alternativeNamenRaw ?? "").split(separator: "\n").map(String.init) }
         set { alternativeNamenRaw = newValue.isEmpty ? nil : newValue.joined(separator: "\n") }
     }
+    /// Rohwert für ``anzahlEinkaufsvorgaenge``. Optional gespeichert, damit vor
+    /// Einführung dieses Attributs angelegte Geschäfte beim automatischen Laden
+    /// nicht abstürzen — ein `nil`-Rohwert fällt auf `0` zurück.
+    private var anzahlEinkaufsvorgaengeRaw: Int?
+    /// Wie oft der Anwender in diesem Geschäft bereits einen Einkaufsvorgang
+    /// abgeschlossen hat (``Einkaufsvorgang/abschliessen(am:)``) — unabhängig von der
+    /// Preishistorie, daher unabhängig von deren Aufbewahrungsfrist. In
+    /// ``GeschaeftStammdatenEditView`` manuell auf `0` zurücksetzbar, ohne die
+    /// eigentliche Kaufhistorie zu löschen (GitHub #30).
+    var anzahlEinkaufsvorgaenge: Int {
+        get { anzahlEinkaufsvorgaengeRaw ?? 0 }
+        set { anzahlEinkaufsvorgaengeRaw = newValue }
+    }
 
     init(name: String, typen: [GeschaeftTyp], adresse: String? = nil) {
         self.id = UUID()

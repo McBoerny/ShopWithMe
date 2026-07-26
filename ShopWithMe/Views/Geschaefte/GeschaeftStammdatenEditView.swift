@@ -64,6 +64,19 @@ struct GeschaeftStammdatenEditView: View {
                         axis: .vertical
                     )
                 }
+
+                if !istNeu {
+                    Section {
+                        LabeledContent("Abgeschlossene Einkäufe", value: "\(geschaeft.anzahlEinkaufsvorgaenge)")
+                        if geschaeft.anzahlEinkaufsvorgaenge != 0 {
+                            Button("Zähler zurücksetzen", role: .destructive) {
+                                geschaeft.anzahlEinkaufsvorgaenge = 0
+                            }
+                        }
+                    } footer: {
+                        Text("Zählt, wie oft hier ein Einkauf abgeschlossen wurde. Das Zurücksetzen löscht nur den Zähler, nicht die Preishistorie.")
+                    }
+                }
             }
             .navigationTitle(istNeu ? "Neues Geschäft" : "Geschäft bearbeiten")
             .navigationBarTitleDisplayMode(.inline)
