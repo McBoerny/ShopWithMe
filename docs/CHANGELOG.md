@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.6 (Build 79) — Geschäfte-Liste alphabetisch mit A-Z-Sprungleiste
+
+- `GeschaeftListView` gruppiert die Geschäfte jetzt nach Anfangsbuchstaben
+  (analog zur Artikelauswahl aus #8) — bei vielen Geschäften zeigt iOS dafür
+  automatisch eine A–Z-Sprungleiste wie im Adressbuch (GitHub #29).
+
 ## v0.6 (Build 78) — Preisübersicht: eigener View, Diagramm, Einzelpreis löschen
 
 - **`GeschaeftPreisUebersichtView`** (neu, GitHub #20): die Preisübersicht eines

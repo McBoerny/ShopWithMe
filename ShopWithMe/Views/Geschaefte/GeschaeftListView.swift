@@ -11,6 +11,9 @@ import SwiftData
 /// ``BelegScanView/init()`` erkennt das Geschäft dafür automatisch, siehe
 /// `docs/BELEGSCAN.md`. Der Preisschild-Scan hat bewusst keinen geschäftslosen
 /// Einstieg (siehe `docs/PREISSCHILD_SCAN.md`) und ist deshalb hier nicht verlinkt.
+///
+/// Gruppiert alphabetisch nach Anfangsbuchstaben — bei vielen Geschäften zeigt iOS
+/// dafür automatisch eine A–Z-Sprungleiste wie im Adressbuch (GitHub #29).
 struct GeschaeftListView: View {
     @Query(sort: \Geschaeft.name) private var geschaefte: [Geschaeft]
     @Environment(\.modelContext) private var modelContext
@@ -25,16 +28,31 @@ struct GeschaeftListView: View {
         Geschaeft.namenMitDuplikaten(unter: geschaefte)
     }
 
+    /// ``geschaefte`` gruppiert nach Anfangsbuchstaben, alphabetisch.
+    private var gruppierteGeschaefte: [(buchstabe: String, geschaefte: [Geschaeft])] {
+        let gruppen = Dictionary(grouping: geschaefte) { geschaeft -> String in
+            guard let erstesZeichen = geschaeft.name.first else { return "#" }
+            return String(erstesZeichen).uppercased()
+        }
+        return gruppen.keys.sorted().map { buchstabe in (buchstabe, gruppen[buchstabe] ?? []) }
+    }
+
     var body: some View {
         List {
-            ForEach(geschaefte) { geschaeft in
-                NavigationLink {
-                    GeschaeftDetailView(geschaeft: geschaeft)
-                } label: {
-                    GeschaeftZeile(geschaeft: geschaeft, istDuplikat: namenMitDuplikaten.contains(geschaeft.name.lowercased()))
+            ForEach(gruppierteGeschaefte, id: \.buchstabe) { gruppe in
+                Section(gruppe.buchstabe) {
+                    ForEach(gruppe.geschaefte) { geschaeft in
+                        NavigationLink {
+                            GeschaeftDetailView(geschaeft: geschaeft)
+                        } label: {
+                            GeschaeftZeile(geschaeft: geschaeft, istDuplikat: namenMitDuplikaten.contains(geschaeft.name.lowercased()))
+                        }
+                    }
+                    .onDelete { offsets in
+                        geschaeftLoeschen(gruppe.geschaefte, at: offsets)
+                    }
                 }
             }
-            .onDelete(perform: geschaeftLoeschen)
         }
         .overlay {
             if geschaefte.isEmpty {
@@ -70,7 +88,7 @@ struct GeschaeftListView: View {
         }
     }
 
-    private func geschaeftLoeschen(at offsets: IndexSet) {
+    private func geschaeftLoeschen(_ geschaefte: [Geschaeft], at offsets: IndexSet) {
         let zuLoeschende = offsets.map { geschaefte[$0] }
         Task {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
