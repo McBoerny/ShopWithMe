@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.6 (Build 91) — Preisübersicht: Endlosschleife beim Navigieren behoben
+
+- Auch der Fix aus Build 90 behob den Hänger noch nicht vollständig — mit
+  gezielten temporären Debug-Ausgaben (auf Wunsch des Nutzers eingebaut, siehe
+  GitHub #33) zeigte sich eine echte Endlosschleife: `GeschaeftPreisUebersichtView`
+  nutzte für die „Preisspanne je Artikel“-Liste die ältere, closure-basierte
+  `NavigationLink { destination } label: {}`-Variante — dabei konstruiert SwiftUI
+  die Destination-View (inkl. eines eigenen `@Query`) **eager für jede Zeile der
+  Liste**, nicht nur für die angetippte. Die wiederholte `@Query`-Neuanlage löste
+  eine Rückkopplung mit dem `@Query` der Preisübersicht selbst aus — beide
+  Views rendern sich seitdem endlos gegenseitig neu. Umgestellt auf das
+  wertbasierte `NavigationLink(value:)` + `.navigationDestination(for:)`
+  (das Muster, das an anderer Stelle im Code, z.B. für Regale, bereits
+  konsequent verwendet wird) — die Destination wird jetzt nur noch für den
+  tatsächlich angetippten Artikel konstruiert.
+
 ## v0.6 (Build 90) — Preisübersicht: tatsächliche Ursache des Hängers gefunden und behoben
 
 - Der vorherige Fix (Build 89) behob eine potenzielle Schwachstelle, war aber

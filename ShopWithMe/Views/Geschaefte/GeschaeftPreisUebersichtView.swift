@@ -35,9 +35,7 @@ struct GeschaeftPreisUebersichtView: View {
             if !artikelPreisSpannen.isEmpty {
                 Section {
                     ForEach(artikelPreisSpannen) { spanne in
-                        NavigationLink {
-                            ArtikelPreisVerlaufView(artikel: spanne.artikel, geschaeft: geschaeft)
-                        } label: {
+                        NavigationLink(value: spanne.artikel) {
                             ArtikelPreisSpanneZeile(spanne: spanne)
                         }
                     }
@@ -70,6 +68,9 @@ struct GeschaeftPreisUebersichtView: View {
         }
         .navigationTitle("Preisübersicht")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(for: Artikel.self) { artikel in
+            ArtikelPreisVerlaufView(artikel: artikel, geschaeft: geschaeft)
+        }
     }
 }
 
@@ -108,12 +109,14 @@ private struct ArtikelPreisVerlaufView: View {
     let artikel: Artikel
     @Environment(\.modelContext) private var modelContext
     /// Alle Belegpositionen dieses Geschäfts — bewusst nur nach **einer** Beziehung
-    /// live gefiltert (siehe ``eintraege``). Ein zusammengesetztes `#Predicate` über
-    /// zwei Beziehungen (`artikel` **und** `geschaeft`) ließ sich in einem live
-    /// beobachtenden `@Query` offenbar nicht zuverlässig auflösen und führte beim
-    /// Öffnen dieses Views zu einem Hänger — an anderer Stelle im Code taucht dieses
-    /// Zwei-Beziehungen-Muster nur in einmaligen `context.fetch`-Aufrufen auf, nie in
-    /// einem live `@Query`.
+    /// live gefiltert (siehe ``eintraege``), statt eines zusammengesetzten
+    /// `#Predicate` über zwei Beziehungen (`artikel` **und** `geschaeft`) — dieses
+    /// Zwei-Beziehungen-Muster taucht an anderer Stelle im Code nur in einmaligen
+    /// `context.fetch`-Aufrufen auf, nie in einem live `@Query`. Rein defensiv;
+    /// die eigentliche Ursache des GitHub-#33-Hängers war, dass dieser View bis vor
+    /// Kurzem als Closure-Destination eines wertlosen `NavigationLink` konstruiert
+    /// wurde (siehe ``GeschaeftPreisUebersichtView``, jetzt `NavigationLink(value:)`
+    /// + `.navigationDestination(for:)`).
     @Query private var eintraegeDesGeschaefts: [KaufEintrag]
 
     init(artikel: Artikel, geschaeft: Geschaeft) {
