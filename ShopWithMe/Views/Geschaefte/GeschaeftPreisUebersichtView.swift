@@ -156,9 +156,8 @@ private struct ArtikelPreisVerlaufView: View {
 
             Section {
                 ForEach(eintraege) { eintrag in
-                    PreisHistorieZeile(eintrag: eintrag, zeigeArtikel: true)
+                    PreisHistorieZeile(eintrag: eintrag, zeigeArtikel: true, loeschen: { eintragLoeschen(eintrag) })
                 }
-                .onDelete(perform: eintragLoeschen)
             } footer: {
                 Text("Nach links wischen, um einen einzelnen Preis dauerhaft zu löschen — z.B. bei einer offensichtlich falsch erfassten Position.")
             }
@@ -180,15 +179,12 @@ private struct ArtikelPreisVerlaufView: View {
         }
     }
 
-    /// Löscht die ausgewählten ``KaufEintrag``e dauerhaft — bewusst ohne
-    /// Rückfrage, analog zu anderen Wisch-Lösch-Aktionen in der App (z.B.
-    /// Kategorie-/Regal-Entfernen).
-    private func eintragLoeschen(at offsets: IndexSet) {
+    /// Löscht `eintrag` dauerhaft — bewusst ohne Rückfrage, analog zu anderen
+    /// Wisch-Lösch-Aktionen in der App (z.B. Kategorie-/Regal-Entfernen).
+    private func eintragLoeschen(_ eintrag: KaufEintrag) {
         Task {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
-                for index in offsets {
-                    modelContext.delete(eintraege[index])
-                }
+                modelContext.delete(eintrag)
             }
         }
     }

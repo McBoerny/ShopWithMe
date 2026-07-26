@@ -12,6 +12,14 @@ struct PreisHistorieZeile: View {
     /// `true` in der Geschäfts-Detailansicht (zeigt den Artikelnamen), `false` in der
     /// Artikel-Detailansicht (zeigt den Geschäftsnamen).
     let zeigeArtikel: Bool
+    /// Optionale Trailing-Wisch-Löschaktion, direkt hier statt über ein
+    /// zusätzliches `.onDelete` am umgebenden `ForEach` angeboten (GitHub #33):
+    /// zwei unabhängige Swipe-Konfigurationen auf derselben Zeile — hier das
+    /// eigene `.swipeActions(edge: .leading)` unten, extern ein zusätzliches
+    /// `.onDelete` — brachten UIKits Swipe-Gesten-Erkennung durcheinander und
+    /// ließen die App beim Öffnen hängen (blockierender `_UISwipeActionPan...`
+    /// laut Debug-Protokoll). `nil` (Standard) zeigt keine Löschaktion.
+    var loeschen: (() -> Void)? = nil
 
     @State private var zeigeZuordnenSheet = false
 
@@ -42,6 +50,13 @@ struct PreisHistorieZeile: View {
                 Label("Zuordnen", systemImage: "tag")
             }
             .tint(.blue)
+        }
+        .swipeActions(edge: .trailing) {
+            if let loeschen {
+                Button(role: .destructive, action: loeschen) {
+                    Label("Löschen", systemImage: "trash")
+                }
+            }
         }
         .sheet(isPresented: $zeigeZuordnenSheet) {
             KaufEintragZuordnenSheet(eintrag: eintrag)

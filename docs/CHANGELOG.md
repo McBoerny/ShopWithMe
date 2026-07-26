@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.6 (Build 90) — Preisübersicht: tatsächliche Ursache des Hängers gefunden und behoben
+
+- Der vorherige Fix (Build 89) behob eine potenzielle Schwachstelle, war aber
+  nicht die tatsächliche Ursache. Ein vom Nutzer bereitgestelltes Debug-Protokoll
+  zeigte den echten Grund: ein `_UISwipeActionPanGestureRecognizer` blockierte
+  die App für über 78 Sekunden. Ursache: `PreisHistorieZeile` definierte eine
+  eigene `.swipeActions(edge: .leading)`-Konfiguration („Zuordnen“), während
+  `ArtikelPreisVerlaufView` zusätzlich ein externes `.onDelete` auf derselben
+  Zeile anwendete — zwei unabhängige Swipe-Konfigurationen auf derselben Zeile
+  brachten UIKits Swipe-Gesten-Erkennung durcheinander. `PreisHistorieZeile`
+  übernimmt die Löschaktion jetzt selbst über einen optionalen `loeschen`-
+  Parameter (eigenes `.swipeActions(edge: .trailing)`), statt sie extern per
+  `.onDelete` zu überlagern (GitHub #33).
+
 ## v0.6 (Build 89) — Preisübersicht: Hänger beim Öffnen der Artikel-Preishistorie behoben
 
 - Ein Antippen eines Artikels in der Preisübersicht eines Geschäfts konnte die
