@@ -174,7 +174,12 @@ struct GeschaeftDetailView: View {
             RegalDetailView(regal: regal)
         }
         .toolbar {
-            EditButton()
+            // Nur anzeigen, wenn er tatsächlich etwas bewirkt: Löschen funktioniert
+            // bereits ohne Edit-Modus per Wischgeste, der einzige Mehrwert sind die
+            // Zieh-Griffe zum manuellen Umsortieren mehrerer Regale (GitHub #28).
+            if geschaeft.regalSortierModus == .manuell && regaleAnzeigen.count > 1 {
+                EditButton()
+            }
         }
         .sheet(isPresented: $zeigeStammdatenEdit) {
             GeschaeftStammdatenEditView(geschaeft: geschaeft, istNeu: false)

@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.6 (Build 80) — Edit-Button in Geschäft-Detail nur bei echtem Nutzen
+
+- `GeschaeftDetailView`: der Bearbeiten-Button oben rechts erscheint jetzt nur
+  noch, wenn er tatsächlich etwas bewirkt — Zieh-Griffe zum manuellen
+  Umsortieren von mindestens zwei Regalen im manuellen Sortiermodus. Löschen
+  funktioniert bereits ohne Edit-Modus per Wischgeste; vorher wirkte der
+  Button in allen anderen Fällen wirkungslos (GitHub #28).
+
 ## v0.6 (Build 79) — Geschäfte-Liste alphabetisch mit A-Z-Sprungleiste
 
 - `GeschaeftListView` gruppiert die Geschäfte jetzt nach Anfangsbuchstaben
