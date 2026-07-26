@@ -106,7 +106,9 @@ manueller Start nötig.
 - Per Wischgeste lässt sich ein bereits abgehakter Artikel dauerhaft aus dieser
   Ansicht entfernen (landet dann nicht wieder auf der offenen Liste).
 - Ein Einkauf lässt sich jederzeit abschließen, auch mit offenen Artikeln — die
-  bleiben einfach auf der globalen Liste.
+  bleiben einfach auf der globalen Liste. Der „Einkauf abschließen“-Button zeigt
+  dabei die Anzahl bereits abgehakter Artikel und färbt sich in der Akzentfarbe,
+  sobald mindestens einer abgehakt wurde.
 
 ## Belegscan & Preisschild-Scan
 

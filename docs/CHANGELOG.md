@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.6 (Build 87) — Einkauf-abschließen-Button zeigt Anzahl abgehakter Artikel
+
+- Der „Einkauf abschließen“-Button zeigt jetzt die Anzahl bereits abgehakter
+  Artikel im Label und wechselt von neutral zu akzentfarben, sobald mindestens
+  ein Artikel abgehakt wurde (GitHub #26).
+
 ## v0.6 (Build 86) — Wischgesten-Hinweis korrigiert, Suchfeld startet inaktiv
 
 - Der Hinweistext zum Zuordnen unzugeordneter Belegpositionen

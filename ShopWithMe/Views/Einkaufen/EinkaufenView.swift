@@ -746,6 +746,43 @@ private struct EinkaufslisteView: View {
         einkaufsvorgang.kaufEintraege.compactMap(\.artikel).filter { abgehakteArtikelIDs.contains($0.persistentModelID) }
     }
 
+    /// Der „Einkauf abschließen“-Button am unteren Bildschirmrand: zeigt die Anzahl
+    /// bereits abgehakter Artikel im Label und wechselt von neutral (kein Artikel
+    /// abgehakt) zu akzentfarben (mindestens einer abgehakt), damit auf einen
+    /// Blick erkennbar ist, ob ein Abschließen bereits sinnvoll ist (GitHub #26).
+    /// Zwei Zweige statt eines gemeinsamen `.buttonStyle(...)`-Ausdrucks, da
+    /// `.glass`/`.glassProminent` unterschiedliche konkrete Typen sind.
+    @ViewBuilder
+    private var einkaufAbschliessenButton: some View {
+        let titel = abgehakteArtikel.isEmpty
+            ? "Einkauf abschließen"
+            : "Einkauf abschließen (\(abgehakteArtikel.count))"
+        if abgehakteArtikel.isEmpty {
+            Button(titel, action: einkaufAbschliessen)
+                .buttonStyle(.glass)
+                .frame(maxWidth: .infinity)
+                .padding()
+        } else {
+            Button(titel, action: einkaufAbschliessen)
+                .buttonStyle(.glassProminent)
+                .frame(maxWidth: .infinity)
+                .padding()
+        }
+    }
+
+    private func einkaufAbschliessen() {
+        Task {
+            // Abschließen + Lernschritt sind fachlich eine Aktion → ein
+            // gemeinsamer Micro-Lease statt zwei getrennter (siehe
+            // `docs/DATABASE_CONCURRENCY.md` → „Gebündelte Aktionen“).
+            await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                einkaufsvorgang.abschliessen()
+                ShelfOrderLearningService.lernenAus(einkaufsvorgang, context: modelContext)
+            }
+            zeigeBelegScanAngebot = true
+        }
+    }
+
     /// Ist ein Geschäft gewählt, blendet dies standardmäßig Artikel aus, die darin
     /// (noch) nicht als verfügbar gelten (siehe ``ArtikelVerfuegbarkeitService``).
     /// Per ``zeigeAlleArtikel`` kann der Anwender diesen Filter für den laufenden
@@ -903,23 +940,7 @@ private struct EinkaufslisteView: View {
                 }
             }
         }
-        .safeAreaInset(edge: .bottom) {
-            Button("Einkauf abschließen") {
-                Task {
-                    // Abschließen + Lernschritt sind fachlich eine Aktion → ein
-                    // gemeinsamer Micro-Lease statt zwei getrennter (siehe
-                    // `docs/DATABASE_CONCURRENCY.md` → „Gebündelte Aktionen“).
-                    await DatabaseLeaseService.performMicroLease(context: modelContext) {
-                        einkaufsvorgang.abschliessen()
-                        ShelfOrderLearningService.lernenAus(einkaufsvorgang, context: modelContext)
-                    }
-                    zeigeBelegScanAngebot = true
-                }
-            }
-            .buttonStyle(.glassProminent)
-            .frame(maxWidth: .infinity)
-            .padding()
-        }
+        .safeAreaInset(edge: .bottom) { einkaufAbschliessenButton }
         // Zeigt bewusst immer den Listennamen, nicht den Geschäftsnamen — der
         // erscheint stattdessen direkt neben dem Einkaufswagen-Icon im
         // `EinkaufenView`-Toolbar (siehe dort, GitHub #16).
