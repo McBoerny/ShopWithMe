@@ -107,18 +107,29 @@ private struct ArtikelPreisSpanneZeile: View {
 private struct ArtikelPreisVerlaufView: View {
     let artikel: Artikel
     @Environment(\.modelContext) private var modelContext
-    @Query private var eintraege: [KaufEintrag]
+    /// Alle Belegpositionen dieses Geschäfts — bewusst nur nach **einer** Beziehung
+    /// live gefiltert (siehe ``eintraege``). Ein zusammengesetztes `#Predicate` über
+    /// zwei Beziehungen (`artikel` **und** `geschaeft`) ließ sich in einem live
+    /// beobachtenden `@Query` offenbar nicht zuverlässig auflösen und führte beim
+    /// Öffnen dieses Views zu einem Hänger — an anderer Stelle im Code taucht dieses
+    /// Zwei-Beziehungen-Muster nur in einmaligen `context.fetch`-Aufrufen auf, nie in
+    /// einem live `@Query`.
+    @Query private var eintraegeDesGeschaefts: [KaufEintrag]
 
     init(artikel: Artikel, geschaeft: Geschaeft) {
         self.artikel = artikel
-        let artikelID = artikel.persistentModelID
         let geschaeftID = geschaeft.persistentModelID
-        _eintraege = Query(
-            filter: #Predicate<KaufEintrag> {
-                $0.artikel?.persistentModelID == artikelID && $0.geschaeft?.persistentModelID == geschaeftID
-            },
+        _eintraegeDesGeschaefts = Query(
+            filter: #Predicate<KaufEintrag> { $0.geschaeft?.persistentModelID == geschaeftID },
             sort: [SortDescriptor(\.datum, order: .reverse)]
         )
+    }
+
+    /// ``eintraegeDesGeschaefts``, zusätzlich auf ``artikel`` eingegrenzt — die
+    /// zweite Filterbedingung läuft bewusst in Swift statt im `#Predicate` (siehe
+    /// Dokumentation an ``eintraegeDesGeschaefts``).
+    private var eintraege: [KaufEintrag] {
+        eintraegeDesGeschaefts.filter { $0.artikel?.persistentModelID == artikel.persistentModelID }
     }
 
     /// ``eintraege`` mit vorhandenem Preis, chronologisch aufsteigend — Grundlage

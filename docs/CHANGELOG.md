@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.6 (Build 89) — Preisübersicht: Hänger beim Öffnen der Artikel-Preishistorie behoben
+
+- Ein Antippen eines Artikels in der Preisübersicht eines Geschäfts konnte die
+  App zum Hängen bringen. Ursache: ein live beobachtendes `@Query` mit einem
+  zusammengesetzten `#Predicate` über zwei Beziehungen (`artikel` **und**
+  `geschaeft`) — dieses Muster war im Code sonst nur für einmalige Fetches in
+  Verwendung, nie für ein live `@Query`. Jetzt wird nur noch nach einer
+  Beziehung live gefiltert, die zweite Filterbedingung läuft in Swift
+  (GitHub #33).
+
 ## v0.6 (Build 88) — Einkaufsliste direkt in der Zeile umbenennen
 
 - **Einkaufslisten-Verwaltung** (`EinkaufslistenVerwaltungView`): der
