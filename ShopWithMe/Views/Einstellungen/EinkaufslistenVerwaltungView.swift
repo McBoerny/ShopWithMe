@@ -4,6 +4,10 @@ import SwiftData
 /// Verwaltung aller ``Einkaufsliste``n: Umbenennen sowie Anlegen/Löschen —
 /// aufrufbar aus ``SettingsView``. Die schnelle Anlage einer neuen Liste direkt
 /// beim Einkaufen (``EinkaufenView``) bleibt davon unabhängig möglich.
+///
+/// Der Name lässt sich direkt in der Zeile per `TextField` bearbeiten — kein
+/// separater Bearbeiten-Subview nötig (GitHub #27). Löschen funktioniert bereits
+/// per Wischgeste, ein zusätzlicher `EditButton()` wäre daher ohne Mehrwert.
 struct EinkaufslistenVerwaltungView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Einkaufsliste.erstelltAm) private var listen: [Einkaufsliste]
@@ -18,11 +22,7 @@ struct EinkaufslistenVerwaltungView: View {
         List {
             Section {
                 ForEach(listen) { liste in
-                    NavigationLink {
-                        ListeBearbeitenView(liste: liste)
-                    } label: {
-                        Label(liste.name, systemImage: "checklist")
-                    }
+                    EinkaufslisteZeile(liste: liste)
                 }
                 .onDelete(perform: listeLoeschen)
             } footer: {
@@ -46,9 +46,6 @@ struct EinkaufslistenVerwaltungView: View {
                     Label("MilkForUs importieren", systemImage: "square.and.arrow.down.on.square")
                 }
             }
-            ToolbarItem(placement: .cancellationAction) {
-                EditButton()
-            }
         }
         .sheet(isPresented: $zeigeNeueListe) {
             NeueEinkaufslisteVerwaltungSheet()
@@ -65,17 +62,17 @@ struct EinkaufslistenVerwaltungView: View {
     }
 }
 
-/// Bearbeitet den Namen einer einzelnen ``Einkaufsliste``.
-private struct ListeBearbeitenView: View {
+/// Eine Zeile in der Einkaufslisten-Verwaltung: der Name ist direkt per
+/// `TextField` editierbar, ganz ohne eigenen Bearbeiten-Bildschirm (GitHub #27).
+private struct EinkaufslisteZeile: View {
     @Bindable var liste: Einkaufsliste
 
     var body: some View {
-        Form {
+        Label {
             TextField("Name", text: $liste.name)
-                .font(.title3)
+        } icon: {
+            Image(systemName: "checklist")
         }
-        .navigationTitle(liste.name)
-        .navigationBarTitleDisplayMode(.inline)
     }
 }
 

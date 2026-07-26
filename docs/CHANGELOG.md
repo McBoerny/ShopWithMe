@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.6 (Build 88) — Einkaufsliste direkt in der Zeile umbenennen
+
+- **Einkaufslisten-Verwaltung** (`EinkaufslistenVerwaltungView`): der
+  Listenname lässt sich jetzt direkt in der Zeile per Textfeld umbenennen —
+  kein eigener Bearbeiten-Bildschirm mehr nötig. Der `Bearbeiten`-Button im
+  Toolbar entfällt, da Löschen bereits per Wischgeste funktioniert (GitHub #27).
+
 ## v0.6 (Build 87) — Einkauf-abschließen-Button zeigt Anzahl abgehakter Artikel
 
 - Der „Einkauf abschließen“-Button zeigt jetzt die Anzahl bereits abgehakter
