@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.6 (Build 82) — Besuchsprotokoll je Geschäft
+
+- **`GeschaeftBesuchsProtokollView`** (neu, GitHub #32): listet alle
+  abgeschlossenen Einkaufsbesuche eines Geschäfts mit Zeitpunkt und Dauer —
+  ohne neues Datenmodell, direkt aus den ohnehin vorhandenen
+  `Einkaufsvorgang.startZeit`/`endZeit` abgeleitet. Aufrufbar über einen
+  neuen Eintrag in `GeschaeftDetailView`.
+
 ## v0.6 (Build 81) — Zähler für abgeschlossene Einkäufe je Geschäft
 
 - **`Geschaeft.anzahlEinkaufsvorgaenge`** (neu): zählt, wie oft ein

@@ -27,6 +27,10 @@ import SwiftData
 /// „Preisübersicht“ ist ein eigener View (``GeschaeftPreisUebersichtView``,
 /// GitHub #20) mit der Preisspanne pro Artikel sowie Positionen ohne
 /// Artikel-Zuordnung — siehe `docs/BELEGSCAN.md`.
+///
+/// „Besuchsprotokoll“ (``GeschaeftBesuchsProtokollView``, GitHub #32) zeigt
+/// Zeitpunkt und Dauer aller abgeschlossenen ``Einkaufsvorgang``e in diesem
+/// Geschäft — ohne eigenes Datenmodell, direkt aus dessen `startZeit`/`endZeit`.
 struct GeschaeftDetailView: View {
     @Bindable var geschaeft: Geschaeft
     @Environment(\.modelContext) private var modelContext
@@ -166,6 +170,11 @@ struct GeschaeftDetailView: View {
                     GeschaeftPreisUebersichtView(geschaeft: geschaeft)
                 } label: {
                     Label("Preisübersicht", systemImage: "chart.line.uptrend.xyaxis")
+                }
+                NavigationLink {
+                    GeschaeftBesuchsProtokollView(geschaeft: geschaeft)
+                } label: {
+                    Label("Besuchsprotokoll", systemImage: "clock.arrow.circlepath")
                 }
             }
         }
