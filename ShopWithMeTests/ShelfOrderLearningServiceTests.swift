@@ -7,7 +7,7 @@ import Testing
 struct ShelfOrderLearningServiceTests {
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {
         let schema = Schema([
-            Artikel.self, ArtikelKategorie.self, Regal.self, Geschaeft.self,
+            Artikel.self, ArtikelKategorie.self, Regal.self, Geschaeft.self, GeschaeftTyp.self,
             Einkaufsvorgang.self, KaufEintrag.self, KategorieBesuchsStatistik.self,
             Einkaufsliste.self, EinkaufslistenEintrag.self,
         ])
@@ -15,6 +15,9 @@ struct ShelfOrderLearningServiceTests {
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
         return (container, container.mainContext)
     }
+
+    private func lebensmittelTyp() -> GeschaeftTyp { GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill") }
+    private func sonstigesTyp() -> GeschaeftTyp { GeschaeftTyp(name: "Sonstiges", symbolName: "shippingbox.fill") }
 
     @Test
     func lerntRegalReihenfolgeAusWiederholtenEinkaeufen() throws {
@@ -26,7 +29,7 @@ struct ShelfOrderLearningServiceTests {
         context.insert(obst)
         context.insert(drogerie)
 
-        let geschaeft = Geschaeft(name: "Testladen", typen: [.lebensmittel])
+        let geschaeft = Geschaeft(name: "Testladen", typen: [lebensmittelTyp()])
         context.insert(geschaeft)
 
         // Manuelle Reihenfolge (bewusst "falsch" gewählt): Drogerie vor Obst.
@@ -76,7 +79,7 @@ struct ShelfOrderLearningServiceTests {
         context.insert(obst)
         context.insert(drogerie)
 
-        let geschaeft = Geschaeft(name: "Testladen", typen: [.lebensmittel])
+        let geschaeft = Geschaeft(name: "Testladen", typen: [lebensmittelTyp()])
         context.insert(geschaeft)
 
         // Manuelle Reihenfolge (bewusst "falsch" gewählt): Drogerie vor Obst.
@@ -141,7 +144,7 @@ struct ShelfOrderLearningServiceTests {
         context.insert(drogerie)
 
         // Dieses Geschäft hat bewusst keine Regale.
-        let geschaeft = Geschaeft(name: "Kiosk", typen: [.sonstiges])
+        let geschaeft = Geschaeft(name: "Kiosk", typen: [sonstigesTyp()])
         context.insert(geschaeft)
 
         let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst])

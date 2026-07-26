@@ -29,6 +29,7 @@ enum SchemaV1: VersionedSchema {
             ArtikelKategorie.self,
             Regal.self,
             Geschaeft.self,
+            GeschaeftTyp.self,
             Einkaufsvorgang.self,
             KaufEintrag.self,
             KategorieBesuchsStatistik.self,

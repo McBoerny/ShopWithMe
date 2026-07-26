@@ -166,5 +166,5 @@ private struct ArtikelAuswahlZeile: View {
 
 #Preview {
     ArtikelHinzufuegenView(einkaufsliste: Einkaufsliste(name: "Einkaufsliste"))
-        .modelContainer(for: [Artikel.self, ArtikelKategorie.self, Einkaufsliste.self, EinkaufslistenEintrag.self], inMemory: true)
+        .modelContainer(for: [Artikel.self, ArtikelKategorie.self, GeschaeftTyp.self, Einkaufsliste.self, EinkaufslistenEintrag.self], inMemory: true)
 }

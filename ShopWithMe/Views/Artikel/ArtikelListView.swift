@@ -167,5 +167,5 @@ private struct ArtikelZeile: View {
     NavigationStack {
         ArtikelListView()
     }
-    .modelContainer(for: [Artikel.self, ArtikelKategorie.self, Einkaufsliste.self, EinkaufslistenEintrag.self], inMemory: true)
+    .modelContainer(for: [Artikel.self, ArtikelKategorie.self, GeschaeftTyp.self, Einkaufsliste.self, EinkaufslistenEintrag.self], inMemory: true)
 }

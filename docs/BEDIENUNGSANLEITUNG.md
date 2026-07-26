@@ -177,7 +177,9 @@ Import ausschließen.
   welche Kategorien als Standard-Warengruppen gelten und dadurch automatisch in
   jedem Geschäft dieses Typs verfügbar sind (siehe „Geschäfte“ oben). Ist Apple
   Intelligence verfügbar, schlägt ein „KI-Vorschlag“-Knopf passende Warengruppen
-  vor, bevorzugt aus bereits vorhandenen Kategorien.
+  vor, bevorzugt aus bereits vorhandenen Kategorien. Reicht die vorinstallierte
+  Auswahl an Geschäftstypen nicht aus, lässt sich hier oder direkt beim Anlegen
+  eines Geschäfts (Abschnitt „Typ“) ein neuer, eigener Geschäftstyp anlegen.
 - **Preishistorie** — Aufbewahrungsdauer/Bereinigung alter Preiseinträge.
 - **Datenbank & Speicherort** — verlegt deine Daten in einen selbst gewählten
   Ordner, z.B. einen lokal gespiegelten Cloud-Ordner. Kein automatischer

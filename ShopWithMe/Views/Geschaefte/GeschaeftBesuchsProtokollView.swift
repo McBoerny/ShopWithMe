@@ -67,7 +67,7 @@ struct GeschaeftBesuchsProtokollView: View {
 
 #Preview {
     NavigationStack {
-        GeschaeftBesuchsProtokollView(geschaeft: Geschaeft(name: "Rewe", typen: [.lebensmittel]))
+        GeschaeftBesuchsProtokollView(geschaeft: Geschaeft(name: "Rewe", typen: [GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")]))
     }
-    .modelContainer(for: [Geschaeft.self, Einkaufsvorgang.self], inMemory: true)
+    .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self, Einkaufsvorgang.self], inMemory: true)
 }

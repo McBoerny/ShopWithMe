@@ -27,7 +27,9 @@ struct GeschaeftStammdatenEditView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Query(sort: \GeschaeftTyp.sortIndex) private var alleTypen: [GeschaeftTyp]
     @State private var standortWirdErmittelt = false
+    @State private var zeigeNeuerTyp = false
 
     var body: some View {
         if istNeu {
@@ -45,12 +47,12 @@ struct GeschaeftStammdatenEditView: View {
                 }
 
                 Section {
-                    ForEach(GeschaeftTyp.allCases) { typ in
+                    ForEach(alleTypen) { typ in
                         Button {
                             typToggeln(typ)
                         } label: {
                             HStack {
-                                Label(typ.anzeigename, systemImage: typ.symbolName)
+                                Label(typ.name, systemImage: typ.symbolName)
                                     .foregroundStyle(.primary)
                                 Spacer()
                                 if geschaeft.typen.contains(typ) {
@@ -61,10 +63,15 @@ struct GeschaeftStammdatenEditView: View {
                         }
                         .buttonStyle(.plain)
                     }
+                    Button {
+                        zeigeNeuerTyp = true
+                    } label: {
+                        Label("Neuen Geschäftstyp anlegen", systemImage: "plus")
+                    }
                 } header: {
                     Text("Typ")
                 } footer: {
-                    Text("Mehrfachauswahl möglich, z.B. Drogerie + Lebensmittel. Mindestens ein Typ muss gewählt sein.")
+                    Text("Mehrfachauswahl möglich, z.B. Drogerie + Lebensmittel. Mindestens ein Typ muss gewählt sein. Ist ein Geschäftstyp noch nicht aufgeführt, kannst du hier auch einen neuen anlegen.")
                 }
 
                 Section("Adresse (optional)") {
@@ -157,6 +164,11 @@ struct GeschaeftStammdatenEditView: View {
                 }
             }
         }
+        .sheet(isPresented: $zeigeNeuerTyp) {
+            NeuerGeschaeftsTypSheet(naechsterSortIndex: (alleTypen.map(\.sortIndex).max() ?? -1) + 1) { typ in
+                geschaeft.typen.append(typ)
+            }
+        }
     }
 
     private func typToggeln(_ typ: GeschaeftTyp) {
@@ -210,6 +222,6 @@ struct GeschaeftStammdatenEditView: View {
 }
 
 #Preview {
-    GeschaeftStammdatenEditView(geschaeft: Geschaeft(name: "Rewe", typen: [.lebensmittel]), istNeu: true)
-        .modelContainer(for: [Geschaeft.self], inMemory: true)
+    GeschaeftStammdatenEditView(geschaeft: Geschaeft(name: "Rewe", typen: [GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")]), istNeu: true)
+        .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self], inMemory: true)
 }

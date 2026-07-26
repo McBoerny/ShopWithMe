@@ -7,7 +7,7 @@ import Testing
 struct PreisHistorieBereinigungServiceTests {
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {
         let schema = Schema([
-            Artikel.self, ArtikelKategorie.self, Regal.self, Geschaeft.self,
+            Artikel.self, ArtikelKategorie.self, Regal.self, Geschaeft.self, GeschaeftTyp.self,
             Einkaufsvorgang.self, KaufEintrag.self, KategorieBesuchsStatistik.self,
             Einkaufsliste.self, EinkaufslistenEintrag.self,
         ])
@@ -15,6 +15,8 @@ struct PreisHistorieBereinigungServiceTests {
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
         return (container, container.mainContext)
     }
+
+    private func lebensmittelTyp() -> GeschaeftTyp { GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill") }
 
     @Test
     func bereinigenLoeschtNurEintraegeAelterAlsStichtag() async throws {
@@ -56,7 +58,7 @@ struct PreisHistorieBereinigungServiceTests {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
-        let geschaeft = Geschaeft(name: "Testladen", typen: [.lebensmittel])
+        let geschaeft = Geschaeft(name: "Testladen", typen: [lebensmittelTyp()])
         context.insert(geschaeft)
         let laufenderEinkauf = Einkaufsvorgang(geschaeft: geschaeft)
         context.insert(laufenderEinkauf)
@@ -77,7 +79,7 @@ struct PreisHistorieBereinigungServiceTests {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
-        let geschaeft = Geschaeft(name: "Testladen", typen: [.lebensmittel])
+        let geschaeft = Geschaeft(name: "Testladen", typen: [lebensmittelTyp()])
         context.insert(geschaeft)
         let abgeschlossenerEinkauf = Einkaufsvorgang(geschaeft: geschaeft)
         abgeschlossenerEinkauf.abschliessen()

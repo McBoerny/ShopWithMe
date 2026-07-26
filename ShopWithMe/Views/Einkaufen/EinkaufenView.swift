@@ -64,96 +64,10 @@ struct EinkaufenView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if let ausgewaehlteListe, let einkauf = aktuellerEinkauf {
-                    EinkaufslisteView(geschaeft: ausgewaehltesGeschaeft, einkaufsliste: ausgewaehlteListe, einkaufsvorgang: einkauf)
-                } else {
-                    ProgressView()
-                }
-            }
-            .safeAreaInset(edge: .top) {
-                if let geschaeftVorschlag {
-                    GeschaeftVorschlagBanner(
-                        vorschlag: geschaeftVorschlag,
-                        aktivieren: { geschaeft in
-                            ausgewaehltesGeschaeft = geschaeft
-                            self.geschaeftVorschlag = nil
-                        },
-                        hinzufuegen: { mapItem in
-                            geschaeftEntwurfAusVorschlag = GeschaeftErkennungService.entwurf(aus: mapItem)
-                            self.geschaeftVorschlag = nil
-                        },
-                        verwerfen: { self.geschaeftVorschlag = nil },
-                        ignorieren: {
-                            ignorierenVorschlag(geschaeftVorschlag)
-                            self.geschaeftVorschlag = nil
-                        },
-                        alleInDerNaeheAnzeigen: {
-                            self.geschaeftVorschlag = nil
-                            zeigeAlleInDerNaehe = true
-                        }
-                    )
-                }
-            }
-            .navigationTitle("Einkaufen")
-            .toolbar {
-                if !einkaufslisten.isEmpty {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Menu {
-                            Picker("Einkaufsliste", selection: $ausgewaehlteListe) {
-                                ForEach(einkaufslisten) { liste in
-                                    Text(liste.name).tag(Optional(liste))
-                                }
-                            }
-                            Button {
-                                zeigeNeueListe = true
-                            } label: {
-                                Label("Neue Liste …", systemImage: "plus")
-                            }
-                        } label: {
-                            Label(ausgewaehlteListe?.name ?? "Liste", systemImage: "checklist")
-                        }
-                    }
-                }
-                ToolbarItem(placement: .principal) {
-                    Menu {
-                        if !geschaefte.isEmpty {
-                            Picker("Geschäft", selection: $ausgewaehltesGeschaeft) {
-                                Text("Kein Geschäft").tag(Optional<Geschaeft>.none)
-                                if !favoritenGeschaefte.isEmpty {
-                                    Section("Favoriten") {
-                                        ForEach(favoritenGeschaefte) { geschaeft in
-                                            Text(geschaeft.name).tag(Optional(geschaeft))
-                                        }
-                                    }
-                                }
-                                ForEach(uebrigeGeschaefte) { geschaeft in
-                                    Text(geschaeft.name).tag(Optional(geschaeft))
-                                }
-                            }
-                        }
-                        Button {
-                            geschaeftEntwurfAusVorschlag = Geschaeft(name: "", typen: [.lebensmittel])
-                        } label: {
-                            Label("Neues Geschäft hinzufügen", systemImage: "plus")
-                        }
-                        Button {
-                            zeigeAlleInDerNaehe = true
-                        } label: {
-                            Label("Geschäfte in der Nähe…", systemImage: "location.magnifyingglass")
-                        }
-                    } label: {
-                        // Explizites HStack statt `Label(_:systemImage:)`, damit der
-                        // Geschäftsname zuverlässig direkt neben dem Icon erscheint
-                        // (ein `Label` in `.principal`-Platzierung zeigt je nach
-                        // verfügbarem Platz sonst nur das Icon an, siehe GitHub #16).
-                        HStack(spacing: 4) {
-                            Image(systemName: "cart.fill")
-                            Text(ausgewaehltesGeschaeft?.name ?? "Geschäft")
-                        }
-                    }
-                }
-            }
+            hauptinhalt
+                .safeAreaInset(edge: .top) { vorschlagBanner }
+                .navigationTitle("Einkaufen")
+                .toolbar { einkaufenToolbar }
         }
         .onAppear {
             Task {
@@ -190,7 +104,7 @@ struct EinkaufenView: View {
                 ignorierteVorschlaege: ignorierteVorschlaege,
                 auswaehlen: { geschaeft in ausgewaehltesGeschaeft = geschaeft },
                 hinzufuegen: { mapItem in
-                    geschaeftEntwurfAusVorschlag = GeschaeftErkennungService.entwurf(aus: mapItem)
+                    geschaeftEntwurfAusVorschlag = GeschaeftErkennungService.entwurf(aus: mapItem, context: modelContext)
                 },
                 hinzufuegenMitStandort: { entwurf in geschaeftEntwurfAusVorschlag = entwurf },
                 wiederAufnehmen: { vorschlag in wiederAufnehmenVorschlag(vorschlag) }
@@ -230,6 +144,143 @@ struct EinkaufenView: View {
         } message: {
             Text("Der Standort konnte nicht ermittelt werden. Prüfe den Standortzugriff bzw. die hinterlegte Adresse.")
         }
+    }
+
+    @ViewBuilder
+    private var hauptinhalt: some View {
+        if let ausgewaehlteListe, let einkauf = aktuellerEinkauf {
+            EinkaufslisteView(geschaeft: ausgewaehltesGeschaeft, einkaufsliste: ausgewaehlteListe, einkaufsvorgang: einkauf)
+        } else {
+            ProgressView()
+        }
+    }
+
+    /// Reaktion auf einen Tipp auf „Hinzufügen“ im ``GeschaeftVorschlagBanner`` für
+    /// einen noch unbekannten Apple-Maps-Laden — als eigene Methode ausgelagert
+    /// (statt inline im Banner-Closure), damit der Swift-Typchecker den
+    /// umgebenden `body` noch in angemessener Zeit auflösen kann.
+    private func vorschlagHinzufuegen(_ mapItem: MKMapItem) {
+        geschaeftEntwurfAusVorschlag = GeschaeftErkennungService.entwurf(aus: mapItem, context: modelContext)
+        geschaeftVorschlag = nil
+    }
+
+    @ViewBuilder
+    private var vorschlagBanner: some View {
+        if let geschaeftVorschlag {
+            GeschaeftVorschlagBanner(
+                vorschlag: geschaeftVorschlag,
+                aktivieren: { geschaeft in
+                    ausgewaehltesGeschaeft = geschaeft
+                    self.geschaeftVorschlag = nil
+                },
+                hinzufuegen: { mapItem in vorschlagHinzufuegen(mapItem) },
+                verwerfen: { self.geschaeftVorschlag = nil },
+                ignorieren: {
+                    ignorierenVorschlag(geschaeftVorschlag)
+                    self.geschaeftVorschlag = nil
+                },
+                alleInDerNaeheAnzeigen: {
+                    self.geschaeftVorschlag = nil
+                    zeigeAlleInDerNaehe = true
+                }
+            )
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var einkaufenToolbar: some ToolbarContent {
+        if !einkaufslisten.isEmpty {
+            ToolbarItem(placement: .topBarLeading) {
+                einkaufslistenMenu
+            }
+        }
+        ToolbarItem(placement: .principal) {
+            geschaeftMenu
+        }
+    }
+
+    /// Inhalt des Geschäft-Auswahl-`Picker`s im Toolbar-`Menu` — als eigene
+    /// `@ViewBuilder`-Property ausgelagert (statt inline im `Menu`-Closure), damit
+    /// der Swift-Typchecker die Toolbar-Verschachtelung noch in angemessener Zeit
+    /// auflösen kann (sonst „unable to type-check this expression in reasonable
+    /// time“).
+    @ViewBuilder
+    private var geschaeftPicker: some View {
+        if !geschaefte.isEmpty {
+            Picker("Geschäft", selection: $ausgewaehltesGeschaeft) {
+                Text("Kein Geschäft").tag(Optional<Geschaeft>.none)
+                if !favoritenGeschaefte.isEmpty {
+                    Section("Favoriten") {
+                        ForEach(favoritenGeschaefte) { geschaeft in
+                            Text(geschaeft.name).tag(geschaeft as Geschaeft?)
+                        }
+                    }
+                }
+                ForEach(uebrigeGeschaefte) { geschaeft in
+                    Text(geschaeft.name).tag(geschaeft as Geschaeft?)
+                }
+            }
+        }
+    }
+
+    /// Das Einkaufslisten-Auswahl-`Menu` im Toolbar (`.topBarLeading`-Platzierung)
+    /// — als eigene `@ViewBuilder`-Property ausgelagert, siehe ``geschaeftPicker``
+    /// für die Begründung (Typchecker-Timeout bei zu tief verschachteltem
+    /// Toolbar-Inhalt).
+    @ViewBuilder
+    private var einkaufslistenMenu: some View {
+        Menu {
+            Picker("Einkaufsliste", selection: $ausgewaehlteListe) {
+                ForEach(einkaufslisten) { liste in
+                    Text(liste.name).tag(liste as Einkaufsliste?)
+                }
+            }
+            Button {
+                zeigeNeueListe = true
+            } label: {
+                Label("Neue Liste …", systemImage: "plus")
+            }
+        } label: {
+            Label(ausgewaehlteListe?.name ?? "Liste", systemImage: "checklist")
+        }
+    }
+
+    /// Das Geschäft-Auswahl-`Menu` im Toolbar (`.principal`-Platzierung) — als
+    /// eigene `@ViewBuilder`-Property ausgelagert, siehe ``geschaeftPicker`` für die
+    /// Begründung (Typchecker-Timeout bei zu tief verschachteltem Toolbar-Inhalt).
+    @ViewBuilder
+    private var geschaeftMenu: some View {
+        Menu {
+            geschaeftPicker
+            Button {
+                geschaeftEntwurfAusVorschlag = neuerLeererGeschaeftsEntwurf()
+            } label: {
+                Label("Neues Geschäft hinzufügen", systemImage: "plus")
+            }
+            Button {
+                zeigeAlleInDerNaehe = true
+            } label: {
+                Label("Geschäfte in der Nähe…", systemImage: "location.magnifyingglass")
+            }
+        } label: {
+            // Explizites HStack statt `Label(_:systemImage:)`, damit der
+            // Geschäftsname zuverlässig direkt neben dem Icon erscheint (ein
+            // `Label` in `.principal`-Platzierung zeigt je nach verfügbarem Platz
+            // sonst nur das Icon an, siehe GitHub #16).
+            HStack(spacing: 4) {
+                Image(systemName: "cart.fill")
+                Text(ausgewaehltesGeschaeft?.name ?? "Geschäft")
+            }
+        }
+    }
+
+    /// Baut einen leeren Geschäfts-Entwurf mit dem Standard-Typ „Lebensmittel“ für
+    /// den „Neues Geschäft hinzufügen“-Menüeintrag. Als eigene Funktion ausgelagert
+    /// (statt inline im Button-Closure), damit der Swift-Typchecker die umgebende
+    /// `Menu`/`ViewBuilder`-Verschachtelung im Toolbar noch in angemessener Zeit
+    /// auflösen kann.
+    private func neuerLeererGeschaeftsEntwurf() -> Geschaeft {
+        Geschaeft(name: "", typen: [GeschaeftTyp.mitNamen("Lebensmittel", symbolName: "cart.fill", context: modelContext)])
     }
 
     /// Fragt ``GeschaeftErkennungService`` nach einem Vorschlag für den aktuellen
@@ -531,6 +582,7 @@ private struct GeschaeftAlleInDerNaeheSheet: View {
     let wiederAufnehmen: (GeschaeftVorschlag) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     @State private var eintraege: [GeschaeftInDerNaeheEintrag]?
     @State private var laeuft = true
     @State private var ermittleStandort = false
@@ -611,7 +663,7 @@ private struct GeschaeftAlleInDerNaeheSheet: View {
     private func neuesGeschaeftAnAktuellemStandort() async {
         ermittleStandort = true
         defer { ermittleStandort = false }
-        guard let entwurf = await GeschaeftErkennungService.entwurfAusAktuellemStandort() else {
+        guard let entwurf = await GeschaeftErkennungService.entwurfAusAktuellemStandort(context: modelContext) else {
             zeigeStandortFehler = true
             return
         }
@@ -1224,5 +1276,5 @@ private struct MengenNotizSheet: View {
 
 #Preview {
     EinkaufenView()
-        .modelContainer(for: [Geschaeft.self, Regal.self, ArtikelKategorie.self, Artikel.self, Einkaufsvorgang.self, Einkaufsliste.self, EinkaufslistenEintrag.self], inMemory: true)
+        .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self, Regal.self, ArtikelKategorie.self, Artikel.self, Einkaufsvorgang.self, Einkaufsliste.self, EinkaufslistenEintrag.self], inMemory: true)
 }

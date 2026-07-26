@@ -41,19 +41,27 @@ final class ArtikelKategorie {
     /// ist — siehe ``Geschaeft/kategorien``.
     var geschaefte: [Geschaeft] = []
 
-    /// Rohwert für ``geschaeftsTypen``. Optional gespeichert, damit vor Einführung
-    /// dieses Attributs angelegte Kategorien beim automatischen Laden nicht
-    /// abstürzen — ein `nil`-Rohwert fällt auf eine leere Liste zurück.
-    private var geschaeftsTypenRaw: [String]?
-    /// Geschäftstypen (z.B. ``GeschaeftTyp/drogerie``), für die diese Kategorie als
-    /// typische Warengruppe gilt — unabhängig von einer tatsächlichen Zuordnung zu
-    /// einem konkreten ``Geschaeft`` (siehe ``geschaefte``). Grundlage dafür, dass
+    /// Rohwert für ``geschaeftsTypen`` von vor Einführung von ``GeschaeftTyp`` als
+    /// eigenständigem SwiftData-Modell (GitHub #25) — enum-Rohwerte wie
+    /// `"drogerie"`. Bleibt nach der einmaligen Migration
+    /// (``geschaeftsTypenMigrierenFallsNoetig(context:)``) unverändert im
+    /// Datensatz stehen (tote Altlast). Bewusst nicht `private`, damit Tests „alte“
+    /// Datensätze simulieren können.
+    var geschaeftsTypenRaw: [String]?
+    /// Rohspeicher für ``geschaeftsTypen`` — bewusst `internal` (nicht `private`),
+    /// damit ``GeschaeftTyp`` per `inverse:`-KeyPath darauf verweisen kann. Nicht
+    /// direkt verwenden, stattdessen ``geschaeftsTypen``.
+    @Relationship(inverse: \GeschaeftTyp.standardKategorien)
+    var geschaeftsTypModelle: [GeschaeftTyp] = []
+    /// Geschäftstypen, für die diese Kategorie als typische Warengruppe gilt —
+    /// unabhängig von einer tatsächlichen Zuordnung zu einem konkreten
+    /// ``Geschaeft`` (siehe ``geschaefte``). Grundlage dafür, dass
     /// ``Geschaeft/verfuegbareKategorien(alleKategorien:)`` diese Kategorie für jedes
     /// Geschäft mit passendem Typ automatisch als verfügbar ansieht (GitHub #5),
     /// ohne sie in ``geschaefte`` zu persistieren.
     var geschaeftsTypen: [GeschaeftTyp] {
-        get { (geschaeftsTypenRaw ?? []).compactMap(GeschaeftTyp.init(rawValue:)) }
-        set { geschaeftsTypenRaw = newValue.map(\.rawValue) }
+        get { geschaeftsTypModelle }
+        set { geschaeftsTypModelle = newValue }
     }
 
     init(name: String, standardSymbol: String, standardFarbeHex: String, sortIndex: Int = 0) {
@@ -84,5 +92,20 @@ extension ArtikelKategorie {
         let neue = ArtikelKategorie(name: name, standardSymbol: "shippingbox.fill", standardFarbeHex: "#8E8E93", sortIndex: naechsterIndex)
         context.insert(neue)
         return neue
+    }
+
+    /// Migriert vor GitHub #25 angelegte Kategorien (deren ``geschaeftsTypen`` noch
+    /// leer ist, aber ``geschaeftsTypenRaw`` alte enum-Rohwerte gespeichert hat)
+    /// einmalig auf die entsprechenden ``GeschaeftTyp``-Objekte. Wird beim
+    /// App-Start für alle Kategorien aufgerufen (siehe ``SeedData``).
+    static func geschaeftsTypenMigrierenFallsNoetig(context: ModelContext) {
+        let alle = (try? context.fetch(FetchDescriptor<ArtikelKategorie>())) ?? []
+        for kategorie in alle {
+            guard kategorie.geschaeftsTypen.isEmpty,
+                  let rohwerte = kategorie.geschaeftsTypenRaw, !rohwerte.isEmpty else { continue }
+            let namen = rohwerte.compactMap(GeschaeftTyp.legacyName(fuerRohwert:))
+            guard !namen.isEmpty else { continue }
+            kategorie.geschaeftsTypen = namen.map { GeschaeftTyp.mitNamen($0, context: context) }
+        }
     }
 }

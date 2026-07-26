@@ -2,55 +2,6 @@ import CoreLocation
 import Foundation
 import SwiftData
 
-/// Typische Geschäftskategorien, die die Standardauswahl beim Anlegen eines
-/// ``Geschaeft``s vorschlägt.
-enum GeschaeftTyp: String, Codable, CaseIterable, Identifiable {
-    case lebensmittel
-    case drogerie
-    case baumarkt
-    case apotheke
-    case elektronik
-    case bekleidung
-    case getraenkemarkt
-    case tierbedarf
-    case buchUndSchreibwaren
-    case sonstiges
-
-    var id: String { rawValue }
-
-    /// Anzeigename in der Benutzeroberfläche.
-    var anzeigename: String {
-        switch self {
-        case .lebensmittel: return "Lebensmittel"
-        case .drogerie: return "Drogerie"
-        case .baumarkt: return "Baumarkt"
-        case .apotheke: return "Apotheke"
-        case .elektronik: return "Elektronik"
-        case .bekleidung: return "Bekleidung"
-        case .getraenkemarkt: return "Getränkemarkt"
-        case .tierbedarf: return "Tierbedarf"
-        case .buchUndSchreibwaren: return "Bücher & Schreibwaren"
-        case .sonstiges: return "Sonstiges"
-        }
-    }
-
-    /// Standard-SF-Symbol für diesen Geschäftstyp.
-    var symbolName: String {
-        switch self {
-        case .lebensmittel: return "cart.fill"
-        case .drogerie: return "sparkles"
-        case .baumarkt: return "hammer.fill"
-        case .apotheke: return "cross.case.fill"
-        case .elektronik: return "bolt.fill"
-        case .bekleidung: return "tshirt.fill"
-        case .getraenkemarkt: return "waterbottle.fill"
-        case .tierbedarf: return "pawprint.fill"
-        case .buchUndSchreibwaren: return "book.fill"
-        case .sonstiges: return "shippingbox.fill"
-        }
-    }
-}
-
 /// Legt fest, ob die Regal-Reihenfolge eines ``Geschaeft``s manuell (``Regal/sortIndex``)
 /// oder automatisch anhand der gelernten Einkaufs-Reihenfolge
 /// (``ShelfOrderLearningService``) bestimmt wird.
@@ -84,31 +35,29 @@ final class Geschaeft {
     var id: UUID
     /// Anzeigename des Geschäfts, z.B. "Rewe am Markt".
     var name: String
-    /// Geschäftstyp (Lebensmittel, Drogerie, …) — seit Einführung von ``typen``
-    /// (Mehrfachauswahl) nicht mehr direkt von außen gesetzt, bleibt aber als
-    /// Migrations-Fallback für vor diesem Zeitpunkt angelegte Geschäfte sowie als
-    /// führender (erster) Typ erhalten — von ``typen`` synchron gehalten.
-    var typ: GeschaeftTyp
-    /// Rohwert für ``typen``. Optional gespeichert, damit vor Einführung der
-    /// Mehrfachauswahl angelegte Geschäfte (deren Datensatz diese Spalte noch nicht
-    /// kennt) beim automatischen Laden nicht abstürzen — ein `nil`/leerer Rohwert
-    /// fällt auf `[typ]` zurück.
-    private var typenRaw: [String]?
+    /// Rohwert für ``typen`` von vor Einführung von ``GeschaeftTyp`` als
+    /// eigenständigem SwiftData-Modell (GitHub #25) — enum-Rohwerte wie
+    /// `"lebensmittel"`. Bleibt nach der einmaligen Migration
+    /// (``typenMigrierenFallsNoetig(context:)``) unverändert im Datensatz stehen
+    /// (tote Altlast) und wird nur noch von dieser Migration gelesen. Bewusst
+    /// nicht `private`, damit Tests „alte“ Datensätze simulieren können.
+    var typenRaw: [String]?
+    /// Rohspeicher für ``typen`` — bewusst `internal` (nicht `private`), damit
+    /// ``GeschaeftTyp`` per `inverse:`-KeyPath darauf verweisen kann. Nicht direkt
+    /// verwenden, stattdessen ``typen``.
+    @Relationship(inverse: \GeschaeftTyp.geschaefte)
+    var typenModelle: [GeschaeftTyp] = []
     /// Geschäftstypen (Lebensmittel, Drogerie, …) — ein Geschäft kann mehrere
     /// gleichzeitig haben (z.B. Drogerie + Lebensmittel). Der erste Wert gilt als
-    /// führender Typ und bleibt zusätzlich in ``typ`` gespiegelt (Icon-Anzeige,
-    /// Migrations-Fallback).
+    /// führender Typ (``fuehrenderTyp``).
     var typen: [GeschaeftTyp] {
-        get {
-            guard let typenRaw, !typenRaw.isEmpty else { return [typ] }
-            let ergebnis = typenRaw.compactMap(GeschaeftTyp.init(rawValue:))
-            return ergebnis.isEmpty ? [typ] : ergebnis
-        }
-        set {
-            typenRaw = newValue.map(\.rawValue)
-            typ = newValue.first ?? .sonstiges
-        }
+        get { typenModelle }
+        set { typenModelle = newValue }
     }
+    /// Der führende (erste zugeordnete) Geschäftstyp — z.B. für die Icon-Anzeige in
+    /// ``GeschaeftListView``/``GeschaeftDetailView``. `nil`, falls (ungültigerweise)
+    /// kein Typ zugeordnet ist.
+    var fuehrenderTyp: GeschaeftTyp? { typen.first }
     /// Optionale Adresse.
     var adresse: String?
     /// Breitengrad — Grundlage der standortbasierten Ladenerkennung
@@ -178,8 +127,7 @@ final class Geschaeft {
     init(name: String, typen: [GeschaeftTyp], adresse: String? = nil) {
         self.id = UUID()
         self.name = name
-        self.typ = typen.first ?? .sonstiges
-        self.typenRaw = typen.map(\.rawValue)
+        self.typenModelle = typen
         self.adresse = adresse
     }
 
@@ -329,5 +277,21 @@ final class Geschaeft {
     /// ``kategorien`` verfügbar sein.
     func regal(fuer kategorie: ArtikelKategorie) -> Regal? {
         regale.first { $0.kategorien.contains(kategorie) }
+    }
+
+    /// Migriert vor GitHub #25 angelegte Geschäfte (deren ``typen`` noch leer ist,
+    /// aber ``typenRaw`` alte enum-Rohwerte gespeichert hat) einmalig auf die
+    /// entsprechenden ``GeschaeftTyp``-Objekte. Wird beim App-Start für alle
+    /// Geschäfte aufgerufen (siehe ``SeedData``); bereits migrierte oder neu
+    /// angelegte Geschäfte (``typen`` nicht leer) bleiben unverändert.
+    static func typenMigrierenFallsNoetig(context: ModelContext) {
+        let alle = (try? context.fetch(FetchDescriptor<Geschaeft>())) ?? []
+        for geschaeft in alle {
+            guard geschaeft.typen.isEmpty, let rohwerte = geschaeft.typenRaw, !rohwerte.isEmpty else { continue }
+            let namen = rohwerte.compactMap(GeschaeftTyp.legacyName(fuerRohwert:))
+            geschaeft.typen = namen.isEmpty
+                ? [GeschaeftTyp.sonstiges(context: context)]
+                : namen.map { GeschaeftTyp.mitNamen($0, context: context) }
+        }
     }
 }

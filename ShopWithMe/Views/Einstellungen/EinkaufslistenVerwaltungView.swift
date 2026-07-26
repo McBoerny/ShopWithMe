@@ -119,5 +119,5 @@ private struct NeueEinkaufslisteVerwaltungSheet: View {
     NavigationStack {
         EinkaufslistenVerwaltungView()
     }
-    .modelContainer(for: [Einkaufsliste.self, EinkaufslistenEintrag.self, Artikel.self, ArtikelKategorie.self], inMemory: true)
+    .modelContainer(for: [Einkaufsliste.self, EinkaufslistenEintrag.self, Artikel.self, ArtikelKategorie.self, GeschaeftTyp.self], inMemory: true)
 }

@@ -23,6 +23,21 @@ enum SeedData {
         ("Sonstiges", "shippingbox.fill", "#8E8E93"),
     ]
 
+    /// Name und SF-Symbol der Standard-Geschäftstypen (GitHub #25) in
+    /// Anzeige-Reihenfolge — entspricht den bisherigen `GeschaeftTyp`-enum-Fällen.
+    static let standardGeschaeftsTypen: [(name: String, symbol: String)] = [
+        ("Lebensmittel", "cart.fill"),
+        ("Drogerie", "sparkles"),
+        ("Baumarkt", "hammer.fill"),
+        ("Apotheke", "cross.case.fill"),
+        ("Elektronik", "bolt.fill"),
+        ("Bekleidung", "tshirt.fill"),
+        ("Getränkemarkt", "waterbottle.fill"),
+        ("Tierbedarf", "pawprint.fill"),
+        ("Bücher & Schreibwaren", "book.fill"),
+        (GeschaeftTyp.sonstigesName, "shippingbox.fill"),
+    ]
+
     /// Legt die Standardkategorien an, sofern noch keine ``ArtikelKategorie`` im
     /// übergebenen Kontext existiert. Wird idempotent aufgerufen (z.B. bei jedem
     /// App-Start) und ändert nichts, wenn der Anwender bereits eigene Kategorien hat.
@@ -47,6 +62,22 @@ enum SeedData {
         // zeitgleichem Erst-Start zweier Geräte gegen einen leeren Store führt
         // höchstens zu kosmetischen doppelten Kategorien, siehe „Vollständiger
         // Schreibvorgang-Katalog“.
+        try? context.save()
+    }
+
+    /// Legt die Standard-Geschäftstypen an, sofern noch kein ``GeschaeftTyp`` im
+    /// übergebenen Kontext existiert (GitHub #25) — analog
+    /// ``seedeStandarddatenFallsLeer(context:)``.
+    @MainActor
+    static func seedeGeschaeftsTypenFallsLeer(context: ModelContext) {
+        let deskriptor = FetchDescriptor<GeschaeftTyp>()
+        let anzahl = (try? context.fetchCount(deskriptor)) ?? 0
+        guard anzahl == 0 else { return }
+
+        for (index, eintrag) in standardGeschaeftsTypen.enumerated() {
+            let typ = GeschaeftTyp(name: eintrag.name, symbolName: eintrag.symbol, sortIndex: index)
+            context.insert(typ)
+        }
         try? context.save()
     }
 }

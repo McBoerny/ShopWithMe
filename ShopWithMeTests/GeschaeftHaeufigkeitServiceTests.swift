@@ -6,11 +6,13 @@ import Testing
 @MainActor
 struct GeschaeftHaeufigkeitServiceTests {
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {
-        let schema = Schema([Geschaeft.self, Einkaufsvorgang.self])
+        let schema = Schema([Geschaeft.self, GeschaeftTyp.self, Einkaufsvorgang.self])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
         return (container, container.mainContext)
     }
+
+    private func lebensmittelTyp() -> GeschaeftTyp { GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill") }
 
     private func vorgang(fuer geschaeft: Geschaeft, vorTagen tage: Int, jetzt: Date, context: ModelContext) {
         let start = Calendar.current.date(byAdding: .day, value: -tage, to: jetzt)!
@@ -24,8 +26,8 @@ struct GeschaeftHaeufigkeitServiceTests {
         let (container, context) = try machtLeerenContainer()
         _ = container
         let jetzt = Date()
-        let rewe = Geschaeft(name: "Rewe", typen: [.lebensmittel])
-        let edeka = Geschaeft(name: "Edeka", typen: [.lebensmittel])
+        let rewe = Geschaeft(name: "Rewe", typen: [lebensmittelTyp()])
+        let edeka = Geschaeft(name: "Edeka", typen: [lebensmittelTyp()])
         context.insert(rewe)
         context.insert(edeka)
 
@@ -53,9 +55,9 @@ struct GeschaeftHaeufigkeitServiceTests {
         let (container, context) = try machtLeerenContainer()
         _ = container
         let jetzt = Date()
-        let rewe = Geschaeft(name: "Rewe", typen: [.lebensmittel])
-        let edeka = Geschaeft(name: "Edeka", typen: [.lebensmittel])
-        let aldi = Geschaeft(name: "Aldi", typen: [.lebensmittel])
+        let rewe = Geschaeft(name: "Rewe", typen: [lebensmittelTyp()])
+        let edeka = Geschaeft(name: "Edeka", typen: [lebensmittelTyp()])
+        let aldi = Geschaeft(name: "Aldi", typen: [lebensmittelTyp()])
         context.insert(rewe)
         context.insert(edeka)
         context.insert(aldi)

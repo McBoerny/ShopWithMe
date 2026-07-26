@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.6 (Build 85) — Geschäftstyp als eigenes, erweiterbares Modell
+
+- **`GeschaeftTyp`** (neu): bisher ein festes `enum` (Lebensmittel, Drogerie, …),
+  jetzt ein eigenständiges SwiftData-Modell. Der Anwender kann in
+  `GeschaeftStammdatenEditView` und der neuen Typ-Verwaltung
+  (`GeschaeftsTypenVerwaltungView`) jetzt auch eigene, benutzerdefinierte
+  Geschäftstypen anlegen (GitHub #25) — die zehn bisherigen Typen bleiben als
+  Vorauswahl beim ersten Start erhalten.
+- Bestehende Geschäfte/Warengruppen mit dem alten enum-Rohwert werden beim
+  App-Start automatisch einmalig auf die entsprechenden `GeschaeftTyp`-Objekte
+  migriert (`Geschaeft.typenMigrierenFallsNoetig`,
+  `ArtikelKategorie.geschaeftsTypenMigrierenFallsNoetig`) — additiv, ohne neue
+  `VersionedSchema` (siehe `docs/DECISIONS.md`).
+- `Geschaeft.typ` entfällt zugunsten von `Geschaeft.fuehrenderTyp` (führender,
+  erster zugeordneter Typ).
+
 ## v0.6 (Build 84) — Geschäft anlegen: Standort per Karte, GPS oder Adresse
 
 - **`Geschaeft.koordinate`** (neu): `CLLocationCoordinate2D`-Zugriff auf

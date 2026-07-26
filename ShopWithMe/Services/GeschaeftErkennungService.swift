@@ -1,5 +1,6 @@
 import CoreLocation
 import MapKit
+import SwiftData
 
 /// Ergebnis der Standort-basierten Ladenerkennung (``GeschaeftErkennungService``) —
 /// entweder ein bereits in der eigenen Liste angelegtes ``Geschaeft`` oder ein von
@@ -203,11 +204,13 @@ enum GeschaeftErkennungService {
     /// Baut aus einem per Ladenerkennung gefundenen, noch unbekannten Laden einen
     /// Geschäfts-Entwurf zur Übernahme in ``GeschaeftStammdatenEditView`` — inkl.
     /// geschätztem ``GeschaeftTyp`` und den Koordinaten für künftiges
-    /// Koordinaten-Matching (siehe ``koordinatenTreffertoleranz``).
-    static func entwurf(aus mapItem: MKMapItem) -> Geschaeft {
+    /// Koordinaten-Matching (siehe ``koordinatenTreffertoleranz``). `context` dient
+    /// nur dem Nachschlagen/Anlegen des vorgeschlagenen ``GeschaeftTyp`` (GitHub #25),
+    /// der Entwurf selbst wird nicht in ihn eingefügt.
+    static func entwurf(aus mapItem: MKMapItem, context: ModelContext) -> Geschaeft {
         let geschaeft = Geschaeft(
             name: mapItem.name ?? "Neues Geschäft",
-            typen: [typVorschlag(fuer: mapItem.pointOfInterestCategory)],
+            typen: [typVorschlag(fuer: mapItem.pointOfInterestCategory, context: context)],
             adresse: mapItem.address?.fullAddress
         )
         geschaeft.breitengrad = mapItem.location.coordinate.latitude
@@ -222,9 +225,9 @@ enum GeschaeftErkennungService {
     /// `nil`, wenn keine Standortberechtigung erteilt wurde oder der Standort nicht
     /// ermittelt werden konnte.
     @MainActor
-    static func entwurfAusAktuellemStandort() async -> Geschaeft? {
+    static func entwurfAusAktuellemStandort(context: ModelContext) async -> Geschaeft? {
         guard let koordinaten = await standortKoordinaten() else { return nil }
-        let geschaeft = Geschaeft(name: "", typen: [.lebensmittel])
+        let geschaeft = Geschaeft(name: "", typen: [GeschaeftTyp.mitNamen("Lebensmittel", symbolName: "cart.fill", context: context)])
         geschaeft.breitengrad = koordinaten.breitengrad
         geschaeft.laengengrad = koordinaten.laengengrad
         return geschaeft
@@ -276,12 +279,12 @@ enum GeschaeftErkennungService {
         return (standort.coordinate.latitude, standort.coordinate.longitude)
     }
 
-    private static func typVorschlag(fuer kategorie: MKPointOfInterestCategory?) -> GeschaeftTyp {
+    private static func typVorschlag(fuer kategorie: MKPointOfInterestCategory?, context: ModelContext) -> GeschaeftTyp {
         switch kategorie {
-        case .pharmacy: return .apotheke
-        case .foodMarket, .bakery: return .lebensmittel
-        case .winery, .brewery: return .getraenkemarkt
-        default: return .sonstiges
+        case .pharmacy: return GeschaeftTyp.mitNamen("Apotheke", symbolName: "cross.case.fill", context: context)
+        case .foodMarket, .bakery: return GeschaeftTyp.mitNamen("Lebensmittel", symbolName: "cart.fill", context: context)
+        case .winery, .brewery: return GeschaeftTyp.mitNamen("Getränkemarkt", symbolName: "waterbottle.fill", context: context)
+        default: return GeschaeftTyp.sonstiges(context: context)
         }
     }
 

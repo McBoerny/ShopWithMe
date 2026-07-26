@@ -82,12 +82,12 @@ struct GeschaeftDetailView: View {
                     zeigeStammdatenEdit = true
                 } label: {
                     HStack(spacing: 16) {
-                        GlassSymbolBadge(symbolName: geschaeft.typ.symbolName, farbe: .accentColor, groesse: 56)
+                        GlassSymbolBadge(symbolName: geschaeft.fuehrenderTyp?.symbolName ?? "shippingbox.fill", farbe: .accentColor, groesse: 56)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(geschaeft.name)
                                 .font(.title3.bold())
                                 .foregroundStyle(.primary)
-                            Text(geschaeft.typen.map(\.anzeigename).joined(separator: ", "))
+                            Text(geschaeft.typen.map(\.name).joined(separator: ", "))
                                 .foregroundStyle(.secondary)
                             if let adresse = geschaeft.adresse, !adresse.isEmpty {
                                 Text(adresse)
@@ -258,7 +258,7 @@ private struct RegalZeile: View {
 
 #Preview {
     NavigationStack {
-        GeschaeftDetailView(geschaeft: Geschaeft(name: "Rewe", typen: [.lebensmittel]))
+        GeschaeftDetailView(geschaeft: Geschaeft(name: "Rewe", typen: [GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")]))
     }
-    .modelContainer(for: [Geschaeft.self, Regal.self, ArtikelKategorie.self], inMemory: true)
+    .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self, Regal.self, ArtikelKategorie.self], inMemory: true)
 }

@@ -96,9 +96,12 @@ enum AISuggestionService {
     /// genutzt in der Typ-Verwaltung der Einstellungen (GitHub #5), um
     /// ``ArtikelKategorie/geschaeftsTypen`` schneller zu befüllen. Bestehende
     /// Kategorienamen werden als Kontext mitgegeben, damit das Modell bevorzugt
-    /// vorhandene wiederverwendet statt Dubletten vorzuschlagen.
+    /// vorhandene wiederverwendet statt Dubletten vorzuschlagen. Nimmt bewusst nur
+    /// den Namen (nicht das ``GeschaeftTyp``-Objekt selbst) entgegen — seit GitHub
+    /// #25 ein SwiftData-`@Model` und damit kein `Sendable`-Typ, der sich gefahrlos
+    /// über die `async`-Grenze dieser Methode reichen ließe.
     static func vorschlag(
-        fuerGeschaeftsTyp typ: GeschaeftTyp,
+        fuerGeschaeftsTypName typName: String,
         bekannteKategorien: [String]
     ) async throws -> WarengruppenVorschlag {
         let anweisungen = """
@@ -110,13 +113,13 @@ enum AISuggestionService {
         dabei ist.
         """
         let session = LanguageModelSession(instructions: anweisungen)
-        let antwort = try await session.respond(to: "Geschäftstyp: \(typ.anzeigename)", generating: WarengruppenVorschlag.self)
+        let antwort = try await session.respond(to: "Geschäftstyp: \(typName)", generating: WarengruppenVorschlag.self)
         return antwort.content
     }
 }
 
 /// Von der lokalen Apple-KI vorgeschlagene, typische Warengruppen für einen
-/// ``GeschaeftTyp`` — siehe ``AISuggestionService/vorschlag(fuerGeschaeftsTyp:bekannteKategorien:)``.
+/// ``GeschaeftTyp`` — siehe ``AISuggestionService/vorschlag(fuerGeschaeftsTypName:bekannteKategorien:)``.
 @Generable
 struct WarengruppenVorschlag {
     @Guide(description: "Namen typischer Warengruppen für diesen Geschäftstyp, bevorzugt aus den bekannten Namen")

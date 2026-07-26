@@ -46,6 +46,10 @@ struct ShopWithMeApp: App {
         DatabaseLeaseService.storeURL = konfiguration.url
         DatabaseDebugLogger.konfiguriere(geteilterOrdner: geteilterOrdner)
         SeedData.seedeStandarddatenFallsLeer(context: context)
+        SeedData.seedeGeschaeftsTypenFallsLeer(context: context)
+        Geschaeft.typenMigrierenFallsNoetig(context: context)
+        ArtikelKategorie.geschaeftsTypenMigrierenFallsNoetig(context: context)
+        try? context.save()
     }
 
     var body: some Scene {

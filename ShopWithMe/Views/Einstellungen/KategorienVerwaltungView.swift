@@ -189,5 +189,5 @@ private struct ArtikelZuKategorieHinzufuegenSheet: View {
     NavigationStack {
         KategorienVerwaltungView()
     }
-    .modelContainer(for: [ArtikelKategorie.self, Artikel.self, Einkaufsliste.self, EinkaufslistenEintrag.self], inMemory: true)
+    .modelContainer(for: [ArtikelKategorie.self, GeschaeftTyp.self, Artikel.self, Einkaufsliste.self, EinkaufslistenEintrag.self], inMemory: true)
 }

@@ -79,5 +79,5 @@ struct RegalDetailView: View {
     NavigationStack {
         RegalDetailView(regal: Regal(name: "Kühlregal"))
     }
-    .modelContainer(for: [Regal.self, ArtikelKategorie.self], inMemory: true)
+    .modelContainer(for: [Regal.self, ArtikelKategorie.self, GeschaeftTyp.self], inMemory: true)
 }

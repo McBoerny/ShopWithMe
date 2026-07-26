@@ -7,11 +7,13 @@ import Testing
 @MainActor
 struct GeschaeftErkennungServiceTests {
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {
-        let schema = Schema([Geschaeft.self, Regal.self, ArtikelKategorie.self])
+        let schema = Schema([Geschaeft.self, GeschaeftTyp.self, Regal.self, ArtikelKategorie.self])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
         return (container, container.mainContext)
     }
+
+    private func lebensmittelTyp() -> GeschaeftTyp { GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill") }
 
     private func mapItem(name: String, latitude: CLLocationDegrees, longitude: CLLocationDegrees) -> MKMapItem {
         let placemark = MKPlacemark(coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude))
@@ -24,7 +26,7 @@ struct GeschaeftErkennungServiceTests {
     func erkenntBereitsAngelegtesGeschaeftAnhandDesNamens() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
-        let rewe = Geschaeft(name: "Rewe am Markt", typen: [.lebensmittel])
+        let rewe = Geschaeft(name: "Rewe am Markt", typen: [lebensmittelTyp()])
         context.insert(rewe)
 
         let standort = CLLocation(latitude: 52.5, longitude: 13.4)
@@ -45,7 +47,7 @@ struct GeschaeftErkennungServiceTests {
     func erkenntBereitsAngelegtesGeschaeftAnhandDerKoordinatenTrotzAbweichendemNamen() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
-        let geschaeft = Geschaeft(name: "Mein Supermarkt", typen: [.lebensmittel])
+        let geschaeft = Geschaeft(name: "Mein Supermarkt", typen: [lebensmittelTyp()])
         geschaeft.breitengrad = 52.5
         geschaeft.laengengrad = 13.4
         context.insert(geschaeft)
@@ -89,12 +91,14 @@ struct GeschaeftErkennungServiceTests {
     }
 
     @Test
-    func entwurfUebernimmtNamenAdresseUndKoordinaten() {
+    func entwurfUebernimmtNamenAdresseUndKoordinaten() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
         let placemark = MKPlacemark(coordinate: CLLocationCoordinate2D(latitude: 52.5, longitude: 13.4))
         let item = MKMapItem(placemark: placemark)
         item.name = "Bio-Markt"
 
-        let entwurf = GeschaeftErkennungService.entwurf(aus: item)
+        let entwurf = GeschaeftErkennungService.entwurf(aus: item, context: context)
 
         #expect(entwurf.name == "Bio-Markt")
         #expect(entwurf.breitengrad == 52.5)
@@ -146,7 +150,7 @@ struct GeschaeftErkennungServiceTests {
     func dedupliziertDoppelteApppleMapsTrefferDesselbenBekanntenGeschaefts() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
-        let rewe = Geschaeft(name: "Rewe am Markt", typen: [.lebensmittel])
+        let rewe = Geschaeft(name: "Rewe am Markt", typen: [lebensmittelTyp()])
         context.insert(rewe)
 
         // Zwei Apple-Maps-Einträge für denselben physischen Laden (z.B. unter
@@ -198,7 +202,7 @@ struct GeschaeftErkennungServiceTests {
         // nicht greifen, nur der (Teilstring-)Namensabgleich. Vor der Konsolidierung
         // auf `istGleicherOrt` prüfte `istSelberLaden` nur exakte Namensgleichheit
         // und hätte diesen Fall fälschlich als zwei verschiedene Läden gelistet.
-        let bioEcke = Geschaeft(name: "Bio Ecke", typen: [.lebensmittel])
+        let bioEcke = Geschaeft(name: "Bio Ecke", typen: [lebensmittelTyp()])
         context.insert(bioEcke)
 
         // Ein zweiter Apple-Maps-Treffer für denselben physischen Laden, dessen Name

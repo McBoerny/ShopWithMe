@@ -89,7 +89,10 @@ struct GeschaeftListView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
-                    neuesGeschaeftEntwurf = Geschaeft(name: "", typen: [.lebensmittel])
+                    neuesGeschaeftEntwurf = Geschaeft(
+                        name: "",
+                        typen: [GeschaeftTyp.mitNamen("Lebensmittel", symbolName: "cart.fill", context: modelContext)]
+                    )
                 } label: {
                     Label("Geschäft hinzufügen", systemImage: "plus")
                 }
@@ -177,10 +180,10 @@ private struct GeschaeftZeile: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            GlassSymbolBadge(symbolName: geschaeft.typ.symbolName, farbe: .accentColor)
+            GlassSymbolBadge(symbolName: geschaeft.fuehrenderTyp?.symbolName ?? "shippingbox.fill", farbe: .accentColor)
             VStack(alignment: .leading, spacing: 2) {
                 Text(geschaeft.name.isEmpty ? "Unbenannt" : geschaeft.name)
-                Text("\(geschaeft.typen.map(\.anzeigename).joined(separator: ", ")) · \(geschaeft.regale.count) Regal(e)")
+                Text("\(geschaeft.typen.map(\.name).joined(separator: ", ")) · \(geschaeft.regale.count) Regal(e)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if istDuplikat, let kurzeAdresse = geschaeft.kurzeAdresse {
@@ -197,5 +200,5 @@ private struct GeschaeftZeile: View {
     NavigationStack {
         GeschaeftListView()
     }
-    .modelContainer(for: [Geschaeft.self, Regal.self, ArtikelKategorie.self, Einkaufsvorgang.self], inMemory: true)
+    .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self, Regal.self, ArtikelKategorie.self, Einkaufsvorgang.self], inMemory: true)
 }

@@ -11,16 +11,30 @@ import SwiftData
 /// einzelner Kategorien zu einem konkreten Geschäft (``KategorieHinzufuegenSheet``)
 /// bleibt davon unabhängig weiterhin möglich.
 struct GeschaeftsTypenVerwaltungView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Query(sort: \GeschaeftTyp.sortIndex) private var geschaeftsTypen: [GeschaeftTyp]
+    @State private var zeigeNeuerTyp = false
+
     var body: some View {
-        List(GeschaeftTyp.allCases) { typ in
-            NavigationLink {
-                GeschaeftsTypKategorienView(typ: typ)
+        List {
+            ForEach(geschaeftsTypen) { typ in
+                NavigationLink {
+                    GeschaeftsTypKategorienView(typ: typ)
+                } label: {
+                    Label(typ.name, systemImage: typ.symbolName)
+                }
+            }
+            Button {
+                zeigeNeuerTyp = true
             } label: {
-                Label(typ.anzeigename, systemImage: typ.symbolName)
+                Label("Neuen Geschäftstyp anlegen", systemImage: "plus")
             }
         }
         .navigationTitle("Geschäftstypen")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $zeigeNeuerTyp) {
+            NeuerGeschaeftsTypSheet(naechsterSortIndex: (geschaeftsTypen.map(\.sortIndex).max() ?? -1) + 1) { _ in }
+        }
     }
 }
 
@@ -110,7 +124,7 @@ private struct GeschaeftsTypKategorienView: View {
                 Text("Markierte Warengruppen sind automatisch in jedem Geschäft mit diesem Typ verfügbar, ohne sie dort einzeln zuzuordnen. Mehrfachauswahl möglich.")
             }
         }
-        .navigationTitle(typ.anzeigename)
+        .navigationTitle(typ.name)
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $zeigeNeueKategorie) {
             NeueKategorieSheet(naechsterSortIndex: (alleKategorien.map(\.sortIndex).max() ?? -1) + 1) { kategorie in
@@ -129,7 +143,8 @@ private struct GeschaeftsTypKategorienView: View {
         kategorie.geschaeftsTypen = aktuelle
     }
 
-    /// Fragt ``AISuggestionService/vorschlag(fuerGeschaeftsTyp:bekannteKategorien:)``
+    /// Fragt
+    /// ``AISuggestionService/vorschlag(fuerGeschaeftsTypName:bekannteKategorien:)``
     /// an und markiert die vorgeschlagenen Kategorien für ``typ`` — vorhandene
     /// Namen werden wiederverwendet (case-insensitiver Abgleich), sonst wird eine
     /// neue ``ArtikelKategorie`` angelegt.
@@ -140,7 +155,7 @@ private struct GeschaeftsTypKategorienView: View {
             defer { kiVorschlagLaeuft = false }
             do {
                 let vorschlag = try await AISuggestionService.vorschlag(
-                    fuerGeschaeftsTyp: typ,
+                    fuerGeschaeftsTypName: typ.name,
                     bekannteKategorien: alleKategorien.map(\.name)
                 )
                 for name in vorschlag.kategorieNamen {
@@ -175,5 +190,5 @@ private struct GeschaeftsTypKategorienView: View {
     NavigationStack {
         GeschaeftsTypenVerwaltungView()
     }
-    .modelContainer(for: [ArtikelKategorie.self, Geschaeft.self], inMemory: true)
+    .modelContainer(for: [ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self], inMemory: true)
 }

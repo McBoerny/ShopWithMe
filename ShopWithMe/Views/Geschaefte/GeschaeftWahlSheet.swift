@@ -24,6 +24,7 @@ struct GeschaeftWahlSheet: View {
     let onAuswahl: (Geschaeft?) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     @Query(sort: \Geschaeft.name) private var alleGeschaefte: [Geschaeft]
     @State private var suchtext: String
     @State private var neuesGeschaeftEntwurf: Geschaeft?
@@ -162,7 +163,7 @@ struct GeschaeftWahlSheet: View {
             defer { erstelleGeschaeft = false }
             let entwurf = Geschaeft(
                 name: getrimmterSuchtext,
-                typen: [.lebensmittel],
+                typen: [GeschaeftTyp.mitNamen("Lebensmittel", symbolName: "cart.fill", context: modelContext)],
                 adresse: getrimmteAdresse.isEmpty ? nil : getrimmteAdresse
             )
             if !getrimmteAdresse.isEmpty,
@@ -177,5 +178,5 @@ struct GeschaeftWahlSheet: View {
 
 #Preview {
     GeschaeftWahlSheet(erkannterName: "REWE Center Musterstadt") { _ in }
-        .modelContainer(for: [Geschaeft.self], inMemory: true)
+        .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self], inMemory: true)
 }

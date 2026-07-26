@@ -155,5 +155,5 @@ struct KaufEintragZuordnenSheet: View {
     eintrag.artikelNameSnapshot = "COL-ZAH"
     eintrag.produktName = "COL-ZAH"
     return KaufEintragZuordnenSheet(eintrag: eintrag)
-        .modelContainer(for: [Artikel.self, ArtikelKategorie.self, KaufEintrag.self, Einkaufsliste.self, EinkaufslistenEintrag.self], inMemory: true)
+        .modelContainer(for: [Artikel.self, ArtikelKategorie.self, GeschaeftTyp.self, KaufEintrag.self, Einkaufsliste.self, EinkaufslistenEintrag.self], inMemory: true)
 }

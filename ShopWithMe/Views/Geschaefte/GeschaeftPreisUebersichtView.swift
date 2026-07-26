@@ -196,7 +196,7 @@ private struct PreisVerlaufPunkt: Identifiable {
 
 #Preview {
     NavigationStack {
-        GeschaeftPreisUebersichtView(geschaeft: Geschaeft(name: "Rewe", typen: [.lebensmittel]))
+        GeschaeftPreisUebersichtView(geschaeft: Geschaeft(name: "Rewe", typen: [GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")]))
     }
-    .modelContainer(for: [Geschaeft.self, Artikel.self, KaufEintrag.self], inMemory: true)
+    .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self, Artikel.self, KaufEintrag.self], inMemory: true)
 }
