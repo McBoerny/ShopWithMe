@@ -6,18 +6,14 @@ import SwiftData
 /// und leitet daraus eine dynamisch nachsortierbare Einkaufsreihenfolge ab — siehe
 /// `docs/ARCHITEKTURVORSCHLAG_ADAPTIVE_SORTIERUNG.md` (GitHub #36).
 ///
-/// Löst dieselbe Aufgabe wie ``ShelfOrderLearningService``, aber feiner: statt eines
-/// einzelnen Durchschnittswerts je Kategorie (``KategorieBesuchsStatistik``) lernt
-/// dieser Service eine vollständige paarweise Distanzmatrix
+/// Ersetzt den früheren, gröberen Ansatz über einen einzelnen Durchschnittswert je
+/// Kategorie: dieser Service lernt eine vollständige paarweise Distanzmatrix
 /// (``WarengruppenDistanz``), die sich nach jeder Abhakung neu sortieren lässt
 /// (``sortierteReihenfolge(offeneKategorien:startpunkt:in:context:)``), statt nur
 /// einmal beim Einkaufsstart.
 enum WarengruppenDistanzService {
     /// Ab wie vielen abgeschlossenen Einkäufen in einem Geschäft eine sortierte
-    /// Reihenfolge angeboten wird — unabhängig von
-    /// ``ShelfOrderLearningService/mindestEinkaeufeFuerVorschlag`` (dort 5), da
-    /// beide Schwellen unterschiedliche Algorithmen mit unterschiedlichem
-    /// Datenbedarf betreffen (siehe Architekturvorschlag Abschnitt 12, Phase 3).
+    /// Reihenfolge angeboten wird (siehe Architekturvorschlag Abschnitt 12, Phase 3).
     static let mindestEinkaeufeFuerVorschlag = 3
     /// Normale Lernrate: ~10% Gewicht des neuen Einkaufs gegenüber der bisherigen
     /// Erfahrung (gleitender Durchschnitt).

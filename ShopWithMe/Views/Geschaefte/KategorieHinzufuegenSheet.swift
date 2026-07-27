@@ -4,22 +4,14 @@ import SwiftData
 /// Sheet zum Hinzufügen einer ``ArtikelKategorie`` zu einem ``Geschaeft``, aufrufbar
 /// aus dem „Kategorien“-Abschnitt von ``GeschaeftDetailView``.
 ///
-/// Kategorien sind wichtiger als Regale: Eine Kategorie wird beim Antippen direkt
-/// diesem Geschäft zugeordnet (``Geschaeft/kategorien``) und damit sofort verfügbar —
-/// ganz ohne Regal. Besitzt das Geschäft bereits Regale, kann zusätzlich optional
-/// eines gewählt werden, um die Kategorie zugleich für die Einkaufs-Reihenfolge
-/// einzusortieren; das bleibt aber jederzeit nachholbar und ist nie Voraussetzung.
+/// Eine Kategorie wird beim Antippen direkt diesem Geschäft zugeordnet
+/// (``Geschaeft/kategorien``) und damit sofort verfügbar.
 struct KategorieHinzufuegenSheet: View {
     let geschaeft: Geschaeft
 
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \ArtikelKategorie.sortIndex) private var alleKategorien: [ArtikelKategorie]
-    @State private var ausgewaehltesRegal: Regal?
     @State private var zeigeNeueKategorie = false
-
-    private var regaleSortiert: [Regal] {
-        geschaeft.regale.sorted { $0.sortIndex < $1.sortIndex }
-    }
 
     /// Kategorien, die in diesem Geschäft noch nicht verfügbar sind — Kategorien,
     /// die bereits über den Geschäftstyp automatisch verfügbar sind (siehe
@@ -37,19 +29,6 @@ struct KategorieHinzufuegenSheet: View {
     private var navigationInhalt: some View {
         NavigationStack {
             Form {
-                if !regaleSortiert.isEmpty {
-                    Section {
-                        Picker("Regal (optional)", selection: $ausgewaehltesRegal) {
-                            Text("Kein Regal").tag(Optional<Regal>.none)
-                            ForEach(regaleSortiert) { regal in
-                                Text(regal.name.isEmpty ? "Unbenannt" : regal.name).tag(Optional(regal))
-                            }
-                        }
-                    } footer: {
-                        Text("Nur zur Sortierung beim Einkaufen — die Kategorie ist auch ohne Regal sofort verfügbar.")
-                    }
-                }
-
                 Section {
                     ForEach(nichtVerfuegbareKategorien) { kategorie in
                         Button {
@@ -88,11 +67,10 @@ struct KategorieHinzufuegenSheet: View {
 
     private func kategorieHinzufuegen(_ kategorie: ArtikelKategorie) {
         geschaeft.kategorien.append(kategorie)
-        ausgewaehltesRegal?.kategorien.append(kategorie)
     }
 }
 
 #Preview {
     KategorieHinzufuegenSheet(geschaeft: Geschaeft(name: "Rewe", typen: [GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")]))
-        .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self, Regal.self, ArtikelKategorie.self], inMemory: true)
+        .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self, ArtikelKategorie.self], inMemory: true)
 }

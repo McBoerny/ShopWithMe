@@ -18,8 +18,8 @@ Die App startet immer direkt mit der Einkaufsliste.
   mittleren Tab erreichbar (siehe „Belegscan & Preisschild-Scan“ unten). Ergänzt,
   ersetzt aber nicht die weiteren Belegscan-Wege aus dem Einkaufen-Tab bzw. aus der
   Geschäfts-Detailansicht.
-- **Einstellungen** — Hilfe, Artikel- und Geschäfte-Verwaltung (inkl. Regale,
-  Kategorien pro Geschäft), Geschäftstypen-Verwaltung, Datenbank-Speicherort.
+- **Einstellungen** — Hilfe, Artikel- und Geschäfte-Verwaltung (inkl. Kategorien
+  pro Geschäft), Geschäftstypen-Verwaltung, Datenbank-Speicherort.
 
 ## Artikel
 
@@ -27,9 +27,8 @@ Jeder Artikel hat einen Namen, eine oder mehrere Kategorien (z.B. Obst,
 Milchprodukte — Mehrfachauswahl beim Bearbeiten), eine Einheit (Stück, kg, g, l,
 ml) und eine Standardmenge — die zugleich die Schrittweite ist, um die die Menge
 beim Einkaufen erhöht/verringert wird. Hat ein Artikel mehrere Kategorien,
-entscheidet pro Geschäft automatisch eine davon über seine Regal-Zuordnung beim
-Einkaufen (die mit eigenem Regal in diesem Geschäft, sonst die im Geschäft
-verfügbare). Neue Artikel legst du meist direkt beim Einkaufen an (landen dann
+entscheidet pro Geschäft automatisch eine davon (die im Geschäft verfügbare) über
+seine Einordnung beim Einkaufen. Neue Artikel legst du meist direkt beim Einkaufen an (landen dann
 automatisch auf der Liste); in der Artikel-Verwaltung (Einstellungen) per „+“
 angelegte Artikel landen nicht automatisch auf der Liste. Beim Anlegen schlägt
 Apple Intelligence (sofern auf deinem Gerät verfügbar) automatisch eine passende
@@ -42,18 +41,14 @@ Intelligence nicht verfügbar, bleibt die manuelle Auswahl jederzeit möglich.
 Ein Geschäft hat einen oder mehrere Typen (Lebensmittel, Drogerie, Baumarkt,
 Apotheke, …, z.B. Drogerie + Lebensmittel bei einem dm — Mehrfachauswahl beim
 Bearbeiten der Stammdaten) und optional eine Adresse. Kategorien sind der primäre Weg, Artikel für ein Geschäft
-verfügbar zu machen — direkt im Geschäft zuordenbar, ganz ohne Regal. Zusätzlich
+verfügbar zu machen — direkt im Geschäft zuordenbar. Zusätzlich
 macht jeder Geschäftstyp automatisch seine in den Einstellungen hinterlegten
 Standard-Warengruppen verfügbar (siehe „Geschäftstypen“ unten) — ganz ohne sie dem
 einzelnen Geschäft manuell zuzuordnen; wählst du später dort noch weitere
 Kategorien manuell aus, betrifft das nur dieses eine Geschäft, nicht generell den
-Geschäftstyp. Regale sind
-zusätzlich optional und dienen vor allem dazu, die Reihenfolge beim Einkaufen zu
-organisieren; du kannst ihnen ebenfalls Kategorien zuordnen. Die Regal-Reihenfolge
-legst du entweder manuell per Drag & Drop fest, oder die App lernt sie automatisch
-aus deinen tatsächlichen Einkäufen (nach 5 Einkäufen in diesem Geschäft angeboten,
-deine manuelle Reihenfolge bleibt so lange bestehen, bis du den Vorschlag explizit
-übernimmst).
+Geschäftstyp. Die Reihenfolge, in der die Kategorien beim Einkaufen erscheinen,
+legst du nicht manuell fest — die App lernt sie automatisch aus deinem
+Abhakverhalten (siehe „Einkaufen“ unten).
 
 **Standort beim Anlegen/Bearbeiten:** Sobald ein Geschäft Koordinaten hat, zeigt
 das Bearbeiten-Formular eine kleine Karte mit einem Pin — durch Antippen der
@@ -86,16 +81,14 @@ aktuellen Standort oder eine (ggf. neu eingegebene) Adresse dafür verwenden sol
 ## Einkaufen
 
 Die Einkaufsliste ist global, nicht an ein Geschäft gebunden. Wählst du zusätzlich
-ein Geschäft, wird sie nach dessen Regal-Reihenfolge gruppiert; Artikel ohne
-passende Kategorie/Regal-Zuordnung erscheinen trotzdem, in einer eigenen
-„Sonstige“-Sektion. Ein Einkauf startet automatisch beim Öffnen des Tabs, kein
-manueller Start nötig.
+ein Geschäft, wird sie nach Artikelkategorie gruppiert. Ein Einkauf startet
+automatisch beim Öffnen des Tabs, kein manueller Start nötig.
 
-Die „Sonstige“-Sektion sortiert sich mit der Zeit selbst: ShopWithMe lernt aus
-der Reihenfolge, in der du Artikel abhakst, welche Warengruppen in diesem
-Geschäft nah beieinanderliegen, und passt die Reihenfolge nach jeder Abhakung
-automatisch an deinen aktuellen Standort in der Liste an — ganz ohne Ladenplan
-oder Standortfreigabe. Ein kleiner Hinweis oben zeigt, ob die Reihenfolge schon
+Die Liste sortiert sich mit der Zeit selbst: ShopWithMe lernt aus der
+Reihenfolge, in der du Artikel abhakst, welche Warengruppen in diesem Geschäft
+nah beieinanderliegen, und passt die Reihenfolge nach jeder Abhakung automatisch
+an deinen aktuellen Standort in der Liste an — ganz ohne Ladenplan oder
+Standortfreigabe. Ein kleiner Hinweis oben zeigt, ob die Reihenfolge schon
 optimiert ist oder noch lernt; bei einem erkannten Ladenumbau erscheint nach
 dem Abschließen ein kurzer Hinweis, dass sich die App automatisch anpasst.
 

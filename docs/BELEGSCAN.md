@@ -210,7 +210,7 @@ in `EinkaufenView`) decken diesen Fall ab:
 5. **Rückwirkende Zuordnung**: steht ein `.einkaufsvorgang` ohne Geschäft dahinter,
    wird `einkaufsvorgang.geschaeft` beim Übernehmen auf das erkannte/gewählte
    Geschäft gesetzt — der gesamte Einkauf gilt rückwirkend als dort getätigt
-   (relevant für `ShelfOrderLearningService`/`ArtikelVerfuegbarkeitService`).
+   (relevant für `WarengruppenDistanzService`/`ArtikelVerfuegbarkeitService`).
 
 Bei `.geschaeft(Geschaeft)` (Scan direkt aus der Geschäfts-Detailansicht) entfällt
 dieser gesamte Abgleich — das Geschäft steht bereits fest, die „Geschäft“-Zeile

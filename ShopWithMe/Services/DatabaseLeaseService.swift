@@ -31,7 +31,7 @@ private struct LeaseInfo: Codable, Sendable {
 ///   Einzelaktionen (z.B. Artikel abhaken) — der Lease wird nur für die Dauer der
 ///   Aktion gehalten.
 /// - **Session-Lease** (``SessionLease``): für Bearbeitungs-Bildschirme mit
-///   kontinuierlicher Live-Bindung (z.B. Geschäft/Regal bearbeiten) — der Lease wird
+///   kontinuierlicher Live-Bindung (z.B. Geschäft bearbeiten) — der Lease wird
 ///   beim Öffnen erworben und beim Verlassen wieder freigegeben.
 ///
 /// Reines Locking über eine JSON-Lock-Datei, koordiniert per ``NSFileCoordinator``,

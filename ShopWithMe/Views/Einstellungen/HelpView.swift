@@ -28,17 +28,13 @@ private struct HilfeThema: Identifiable {
 
     static let alle: [HilfeThema] = [
         HilfeThema(
-            titel: "Kategorien & Regale pro Geschäft",
+            titel: "Kategorien pro Geschäft",
             text: """
-            Unter Einstellungen → Geschäfte kannst du einem Geschäft direkt Kategorien zuordnen \
-            („Kategorien“-Abschnitt → „Kategorie hinzufügen“) — ganz ohne ein Regal \
-            anzulegen. Zusammen mit den unter Einstellungen → Geschäftstypen \
-            hinterlegten Standard-Warengruppen des Geschäftstyps ergibt das die \
-            verfügbaren Kategorien, die beim Einkaufen dort auftauchen. So zeigt dir \
-            die App im Baumarkt keine Milchprodukte an. Regale sind optional und \
-            dienen nur dazu, die Reihenfolge beim Einkaufen zu organisieren — du \
-            kannst ihnen zusätzlich Kategorien zuordnen (Regal antippen), musst es \
-            aber nicht.
+            Unter Einstellungen → Geschäfte kannst du einem Geschäft direkt Kategorien \
+            zuordnen („Kategorien“-Abschnitt → „Kategorie hinzufügen“). Zusammen mit \
+            den unter Einstellungen → Geschäftstypen hinterlegten Standard-Warengruppen \
+            des Geschäftstyps ergibt das die verfügbaren Kategorien, die beim Einkaufen \
+            dort auftauchen. So zeigt dir die App im Baumarkt keine Milchprodukte an.
             """
         ),
         HilfeThema(
@@ -53,15 +49,16 @@ private struct HilfeThema: Identifiable {
             """
         ),
         HilfeThema(
-            titel: "Automatische Regal-Reihenfolge",
+            titel: "Automatische Einkaufsreihenfolge",
             text: """
-            Du kannst die Reihenfolge der Regale eines Geschäfts jederzeit manuell \
-            per Drag & Drop festlegen (Einstellungen → Geschäfte → Geschäft → „Bearbeiten“). \
-            Zusätzlich merkt sich die App, in welcher Reihenfolge du beim Einkaufen \
-            tatsächlich durch die Regale läufst. Nach 5 abgeschlossenen Einkäufen in \
-            einem Geschäft bietet sie dir eine automatische Reihenfolge an — deine \
-            manuelle Reihenfolge bleibt aber so lange bestehen, bis du den Vorschlag \
-            explizit übernimmst.
+            Die App merkt sich beim Abhaken, in welcher Reihenfolge du typischerweise \
+            durch ein Geschäft läufst, und sortiert deine Einkaufsliste danach — ganz \
+            ohne Ladenplan oder Standortfreigabe, allein aus deinem bisherigen \
+            Abhakverhalten gelernt. Ein Hinweis oben in der Liste zeigt an, ob die \
+            Reihenfolge schon optimiert ist oder noch lernt; nach jeder Abhakung wird \
+            die verbleibende Liste automatisch neu sortiert. Ändert sich die \
+            Anordnung im Geschäft, erkennt die App das und passt sich mit den \
+            nächsten Einkäufen automatisch an.
             """
         ),
         HilfeThema(

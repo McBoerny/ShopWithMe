@@ -182,7 +182,7 @@ private struct GeschaeftZeile: View {
             GlassSymbolBadge(symbolName: geschaeft.fuehrenderTyp?.symbolName ?? "shippingbox.fill", farbe: .accentColor)
             VStack(alignment: .leading, spacing: 2) {
                 Text(geschaeft.name.isEmpty ? "Unbenannt" : geschaeft.name)
-                Text("\(geschaeft.typen.map(\.name).joined(separator: ", ")) · \(geschaeft.regale.count) Regal(e)")
+                Text(geschaeft.typen.map(\.name).joined(separator: ", "))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if istDuplikat, let kurzeAdresse = geschaeft.kurzeAdresse {
@@ -199,5 +199,5 @@ private struct GeschaeftZeile: View {
     NavigationStack {
         GeschaeftListView()
     }
-    .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self, Regal.self, ArtikelKategorie.self, Einkaufsvorgang.self], inMemory: true)
+    .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self, ArtikelKategorie.self, Einkaufsvorgang.self], inMemory: true)
 }

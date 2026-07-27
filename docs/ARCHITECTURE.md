@@ -21,7 +21,7 @@ ShopWithMe/
     App/                      # App-Entry-Point, ModelContainer-Setup
     Models/                   # SwiftData @Model Typen + Seed-Daten
     Services/                 # AISuggestionService, ReceiptScanService,
-                               # PriceTagScanService, ShelfOrderLearningService,
+                               # PriceTagScanService, WarengruppenDistanzService,
                                # DatabaseLocationService, MilkForUsImportService
     DesignSystem/              # Liquid-Glass-Wrapper, Symbol/Farb-Picker
     Views/                    # nach Feature gruppiert: Artikel, Geschaefte,
@@ -36,20 +36,21 @@ ShopWithMe/
 ## Datenmodell
 
 ```
-ArtikelKategorie          Regal                      Geschaeft
-────────────────          ─────                      ─────────
-id: UUID                  id: UUID                    id: UUID
-name: String              name: String                name: String
-standardSymbol: String    sortIndex: Int              typ: GeschaeftTyp (führend)
-standardFarbeHex: String  ┌─geschaeft: Geschaeft?      typenRaw: [String]? (→ typen)
-sortIndex: Int            │ kategorien: [ArtikelKategorie]  adresse: String?
-┌─regale: [Regal] ────────┘                            breitengrad/laengengrad: Double?
-└─geschaefte: [Geschaeft] ─────────────────────────────regale: [Regal] ──┘
-  (many-to-many, direkt —                              kategorien: [ArtikelKategorie]
-   ohne Regal nötig)                                    regalSortierModusRaw: String?
-                                                         alternativeNamenRaw: String?
-                                                         kaufEintraege: [KaufEintrag]
-                                                           (cascade — siehe unten)
+ArtikelKategorie                     GeschaeftTyp               Geschaeft
+────────────────                     ────────────               ─────────
+id: UUID                             id: UUID                   id: UUID
+name: String                         name: String               name: String
+standardSymbol: String               symbolName: String         typenModelle: [GeschaeftTyp]
+standardFarbeHex: String             sortIndex: Int              (→ typen, fuehrenderTyp = typen.first)
+sortIndex: Int                       geschaefte: [Geschaeft]     adresse: String?
+┌─geschaeftsTypModelle:               standardKategorien:         breitengrad/laengengrad: Double?
+│  [GeschaeftTyp] (→geschaeftsTypen)   [ArtikelKategorie]          kategorien: [ArtikelKategorie]
+└─geschaefte: [Geschaeft]                                         alternativeNamenRaw: String?
+  (many-to-many, direkt)                                          anzahlEinkaufsvorgaengeRaw: Int?
+                                                                   umbauVerdachtRaw: Bool?
+                                                                   unauffaelligeEinkaeufeInFolgeRaw: Int?
+                                                                   kaufEintraege: [KaufEintrag]
+                                                                     (cascade — siehe unten)
 
 Artikel                              Einkaufsvorgang            KaufEintrag
 ───────                              ───────────────            ───────────
@@ -75,30 +76,30 @@ erstelltAm: Date                     artikel: Artikel? ────────�
                                       notiz: String?
                                       erstelltAm: Date
 
-KategorieBesuchsStatistik                IgnorierterGeschaeftsVorschlag
-─────────────────────────                ──────────────────────────────
+WarengruppenDistanz                       IgnorierterGeschaeftsVorschlag
+───────────────────                       ──────────────────────────────
 id: UUID                                  name: String
 geschaeft: Geschaeft?                     breitengrad/laengengrad: Double?
-kategorie: ArtikelKategorie?              ignoriertAm: Date
-besucheAnzahl: Int                        (keine Relationship zu Geschaeft —
-summeSequenzPosition: Double               Name/Koordinaten genügen für den
-→ durchschnittlichePosition (computed)     Abgleich, siehe unten)
+kategorieA: ArtikelKategorie?             ignoriertAm: Date
+kategorieB: ArtikelKategorie?             (keine Relationship zu Geschaeft —
+distanz: Double (0=nah, 1=fern)            Name/Koordinaten genügen für den
+                                            Abgleich, siehe unten)
 ```
 
-Design-Entscheidung (aktualisiert, siehe `docs/DECISIONS.md`): **Kategorien sind
-wichtiger als Regale, Regale sind optional.** Ein `Geschaeft` kann `ArtikelKategorie`n
-direkt zugeordnet bekommen (`Geschaeft.kategorien`), ganz ohne ein `Regal` anzulegen.
-`Geschaeft.verfuegbareKategorien` ist die Vereinigung dieser direkten Zuordnung und der
-Kategorien, die über `Regal.kategorien` zugeordnet sind — ein Regal organisiert damit
-nur noch die Reihenfolge beim Einkaufen, ist aber keine Voraussetzung für
-Verfügbarkeit.
+Design-Entscheidung (siehe `docs/DECISIONS.md`): Ein `Geschaeft` bekommt
+`ArtikelKategorie`n direkt zugeordnet (`Geschaeft.kategorien`) — das ist der einzige
+Weg, eine Kategorie verfügbar zu machen. Die Reihenfolge beim Einkaufen ist keine
+manuell gepflegte Struktur (früher: `Regal`), sondern wird von
+`WarengruppenDistanzService` aus dem Abhakverhalten gelernt (paarweise Distanz je
+Kategorie-Paar und Geschäft, siehe
+`docs/ARCHITEKTURVORSCHLAG_ADAPTIVE_SORTIERUNG.md`).
 
 ## Services
 
 - **AISuggestionService**: prüft `SystemLanguageModel.default.availability`; nutzt bei
-  Verfügbarkeit `LanguageModelSession` mit einem `@Generable`-Ergebnistyp, um Kategorie-
-  und Regalname vorzuschlagen. Bekommt bestehende Kategorie-/Regalnamen als Kontext,
-  damit bevorzugt bestehende Werte wiederverwendet werden. Wird in `ArtikelEditView`
+  Verfügbarkeit `LanguageModelSession` mit einem `@Generable`-Ergebnistyp, um eine
+  Kategorie vorzuschlagen. Bekommt bestehende Kategorienamen als Kontext, damit
+  bevorzugt bestehende Werte wiederverwendet werden. Wird in `ArtikelEditView`
   automatisch (entprellt per `.task(id: artikel.name)`) aufgerufen, sobald ein neuer
   Artikel noch keine Kategorie hat — kein manueller Button mehr.
 - **ReceiptScanService** (Protokoll): Implementierung `VisionFoundationModelsReceiptScanner`
@@ -128,10 +129,11 @@ Verfügbarkeit.
   Alias für künftige Scans. Greift nur, wenn der Scan-Kontext noch kein Geschäft
   feststehend mitbringt (z.B. nachträglich zuhause gescannter Beleg) — Details in
   `docs/BELEGSCAN.md` → „Automatischer Geschäfts-Abgleich“.
-- **ShelfOrderLearningService**: aktualisiert nach jedem abgeschlossenen
-  `Einkaufsvorgang` die `KategorieBesuchsStatistik` und leitet daraus sowohl eine
-  vorgeschlagene automatische Regal-Reihenfolge als auch (für Geschäfte ohne Regale
-  bzw. für Kategorien ohne Regal-Zuordnung) eine reine Kategorie-Reihenfolge ab.
+- **WarengruppenDistanzService**: lernt nach jedem abgeschlossenen `Einkaufsvorgang`
+  aus der Abhakreihenfolge eine paarweise Distanz zwischen Artikelkategorien je
+  Geschäft (`WarengruppenDistanz`) und sortiert die Einkaufsliste danach dynamisch
+  neu (Greedy-Nearest-Neighbor + 2-opt) — Details in
+  `docs/ARCHITEKTURVORSCHLAG_ADAPTIVE_SORTIERUNG.md`.
 - **MilkForUsImportService**: importiert eine aus der Shopping-App "MilkForUs"
   exportierte Textdatei (Kategorien + Artikel) — Kategorie-Abgleich per exaktem
   Namenstreffer, sonst KI-Best-Match (`AISuggestionService.kategorieMatch`) gegen den

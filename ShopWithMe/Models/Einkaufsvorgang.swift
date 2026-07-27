@@ -4,9 +4,8 @@ import SwiftData
 /// Ein einzelner Einkaufsvorgang (Ladenbesuch) in einem bestimmten ``Geschaeft``.
 ///
 /// Während eines Einkaufsvorgangs entstehen ``KaufEintrag``e, aus deren
-/// Reihenfolge der ``ShelfOrderLearningService`` lernt, in welcher Reihenfolge der
-/// Anwender die Artikelkategorien (und damit die zugehörigen Regale) typischerweise
-/// abläuft.
+/// Reihenfolge der ``WarengruppenDistanzService`` lernt, welche Artikelkategorien
+/// im jeweiligen Geschäft räumlich nah beieinanderliegen.
 @Model
 final class Einkaufsvorgang {
     /// Eindeutige Kennung.
@@ -47,7 +46,7 @@ final class Einkaufsvorgang {
     /// Artikel mit derselben, für ``geschaeft`` führenden ``ArtikelKategorie``
     /// (``Artikel/fuehrendeKategorie(inGeschaeft:context:)``) erhalten denselben
     /// ``KaufEintrag/kategorieBesuchsIndex``, neue Kategorien den jeweils nächsten
-    /// Index — das ist die Rohdatenbasis für ``ShelfOrderLearningService``. Artikel
+    /// Index — das ist die Rohdatenbasis für ``WarengruppenDistanzService``. Artikel
     /// ohne eigene Kategorie fallen dabei automatisch unter "Sonstiges".
     func artikelAbhaken(_ artikel: Artikel, context: ModelContext) {
         // Dedupe-Schutz gegen das in `docs/DATABASE_CONCURRENCY.md` dokumentierte

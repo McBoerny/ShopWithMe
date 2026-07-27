@@ -92,7 +92,7 @@ vollständig umgesetzt; weitere Ideen siehe „Zukünftig“ unten.
   umgesetzten Lösch-Logik in `PreisHistorieBereinigungService`) — zurückgestellt, da
   SwiftData-`@Relationship`s nicht store-übergreifend funktionieren und die dafür
   nötige Ablösung von `KaufEintrag`s operativer Rolle (laufender Einkaufsvorgang,
-  `ShelfOrderLearningService`) ein eigenständiges, größeres Vorhaben wäre. Details/
+  `WarengruppenDistanzService`) ein eigenständiges, größeres Vorhaben wäre. Details/
   erwogene Alternativen siehe `docs/PREISHISTORIE_BEREINIGUNG.md`.
 - **Nutzungs-Tracking/Analytics**: anonymisiertes Tracking-Framework zur Analyse der
   App-Nutzung — erfassen, welche Funktionen wie häufig genutzt werden, um die Roadmap

@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.6 (Build 96) — Regal entfernt: Warengruppen-Distanzmatrix ersetzt manuelle Sortierstruktur (GitHub #35)
+
+- **`Regal`, `RegalSortierModus`, `RegalDetailView`, `ShelfOrderLearningService` und
+  `KategorieBesuchsStatistik` entfernt.** Mit der in Build 95 eingeführten
+  `WarengruppenDistanzService`-Sortierung (paarweise Distanzmatrix statt eines
+  einzelnen Skalars je Kategorie) hatte die manuell zu pflegende Regal-Zwischenschicht
+  keinen Zweck mehr, den die automatische Sortierung nicht feiner und ohne
+  Pflegeaufwand abdeckt. Begründung und Umfang: [Issue #35](https://github.com/McBoerny/ShopWithMe/issues/35).
+- `Geschaeft.verfuegbareKategorien` ist jetzt schlicht `kategorien.sorted { $0.sortIndex < $1.sortIndex }`
+  (keine Regal-Vereinigung mehr); `Artikel.fuehrendeKategorie` verliert die
+  Regal-Priorität; `ArtikelKategorie.regale` entfällt.
+  `GeschaeftDetailView` verliert Regal-Sektion und `EditButton` (der zuvor nur für die
+  manuelle Regal-Reihenfolge nötig war, GitHub #28); `EinkaufenView` gruppiert
+  Einkaufslisten-Sektionen jetzt einheitlich nach Kategorie statt teils nach
+  Regal/teils nach Kategorie (`Gruppe`/`sonstigeArtikel` entfallen).
+- **Achtung Datenmigration:** Da `Regal` und `KategorieBesuchsStatistik` aus dem
+  SwiftData-Schema entfernt wurden, verwirft die automatische Lightweight-Migration
+  beim nächsten Start alle bisher gespeicherten Regal- und
+  Kategorie-Besuchsstatistik-Datensätze unwiderruflich (Kategorie- und Geschäfts-Daten
+  selbst bleiben erhalten). Die gelernte Sortierreihenfolge baut sich über die neue
+  `WarengruppenDistanz`-Matrix aus künftigen Einkäufen neu auf.
+- Betroffene Doku (`ARCHITECTURE.md`, `PRODUCT_SPEC.md`, `BEDIENUNGSANLEITUNG.md`,
+  `DATABASE_CONCURRENCY.md`, `HelpView`) auf den Stand ohne Regal aktualisiert.
+
 ## v0.6 (Build 95) — Adaptive Einkaufslistenoptimierung (Warengruppen-Distanzmatrix)
 
 - **`WarengruppenDistanz`** (neu): paarweise, ladenspezifisch gelernte Distanz

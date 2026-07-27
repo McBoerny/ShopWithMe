@@ -58,7 +58,7 @@ SwiftData unterstützt keine `@Relationship`s, deren Zielobjekt in einem *andere
 müssen im selben Store liegen. Ein zweiter Store für `KaufEintrag` (oder ein neues,
 schlankeres Preis-Modell) hätte diese Relationships daher zwangsläufig durch reine
 UUID-Referenzen mit manuellem Nachschlagen ersetzt — ein invasiver Eingriff quer durch
-`Einkaufsvorgang`, `ShelfOrderLearningService`, `BelegScanView` und die zugehörigen
+`Einkaufsvorgang`, `WarengruppenDistanzService`, `BelegScanView` und die zugehörigen
 Tests, für einen Nutzen (unabhängige Aufbewahrungsfrist), der sich wie oben gezeigt
 auch ohne Store-Trennung erreichen lässt.
 

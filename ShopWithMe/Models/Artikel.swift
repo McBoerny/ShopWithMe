@@ -143,19 +143,16 @@ extension Artikel {
         return [ArtikelKategorie.sonstige(context: context)]
     }
 
-    /// Die für Gruppierung (Regal-Zuordnung beim Einkaufen) und Lernalgorithmus in
-    /// `geschaeft` **führende** Kategorie, falls ein Artikel mehreren Kategorien
-    /// zugeordnet ist — Nutzer-Entscheidung: pro Geschäft gewinnt genau eine
-    /// Kategorie, kein Duplizieren des Artikels über mehrere Regal-Bereiche.
-    /// Priorität: eine Kategorie mit Regal-Zuordnung in `geschaeft` > eine im
-    /// Geschäft überhaupt verfügbare Kategorie > die erste zugeordnete Kategorie
-    /// (ohne `geschaeft`, z.B. in der geschäftsunabhängigen Artikel-Verwaltung).
+    /// Die für Gruppierung und Sortierung (``WarengruppenDistanzService``) beim
+    /// Einkaufen in `geschaeft` **führende** Kategorie, falls ein Artikel mehreren
+    /// Kategorien zugeordnet ist — Nutzer-Entscheidung: pro Geschäft gewinnt genau
+    /// eine Kategorie, kein Duplizieren des Artikels über mehrere Abschnitte.
+    /// Priorität: eine im Geschäft tatsächlich verfügbare Kategorie > die erste
+    /// zugeordnete Kategorie (ohne `geschaeft`, z.B. in der geschäftsunabhängigen
+    /// Artikel-Verwaltung).
     func fuehrendeKategorie(inGeschaeft geschaeft: Geschaeft?, context: ModelContext) -> ArtikelKategorie {
         let kandidaten = effektiveKategorien(context: context)
         guard let geschaeft else { return kandidaten[0] }
-        if let mitRegal = kandidaten.first(where: { geschaeft.regal(fuer: $0) != nil }) {
-            return mitRegal
-        }
         let alleKategorien = (try? context.fetch(FetchDescriptor<ArtikelKategorie>())) ?? []
         let verfuegbareKategorien = geschaeft.verfuegbareKategorien(alleKategorien: alleKategorien)
         if let verfuegbar = kandidaten.first(where: { verfuegbareKategorien.contains($0) }) {

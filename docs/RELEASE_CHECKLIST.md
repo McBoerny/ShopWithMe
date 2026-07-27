@@ -35,7 +35,7 @@ Test- und Doku-Punkte.
 - [ ] **Voller Security-Review** — `/security-review` über den gesamten Diff
       seit letztem Major-Release.
 - [ ] **Vollständiger Regressionstest** — alle dokumentierten Sonderfälle
-      gezielt durchspielen (z.B. Artikel ohne Kategorie/Regal, mehrere
+      gezielt durchspielen (z.B. Artikel ohne Kategorie, mehrere
       Einkaufslisten, abgehaktes Rückgängigmachen, Belegscan in beiden
       Kontexten — siehe Memory/`docs/DECISIONS.md`), nicht nur Golden Path.
 - [ ] **Accessibility-Vollcheck** — VoiceOver-Durchlauf + Dynamic-Type-Extremwerte

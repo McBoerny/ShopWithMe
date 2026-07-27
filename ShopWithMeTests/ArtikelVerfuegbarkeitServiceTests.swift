@@ -7,8 +7,8 @@ import Testing
 struct ArtikelVerfuegbarkeitServiceTests {
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {
         let schema = Schema([
-            Artikel.self, ArtikelKategorie.self, Regal.self, Geschaeft.self, GeschaeftTyp.self,
-            Einkaufsvorgang.self, KaufEintrag.self, KategorieBesuchsStatistik.self,
+            Artikel.self, ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self,
+            Einkaufsvorgang.self, KaufEintrag.self,
             Einkaufsliste.self, EinkaufslistenEintrag.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -20,34 +20,7 @@ struct ArtikelVerfuegbarkeitServiceTests {
     private func sonstigesTyp() -> GeschaeftTyp { GeschaeftTyp(name: "Sonstiges", symbolName: "shippingbox.fill") }
 
     @Test
-    func geschaeftMitRegalenNutztRegalZuordnung() throws {
-        let (container, context) = try machtLeerenContainer()
-        _ = container
-
-        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
-        let drogerie = ArtikelKategorie(name: "Drogerie", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
-        context.insert(obst)
-        context.insert(drogerie)
-
-        let geschaeft = Geschaeft(name: "Rewe", typen: [lebensmittelTyp()])
-        context.insert(geschaeft)
-        let obstregal = Regal(name: "Obstregal", sortIndex: 0, geschaeft: geschaeft)
-        obstregal.kategorien = [obst]
-        context.insert(obstregal)
-
-        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst])
-        let shampoo = Artikel(name: "Shampoo", symbolName: "sparkles", farbeHex: "#AF52DE", kategorien: [drogerie])
-        context.insert(apfel)
-        context.insert(shampoo)
-
-        #expect(ArtikelVerfuegbarkeitService.istVerfuegbar(apfel, in: geschaeft, context: context))
-        #expect(!ArtikelVerfuegbarkeitService.istVerfuegbar(shampoo, in: geschaeft, context: context))
-    }
-
-    @Test
-    func geschaeftMitDirektZugeordneterKategorieOhneRegal() throws {
-        // Kategorien sind wichtiger als Regale: Verfügbarkeit funktioniert auch ganz
-        // ohne ein einziges Regal.
+    func geschaeftMitDirektZugeordneterKategorie() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
@@ -65,13 +38,12 @@ struct ArtikelVerfuegbarkeitServiceTests {
         context.insert(apfel)
         context.insert(shampoo)
 
-        #expect(geschaeft.regale.isEmpty)
         #expect(ArtikelVerfuegbarkeitService.istVerfuegbar(apfel, in: geschaeft, context: context))
         #expect(!ArtikelVerfuegbarkeitService.istVerfuegbar(shampoo, in: geschaeft, context: context))
     }
 
     @Test
-    func geschaeftOhneRegaleLerntAusAbhaken() throws {
+    func geschaeftLerntAusAbhaken() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
@@ -94,7 +66,7 @@ struct ArtikelVerfuegbarkeitServiceTests {
     }
 
     @Test
-    func geschaeftOhneRegaleIgnoriertKaeufeAusAnderenGeschaeften() throws {
+    func geschaeftIgnoriertKaeufeAusAnderenGeschaeften() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
 

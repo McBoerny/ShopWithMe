@@ -3,11 +3,11 @@ import SwiftData
 import MapKit
 
 /// Einstiegspunkt zum Einkaufen: zeigt sofort beim Öffnen die Einkaufsliste der
-/// ausgewählten ``Einkaufsliste`` an — optional gruppiert nach Regal eines
-/// gewählten Geschäfts. Ein passender ``Einkaufsvorgang`` (für die Kombination aus
-/// gewählter Liste und gewähltem Geschäft) wird dafür automatisch angelegt, sobald
-/// keiner läuft; ein manueller "Start" ist nicht nötig, Artikel lassen sich
-/// jederzeit abhaken.
+/// ausgewählten ``Einkaufsliste`` an — optional nach Artikelkategorie gruppiert und
+/// sortiert (``WarengruppenDistanzService``), wenn ein Geschäft gewählt ist. Ein
+/// passender ``Einkaufsvorgang`` (für die Kombination aus gewählter Liste und
+/// gewähltem Geschäft) wird dafür automatisch angelegt, sobald keiner läuft; ein
+/// manueller "Start" ist nicht nötig, Artikel lassen sich jederzeit abhaken.
 ///
 /// Prüft beim Öffnen zusätzlich per ``GeschaeftErkennungService``, ob sich der
 /// Anwender in der Nähe eines bekannten Ladens befindet, und zeigt dafür ggf. ein
@@ -704,7 +704,8 @@ private struct GeschaeftInDerNaeheZeile: View {
 }
 
 /// Die Einkaufsliste einer ``Einkaufsliste`` für einen laufenden Einkaufsvorgang —
-/// bei gewähltem Geschäft nach Regal gruppiert, sonst flach.
+/// nach Artikelkategorie gruppiert und, bei gewähltem Geschäft, per
+/// ``WarengruppenDistanzService`` sortiert.
 private struct EinkaufslisteView: View {
     let geschaeft: Geschaeft?
     let einkaufsliste: Einkaufsliste
@@ -782,7 +783,6 @@ private struct EinkaufslisteView: View {
             // `docs/DATABASE_CONCURRENCY.md` → „Gebündelte Aktionen“).
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
                 einkaufsvorgang.abschliessen()
-                ShelfOrderLearningService.lernenAus(einkaufsvorgang, context: modelContext)
                 WarengruppenDistanzService.verarbeiteEinkauf(einkaufsvorgang, context: modelContext)
             }
             zeigeUmbauHinweis = geschaeft?.umbauVerdacht ?? false
@@ -805,16 +805,8 @@ private struct EinkaufslisteView: View {
         return verfuegbarkeitsgefiltert(basis)
     }
 
-    private struct Gruppe: Identifiable {
-        let regal: Regal
-        var artikel: [Artikel]
-        var id: PersistentIdentifier { regal.persistentModelID }
-    }
-
-    /// Eine Gruppe von Artikeln derselben Artikelkategorie, die sich keinem Regal
-    /// zuordnen lässt — z.B. weil das Geschäft keine Regale besitzt oder die
-    /// Kategorie darin keinem Regal zugeordnet ist. Artikel ohne eigene Kategorie
-    /// fallen dabei automatisch in die Kategorie "Sonstiges".
+    /// Eine Gruppe von Artikeln derselben Artikelkategorie. Artikel ohne eigene
+    /// Kategorie fallen dabei automatisch in die Kategorie "Sonstiges".
     private struct KategorieGruppe: Identifiable {
         let kategorie: ArtikelKategorie
         var artikel: [Artikel]
@@ -824,46 +816,22 @@ private struct EinkaufslisteView: View {
     /// Die für ``geschaeft`` führende Kategorie eines Artikels (siehe
     /// ``Artikel/fuehrendeKategorie(inGeschaeft:context:)``) — hat ein Artikel
     /// mehrere Kategorien, entscheidet das (nicht eine Duplizierung über mehrere
-    /// Regal-Bereiche), welchem Regal/welcher Sektion er beim Einkaufen zugeordnet
-    /// wird.
+    /// Sektionen), welcher Sektion er beim Einkaufen zugeordnet wird.
     private func effektiveKategorie(fuer artikel: Artikel) -> ArtikelKategorie {
         artikel.fuehrendeKategorie(inGeschaeft: geschaeft, context: modelContext)
     }
 
-    /// Artikel, die sich keinem Regal zuordnen lassen (kein Geschäft gewählt oder
-    /// die Kategorie darin keinem Regal zugeordnet) — werden dennoch angezeigt, nur
-    /// eben in nach Kategorie gruppierten Sektionen.
-    private var sonstigeArtikel: [Artikel] {
-        guard let geschaeft else { return artikelAufListe }
-        return artikelAufListe.filter { geschaeft.regal(fuer: effektiveKategorie(fuer: $0)) == nil }
-    }
-
-    private var gruppen: [Gruppe] {
-        guard let geschaeft else { return [] }
-        var nachRegal: [PersistentIdentifier: Gruppe] = [:]
-        for artikel in artikelAufListe {
-            guard let regal = geschaeft.regal(fuer: effektiveKategorie(fuer: artikel)) else { continue }
-            nachRegal[regal.persistentModelID, default: Gruppe(regal: regal, artikel: [])].artikel.append(artikel)
-        }
-        let reihenfolge = ShelfOrderLearningService.effektiveReihenfolge(fuer: geschaeft, context: modelContext)
-        let position = Dictionary(uniqueKeysWithValues: reihenfolge.enumerated().map { ($1.persistentModelID, $0) })
-        return nachRegal.values.sorted {
-            (position[$0.regal.persistentModelID] ?? .max) < (position[$1.regal.persistentModelID] ?? .max)
-        }
-    }
-
-    /// ``sonstigeArtikel``, gruppiert nach Artikelkategorie und sortiert über
+    /// ``artikelAufListe``, gruppiert nach Artikelkategorie und sortiert über
     /// ``WarengruppenDistanzService`` — der gelernten, paarweisen Warengruppen-
     /// Distanzmatrix dieses Geschäfts (Architekturvorschlag Abschnitt 4.2/4.3,
-    /// GitHub #36). Das ist insbesondere für Geschäfte ohne Regale die alleinige
-    /// Sortiergrundlage. Startpunkt der Sortierung ist ``zuletztAbgehakteKategorie``
-    /// — die verbleibende Liste wird so nach jeder Abhakung dynamisch neu
-    /// sortiert, ausgehend vom aktuellen (impliziten) Standort. Ohne genügend
-    /// gelernte Daten (``WarengruppenDistanzService/genuegendDatenVerfuegbar(fuer:)``)
-    /// bleibt es bei alphabetischer Reihenfolge.
-    private var sonstigeGruppen: [KategorieGruppe] {
+    /// GitHub #36). Startpunkt der Sortierung ist ``zuletztAbgehakteKategorie`` —
+    /// die verbleibende Liste wird so nach jeder Abhakung dynamisch neu sortiert,
+    /// ausgehend vom aktuellen (impliziten) Standort. Ohne genügend gelernte Daten
+    /// (``WarengruppenDistanzService/genuegendDatenVerfuegbar(fuer:)``) bleibt es
+    /// bei alphabetischer Reihenfolge.
+    private var kategorieGruppen: [KategorieGruppe] {
         var nachKategorie: [PersistentIdentifier: KategorieGruppe] = [:]
-        for artikel in sonstigeArtikel {
+        for artikel in artikelAufListe {
             let kategorie = effektiveKategorie(fuer: artikel)
             nachKategorie[kategorie.persistentModelID, default: KategorieGruppe(kategorie: kategorie, artikel: [])].artikel.append(artikel)
         }
@@ -896,7 +864,7 @@ private struct EinkaufslisteView: View {
     /// Abschnitte gibt.
     @ViewBuilder
     private var sortierStatusHinweis: some View {
-        if let geschaeft, !sonstigeGruppen.isEmpty {
+        if let geschaeft, !kategorieGruppen.isEmpty {
             HStack(spacing: 6) {
                 if WarengruppenDistanzService.genuegendDatenVerfuegbar(fuer: geschaeft) {
                     Image(systemName: "checkmark.seal.fill")
@@ -927,7 +895,7 @@ private struct EinkaufslisteView: View {
 
     var body: some View {
         List {
-            ForEach(gruppen) { gruppe in
+            ForEach(kategorieGruppen) { gruppe in
                 Section {
                     ForEach(gruppe.artikel) { artikel in
                         ArtikelAbhakZeile(
@@ -942,26 +910,7 @@ private struct EinkaufslisteView: View {
                         )
                     }
                 } header: {
-                    EinkaufslistenSektionHeader(titel: gruppe.regal.name, kategorie: nil)
-                }
-            }
-
-            ForEach(sonstigeGruppen) { gruppe in
-                Section {
-                    ForEach(gruppe.artikel) { artikel in
-                        ArtikelAbhakZeile(
-                            artikel: artikel,
-                            eintrag: einkaufsliste.eintrag(fuer: artikel),
-                            mengeAnzeige: menge(fuer: artikel),
-                            istAbgehakt: istAbgehakt(artikel),
-                            abhaken: { umschalten(artikel) },
-                            mengeErhoehen: { mengeErhoehen(artikel) },
-                            mengeVerringern: { mengeVerringern(artikel) },
-                            dauerhaftEntfernen: istAbgehakt(artikel) ? { entferneDauerhaft(artikel) } : nil
-                        )
-                    }
-                } header: {
-                    EinkaufslistenSektionHeader(titel: gruppe.kategorie.name, kategorie: gruppe.kategorie)
+                    EinkaufslistenSektionHeader(kategorie: gruppe.kategorie)
                 }
             }
 
@@ -1169,21 +1118,16 @@ private struct SchnellauswahlButton: View {
     }
 }
 
-/// Kopfzeile einer Einkaufslisten-Sektion (Regal oder Kategorie). Bei
-/// Kategorie-Sektionen (``kategorie`` gesetzt) wird zusätzlich deren Icon/Farbe
-/// (``ArtikelKategorie/standardSymbol``/``standardFarbeHex``) angezeigt — Regal-
-/// Sektionen bleiben ohne Icon, da ein Regal mehrere Kategorien bündeln kann.
+/// Kopfzeile einer Einkaufslisten-Kategorie-Sektion mit Icon/Farbe
+/// (``ArtikelKategorie/standardSymbol``/``standardFarbeHex``).
 private struct EinkaufslistenSektionHeader: View {
-    let titel: String
-    let kategorie: ArtikelKategorie?
+    let kategorie: ArtikelKategorie
 
     var body: some View {
         HStack(spacing: 6) {
-            if let kategorie {
-                Image(systemName: kategorie.standardSymbol)
-                    .foregroundStyle(Color(hex: kategorie.standardFarbeHex))
-            }
-            Text(titel)
+            Image(systemName: kategorie.standardSymbol)
+                .foregroundStyle(Color(hex: kategorie.standardFarbeHex))
+            Text(kategorie.name)
             Spacer()
         }
     }
@@ -1350,5 +1294,5 @@ private struct MengenNotizSheet: View {
 
 #Preview {
     EinkaufenView()
-        .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self, Regal.self, ArtikelKategorie.self, Artikel.self, Einkaufsvorgang.self, Einkaufsliste.self, EinkaufslistenEintrag.self], inMemory: true)
+        .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self, ArtikelKategorie.self, Artikel.self, Einkaufsvorgang.self, Einkaufsliste.self, EinkaufslistenEintrag.self, WarengruppenDistanz.self], inMemory: true)
 }

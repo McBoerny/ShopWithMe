@@ -36,7 +36,7 @@ gleichzeitige schreibende Öffnen durch zwei Geräte, um Store, `-wal`- und
 Code-Prüfung zeigt, dass es im gesamten Projekt **keinen einzigen expliziten
 `context.save()`-Aufruf** gibt — auch nicht beim Artikel-Abhaken selbst
 (`Einkaufsvorgang.artikelAbhaken(_:context:)`, `Models/Einkaufsvorgang.swift:45-52`).
-Alle Schreibzugriffe (Artikel abhaken, Geschäfts-/Regal-Bearbeitung, …) verlassen
+Alle Schreibzugriffe (Artikel abhaken, Geschäfts-Bearbeitung, …) verlassen
 sich bislang ausschließlich auf SwiftDatas **implizites Autosave**
 (`ModelContext.autosaveEnabled`, Standardwert `true`), das opportunistisch bei
 Leerlauf/Hintergrundwechsel/Teardown schreibt — nicht an einem klar
@@ -182,12 +182,12 @@ Haltedauer** (Micro-Lease), nicht die Sperr-Granularität.
 
 Das Micro-Lease-Verfahren oben passt zu **diskreten Einzelaktionen** (ein Tap
 = ein abgeschlossener Zustandswechsel), wie beim Artikel-Abhaken. Für
-**Geschäfte- und Regal-Bearbeitung** trifft das nicht zu: Code-Prüfung zeigt,
-dass diese Bildschirme (`GeschaeftStammdatenEditView`, `RegalDetailView`,
-`GeschaeftDetailView` inkl. Regal-Reihenfolge/Kategorie-Zuordnung,
+**Geschäfte-Bearbeitung** trifft das nicht zu: Code-Prüfung zeigt,
+dass diese Bildschirme (`GeschaeftStammdatenEditView`,
+`GeschaeftDetailView` inkl. Kategorie-Zuordnung,
 `KategorieHinzufuegenSheet`) per `@Bindable` **live und ungebündelt** an das
 SwiftData-Modell binden — jeder Tastenanschlag, jeder Kategorie-Toggle, jede
-Regal-Verschiebung mutiert das Modell sofort, ohne natürlichen
+Kategorie-Entfernen mutiert das Modell sofort, ohne natürlichen
 Abschlusspunkt einzelner Aktionen. Ein Micro-Lease pro Tastenanschlag wäre
 Overkill (ständiges Erwerben/Freigeben beim Tippen).
 
@@ -201,7 +201,7 @@ für die gesamte Dauer der Bearbeitung — potenziell mehrere Minuten statt
 Sekundenbruchteile.
 
 **Begründung für diesen bewussten Unterschied zum Micro-Lease-Prinzip:**
-gleichzeitige Bearbeitung *desselben* Geschäfts/Regals durch zwei Personen ist
+gleichzeitige Bearbeitung *desselben* Geschäfts durch zwei Personen ist
 ein seltener Vorgang (anders als gemeinsames Abhaken während eines Einkaufs,
 wo Gleichzeitigkeit der Normalfall ist) — ein session-langer Lease ist hier
 vertretbar und deutlich einfacher umzusetzen als ein Formular-Umbau auf
@@ -209,8 +209,8 @@ Entwurfs-Zustand oder ein entprellter (debounced) Save-Mechanismus (beide als
 Alternativen geprüft, aber nicht gewählt).
 
 **Betroffene Bildschirme (Session-Lease-Geltungsbereich):**
-`GeschaeftDetailView` (inkl. Regal-Reihenfolge und Kategorie-Zuordnung direkt
-auf dem Bildschirm), `GeschaeftStammdatenEditView`, `RegalDetailView`,
+`GeschaeftDetailView` (inkl. Kategorie-Zuordnung direkt
+auf dem Bildschirm), `GeschaeftStammdatenEditView`,
 `KategorieHinzufuegenSheet`. `NeueKategorieSheet` ist bereits als Ausnahme mit
 echtem Entwurfs-Zustand (lokale `@State`, erst bei „Sichern" per
 `modelContext.insert(...)` übernommen) umgesetzt — hier reicht ein
@@ -227,7 +227,7 @@ UI-Verhalten, unabhängig vom Lease-Mechanismus.
 
 Vollständiger Code-Audit aller Stellen, die SwiftData-Modelle mutieren, damit
 keine Schreibvorgänge unbeachtet bleiben. Zusätzlich zu den bereits genannten
-Fällen (Artikel-Abhaken, Geschäfte-/Regal-Bearbeitung):
+Fällen (Artikel-Abhaken, Geschäfte-Bearbeitung):
 
 **Dual-Mode-Views (Klarstellung, keine neue Entscheidung nötig):**
 `ArtikelEditView` und `GeschaeftStammdatenEditView` werden sowohl fürs
@@ -252,7 +252,7 @@ wie oben beschrieben.
   leeren `Einkaufsvorgang`s). Bei einem seltenen Zusammentreffen mit einem
   fremden Micro-Lease gilt dieselbe „kurz zurückstellen"-Behandlung wie
   überall sonst.
-- Regal-/Kategorie-Einzelaktionen *innerhalb* von `GeschaeftDetailView`
+- Kategorie-Einzelaktionen *innerhalb* von `GeschaeftDetailView`
   (`regalHinzufuegen`, `regalLoeschen`, `regalVerschieben`,
   `kategorieEntfernen`) benötigen **keine eigene** Lease-Behandlung — sie
   passieren, während die Session-Lease dieses Bildschirms ohnehin schon
@@ -268,8 +268,8 @@ wie oben beschrieben.
 
 **Gebündelte Aktionen (teilen sich einen Lease statt einen eigenen zu bekommen):**
 - Einkaufsvorgang **abschließen** (`endZeit` setzen) und der direkt im selben
-  Tap ausgelöste Lernschritt (`ShelfOrderLearningService.lernenAus`, aktualisiert
-  `KategorieBesuchsStatistik`) sind fachlich eine Aktion — ein Micro-Lease für
+  Tap ausgelöste Lernschritt (`WarengruppenDistanzService.verarbeiteEinkauf`)
+  sind fachlich eine Aktion — ein Micro-Lease für
   beide zusammen, kein zweiter Erwerb für den Lernschritt.
 
 ### Gewählte Parameter (Zusatzfälle)
@@ -392,7 +392,7 @@ Alle Punkte umgesetzt und per `xcodebuild build`/`test` verifiziert:
    `Einkaufsvorgang`/`EinkaufenView`/`BelegScanView`/`ArtikelListView`/
    `GeschaeftListView`/`ArtikelHinzufuegenView`/`NeueKategorieSheet`/
    `ArtikelEditView`/`GeschaeftStammdatenEditView`; Session-Lease über
-   `Views/SessionLeaseGate.swift` in `GeschaeftDetailView`/`RegalDetailView`/
+   `Views/SessionLeaseGate.swift` in `GeschaeftDetailView`/
    `KategorieHinzufuegenSheet`/den Bearbeiten-Pfaden von `ArtikelEditView` und
    `GeschaeftStammdatenEditView`). `SeedData` erhielt ebenfalls einen expliziten
    `save()` (ohne Lease, siehe „Vollständiger Schreibvorgang-Katalog").

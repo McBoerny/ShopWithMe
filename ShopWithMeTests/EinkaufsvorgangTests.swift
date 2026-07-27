@@ -7,8 +7,8 @@ import Testing
 struct EinkaufsvorgangTests {
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {
         let schema = Schema([
-            Artikel.self, ArtikelKategorie.self, Regal.self, Geschaeft.self, GeschaeftTyp.self,
-            Einkaufsvorgang.self, KaufEintrag.self, KategorieBesuchsStatistik.self,
+            Artikel.self, ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self,
+            Einkaufsvorgang.self, KaufEintrag.self,
             Einkaufsliste.self, EinkaufslistenEintrag.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -27,9 +27,6 @@ struct EinkaufsvorgangTests {
         context.insert(obst)
         let geschaeft = Geschaeft(name: "Testladen", typen: [lebensmittelTyp()])
         context.insert(geschaeft)
-        let regal = Regal(name: "Obstregal", geschaeft: geschaeft)
-        regal.kategorien = [obst]
-        context.insert(regal)
         let liste = Einkaufsliste(name: "Einkaufsliste")
         context.insert(liste)
         let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst], einheit: .stueck, mengenSchritt: 3)
@@ -65,12 +62,6 @@ struct EinkaufsvorgangTests {
 
         let geschaeft = Geschaeft(name: "Testladen", typen: [lebensmittelTyp()])
         context.insert(geschaeft)
-        let obstregal = Regal(name: "Obstregal", sortIndex: 0, geschaeft: geschaeft)
-        obstregal.kategorien = [obst]
-        context.insert(obstregal)
-        let drogerieregal = Regal(name: "Drogerieregal", sortIndex: 1, geschaeft: geschaeft)
-        drogerieregal.kategorien = [drogerie]
-        context.insert(drogerieregal)
 
         let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst])
         let birne = Artikel(name: "Birne", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst])
@@ -133,9 +124,6 @@ struct EinkaufsvorgangTests {
         context.insert(obst)
         let geschaeft = Geschaeft(name: "Testladen", typen: [lebensmittelTyp()])
         context.insert(geschaeft)
-        let regal = Regal(name: "Obstregal", geschaeft: geschaeft)
-        regal.kategorien = [obst]
-        context.insert(regal)
         let liste = Einkaufsliste(name: "Einkaufsliste")
         context.insert(liste)
         let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst], mengenSchritt: 2)

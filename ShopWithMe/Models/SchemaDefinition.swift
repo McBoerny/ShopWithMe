@@ -1,7 +1,6 @@
 import SwiftData
 
-/// Version 1 des SwiftData-Schemas — der Modellstand ab v1.5 (nach dem Absturz-Fix
-/// für ``Geschaeft/regalSortierModus``, siehe `docs/DECISIONS.md`).
+/// Version 1 des SwiftData-Schemas.
 ///
 /// **Wichtig (siehe `docs/DECISIONS.md`, "Duplicate version checksums"-Vorfall):**
 /// Dieses Projekt pflegt Modelle als flache, einzige Klassen (`Models/*.swift`) statt
@@ -14,7 +13,7 @@ import SwiftData
 /// **Für rein additive, optionale neue Attribute bleibt es daher bei dieser einzigen
 /// ``SchemaV1`` + der defensiven Regel aus `docs/DECISIONS.md`** (neues Attribut
 /// optional deklarieren, ggf. über ein Computed-Property mit sicherem Fallback
-/// kapseln wie ``Geschaeft/regalSortierModus``) — SwiftDatas klassische automatische
+/// kapseln wie ``Geschaeft/umbauVerdacht``) — SwiftDatas klassische automatische
 /// Lightweight-Migration übernimmt die neue Spalte dann anstandslos. Eine echte neue
 /// ``VersionedSchema`` samt ``MigrationStage`` ist erst nötig, wenn bestehende Daten
 /// tatsächlich transformiert werden müssen (`.custom`) — und setzt dann voraus, dass
@@ -27,12 +26,10 @@ enum SchemaV1: VersionedSchema {
         [
             Artikel.self,
             ArtikelKategorie.self,
-            Regal.self,
             Geschaeft.self,
             GeschaeftTyp.self,
             Einkaufsvorgang.self,
             KaufEintrag.self,
-            KategorieBesuchsStatistik.self,
             WarengruppenDistanz.self,
             Einkaufsliste.self,
             EinkaufslistenEintrag.self,

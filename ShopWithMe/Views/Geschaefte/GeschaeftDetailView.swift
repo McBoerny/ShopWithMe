@@ -1,19 +1,12 @@
 import SwiftUI
 import SwiftData
 
-/// Detailansicht eines ``Geschaeft``s: Stammdaten, Kategorien- und Regal-Verwaltung
-/// sowie Kaufbeleg- und Preisschild-Scan.
+/// Detailansicht eines ``Geschaeft``s: Stammdaten, Kategorien-Verwaltung sowie
+/// Kaufbeleg- und Preisschild-Scan.
 ///
-/// Der „Kategorien“-Abschnitt zeigt ``Geschaeft/verfuegbareKategorien`` — Kategorien
-/// sind dabei auch ohne Regal sofort verfügbar (siehe ``Geschaeft/kategorien``);
-/// Regale sind optional und dienen nur der Sortierung beim Einkaufen.
-///
-/// Die Reihenfolge der Regale in dieser Liste hängt vom gewählten
-/// ``RegalSortierModus`` ab: manuell (``Regal/sortIndex``, per Drag-Handle im
-/// Bearbeiten-Modus änderbar) oder automatisch anhand der gelernten Einkaufs-
-/// Reihenfolge (``ShelfOrderLearningService``). Der Wechsel zwischen beiden Modi
-/// überschreibt die jeweils andere Reihenfolge nicht — beide bleiben unabhängig
-/// voneinander erhalten.
+/// Der „Kategorien“-Abschnitt zeigt ``Geschaeft/verfuegbareKategorien`` — die
+/// Reihenfolge beim Einkaufen wird nicht hier manuell festgelegt, sondern von
+/// ``WarengruppenDistanzService`` aus dem bisherigen Abhakverhalten gelernt.
 ///
 /// „Kaufbeleg scannen“ öffnet ``BelegScanView`` im ``BelegScanKontext/geschaeft(_:)``-
 /// Kontext — unabhängig von einem laufenden ``Einkaufsvorgang``, z.B. um Preise für
@@ -32,11 +25,11 @@ import SwiftData
 /// Zeitpunkt und Dauer aller abgeschlossenen ``Einkaufsvorgang``e in diesem
 /// Geschäft — ohne eigenes Datenmodell, direkt aus dessen `startZeit`/`endZeit`.
 /// Navigationsziele der beiden letzten Zeilen in ``GeschaeftDetailView``, die auf
-/// keinem konkreten Datenwert basieren (anders als z.B. ``Regal``) — als eigenes
-/// `Hashable`-Werteziel für `NavigationLink(value:)`/`.navigationDestination(for:)`,
-/// statt der älteren closure-basierten `NavigationLink { destination } label: {}`-
-/// Variante. Letztere konstruiert ihre Destination-View eager bei **jedem** Rendern
-/// von `GeschaeftDetailView`, nicht erst beim tatsächlichen Antippen — bei
+/// keinem konkreten Datenwert basieren — als eigenes `Hashable`-Werteziel für
+/// `NavigationLink(value:)`/`.navigationDestination(for:)`, statt der älteren
+/// closure-basierten `NavigationLink { destination } label: {}`-Variante. Letztere
+/// konstruiert ihre Destination-View eager bei **jedem** Rendern von
+/// `GeschaeftDetailView`, nicht erst beim tatsächlichen Antippen — bei
 /// `GeschaeftPreisUebersichtView` (eigenes `@Query`) führte das zu einer
 /// Endlosschleife mit dessen verschachtelten Destinations (GitHub #33).
 private enum GeschaeftDetailNavigationsziel: Hashable {
@@ -56,40 +49,12 @@ struct GeschaeftDetailView: View {
         self.geschaeft = geschaeft
     }
 
-    private var regaleAnzeigen: [Regal] {
-        ShelfOrderLearningService.effektiveReihenfolge(fuer: geschaeft, context: modelContext)
-    }
-
-    private var automatischeReihenfolgeVerfuegbar: Bool {
-        ShelfOrderLearningService.automatischeReihenfolgeVerfuegbar(fuer: geschaeft, context: modelContext)
-    }
-
-    private var verschiebenAktion: ((IndexSet, Int) -> Void)? {
-        guard geschaeft.regalSortierModus == .manuell else { return nil }
-        return regalVerschieben
-    }
-
     var body: some View {
         SessionLeaseGate { listInhalt }
     }
 
     private var listInhalt: some View {
         List {
-            if automatischeReihenfolgeVerfuegbar {
-                Section {
-                    Picker("Reihenfolge", selection: $geschaeft.regalSortierModus) {
-                        ForEach(RegalSortierModus.allCases) { modus in
-                            Text(modus.anzeigename).tag(modus)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                } footer: {
-                    Text(geschaeft.regalSortierModus == .automatisch
-                         ? "ShopWithMe sortiert die Regale automatisch anhand deiner bisherigen Einkäufe. Deine manuelle Reihenfolge bleibt dabei erhalten und lässt sich jederzeit wieder auswählen."
-                         : "Du legst die Reihenfolge selbst fest. ShopWithMe hat außerdem genug Einkäufe gelernt, um stattdessen automatisch zu sortieren.")
-                }
-            }
-
             Section {
                 Button {
                     zeigeStammdatenEdit = true
@@ -117,38 +82,8 @@ struct GeschaeftDetailView: View {
             }
 
             Section {
-                ForEach(regaleAnzeigen) { regal in
-                    NavigationLink(value: regal) {
-                        RegalZeile(regal: regal)
-                    }
-                }
-                .onDelete(perform: regalLoeschen)
-                .onMove(perform: verschiebenAktion)
-
-                Button {
-                    regalHinzufuegen()
-                } label: {
-                    Label("Regal hinzufügen", systemImage: "plus")
-                }
-            } header: {
-                Text("Regale")
-            } footer: {
-                Text(geschaeft.regalSortierModus == .manuell
-                     ? "Ziehe die Regale (über „Bearbeiten“) in die Reihenfolge, in der du sie beim Einkaufen ablaufen möchtest."
-                     : "Diese Reihenfolge wird automatisch gelernt. Wechsle oben zu „Manuell“, um sie selbst festzulegen.")
-            }
-
-            Section {
                 ForEach(geschaeft.verfuegbareKategorien) { kategorie in
-                    HStack {
-                        Label(kategorie.name, systemImage: kategorie.standardSymbol)
-                        Spacer()
-                        if let regal = geschaeft.regal(fuer: kategorie) {
-                            Text(regal.name)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
+                    Label(kategorie.name, systemImage: kategorie.standardSymbol)
                 }
                 .onDelete(perform: kategorieEntfernen)
 
@@ -160,7 +95,7 @@ struct GeschaeftDetailView: View {
             } header: {
                 Text("Kategorien")
             } footer: {
-                Text("Kategorien sind auch ohne Regal sofort verfügbar. Regale sind optional und dienen nur der Sortierung beim Einkaufen. Zum Entfernen nach links wischen.")
+                Text("Kategorien sind sofort verfügbar. Die Reihenfolge beim Einkaufen lernt die App automatisch aus deinem bisherigen Abhakverhalten. Zum Entfernen nach links wischen.")
             }
 
             Section {
@@ -188,23 +123,12 @@ struct GeschaeftDetailView: View {
             }
         }
         .navigationTitle(geschaeft.name.isEmpty ? "Geschäft" : geschaeft.name)
-        .navigationDestination(for: Regal.self) { regal in
-            RegalDetailView(regal: regal)
-        }
         .navigationDestination(for: GeschaeftDetailNavigationsziel.self) { ziel in
             switch ziel {
             case .preisuebersicht:
                 GeschaeftPreisUebersichtView(geschaeft: geschaeft)
             case .besuchsprotokoll:
                 GeschaeftBesuchsProtokollView(geschaeft: geschaeft)
-            }
-        }
-        .toolbar {
-            // Nur anzeigen, wenn er tatsächlich etwas bewirkt: Löschen funktioniert
-            // bereits ohne Edit-Modus per Wischgeste, der einzige Mehrwert sind die
-            // Zieh-Griffe zum manuellen Umsortieren mehrerer Regale (GitHub #28).
-            if geschaeft.regalSortierModus == .manuell && regaleAnzeigen.count > 1 {
-                EditButton()
             }
         }
         .sheet(isPresented: $zeigeStammdatenEdit) {
@@ -224,51 +148,7 @@ struct GeschaeftDetailView: View {
     private func kategorieEntfernen(at offsets: IndexSet) {
         let kategorien = geschaeft.verfuegbareKategorien
         for index in offsets {
-            let kategorie = kategorien[index]
-            geschaeft.kategorien.removeAll { $0 == kategorie }
-            geschaeft.regal(fuer: kategorie)?.kategorien.removeAll { $0 == kategorie }
-        }
-    }
-
-    private func regalHinzufuegen() {
-        let naechsterIndex = (geschaeft.regale.map(\.sortIndex).max() ?? -1) + 1
-        let regal = Regal(name: "Neues Regal", sortIndex: naechsterIndex, geschaeft: geschaeft)
-        modelContext.insert(regal)
-    }
-
-    private func regalLoeschen(at offsets: IndexSet) {
-        let sortiert = regaleAnzeigen
-        for index in offsets {
-            modelContext.delete(sortiert[index])
-        }
-    }
-
-    private func regalVerschieben(from source: IndexSet, to destination: Int) {
-        var sortiert = regaleAnzeigen
-        sortiert.move(fromOffsets: source, toOffset: destination)
-        for (index, regal) in sortiert.enumerated() {
-            regal.sortIndex = index
-        }
-    }
-}
-
-/// Eine Zeile in der Regal-Liste eines Geschäfts.
-private struct RegalZeile: View {
-    let regal: Regal
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(regal.name.isEmpty ? "Unbenannt" : regal.name)
-            if regal.kategorien.isEmpty {
-                Text("Keine Kategorien zugeordnet")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                Text(regal.kategorien.map(\.name).sorted().joined(separator: ", "))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
+            geschaeft.kategorien.removeAll { $0 == kategorien[index] }
         }
     }
 }
@@ -277,5 +157,5 @@ private struct RegalZeile: View {
     NavigationStack {
         GeschaeftDetailView(geschaeft: Geschaeft(name: "Rewe", typen: [GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")]))
     }
-    .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self, Regal.self, ArtikelKategorie.self], inMemory: true)
+    .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self, ArtikelKategorie.self], inMemory: true)
 }

@@ -15,24 +15,19 @@ Geschäfte und den Einkaufsvorgang selbst intelligent unterstützt.
   oder Stück) — die beim Anlegen festgelegte Menge ist zugleich die
   Standard-Schrittweite für Erhöhen/Verringern auf der Einkaufsliste. Hat ein Artikel
   mehrere Kategorien, entscheidet pro Geschäft eine **führende** Kategorie
-  (`Artikel/fuehrendeKategorie(inGeschaeft:context:)`) über Regal-Zuordnung/
-  Gruppierung beim Einkaufen — bevorzugt eine Kategorie mit Regal-Zuordnung in
-  diesem Geschäft, sonst eine dort verfügbare, sonst die erste zugeordnete. Symbol/
-  Farbe existieren weiterhin als Datenfelder, werden aber in keiner UI mehr
-  angezeigt oder vom Anwender/der KI gesetzt.
+  (`Artikel/fuehrendeKategorie(inGeschaeft:context:)`) über die Gruppierung beim
+  Einkaufen — bevorzugt eine im Geschäft verfügbare Kategorie, sonst die erste
+  zugeordnete. Symbol/Farbe existieren weiterhin als Datenfelder, werden aber in
+  keiner UI mehr angezeigt oder vom Anwender/der KI gesetzt.
 - **Artikelkategorie**: z.B. Obst, Milchprodukte, Drogerieartikel. Kategorien sind global,
   nicht pro Geschäft.
 - **Geschäft**: hat einen oder mehrere Typen (Lebensmittel, Drogerie, Baumarkt,
-  Apotheke, …, z.B. Drogerie + Lebensmittel bei einem dm) sowie
-  eigene **Kategorien** und (optional) eigene **Regale**. Kategorien sind wichtiger
-  als Regale: ein Geschäft kann Kategorien direkt zugeordnet bekommen, ganz ohne ein
-  Regal anzulegen — nur diese (bzw. über ein Regal zugeordneten) Kategorien werden
-  beim Einkaufen für dieses Geschäft angezeigt.
-- **Regal**: gehört zu genau einem Geschäft und ist rein optional. Jedem Regal können
-  eine oder mehrere Artikelkategorien zugeordnet werden, die dadurch (falls nicht
-  schon direkt zugeordnet) ebenfalls in diesem Geschäft verfügbar werden. Ein Regal
-  dient in erster Linie dazu, die Reihenfolge beim Einkaufen zu organisieren — nicht
-  der Verfügbarkeit an sich.
+  Apotheke, …, z.B. Drogerie + Lebensmittel bei einem dm) sowie eigene
+  **Kategorien**: ein Geschäft kann Kategorien direkt zugeordnet bekommen — nur
+  diese (bzw. über den Geschäftstyp automatisch verfügbaren) Kategorien werden
+  beim Einkaufen für dieses Geschäft angezeigt. Die Reihenfolge, in der sie beim
+  Einkaufen erscheinen, wird nicht manuell festgelegt, sondern automatisch aus dem
+  Abhakverhalten gelernt (siehe „Einkaufsvorgang“ unten).
 
 ## Artikel-Anlage mit KI-Unterstützung
 
@@ -41,7 +36,7 @@ Beim Anlegen eines neuen Artikels bestimmt eine lokale Apple-KI (FoundationModel
 Anstoß: sobald der Anwender einen Namen eingibt (entprellt, damit nicht bei jedem
 Tastenanschlag ein KI-Aufruf losgeschickt wird), wird die Kategorie vorgeschlagen,
 sofern noch keine gewählt wurde. Eine bereits manuell gewählte Kategorie wird dabei
-nie überschrieben. Zusätzlich liefert die KI informativ einen Regal-Hinweis. Ist auf
+nie überschrieben. Ist auf
 dem Gerät keine Apple Intelligence verfügbar, bleibt die Kategorie einfach leer (dann
 "Sonstiges") — reine manuelle Auswahl bleibt immer möglich.
 
@@ -66,17 +61,14 @@ auf die Einkaufsliste kommt.
 
 ## Einkaufsvorgang
 
-- Der Anwender kann pro Geschäft eine eigene Reihenfolge der Regale festlegen (der Weg,
-  den er im Laden ablaufen möchte).
-- Die App lernt automatisch aus vergangenen Einkäufen, in welcher Reihenfolge Regale
-  typischerweise besucht werden, und schlägt nach ausreichend Trainingsdurchläufen eine
-  automatische Reihenfolge vor. Die manuelle Reihenfolge bleibt bestehen, bis der
-  Anwender die automatische explizit übernimmt.
+- Die App lernt automatisch aus dem Abhakverhalten vergangener Einkäufe, welche
+  Artikelkategorien in einem Geschäft räumlich nah beieinanderliegen (paarweise
+  Distanzmatrix, `WarengruppenDistanzService`), und sortiert die Einkaufsliste
+  danach dynamisch — nach jeder Abhakung neu, ausgehend vom aktuellen (impliziten)
+  Standort. Details in `docs/ARCHITEKTURVORSCHLAG_ADAPTIVE_SORTIERUNG.md`.
 - Die Einkaufsliste ist global und nicht von einem Geschäft abhängig. Optional kann der
-  Anwender ein Geschäft wählen, wonach die Liste nach Regal in der gültigen Reihenfolge
-  gruppiert wird. Artikel ohne Kategorie oder ohne Regal-Zuordnung im gewählten Geschäft
-  (bzw. alle Artikel, wenn kein Geschäft gewählt ist) erscheinen dennoch, in einer
-  eigenen „Sonstige“-Sektion.
+  Anwender ein Geschäft wählen, wonach die Liste nach Artikelkategorie gruppiert und
+  sortiert wird.
 - Ein Einkauf startet automatisch beim Öffnen des Einkaufen-Tabs (für das gewählte
   Geschäft, bzw. ohne Geschäft) — kein manueller „Start“ nötig.
 - Beim Einkaufen werden standardmäßig nur die im gewählten Geschäft verfügbaren Artikel

@@ -6,10 +6,10 @@ import SwiftData
 /// `EinkaufslisteView.verfuegbarkeitsgefiltert(_:)`).
 ///
 /// Besitzt das Geschäft eigene Kategorien (``Geschaeft/verfuegbareKategorien(alleKategorien:)``
-/// — direkt zugeordnet, über ein Regal oder über den Geschäftstyp, siehe
-/// ``ArtikelKategorie/geschaeftsTypen``; ein Regal ist dafür nicht erforderlich),
-/// ist ein Artikel verfügbar, wenn mindestens eine seiner Kategorien darin
-/// enthalten ist (ein Artikel kann mehreren Kategorien angehören).
+/// — direkt zugeordnet oder über den Geschäftstyp, siehe
+/// ``ArtikelKategorie/geschaeftsTypen``), ist ein Artikel verfügbar, wenn
+/// mindestens eine seiner Kategorien darin enthalten ist (ein Artikel kann
+/// mehreren Kategorien angehören).
 /// Besitzt das Geschäft keine eigenen Kategorien, lernt die App stattdessen aus der
 /// Kaufhistorie: ein Artikel gilt als verfügbar, sobald er dort mindestens einmal
 /// abgehakt/gekauft wurde (``KaufEintrag``) — das Abhaken eines bislang unbekannten

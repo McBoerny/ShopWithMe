@@ -153,3 +153,33 @@ Klasse mehrfach in verschiedenen `VersionedSchema`s zu referenzieren.
 `user.name`/`user.email` wurden nur lokal für dieses Repo gesetzt (nicht global), da
 kein globaler Git-Autor konfiguriert war. Bei Bedarf mit `git config user.name/email`
 anpassen.
+
+## Regal-Entfernung: adaptive Sortierung ersetzt manuelle Zwischenschicht (v0.6, GitHub #35)
+
+**Rückblick:** `Regal` wurde in v0.3 eingeführt, um Kategorien innerhalb eines
+Geschäfts zu einer Sortiereinheit zu bündeln (manuelle Reihenfolge oder ab v0.5 ein
+gelernter Durchschnittswert je Regal, `ShelfOrderLearningService`/
+`KategorieBesuchsStatistik`). Die frühere Entscheidung oben („Kategorien wichtiger als
+Regale“) hatte `Regal` bereits auf eine rein optionale Sortier-Hilfsstruktur reduziert,
+ohne Einfluss auf Verfügbarkeit.
+
+**Auslöser der Entfernung:** Mit der in Build 95 eingeführten
+`WarengruppenDistanzService`-Sortierung (paarweise gelernte Distanz je
+Kategorie-Paar und Geschäft statt eines einzelnen Skalars je Kategorie, siehe
+`docs/ARCHITEKTURVORSCHLAG_ADAPTIVE_SORTIERUNG.md`) deckt die automatische Sortierung
+dasselbe Problem feiner und ganz ohne manuellen Pflegeaufwand ab. `Regal` als
+zusätzliche, vom Anwender anzulegende und zu benennende Zwischenschicht hatte damit
+keinen Zweck mehr. Da `ShelfOrderLearningService` und `KategorieBesuchsStatistik`
+ausschließlich von `Regal` aus aufgerufen wurden, waren beide nach dessen Entfernung
+selbst verwaist und wurden im selben Zug entfernt (Nutzerentscheidung, alle drei
+zusammen statt schrittweise zu entfernen).
+
+**Konsequenz für bestehende Daten:** `Regal` und `KategorieBesuchsStatistik` wurden
+aus `SchemaDefinition.swift`s Modell-Liste entfernt. SwiftDatas automatische
+Lightweight-Migration verwirft dadurch beim nächsten Start jede bereits gespeicherte
+Regal- bzw. Kategorie-Besuchsstatistik-Zeile unwiderruflich — anders als bei rein
+additiven Attributänderungen (siehe Abschnitt oben) ist das hier bewusst in Kauf
+genommen, da die entfernten Tabellen ohne die zugehörigen Modelltypen ohnehin nicht
+mehr lesbar wären und ihr einziger Zweck (Regal-Zuordnung/-Reihenfolge) mit der
+Entfernung selbst entfällt. `Geschaeft`/`ArtikelKategorie`/`KaufEintrag` und alle
+sonstigen Daten bleiben unverändert erhalten.

@@ -14,12 +14,10 @@ struct ArtikelEditView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \ArtikelKategorie.sortIndex) private var kategorien: [ArtikelKategorie]
-    @Query private var alleRegale: [Regal]
     @Query private var kaufHistorie: [KaufEintrag]
 
     @State private var kiVorschlagLaeuft = false
     @State private var kiFehlermeldung: String?
-    @State private var kiRegalHinweis: String?
     @State private var zeigeNeueKategorie = false
 
     init(artikel: Artikel, istNeu: Bool) {
@@ -79,11 +77,6 @@ struct ArtikelEditView: View {
                         }
                         .font(.footnote)
                         .foregroundStyle(.secondary)
-                    }
-                    if let kiRegalHinweis {
-                        Text(kiRegalHinweis)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
                     }
                     if let kiFehlermeldung {
                         Text(kiFehlermeldung)
@@ -195,8 +188,7 @@ struct ArtikelEditView: View {
         do {
             let vorschlag = try await AISuggestionService.vorschlag(
                 fuerArtikelName: name,
-                bekannteKategorien: kategorien.map(\.name),
-                bekannteRegale: Set(alleRegale.map(\.name)).sorted()
+                bekannteKategorien: kategorien.map(\.name)
             )
             guard !Task.isCancelled, artikel.kategorien.isEmpty else { return }
 
@@ -204,9 +196,6 @@ struct ArtikelEditView: View {
                 $0.name.localizedCaseInsensitiveCompare(vorschlag.kategorieName) == .orderedSame
             }) {
                 artikel.kategorien = [passendeKategorie]
-            }
-            if !vorschlag.regalName.isEmpty {
-                kiRegalHinweis = "Vorschlag: Regal „\(vorschlag.regalName)“ — bitte in den Geschäften prüfen/zuordnen."
             }
         } catch {
             kiFehlermeldung = "KI-Vorschlag nicht verfügbar: \(error.localizedDescription)"

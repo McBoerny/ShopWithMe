@@ -9,8 +9,8 @@ struct MilkForUsImportServiceTests {
     /// den Container selbst am Leben halten, solange der Context benutzt wird.
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {
         let schema = Schema([
-            Artikel.self, ArtikelKategorie.self, Regal.self, Geschaeft.self,
-            Einkaufsvorgang.self, KaufEintrag.self, KategorieBesuchsStatistik.self,
+            Artikel.self, ArtikelKategorie.self, Geschaeft.self,
+            Einkaufsvorgang.self, KaufEintrag.self,
             Einkaufsliste.self, EinkaufslistenEintrag.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)

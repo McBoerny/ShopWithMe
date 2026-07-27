@@ -7,8 +7,8 @@ import Testing
 struct PreisHistorieBereinigungServiceTests {
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {
         let schema = Schema([
-            Artikel.self, ArtikelKategorie.self, Regal.self, Geschaeft.self, GeschaeftTyp.self,
-            Einkaufsvorgang.self, KaufEintrag.self, KategorieBesuchsStatistik.self,
+            Artikel.self, ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self,
+            Einkaufsvorgang.self, KaufEintrag.self,
             Einkaufsliste.self, EinkaufslistenEintrag.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)

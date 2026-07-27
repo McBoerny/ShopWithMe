@@ -22,7 +22,7 @@ final class KaufEintrag {
     /// Das Geschäft, in dem der Kauf stattfand.
     var geschaeft: Geschaeft?
     /// Die Kategorie des Artikels zum Kaufzeitpunkt — Grundlage für
-    /// ``ShelfOrderLearningService``, unabhängig von einer späteren Änderung der
+    /// ``WarengruppenDistanzService``, unabhängig von einer späteren Änderung der
     /// Artikel-Kategorie-Zuordnung.
     var kategorie: ArtikelKategorie?
     /// Name des Artikels zum Kaufzeitpunkt (dauerhafter Schnappschuss).
@@ -50,7 +50,7 @@ final class KaufEintrag {
     /// Gekaufte Menge (Standard: 1).
     var menge: Double
     /// Position in der chronologischen Kategorie-Besuchsreihenfolge dieses
-    /// Einkaufsvorgangs — Grundlage für ``ShelfOrderLearningService``.
+    /// Einkaufsvorgangs — Grundlage für ``WarengruppenDistanzService``.
     var kategorieBesuchsIndex: Int?
 
     init(

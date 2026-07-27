@@ -2,10 +2,9 @@ import SwiftUI
 import SwiftData
 
 /// Sheet zum Anlegen einer neuen ``ArtikelKategorie``, z.B. aus der
-/// Regal-Bearbeitung oder der Kategorien-Verwaltung eines Geschäfts heraus. Die
-/// neue Kategorie wird beim Sichern in den Model-Context eingefügt und über
-/// ``onErstellt`` an den Aufrufer gemeldet, der sie üblicherweise sofort einem
-/// Regal zuordnet.
+/// Kategorien-Verwaltung eines Geschäfts heraus. Die neue Kategorie wird beim
+/// Sichern in den Model-Context eingefügt und über ``onErstellt`` an den
+/// Aufrufer gemeldet.
 struct NeueKategorieSheet: View {
     let naechsterSortIndex: Int
     let onErstellt: (ArtikelKategorie) -> Void

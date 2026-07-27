@@ -2,33 +2,12 @@ import CoreLocation
 import Foundation
 import SwiftData
 
-/// Legt fest, ob die Regal-Reihenfolge eines ``Geschaeft``s manuell (``Regal/sortIndex``)
-/// oder automatisch anhand der gelernten Einkaufs-Reihenfolge
-/// (``ShelfOrderLearningService``) bestimmt wird.
-///
-/// Der Wechsel zwischen beiden Modi verändert ``Regal/sortIndex`` nicht — die
-/// automatische Reihenfolge ist eine Alternative zur manuellen, keine Überschreibung.
-enum RegalSortierModus: String, Codable, CaseIterable, Identifiable {
-    case manuell
-    case automatisch
-
-    var id: String { rawValue }
-
-    var anzeigename: String {
-        switch self {
-        case .manuell: return "Manuell"
-        case .automatisch: return "Automatisch"
-        }
-    }
-}
-
 /// Ein Geschäft, das der Anwender zum Einkaufen aufsucht.
 ///
-/// Kategorien sind wichtiger als Regale: Ein Geschäft kann ``ArtikelKategorie``n
-/// direkt zugeordnet bekommen (``kategorien``), ganz ohne ein Regal anzulegen. Regale
-/// sind rein optional und dienen ausschließlich dazu, die bereits verfügbaren
-/// Kategorien für die Reihenfolge beim Einkaufen in Gruppen zu organisieren — siehe
-/// ``verfuegbareKategorien``, die Vereinigung aus beiden Wegen.
+/// Ein Geschäft bekommt ``ArtikelKategorie``n direkt zugeordnet (``kategorien``) —
+/// die Reihenfolge beim Einkaufen wird nicht manuell festgelegt, sondern von
+/// ``WarengruppenDistanzService`` aus dem bisherigen Abhakverhalten gelernt (siehe
+/// `docs/ARCHITEKTURVORSCHLAG_ADAPTIVE_SORTIERUNG.md`).
 @Model
 final class Geschaeft {
     /// Eindeutige Kennung.
@@ -66,25 +45,9 @@ final class Geschaeft {
     var breitengrad: Double?
     /// Längengrad — siehe ``breitengrad``.
     var laengengrad: Double?
-    /// Rohwert für ``regalSortierModus``. Optional gespeichert, damit vor v1.4
-    /// angelegte Geschäfte (deren Datensatz diese Spalte noch nicht kennt) beim
-    /// automatischen Laden nicht abstürzen — ein `nil`-Rohwert wird als `.manuell`
-    /// interpretiert.
-    private var regalSortierModusRaw: String?
-    /// Ob die Regal-Reihenfolge manuell oder automatisch (``ShelfOrderLearningService``)
-    /// bestimmt wird.
-    var regalSortierModus: RegalSortierModus {
-        get { regalSortierModusRaw.flatMap(RegalSortierModus.init(rawValue:)) ?? .manuell }
-        set { regalSortierModusRaw = newValue.rawValue }
-    }
-    /// Regale dieses Geschäfts. Wird ein Geschäft gelöscht, werden auch seine Regale
-    /// gelöscht.
-    @Relationship(deleteRule: .cascade, inverse: \Regal.geschaeft)
-    var regale: [Regal] = []
-    /// Artikelkategorien, die diesem Geschäft direkt zugeordnet sind — unabhängig
-    /// davon, ob sie zusätzlich einem ``Regal`` zugeordnet sind. Das ist der primäre
-    /// Weg, eine Kategorie in einem Geschäft verfügbar zu machen; ein Regal ist dafür
-    /// nicht erforderlich (siehe ``verfuegbareKategorien``).
+    /// Artikelkategorien, die diesem Geschäft zugeordnet sind — der einzige Weg,
+    /// eine Kategorie in einem Geschäft verfügbar zu machen (siehe
+    /// ``verfuegbareKategorien``).
     @Relationship(inverse: \ArtikelKategorie.geschaefte)
     var kategorien: [ArtikelKategorie] = []
     /// Preishistorie (``KaufEintrag``), die in diesem Geschäft erfasst wurde. Wird das
@@ -266,25 +229,18 @@ final class Geschaeft {
     }
 
     /// Alle Artikelkategorien, die in diesem Geschäft manuell verfügbar gemacht
-    /// wurden.
-    ///
-    /// Leitet sich aus der Vereinigung zweier Wege ab: direkt diesem Geschäft
-    /// zugeordnete Kategorien (``kategorien``) sowie Kategorien, die einem seiner
-    /// Regale zugeordnet sind (dedupliziert, sortiert nach
-    /// ``ArtikelKategorie/sortIndex``). Zeigt bewusst **nicht** die zusätzlich über
-    /// ``verfuegbareKategorien(alleKategorien:)`` einbezogenen, rein aus dem
-    /// Geschäftstyp abgeleiteten Kategorien — diese Variante ist die Grundlage für
-    /// die manuelle Verwaltung (``GeschaeftDetailView``, Entfernen einer Kategorie),
-    /// wo nur tatsächlich zugeordnete Kategorien entfernbar sein dürfen.
+    /// wurden, sortiert nach ``ArtikelKategorie/sortIndex``. Zeigt bewusst **nicht**
+    /// die zusätzlich über ``verfuegbareKategorien(alleKategorien:)`` einbezogenen,
+    /// rein aus dem Geschäftstyp abgeleiteten Kategorien — diese Variante ist die
+    /// Grundlage für die manuelle Verwaltung (``GeschaeftDetailView``, Entfernen
+    /// einer Kategorie), wo nur tatsächlich zugeordnete Kategorien entfernbar sein
+    /// dürfen.
     var verfuegbareKategorien: [ArtikelKategorie] {
-        var gesehen = Set<PersistentIdentifier>()
-        return (kategorien + regale.flatMap(\.kategorien))
-            .filter { gesehen.insert($0.persistentModelID).inserted }
-            .sorted { $0.sortIndex < $1.sortIndex }
+        kategorien.sorted { $0.sortIndex < $1.sortIndex }
     }
 
-    /// Wie ``verfuegbareKategorien``, ergänzt um Kategorien, die zwar keinem Regal
-    /// oder ``kategorien`` dieses Geschäfts zugeordnet sind, aber laut
+    /// Wie ``verfuegbareKategorien``, ergänzt um Kategorien, die zwar nicht
+    /// ``kategorien`` dieses Geschäfts zugeordnet sind, aber laut
     /// ``ArtikelKategorie/geschaeftsTypen`` als typische Warengruppe für einen der
     /// ``typen`` dieses Geschäfts gelten (GitHub #5). Wird für die tatsächliche
     /// Verfügbarkeit beim Einkaufen genutzt (siehe ``ArtikelVerfuegbarkeitService``,
@@ -297,14 +253,6 @@ final class Geschaeft {
         return (verfuegbareKategorien + typBasiert)
             .filter { gesehen.insert($0.persistentModelID).inserted }
             .sorted { $0.sortIndex < $1.sortIndex }
-    }
-
-    /// Das Regal dieses Geschäfts, dem die übergebene Kategorie zugeordnet ist —
-    /// `nil`, wenn die Kategorie keinem Regal zugeordnet ist. Das bedeutet nicht
-    /// zwangsläufig, dass sie nicht verfügbar ist: sie kann stattdessen direkt über
-    /// ``kategorien`` verfügbar sein.
-    func regal(fuer kategorie: ArtikelKategorie) -> Regal? {
-        regale.first { $0.kategorien.contains(kategorie) }
     }
 
     /// Migriert vor GitHub #25 angelegte Geschäfte (deren ``typen`` noch leer ist,

@@ -4,11 +4,8 @@ import SwiftData
 /// Eine Artikelkategorie fasst gleichartige Artikel zusammen, z.B. „Obst & Gemüse“.
 ///
 /// Kategorien sind global und geschäftsunabhängig. Ob eine Kategorie in einem
-/// bestimmten Geschäft verfügbar ist, ergibt sich aus zwei unabhängigen Wegen:
-/// direkt über ``geschaefte`` (``Geschaeft/kategorien``) oder indirekt darüber, dass
-/// sie einem ``Regal`` dieses Geschäfts zugeordnet ist. Regale sind dabei rein
-/// optional — sie dienen nur der Sortierung beim Einkaufen, nicht der
-/// Verfügbarkeit (siehe `docs/DECISIONS.md`).
+/// bestimmten Geschäft verfügbar ist, ergibt sich direkt über ``geschaefte``
+/// (``Geschaeft/kategorien``) — siehe `docs/DECISIONS.md`.
 @Model
 final class ArtikelKategorie {
     /// Eindeutige Kennung.
@@ -30,15 +27,12 @@ final class ArtikelKategorie {
     var artikel: [Artikel] = []
     /// Artikel, die dieser Kategorie über ``Artikel/kategorien`` (Mehrfachzuordnung)
     /// zugeordnet sind — die maßgebliche Quelle. Inverse wird auf der
-    /// ``Artikel/kategorienRaw``-Seite deklariert (analog ``regale``/``geschaefte``
-    /// unten, die ebenfalls nur einseitig `inverse:` tragen).
+    /// ``Artikel/kategorienRaw``-Seite deklariert (analog ``geschaefte`` unten, die
+    /// ebenfalls nur einseitig `inverse:` trägt).
     var zugeordneteArtikel: [Artikel] = []
 
-    /// Regale (über alle Geschäfte hinweg), denen diese Kategorie zugeordnet ist.
-    var regale: [Regal] = []
-
-    /// Geschäfte, in denen diese Kategorie direkt (ohne Regal-Zuordnung) verfügbar
-    /// ist — siehe ``Geschaeft/kategorien``.
+    /// Geschäfte, in denen diese Kategorie verfügbar ist — siehe
+    /// ``Geschaeft/kategorien``.
     var geschaefte: [Geschaeft] = []
 
     /// Rohwert für ``geschaeftsTypen`` von vor Einführung von ``GeschaeftTyp`` als

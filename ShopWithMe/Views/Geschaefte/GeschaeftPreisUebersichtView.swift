@@ -183,7 +183,7 @@ private struct ArtikelPreisVerlaufView: View {
     }
 
     /// Löscht `eintrag` dauerhaft — bewusst ohne Rückfrage, analog zu anderen
-    /// Wisch-Lösch-Aktionen in der App (z.B. Kategorie-/Regal-Entfernen).
+    /// Wisch-Lösch-Aktionen in der App (z.B. Kategorie-Entfernen).
     private func eintragLoeschen(_ eintrag: KaufEintrag) {
         Task {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
