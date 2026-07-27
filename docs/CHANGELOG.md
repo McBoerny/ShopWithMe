@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.7 (Build 97) — Versions-Checkpoint: v0.6-Zyklus abgeschlossen
+
+- Minor-Version auf `0.7` angehoben (Nutzervorgabe) — der `v0.6`-Zyklus (adaptive
+  Warengruppen-Distanzmatrix, GitHub #36, sowie die darauf aufbauende Entfernung von
+  `Regal`/`ShelfOrderLearningService`/`KategorieBesuchsStatistik`, GitHub #35) ist
+  damit abgeschlossen.
+
 ## v0.6 (Build 96) — Regal entfernt: Warengruppen-Distanzmatrix ersetzt manuelle Sortierstruktur (GitHub #35)
 
 - **`Regal`, `RegalSortierModus`, `RegalDetailView`, `ShelfOrderLearningService` und
