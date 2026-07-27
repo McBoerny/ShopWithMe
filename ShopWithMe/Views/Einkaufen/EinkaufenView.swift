@@ -731,6 +731,11 @@ private struct EinkaufslisteView: View {
     /// werden (siehe ``ArtikelVerfuegbarkeitService``). Per langem Tap auf die
     /// Schnellauswahl umschaltbar (Lernmodus); gilt nur für diesen Einkaufsvorgang.
     @State private var zeigeAlleArtikel = false
+    /// Zeigt nach ``einkaufAbschliessen()`` einmalig den Hinweis, dass
+    /// ``WarengruppenDistanzService`` eine deutliche Abweichung von der gelernten
+    /// Warengruppen-Reihenfolge festgestellt hat (``Geschaeft/umbauVerdacht``,
+    /// Architekturvorschlag Abschnitt 4.4/7).
+    @State private var zeigeUmbauHinweis = false
 
     private var abgehakteArtikelIDs: Set<PersistentIdentifier> {
         Set(einkaufsvorgang.kaufEintraege.compactMap { $0.artikel?.persistentModelID })
@@ -778,7 +783,9 @@ private struct EinkaufslisteView: View {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
                 einkaufsvorgang.abschliessen()
                 ShelfOrderLearningService.lernenAus(einkaufsvorgang, context: modelContext)
+                WarengruppenDistanzService.verarbeiteEinkauf(einkaufsvorgang, context: modelContext)
             }
+            zeigeUmbauHinweis = geschaeft?.umbauVerdacht ?? false
             zeigeBelegScanAngebot = true
         }
     }
@@ -845,25 +852,65 @@ private struct EinkaufslisteView: View {
         }
     }
 
-    /// ``sonstigeArtikel``, gruppiert nach Artikelkategorie und sortiert nach der für
-    /// dieses Geschäft gelernten Kategorie-Reihenfolge (``ShelfOrderLearningService``).
-    /// Das ist insbesondere für Geschäfte ohne Regale die alleinige Sortiergrundlage.
-    /// Kategorien ohne Beobachtung landen (alphabetisch sortiert) dahinter.
+    /// ``sonstigeArtikel``, gruppiert nach Artikelkategorie und sortiert über
+    /// ``WarengruppenDistanzService`` — der gelernten, paarweisen Warengruppen-
+    /// Distanzmatrix dieses Geschäfts (Architekturvorschlag Abschnitt 4.2/4.3,
+    /// GitHub #36). Das ist insbesondere für Geschäfte ohne Regale die alleinige
+    /// Sortiergrundlage. Startpunkt der Sortierung ist ``zuletztAbgehakteKategorie``
+    /// — die verbleibende Liste wird so nach jeder Abhakung dynamisch neu
+    /// sortiert, ausgehend vom aktuellen (impliziten) Standort. Ohne genügend
+    /// gelernte Daten (``WarengruppenDistanzService/genuegendDatenVerfuegbar(fuer:)``)
+    /// bleibt es bei alphabetischer Reihenfolge.
     private var sonstigeGruppen: [KategorieGruppe] {
         var nachKategorie: [PersistentIdentifier: KategorieGruppe] = [:]
         for artikel in sonstigeArtikel {
             let kategorie = effektiveKategorie(fuer: artikel)
             nachKategorie[kategorie.persistentModelID, default: KategorieGruppe(kategorie: kategorie, artikel: [])].artikel.append(artikel)
         }
-        let positionen = geschaeft.map { ShelfOrderLearningService.kategoriePositionen(fuer: $0, context: modelContext) } ?? [:]
-        return nachKategorie.values.sorted { istVor($0, $1, positionen: positionen) }
+        let alphabetisch = nachKategorie.values.map(\.kategorie).sorted { $0.name < $1.name }
+        guard let geschaeft else {
+            return nachKategorie.values.sorted { $0.kategorie.name < $1.kategorie.name }
+        }
+        let sortiert = WarengruppenDistanzService.sortierteReihenfolge(
+            offeneKategorien: alphabetisch,
+            startpunkt: zuletztAbgehakteKategorie,
+            in: geschaeft,
+            context: modelContext
+        )
+        let position = Dictionary(uniqueKeysWithValues: sortiert.enumerated().map { ($1.persistentModelID, $0) })
+        return nachKategorie.values.sorted {
+            (position[$0.kategorie.persistentModelID] ?? .max) < (position[$1.kategorie.persistentModelID] ?? .max)
+        }
     }
 
-    private func istVor(_ a: KategorieGruppe, _ b: KategorieGruppe, positionen: [PersistentIdentifier: Double]) -> Bool {
-        let posA = positionen[a.kategorie.persistentModelID] ?? .infinity
-        let posB = positionen[b.kategorie.persistentModelID] ?? .infinity
-        if posA == posB { return a.kategorie.name < b.kategorie.name }
-        return posA < posB
+    /// Die Kategorie des zuletzt (nach Zeitstempel) abgehakten Artikels dieses
+    /// Einkaufsvorgangs — impliziter aktueller Standort für die dynamische
+    /// Neusortierung (Architekturvorschlag Abschnitt 4.3). `nil` vor dem ersten
+    /// Abhaken.
+    private var zuletztAbgehakteKategorie: ArtikelKategorie? {
+        einkaufsvorgang.kaufEintraege.max { $0.datum < $1.datum }?.kategorie
+    }
+
+    /// Statusbanner über den Sortierzustand dieses Geschäfts (Architekturvorschlag
+    /// Abschnitt 7) — nur sichtbar, wenn es überhaupt kategoriebasiert sortierte
+    /// Abschnitte gibt.
+    @ViewBuilder
+    private var sortierStatusHinweis: some View {
+        if let geschaeft, !sonstigeGruppen.isEmpty {
+            HStack(spacing: 6) {
+                if WarengruppenDistanzService.genuegendDatenVerfuegbar(fuer: geschaeft) {
+                    Image(systemName: "checkmark.seal.fill")
+                    Text("Reihenfolge optimiert")
+                } else {
+                    Image(systemName: "brain")
+                    Text("Lernt noch – Reihenfolge unoptimiert")
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal)
+            .padding(.top, 4)
+        }
     }
 
     /// Die momentan für die Anzeige relevante Menge eines Artikels: solange er noch
@@ -940,6 +987,7 @@ private struct EinkaufslisteView: View {
                 }
             }
         }
+        .safeAreaInset(edge: .top) { sortierStatusHinweis }
         .safeAreaInset(edge: .bottom) { einkaufAbschliessenButton }
         // Zeigt bewusst immer den Listennamen, nicht den Geschäftsnamen — der
         // erscheint stattdessen direkt neben dem Einkaufswagen-Icon im
@@ -1004,6 +1052,11 @@ private struct EinkaufslisteView: View {
         }
         .sheet(isPresented: $zeigeBelegScan) {
             BelegScanView(einkaufsvorgang: einkaufsvorgang)
+        }
+        .alert("Hat sich im Laden etwas verändert?", isPresented: $zeigeUmbauHinweis) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Die Reihenfolge weicht deutlich von der bisherigen Erfahrung ab. Wir passen uns mit den nächsten Einkäufen automatisch an.")
         }
     }
 

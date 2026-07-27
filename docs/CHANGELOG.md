@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.6 (Build 95) — Adaptive Einkaufslistenoptimierung (Warengruppen-Distanzmatrix)
+
+- **`WarengruppenDistanz`** (neu): paarweise, ladenspezifisch gelernte Distanz
+  zwischen zwei Artikelkategorien — Kernbaustein der adaptiven
+  Einkaufslistenoptimierung nach `docs/ARCHITEKTURVORSCHLAG_ADAPTIVE_SORTIERUNG.md`
+  (GitHub #36).
+- **`WarengruppenDistanzService`** (neu): lernt nach jedem abgeschlossenen
+  Einkauf aus der Abhakreihenfolge (Positions- und Zeitdistanz, gleitender
+  Durchschnitt) und erkennt mögliche Ladenumbauten (`Geschaeft/umbauVerdacht`).
+  Sortiert die Warengruppen einer Einkaufsliste per Greedy-Nearest-Neighbor +
+  2-opt und passt die Reihenfolge nach jeder Abhakung dynamisch an den
+  aktuellen (impliziten) Standort an.
+- `EinkaufenView` nutzt die neue Sortierung für Kategorien ohne Regal-Zuordnung
+  (bisher nur ein einzelner Durchschnittswert je Kategorie) und zeigt einen
+  Status-Hinweis („Lernt noch“/„Reihenfolge optimiert“) sowie einen Dialog bei
+  erkanntem Ladenumbau.
+- Die Regal-basierte Sortierung (``ShelfOrderLearningService``) bleibt vorerst
+  unverändert bestehen — deren Ablösung ist als eigenes Vorhaben in
+  [Issue #35](https://github.com/McBoerny/ShopWithMe/issues/35) vorgesehen.
+
 ## v0.6 (Build 93) — Geschäfte-Navigation: letzte beiden Ebenen ebenfalls auf wertbasiert umgestellt (GitHub #33 endgültig behoben)
 
 - Nach Build 90–92 blieb die Fehlerklasse an zwei weiteren, noch weiter außen

@@ -123,6 +123,34 @@ final class Geschaeft {
         get { anzahlEinkaufsvorgaengeRaw ?? 0 }
         set { anzahlEinkaufsvorgaengeRaw = newValue }
     }
+    /// Rohwert für ``umbauVerdacht``. Optional gespeichert, damit vor Einführung
+    /// dieses Attributs angelegte Geschäfte beim automatischen Laden nicht
+    /// abstürzen — ein `nil`-Rohwert fällt auf `false` zurück.
+    private var umbauVerdachtRaw: Bool?
+    /// Ob ``WarengruppenDistanzService`` bei den letzten Einkäufen in diesem
+    /// Geschäft eine deutliche Abweichung von der gelernten Warengruppen-Distanz
+    /// festgestellt hat (z.B. nach einem Ladenumbau) — siehe
+    /// ``WarengruppenDistanzService/erkenneUmbau(_:context:)``. Löst in der UI
+    /// einen Hinweis aus und erhöht vorübergehend die Lernrate, damit sich die
+    /// Distanzmatrix schneller an die neue Anordnung anpasst.
+    var umbauVerdacht: Bool {
+        get { umbauVerdachtRaw ?? false }
+        set { umbauVerdachtRaw = newValue }
+    }
+    /// Rohwert für ``unauffaelligeEinkaeufeInFolge``. Optional gespeichert, damit
+    /// vor Einführung dieses Attributs angelegte Geschäfte beim automatischen
+    /// Laden nicht abstürzen — ein `nil`-Rohwert fällt auf `0` zurück.
+    private var unauffaelligeEinkaeufeInFolgeRaw: Int?
+    /// Anzahl aufeinanderfolgender Einkäufe seit dem letzten ``umbauVerdacht``,
+    /// die keine deutliche Abweichung von der gelernten Warengruppen-Distanz
+    /// mehr gezeigt haben — siehe
+    /// ``WarengruppenDistanzService/erkenneUmbau(besuche:matrix:geschaeft:)``.
+    /// Erreicht der Zähler die dort definierte Schwelle, wird ``umbauVerdacht``
+    /// wieder zurückgesetzt.
+    var unauffaelligeEinkaeufeInFolge: Int {
+        get { unauffaelligeEinkaeufeInFolgeRaw ?? 0 }
+        set { unauffaelligeEinkaeufeInFolgeRaw = newValue }
+    }
 
     init(name: String, typen: [GeschaeftTyp], adresse: String? = nil) {
         self.id = UUID()

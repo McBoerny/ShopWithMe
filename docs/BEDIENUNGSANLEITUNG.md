@@ -91,6 +91,14 @@ passende Kategorie/Regal-Zuordnung erscheinen trotzdem, in einer eigenen
 „Sonstige“-Sektion. Ein Einkauf startet automatisch beim Öffnen des Tabs, kein
 manueller Start nötig.
 
+Die „Sonstige“-Sektion sortiert sich mit der Zeit selbst: ShopWithMe lernt aus
+der Reihenfolge, in der du Artikel abhakst, welche Warengruppen in diesem
+Geschäft nah beieinanderliegen, und passt die Reihenfolge nach jeder Abhakung
+automatisch an deinen aktuellen Standort in der Liste an — ganz ohne Ladenplan
+oder Standortfreigabe. Ein kleiner Hinweis oben zeigt, ob die Reihenfolge schon
+optimiert ist oder noch lernt; bei einem erkannten Ladenumbau erscheint nach
+dem Abschließen ein kurzer Hinweis, dass sich die App automatisch anpasst.
+
 - **Wischen nach rechts** verringert die Menge, **Wischen nach links** erhöht sie
   (nie unter die Schrittweite) — bei noch offenen Artikeln löst ein vollständiger
   Wisch die Aktion direkt aus, ganz ohne zusätzlichen Bestätigungs-Tap. **Tap auf
