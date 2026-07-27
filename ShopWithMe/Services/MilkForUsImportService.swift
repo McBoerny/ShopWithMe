@@ -154,7 +154,11 @@ enum MilkForUsImportService {
     ) async {
         await DatabaseLeaseService.performMicroLease(context: context) {
             var naechsterSortIndex = ((try? context.fetch(FetchDescriptor<ArtikelKategorie>()))?.map(\.sortIndex).max() ?? -1) + 1
-            let alleArtikel = (try? context.fetch(FetchDescriptor<Artikel>())) ?? []
+            // `var` statt `let`: derselbe Artikelname kann in mehreren Gruppen
+            // dieses Imports auftauchen — neu angelegte Artikel werden unten
+            // sofort ergänzt, damit eine zweite Fundstelle im selben Aufruf sie
+            // wiederverwendet statt ein Duplikat anzulegen.
+            var alleArtikel = (try? context.fetch(FetchDescriptor<Artikel>())) ?? []
 
             for gruppe in gruppen where !gruppe.artikelNamen.isEmpty {
                 let kategorie: ArtikelKategorie
@@ -186,6 +190,7 @@ enum MilkForUsImportService {
                             kategorien: [kategorie]
                         )
                         context.insert(neuer)
+                        alleArtikel.append(neuer)
                         return neuer
                     }()
                     einkaufsliste.artikelHinzufuegen(artikel, context: context)

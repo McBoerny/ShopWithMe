@@ -48,10 +48,18 @@ enum WarengruppenDistanzService {
     /// einen möglichen Ladenumbau (``erkenneUmbau(besuche:matrix:geschaeft:)``).
     /// Ohne Wirkung, wenn der Einkauf kein Geschäft hat oder weniger als zwei
     /// unterschiedliche Warengruppen besucht wurden (keine Paare zum Lernen).
-    static func verarbeiteEinkauf(_ einkaufsvorgang: Einkaufsvorgang, context: ModelContext) {
-        guard let geschaeft = einkaufsvorgang.geschaeft else { return }
+    ///
+    /// Liefert `true`, wenn ``Geschaeft/umbauVerdacht`` durch **diesen** Einkauf
+    /// neu von `false` auf `true` gewechselt ist — anders als der reine
+    /// Feldwert bleibt dieses Ergebnis über die folgenden Einkäufe hinweg nicht
+    /// `true`, sodass ein Aufrufer (z.B. ein Hinweis-Dialog) nur beim
+    /// erstmaligen Erkennen reagieren kann statt bei jedem Einkauf erneut,
+    /// solange der Verdacht noch nicht wieder zurückgesetzt wurde.
+    @discardableResult
+    static func verarbeiteEinkauf(_ einkaufsvorgang: Einkaufsvorgang, context: ModelContext) -> Bool {
+        guard let geschaeft = einkaufsvorgang.geschaeft else { return false }
         let besuche = besuchsreihenfolge(fuer: einkaufsvorgang)
-        guard besuche.count >= 2 else { return }
+        guard besuche.count >= 2 else { return false }
 
         let bekannte = WarengruppenDistanz.alle(fuer: geschaeft, context: context)
         var matrix = Dictionary(uniqueKeysWithValues: bekannte.map { (paarSchluessel(fuer: $0), $0) })
@@ -59,8 +67,9 @@ enum WarengruppenDistanzService {
         // Umbau-Erkennung nutzt bewusst die Matrix VOR dem Lernschritt dieses
         // Einkaufs — sie vergleicht die neue Beobachtung gegen die bisherige
         // Erfahrung, nicht gegen sich selbst.
-        erkenneUmbau(besuche: besuche, matrix: matrix, geschaeft: geschaeft)
+        let umbauNeuErkannt = erkenneUmbau(besuche: besuche, matrix: matrix, geschaeft: geschaeft)
         lerne(besuche: besuche, matrix: &matrix, geschaeft: geschaeft, context: context)
+        return umbauNeuErkannt
     }
 
     /// Baut die Besuchsreihenfolge eines Einkaufsvorgangs: eine ``Besuch``-Zeile je
@@ -130,8 +139,14 @@ enum WarengruppenDistanzService {
     /// ``Geschaeft/umbauVerdacht``/``Geschaeft/unauffaelligeEinkaeufeInFolge``
     /// entsprechend. `internal` statt `private`, damit die Erkennung ohne
     /// vollständigen Einkaufsvorgang direkt getestet werden kann.
-    static func erkenneUmbau(besuche: [Besuch], matrix: [String: WarengruppenDistanz], geschaeft: Geschaeft) {
-        guard besuche.count >= 2 else { return }
+    ///
+    /// Liefert `true` genau dann, wenn ``Geschaeft/umbauVerdacht`` durch diesen
+    /// Aufruf von `false` auf `true` wechselt (siehe
+    /// ``verarbeiteEinkauf(_:context:)``); bleibt der Verdacht über mehrere
+    /// Einkäufe hinweg bestehen, liefern die folgenden Aufrufe `false`.
+    @discardableResult
+    static func erkenneUmbau(besuche: [Besuch], matrix: [String: WarengruppenDistanz], geschaeft: Geschaeft) -> Bool {
+        guard besuche.count >= 2 else { return false }
         let gesamtanzahl = Double(besuche.count)
         var abweichungen: [Double] = []
         for i in 0..<(besuche.count - 1) {
@@ -142,8 +157,10 @@ enum WarengruppenDistanzService {
         let durchschnittlicheAbweichung = abweichungen.reduce(0, +) / Double(abweichungen.count)
 
         if durchschnittlicheAbweichung > umbauSchwelle {
+            let neuErkannt = !geschaeft.umbauVerdacht
             geschaeft.umbauVerdacht = true
             geschaeft.unauffaelligeEinkaeufeInFolge = 0
+            return neuErkannt
         } else if geschaeft.umbauVerdacht {
             geschaeft.unauffaelligeEinkaeufeInFolge += 1
             if geschaeft.unauffaelligeEinkaeufeInFolge >= einkaeufeBisUmbauZurueckgesetzt {
@@ -151,6 +168,7 @@ enum WarengruppenDistanzService {
                 geschaeft.unauffaelligeEinkaeufeInFolge = 0
             }
         }
+        return false
     }
 
     // MARK: - Sortierung (Architekturvorschlag Abschnitt 4.2/4.3)
@@ -190,10 +208,12 @@ enum WarengruppenDistanzService {
         if let startpunkt, let index = restliste.firstIndex(where: { $0.persistentModelID == startpunkt.persistentModelID }) {
             start = restliste.remove(at: index)
         } else {
+            // `restliste` ist an dieser Stelle noch unverändert `offeneKategorien`
+            // und laut Guard oben nicht leer — `.min` kann daher nie `nil` liefern.
             start = restliste.min { kandidatEins, kandidatZwei in
                 durchschnittsdistanz(von: kandidatEins, zu: offeneKategorien, distanz: distanz)
                     < durchschnittsdistanz(von: kandidatZwei, zu: offeneKategorien, distanz: distanz)
-            } ?? restliste.removeFirst()
+            }!
             restliste.removeAll { $0.persistentModelID == start.persistentModelID }
         }
 

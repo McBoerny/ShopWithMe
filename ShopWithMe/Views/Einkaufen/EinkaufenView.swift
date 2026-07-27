@@ -781,11 +781,16 @@ private struct EinkaufslisteView: View {
             // Abschließen + Lernschritt sind fachlich eine Aktion → ein
             // gemeinsamer Micro-Lease statt zwei getrennter (siehe
             // `docs/DATABASE_CONCURRENCY.md` → „Gebündelte Aktionen“).
+            var umbauNeuErkannt = false
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
                 einkaufsvorgang.abschliessen()
-                WarengruppenDistanzService.verarbeiteEinkauf(einkaufsvorgang, context: modelContext)
+                umbauNeuErkannt = WarengruppenDistanzService.verarbeiteEinkauf(einkaufsvorgang, context: modelContext)
             }
-            zeigeUmbauHinweis = geschaeft?.umbauVerdacht ?? false
+            // Bewusst der Rückgabewert (nur beim erstmaligen Erkennen `true`)
+            // statt des rohen `geschaeft.umbauVerdacht`-Felds, das über mehrere
+            // folgende Einkäufe hinweg `true` bleibt — sonst würde der Hinweis
+            // bei jedem dieser Einkäufe erneut erscheinen.
+            zeigeUmbauHinweis = umbauNeuErkannt
             zeigeBelegScanAngebot = true
         }
     }
@@ -821,17 +826,23 @@ private struct EinkaufslisteView: View {
         artikel.fuehrendeKategorie(inGeschaeft: geschaeft, context: modelContext)
     }
 
-    /// ``artikelAufListe``, gruppiert nach Artikelkategorie und sortiert über
-    /// ``WarengruppenDistanzService`` — der gelernten, paarweisen Warengruppen-
-    /// Distanzmatrix dieses Geschäfts (Architekturvorschlag Abschnitt 4.2/4.3,
-    /// GitHub #36). Startpunkt der Sortierung ist ``zuletztAbgehakteKategorie`` —
-    /// die verbleibende Liste wird so nach jeder Abhakung dynamisch neu sortiert,
-    /// ausgehend vom aktuellen (impliziten) Standort. Ohne genügend gelernte Daten
+    /// `artikelListe` (üblicherweise ``artikelAufListe``), gruppiert nach
+    /// Artikelkategorie und sortiert über ``WarengruppenDistanzService`` — der
+    /// gelernten, paarweisen Warengruppen-Distanzmatrix dieses Geschäfts
+    /// (Architekturvorschlag Abschnitt 4.2/4.3, GitHub #36). Startpunkt der
+    /// Sortierung ist ``zuletztAbgehakteKategorie`` — die verbleibende Liste wird
+    /// so nach jeder Abhakung dynamisch neu sortiert, ausgehend vom aktuellen
+    /// (impliziten) Standort. Ohne genügend gelernte Daten
     /// (``WarengruppenDistanzService/genuegendDatenVerfuegbar(fuer:)``) bleibt es
     /// bei alphabetischer Reihenfolge.
-    private var kategorieGruppen: [KategorieGruppe] {
+    ///
+    /// Als Funktion statt als computed property, damit `body` sie einmal pro
+    /// Render mit einer bereits berechneten `artikelListe` aufruft, statt sie
+    /// (inklusive der darin enthaltenen Sortierung samt SwiftData-Fetch) mehrfach
+    /// neu auszuwerten.
+    private func kategorieGruppen(fuer artikelListe: [Artikel]) -> [KategorieGruppe] {
         var nachKategorie: [PersistentIdentifier: KategorieGruppe] = [:]
-        for artikel in artikelAufListe {
+        for artikel in artikelListe {
             let kategorie = effektiveKategorie(fuer: artikel)
             nachKategorie[kategorie.persistentModelID, default: KategorieGruppe(kategorie: kategorie, artikel: [])].artikel.append(artikel)
         }
@@ -861,10 +872,11 @@ private struct EinkaufslisteView: View {
 
     /// Statusbanner über den Sortierzustand dieses Geschäfts (Architekturvorschlag
     /// Abschnitt 7) — nur sichtbar, wenn es überhaupt kategoriebasiert sortierte
-    /// Abschnitte gibt.
+    /// Abschnitte gibt. Nimmt die bereits berechneten `gruppen` entgegen, statt
+    /// ``kategorieGruppen(fuer:)`` ein zweites Mal auszuwerten.
     @ViewBuilder
-    private var sortierStatusHinweis: some View {
-        if let geschaeft, !kategorieGruppen.isEmpty {
+    private func sortierStatusHinweis(gruppen: [KategorieGruppe]) -> some View {
+        if let geschaeft, !gruppen.isEmpty {
             HStack(spacing: 6) {
                 if WarengruppenDistanzService.genuegendDatenVerfuegbar(fuer: geschaeft) {
                     Image(systemName: "checkmark.seal.fill")
@@ -894,8 +906,10 @@ private struct EinkaufslisteView: View {
     }
 
     var body: some View {
+        let artikelListe = artikelAufListe
+        let gruppen = kategorieGruppen(fuer: artikelListe)
         List {
-            ForEach(kategorieGruppen) { gruppe in
+            ForEach(gruppen) { gruppe in
                 Section {
                     ForEach(gruppe.artikel) { artikel in
                         ArtikelAbhakZeile(
@@ -914,7 +928,7 @@ private struct EinkaufslisteView: View {
                 }
             }
 
-            if artikelAufListe.isEmpty {
+            if artikelListe.isEmpty {
                 if !offeneArtikel.isEmpty {
                     ContentUnavailableView(
                         "Keine verfügbaren Artikel",
@@ -936,7 +950,7 @@ private struct EinkaufslisteView: View {
                 }
             }
         }
-        .safeAreaInset(edge: .top) { sortierStatusHinweis }
+        .safeAreaInset(edge: .top) { sortierStatusHinweis(gruppen: gruppen) }
         .safeAreaInset(edge: .bottom) { einkaufAbschliessenButton }
         // Zeigt bewusst immer den Listennamen, nicht den Geschäftsnamen — der
         // erscheint stattdessen direkt neben dem Einkaufswagen-Icon im

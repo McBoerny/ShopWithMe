@@ -58,10 +58,13 @@ struct GeschaeftBesuchsProtokollView: View {
     }
 
     /// Formatierte Dauer zwischen `start` und `ende` (z.B. „23 Min.“ oder „1 Std.
-    /// 5 Min.“) — leerer String im (praktisch nicht vorkommenden) Fall, dass der
-    /// Formatter keinen Text liefert.
+    /// 5 Min.“). Unter einer Minute (z.B. Einkauf versehentlich sofort wieder
+    /// abgeschlossen) rundet ``dauerFormatter`` sowohl Stunden als auch Minuten auf
+    /// 0 und liefert wegen `zeroFormattingBehavior = .dropAll` gar keinen Text —
+    /// das wird hier gesondert abgefangen, statt eine leere Zeile anzuzeigen.
     private func dauerText(von start: Date, bis ende: Date) -> String {
-        Self.dauerFormatter.string(from: start, to: ende) ?? ""
+        guard ende.timeIntervalSince(start) >= 60 else { return "< 1 Min." }
+        return Self.dauerFormatter.string(from: start, to: ende) ?? "< 1 Min."
     }
 }
 

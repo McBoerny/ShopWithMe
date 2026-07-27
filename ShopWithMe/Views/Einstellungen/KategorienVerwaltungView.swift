@@ -77,10 +77,18 @@ private struct KategorieBearbeitenView: View {
     @Bindable var kategorie: ArtikelKategorie
     @State private var zeigeArtikelHinzufuegen = false
 
-    /// Artikel, die dieser Kategorie über ``ArtikelKategorie/zugeordneteArtikel``
-    /// (die maßgebliche Quelle für Mehrfachzuordnung) zugeordnet sind, alphabetisch.
+    /// Artikel, die dieser Kategorie zugeordnet sind, alphabetisch — Vereinigung aus
+    /// ``ArtikelKategorie/zugeordneteArtikel`` (maßgebliche Quelle für
+    /// Mehrfachzuordnung) und ``ArtikelKategorie/artikel`` (Migrations-Fallback für
+    /// Artikel, die noch nie über die Mehrfachauswahl neu gespeichert wurden, siehe
+    /// ``Artikel/effektiveKategorien(context:)``) — sonst fehlen genau diese
+    /// Alt-Artikel hier, obwohl sie überall sonst in der App korrekt zu dieser
+    /// Kategorie gehören.
     private var zugeordneteArtikel: [Artikel] {
-        kategorie.zugeordneteArtikel.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        let mehrfachzuordnung = Set(kategorie.zugeordneteArtikel.map(\.persistentModelID))
+        let legacy = kategorie.artikel.filter { !mehrfachzuordnung.contains($0.persistentModelID) }
+        return (kategorie.zugeordneteArtikel + legacy)
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
     var body: some View {

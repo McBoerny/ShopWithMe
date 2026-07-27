@@ -158,17 +158,24 @@ private struct GeschaeftsTypKategorienView: View {
                     fuerGeschaeftsTypName: typ.name,
                     bekannteKategorien: alleKategorien.map(\.name)
                 )
+                // Lokale Kopie statt der `@Query`-Momentaufnahme direkt zu lesen:
+                // die aktualisiert sich erst beim nächsten View-Update, nicht
+                // synchron nach `modelContext.insert(...)` — bei einem doppelten
+                // oder sehr ähnlichen Namen im KI-Vorschlag (nichts erzwingt
+                // Eindeutigkeit) würde die zweite Fundstelle die gerade erst
+                // angelegte Kategorie sonst nicht sehen und ein Duplikat anlegen.
+                var bekannteKategorien = alleKategorien
                 for name in vorschlag.kategorieNamen {
                     let getrimmt = name.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !getrimmt.isEmpty else { continue }
-                    if let bestehende = alleKategorien.first(where: {
+                    if let bestehende = bekannteKategorien.first(where: {
                         $0.name.localizedCaseInsensitiveCompare(getrimmt) == .orderedSame
                     }) {
                         if !bestehende.geschaeftsTypen.contains(typ) {
                             bestehende.geschaeftsTypen = bestehende.geschaeftsTypen + [typ]
                         }
                     } else {
-                        let naechsterIndex = (alleKategorien.map(\.sortIndex).max() ?? -1) + 1
+                        let naechsterIndex = (bekannteKategorien.map(\.sortIndex).max() ?? -1) + 1
                         let neue = ArtikelKategorie(
                             name: getrimmt,
                             standardSymbol: "shippingbox.fill",
@@ -177,6 +184,7 @@ private struct GeschaeftsTypKategorienView: View {
                         )
                         neue.geschaeftsTypen = [typ]
                         modelContext.insert(neue)
+                        bekannteKategorien.append(neue)
                     }
                 }
             } catch {

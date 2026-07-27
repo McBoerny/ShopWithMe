@@ -1313,7 +1313,7 @@ echte Bugs in der v0.5-Ladenerkennung auf, beide jetzt behoben:
   aktualisierte die In-Memory-Relationship nicht sofort, `artikelAbwaehlen` entfernt
   den Eintrag jetzt zusätzlich direkt aus `kaufEintraege`.
 
-## v0.3 — Geschäfte-Verwaltung
+## v0.3 (Build 98) — Geschäfte-Verwaltung
 
 - `Views/Geschaefte/GeschaeftListView.swift`: Geschäfte anlegen, bearbeiten, löschen.
 - `Views/Geschaefte/GeschaeftStammdatenEditView.swift`: Name/Typ/Adresse-Formular.
