@@ -1245,7 +1245,7 @@ echte Bugs in der v0.5-Ladenerkennung auf, beide jetzt behoben:
   Reihenfolge von einer bewusst falsch gewählten manuellen Reihenfolge abweichen
   und korrekt übernommen werden kann.
 
-## v0.4 — Einkaufen-Flow
+## v0.4 (Build 94) — Einkaufen-Flow
 
 - `Views/Einkaufen/EinkaufenView.swift`: Geschäft wählen, Einkauf starten, nach Regal
   gruppierte Einkaufsliste abarbeiten (nur Kategorien, die diesem Geschäft über
