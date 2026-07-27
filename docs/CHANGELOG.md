@@ -1,5 +1,37 @@
 # Changelog
 
+## v0.6 (Build 93) — Geschäfte-Navigation: letzte beiden Ebenen ebenfalls auf wertbasiert umgestellt (GitHub #33 endgültig behoben)
+
+- Nach Build 90–92 blieb die Fehlerklasse an zwei weiteren, noch weiter außen
+  liegenden Stellen bestehen — dieselbe closure-basierte
+  `NavigationLink { destination } label: {}`-Variante, die eine Ziel-View eager
+  bei **jedem** Rendern der umgebenden Liste konstruiert statt erst beim
+  tatsächlichen Antippen:
+  - `GeschaeftListView` (Zeilen-Navigation zur Detailansicht): GitHub #13
+    (Build 68) hatte diese Zeilen absichtlich von wertbasiertem
+    `NavigationLink(value:)` auf die closure-basierte Variante umgestellt, um
+    einen im Simulator nicht reproduzierbaren Navigations-Bug zu adressieren —
+    genau das war rückblickend die eigentliche Ursache-Klasse. Da mehrere
+    Zeilen gleichzeitig gerendert werden, registrierten mehrere
+    `GeschaeftDetailView`-Instanzen (unterschiedlicher `geschaeft`-Werte)
+    gleichzeitig `.navigationDestination(for: GeschaeftDetailNavigationsziel.self)`
+    — ein Tap auf „Preisübersicht“ in der Detailansicht landete dadurch teils
+    wieder auf der Detailansicht selbst statt auf `GeschaeftPreisUebersichtView`.
+  - `SettingsView` (Zeilen-Navigation u.a. zu „Geschäfte“): dieselbe Ursache
+    eine Ebene höher — sobald `GeschaeftListView` (eigenes `@Query` und, nach
+    obigem Fix, eigenes `.navigationDestination(for: Geschaeft.self)`) darüber
+    ebenfalls nur noch closure-basiert geöffnet wurde, verhinderte das
+    eager-konstruierte Duplikat die Navigation von der Geschäfte-Liste zur
+    Detailansicht vollständig (Tap auf ein Geschäft passierte nichts mehr).
+  Beide Stellen jetzt auf `NavigationLink(value:)` +
+  `.navigationDestination(for:)` umgestellt — `GeschaeftListView` direkt über
+  `Geschaeft` als Wert, `SettingsView` über ein neues
+  `SettingsNavigationsziel`-Enum (analog `GeschaeftDetailNavigationsziel`).
+  Damit verwendet die komplette Navigationskette
+  Einstellungen → Geschäfte → Geschäft-Detail → Preisübersicht → Artikel-Preishistorie
+  durchgängig das wertbasierte Muster — keine closure-basierte
+  `NavigationLink` mehr in diesem Pfad.
+
 ## v0.6 (Build 92) — Geschäft-Detail: auch äußere Preisübersicht-Navigation entschärft
 
 - Build 91 behob die Endlosschleife nur auf einer Ebene — `GeschaeftDetailView`

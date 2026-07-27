@@ -52,9 +52,7 @@ struct GeschaeftListView: View {
             if !favoriten.isEmpty {
                 Section("Favoriten") {
                     ForEach(favoriten) { geschaeft in
-                        NavigationLink {
-                            GeschaeftDetailView(geschaeft: geschaeft)
-                        } label: {
+                        NavigationLink(value: geschaeft) {
                             GeschaeftZeile(geschaeft: geschaeft, istDuplikat: namenMitDuplikaten.contains(geschaeft.name.lowercased()))
                         }
                     }
@@ -64,9 +62,7 @@ struct GeschaeftListView: View {
             ForEach(gruppierteGeschaefte, id: \.buchstabe) { gruppe in
                 Section(gruppe.buchstabe) {
                     ForEach(gruppe.geschaefte) { geschaeft in
-                        NavigationLink {
-                            GeschaeftDetailView(geschaeft: geschaeft)
-                        } label: {
+                        NavigationLink(value: geschaeft) {
                             GeschaeftZeile(geschaeft: geschaeft, istDuplikat: namenMitDuplikaten.contains(geschaeft.name.lowercased()))
                         }
                     }
@@ -75,6 +71,9 @@ struct GeschaeftListView: View {
                     }
                 }
             }
+        }
+        .navigationDestination(for: Geschaeft.self) { geschaeft in
+            GeschaeftDetailView(geschaeft: geschaeft)
         }
         .overlay {
             if geschaefte.isEmpty {
