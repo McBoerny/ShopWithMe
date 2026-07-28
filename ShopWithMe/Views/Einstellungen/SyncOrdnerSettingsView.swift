@@ -17,6 +17,7 @@ import UniformTypeIdentifiers
 /// eingekauft wird) ist erst Phase 4 des Plans („adaptives Polling“).
 struct SyncOrdnerSettingsView: View {
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var syncPollingService: SyncPollingService
 
     @State private var zeigeOrdnerauswahl = false
     @State private var fehlermeldung: String?
@@ -107,14 +108,14 @@ struct SyncOrdnerSettingsView: View {
         }
     }
 
+    /// Nutzt denselben Sync-Zyklus wie ``SyncPollingService`` (statt die vier
+    /// Schritte hier zu duplizieren), damit z.B. die Diagnose-Protokollierung
+    /// (``SyncDebugLogger``) an einer einzigen Stelle passiert.
     private func jetztSynchronisieren() {
         letzterSyncErfolgreich = false
         wirdSynchronisiert = true
         Task {
-            await SyncSnapshotImportService.importiereSnapshots(context: modelContext)
-            await SyncImportService.importiereNeueEvents(context: modelContext)
-            await SyncExportService.exportiereNeueEvents(context: modelContext)
-            await SyncSnapshotExportService.exportiereSnapshot(context: modelContext)
+            await syncPollingService.syncZyklus()
             wirdSynchronisiert = false
             letzterSyncErfolgreich = true
         }
@@ -125,4 +126,5 @@ struct SyncOrdnerSettingsView: View {
     NavigationStack {
         SyncOrdnerSettingsView()
     }
+    .environmentObject(SyncPollingService())
 }

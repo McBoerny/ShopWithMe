@@ -37,7 +37,10 @@ enum SyncSnapshotExportService {
         let snapshot = erstelleSnapshot(context: context)
         guard let daten = try? JSONEncoder().encode(snapshot) else { return }
 
-        guard syncOrdner.startAccessingSecurityScopedResource() else { return }
+        guard syncOrdner.startAccessingSecurityScopedResource() else {
+            SyncDebugLogger.log(.ordnerZugriffFehlgeschlagen, details: "exportiereSnapshot")
+            return
+        }
         defer { syncOrdner.stopAccessingSecurityScopedResource() }
 
         let zielURL = eigeneExportURL(in: syncOrdner)

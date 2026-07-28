@@ -32,7 +32,10 @@ enum SyncSnapshotImportService {
     @MainActor
     static func importiereSnapshots(context: ModelContext) async {
         guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return }
-        guard syncOrdner.startAccessingSecurityScopedResource() else { return }
+        guard syncOrdner.startAccessingSecurityScopedResource() else {
+            SyncDebugLogger.log(.ordnerZugriffFehlgeschlagen, details: "importiereSnapshots")
+            return
+        }
         defer { syncOrdner.stopAccessingSecurityScopedResource() }
 
         let peersOrdner = syncOrdner.appendingPathComponent("peers", isDirectory: true)
@@ -46,6 +49,7 @@ enum SyncSnapshotImportService {
             guard let daten = try? Data(contentsOf: exportURL),
                   let snapshot = try? JSONDecoder().decode(SyncSnapshot.self, from: daten)
             else { continue }
+            SyncDebugLogger.protokolliereAlter(.snapshotEmpfangen, erzeugtAm: snapshot.erzeugtAm, zusatz: "peer=\(peerOrdner.lastPathComponent.prefix(8))")
             merge(snapshot, peerGeraeteID: peerOrdner.lastPathComponent, context: context)
         }
 

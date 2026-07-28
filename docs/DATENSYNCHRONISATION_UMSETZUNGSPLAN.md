@@ -174,6 +174,22 @@ Intervall-Logik als ursprünglich skizziert:
   (Löschen nach 2h-Sicherheitsfenster). Für den aktuellen Umfang unkritisch
   (kleine JSON-Dateien), aber ein späterer Aufräum-Mechanismus bleibt sinnvoll.
 
+**Ergänzung: `SyncDebugLogger` (Datengrundlage für spätere Optimierung).**
+Damit die oben getroffenen Annahmen (5s/60s-Intervalle, kein Backoff, keine
+Konsolidierung) später mit echten Praxisdaten statt Schätzungen überprüft
+werden können, protokolliert ein neuer, optionaler Debug-Modus (siehe
+`docs/LOGGING.md` → „Mechanismus: Datensynchronisation") lokal: die
+tatsächlich beobachtete Latenz empfangener Events/Snapshots (Alter beim
+Eintreffen — genau der Wert, den die „Realistische Erwartung ohne Multipeer"
+oben bisher nur schätzt), die Dauer jedes Sync-Zyklus und
+Ordner-Zugriffsfehler (bisher unsichtbar, da alle Sync-Funktionen mit `try?`
+best-effort arbeiten — Vorstufe für einen künftigen Fehler-Backoff). Standardmäßig
+aus, Einstellungen → „Sync-Debug-Modus". Als Nebeneffekt nutzt
+`SyncOrdnerSettingsView` jetzt denselben `SyncPollingService.syncZyklus()`
+wie das automatische Polling, statt die vier Sync-Aufrufe zu duplizieren —
+die Protokollierung passiert dadurch an einer einzigen Stelle für beide
+Auslöser (manuell und automatisch).
+
 ---
 
 ## 1. Architekturüberblick

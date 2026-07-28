@@ -109,6 +109,70 @@ ergänzt.
 - Rein lokales Diagnose-Werkzeug, kein Crash-Reporting-Server (siehe
   gemeinsame Prinzipien oben).
 
+## Mechanismus: Datensynchronisation
+
+Zweiter konkreter Mechanismus, ergänzt mit Phase 4 des
+`docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` (GitHub #39). Zweck: Der Plan
+schätzt die tatsächliche Sync-Latenz (5–30s iCloud Drive, 1–10s Synology
+Drive) auf Basis von `docs/DATABASE_CONCURRENCY.md`, nicht auf Basis echter
+Messungen, und Phase 4 verzichtet bewusst auf Fehler-Backoff, weil die
+Sync-Funktionen bisher keine auswertbare Erfolgs-/Fehlerrückmeldung liefern.
+Dieses Protokoll schafft die fehlende Datengrundlage für beides, damit die
+Polling-Intervalle in `SyncPollingService` später mit echten Praxisdaten statt
+Annahmen nachjustiert werden können.
+
+### Bausteine
+
+- **Globaler Schalter:** `UserDefaults`-Boolean (Key
+  `datensyncDebugModusAktiv`). Neue View `SyncDebugSettingsView` (Vorbild:
+  `DatabaseDebugSettingsView`), verlinkt aus `SettingsView.swift` neben dem
+  bestehenden Eintrag zur Datensynchronisation. Enthält: Toggle „Debug-Modus",
+  aktuelle Log-Dateigröße, Button „Protokoll teilen" (Share Sheet), Button
+  „Protokoll leeren".
+- **`SyncDebugLogger`:** fachlicher Wrapper um den gemeinsamen
+  `DebugLogWriter` (Kategorie `Datensynchronisation`), aufgerufen von
+  `SyncPollingService`, `SyncImportService`, `SyncSnapshotImportService`,
+  `SyncExportService` und `SyncSnapshotExportService` an den unten gelisteten
+  Ereignis-Punkten.
+
+### Abweichung vom DB-Debug-Modus: nur lokal, keine Spiegelung
+
+Anders als der DB-Debug-Modus wird das Datensynchronisations-Protokoll
+bewusst **nicht** zusätzlich in den Sync-Ordner gespiegelt. Die für die
+Optimierung relevanten Werte (Alter eines empfangenen Updates, Dauer eines
+Sync-Zyklus) sind bereits aus rein lokaler Sicht aussagekräftig — eine
+geräteübergreifende Zusammenführung würde zusätzliche
+Security-Scope-Handhabung beim Schreiben in den (im Gegensatz zum
+DB-Ordner nicht dauerhaft offen gehaltenen) Sync-Ordner erfordern, ohne für
+den Optimierungszweck nötig zu sein.
+
+### Protokollierte Ereignistypen
+
+`sync_zyklus_{start,ende}` (Details bei `ende`: gemessene Zyklusdauer),
+`sync_event_empfangen`/`sync_snapshot_empfangen` (Details: `alter_sekunden=…`
+— Differenz zwischen jetzt und dem Erzeugungszeitpunkt auf dem
+Herkunftsgerät, nur für tatsächlich neu angewendete Updates, nicht für
+Verlierer im Konfliktfall), `sync_ordner_zugriff_fehlgeschlagen` (Details:
+welche Funktion), `debug_mode_{enabled,disabled}`.
+
+**Bewusste Wiederverwendung von `wallClock`/`erzeugtAm` für die
+Latenzmessung:** Diese Felder sind in `SyncEvent`/`SyncSnapshot` als „nur
+informativ, nie für Ordnung zwischen Geräten verwendet" dokumentiert (siehe
+`LamportClock`-Doku) — das gilt weiterhin für die *fachliche Korrektheit*
+(Konfliktauflösung läuft ausschließlich über den Lamport-Zähler). Für eine
+*Diagnose*-Messung wie hier, bei der es nur um die ungefähre beobachtete
+Latenz geht (nicht um eine korrekte Ereignis-Reihenfolge), ist die
+Geräteuhr hingegen genau der richtige Wert.
+
+### Bekannte Grenzen
+
+- Setzt hinreichend synchrone Geräteuhren voraus (üblich bei iOS/NTP, aber
+  nicht garantiert) — eine falsch gehende Uhr auf einem Peer verzerrt dessen
+  gemessene Latenzwerte auf den empfangenden Geräten.
+- Rein lokales Diagnose-Werkzeug ohne geräteübergreifende Zusammenführung
+  (siehe oben) — für einen Vergleich mehrerer Geräte müssen die Protokolle
+  aktuell manuell nebeneinandergelegt werden (z.B. Teilen-Button je Gerät).
+
 ## Weitere Mechanismen (geplant, noch nicht spezifiziert)
 
 Noch kein konkreter Bedarf dokumentiert. Künftige Kandidaten (z.B. Debugging

@@ -58,9 +58,15 @@ final class SyncPollingService: ObservableObject {
 
     func syncZyklus() async {
         guard let context else { return }
+        SyncDebugLogger.log(.zyklusStart, details: einkaufAktiv ? "einkaufAktiv" : "ruhend")
+        let start = ContinuousClock.now
+
         await SyncSnapshotImportService.importiereSnapshots(context: context)
         await SyncImportService.importiereNeueEvents(context: context)
         await SyncExportService.exportiereNeueEvents(context: context)
         await SyncSnapshotExportService.exportiereSnapshot(context: context)
+
+        let dauer = start.duration(to: .now)
+        SyncDebugLogger.log(.zyklusEnde, details: "dauer=\(dauer)")
     }
 }

@@ -24,7 +24,10 @@ enum SyncImportService {
     @MainActor
     static func importiereNeueEvents(context: ModelContext) async {
         guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return }
-        guard syncOrdner.startAccessingSecurityScopedResource() else { return }
+        guard syncOrdner.startAccessingSecurityScopedResource() else {
+            SyncDebugLogger.log(.ordnerZugriffFehlgeschlagen, details: "importiereNeueEvents")
+            return
+        }
         defer { syncOrdner.stopAccessingSecurityScopedResource() }
 
         let peersOrdner = syncOrdner.appendingPathComponent("peers", isDirectory: true)
@@ -83,6 +86,11 @@ enum SyncImportService {
         }
 
         SyncEventService.uebernehmen(empfangen, context: context)
+        // Beobachtete Latenz dieses Updates (siehe SyncDebugLogger-Typ-Doku) —
+        // nur für tatsächlich neu angewendete Events, nicht für Verlierer im
+        // Konfliktfall oder unbekannte Arten (dort fand keine reale
+        // Zustandsänderung statt).
+        SyncDebugLogger.protokolliereAlter(.eventEmpfangen, erzeugtAm: empfangen.wallClock, zusatz: "art=\(art.rawValue)")
     }
 
     /// Prüft per ``SyncEventService/aktuellerGewinner(bezugsID:artikelID:context:)``,

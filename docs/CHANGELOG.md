@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.7 (Build 118) — Sync-Debug-Modus: Datengrundlage für spätere Polling-Optimierung (GitHub #39)
+
+- Neuer, optionaler „Sync-Debug-Modus" (Einstellungen, standardmäßig aus)
+  protokolliert lokal: wie alt empfangene Updates (Events/Snapshots) beim
+  Eintreffen waren (die tatsächlich beobachtete Sync-Latenz — bisher nur
+  geschätzt, siehe Umsetzungsplan-Dokument), wie lange ein Sync-Zyklus
+  dauert, und Ordner-Zugriffsfehler (bisher unsichtbar, da alle
+  Sync-Funktionen best-effort arbeiten).
+- Grundlage, um die in Phase 4 gewählten Polling-Intervalle (5s/60s) und die
+  bewusst noch fehlenden Mechanismen (Fehler-Backoff, Konsolidierung) später
+  mit echten Praxisdaten statt Annahmen zu überprüfen und nachzujustieren.
+- `SyncOrdnerSettingsView` nutzt jetzt denselben `SyncPollingService.syncZyklus()`
+  wie das automatische Polling, statt die vier Sync-Aufrufe zu duplizieren —
+  die neue Protokollierung gilt dadurch für beide Auslöser (manuell und
+  automatisch).
+
 ## v0.7 (Build 117) — Datensynchronisation Phase 4: automatisches Hintergrund-Polling (GitHub #39)
 
 - Neuer `SyncPollingService` synchronisiert jetzt automatisch, solange die

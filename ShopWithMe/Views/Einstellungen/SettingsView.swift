@@ -29,6 +29,7 @@ private enum SettingsNavigationsziel: Hashable {
     case preishistorie
     case datenbankSpeicherort
     case syncOrdner
+    case syncDebugModus
     case dbDebugModus
     case debugEinstellungen
 }
@@ -65,6 +66,9 @@ struct SettingsView: View {
                     NavigationLink(value: SettingsNavigationsziel.syncOrdner) {
                         Label("Datensynchronisation", systemImage: "arrow.triangle.2.circlepath")
                     }
+                    NavigationLink(value: SettingsNavigationsziel.syncDebugModus) {
+                        Label("Sync-Debug-Modus", systemImage: "ladybug")
+                    }
                     NavigationLink(value: SettingsNavigationsziel.dbDebugModus) {
                         Label("DB-Debug-Modus", systemImage: "ladybug")
                     }
@@ -100,6 +104,8 @@ struct SettingsView: View {
                     DatabaseLocationSettingsView()
                 case .syncOrdner:
                     SyncOrdnerSettingsView()
+                case .syncDebugModus:
+                    SyncDebugSettingsView()
                 case .dbDebugModus:
                     DatabaseDebugSettingsView()
                 case .debugEinstellungen:

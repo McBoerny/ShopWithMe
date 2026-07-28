@@ -35,7 +35,10 @@ enum SyncExportService {
         beschreibung.sortBy = [SortDescriptor(\.lamportZaehler)]
         guard let ausstehende = try? context.fetch(beschreibung), !ausstehende.isEmpty else { return }
 
-        guard syncOrdner.startAccessingSecurityScopedResource() else { return }
+        guard syncOrdner.startAccessingSecurityScopedResource() else {
+            SyncDebugLogger.log(.ordnerZugriffFehlgeschlagen, details: "exportiereNeueEvents")
+            return
+        }
         defer { syncOrdner.stopAccessingSecurityScopedResource() }
 
         let eventsOrdner = eigenerEventsOrdner(in: syncOrdner)

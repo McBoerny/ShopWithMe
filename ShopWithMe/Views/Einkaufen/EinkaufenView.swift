@@ -1354,4 +1354,5 @@ private struct MengenNotizSheet: View {
 #Preview {
     EinkaufenView()
         .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self, ArtikelKategorie.self, Artikel.self, Einkaufsvorgang.self, Einkaufsliste.self, EinkaufslistenEintrag.self, WarengruppenDistanz.self], inMemory: true)
+        .environmentObject(SyncPollingService())
 }
