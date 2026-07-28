@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import PhotosUI
+import VisionKit
 
 /// Kontext, in dem ein Kassenbon gescannt wird.
 ///
@@ -183,11 +184,15 @@ struct BelegScanView: View {
                 }
             }
         }
-        .sheet(isPresented: $zeigeKamera) {
-            KameraAufnahmeView { bild in
-                zeigeKamera = false
-                verarbeite(bild: bild)
-            }
+        .fullScreenCover(isPresented: $zeigeKamera) {
+            DokumentScanView(
+                onBild: { bild in
+                    zeigeKamera = false
+                    verarbeite(bild: bild)
+                },
+                onAbbruch: { zeigeKamera = false }
+            )
+            .ignoresSafeArea()
         }
         .sheet(isPresented: $zeigeGeschaeftWahl) {
             GeschaeftWahlSheet(erkannterName: erkannterGeschaeftName, erkannteAdresse: erkannteGeschaeftAdresse) { gewaehlt in
@@ -457,12 +462,12 @@ private struct AufnahmeAnsicht: View {
                     Label("Beleg scannen", systemImage: "doc.text.viewfinder")
                 } description: {
                     Text(geschaeftName.isEmpty
-                         ? "Fotografiere den Kassenbon oder wähle ein Foto aus deiner Mediathek. Das Geschäft wird nach Möglichkeit automatisch erkannt."
-                         : "Fotografiere den Kassenbon von „\(geschaeftName)“ oder wähle ein Foto aus deiner Mediathek.")
+                         ? "Scanne den Kassenbon oder wähle ein Foto aus deiner Mediathek. Das Geschäft wird nach Möglichkeit automatisch erkannt."
+                         : "Scanne den Kassenbon von „\(geschaeftName)“ oder wähle ein Foto aus deiner Mediathek.")
                 } actions: {
                     VStack(spacing: 12) {
-                        if UIImagePickerController.isSourceTypeAvailable(.camera) {
-                            Button("Foto aufnehmen", action: kameraOeffnen)
+                        if VNDocumentCameraViewController.isSupported {
+                            Button("Beleg scannen", action: kameraOeffnen)
                                 .buttonStyle(.glass)
                         }
                         PhotosPicker("Aus Fotomediathek wählen", selection: $ausgewaehltesFoto, matching: .images)
@@ -477,35 +482,6 @@ private struct AufnahmeAnsicht: View {
             }
         }
         .padding()
-    }
-}
-
-/// UIKit-Brücke für die Kamera-Aufnahme eines Belegfotos.
-private struct KameraAufnahmeView: UIViewControllerRepresentable {
-    let onImage: (UIImage) -> Void
-
-    func makeUIViewController(context: Context) -> UIImagePickerController {
-        let picker = UIImagePickerController()
-        picker.sourceType = .camera
-        picker.delegate = context.coordinator
-        return picker
-    }
-
-    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(onImage: onImage)
-    }
-
-    final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
-        let onImage: (UIImage) -> Void
-        init(onImage: @escaping (UIImage) -> Void) { self.onImage = onImage }
-
-        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
-            if let bild = info[.originalImage] as? UIImage {
-                onImage(bild)
-            }
-        }
     }
 }
 

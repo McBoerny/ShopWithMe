@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.7 (Build 103) — Belegscan-Qualität: Dokumentenscanner, Zeilen-Leserichtung
+
+- **Dokumentenoptimierte Aufnahme:** `BelegScanView` nutzt jetzt
+  `VNDocumentCameraViewController` (VisionKit, neue `DesignSystem/DokumentScanView.swift`)
+  statt eines rohen Kamerafotos (`UIImagePickerController`) — automatische
+  Kantenerkennung, Perspektivkorrektur und Kontrastoptimierung vor der OCR.
+  Erwartet deutlich weniger Erkennungsfehler bei schräg gehaltenen, verknitterten
+  oder schlecht beleuchteten Kassenbons. `PreisschildScanView` bleibt bewusst bei
+  `UIImagePickerController` — dessen Kantenerkennung ist auf seitenartige
+  Dokumente ausgelegt, nicht auf ein einzelnes Regal-Preisschild.
+- **OCR-Zeilen in Leserichtung sortiert:** neue
+  `[ErkannteZeile].sortiertInLeserichtung()` (oben nach unten, bei gleicher Zeile
+  links nach rechts) statt Visions nicht garantiert lesereihenfolge-treuer
+  Ausgabe zu übernehmen — verhindert, dass Artikelname und Preis
+  unterschiedlicher Zeilen bei einer leicht schiefen Aufnahme fälschlich
+  zusammengeführt werden.
+- `VNRecognizeTextRequest.minimumTextHeight = 0.01` ergänzt, damit kleine
+  Thermodruck-Schrift zuverlässiger erkannt wird.
+- Details in `docs/BELEGSCAN.md`.
+
 ## v0.7 (Build 102) — Warengruppen-Ausschluss, Singular/Plural-Suche, Karten-/Sortier-Fixes (GitHub #42–#46)
 
 - **Karten-Auto-Zoom entfernt (GitHub #42):** Korrektur der #41-Umsetzung — die

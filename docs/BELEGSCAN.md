@@ -37,17 +37,37 @@ Belegscans hinweg.
 - `ShopWithMe/DesignSystem/ZoombareBildAnsicht.swift` — zoom-/schwenkbare,
   einbettbare Inhaltsansicht des Original-Belegs mit optionaler
   Positions-Markierung, inline in `ErgebnisListe` (siehe unten).
+- `ShopWithMe/DesignSystem/DokumentScanView.swift` — dokumentenoptimierte
+  Kamera-Aufnahme (VisionKit, `VNDocumentCameraViewController`) mit automatischer
+  Kantenerkennung/Perspektivkorrektur, nur für `BelegScanView` (siehe „Aufnahme“
+  unten) — für `PreisschildScanView` weiterhin ein rohes Kamerafoto
+  (`UIImagePickerController`), da dessen Kantenerkennung auf seitenartige
+  Dokumente ausgelegt ist, nicht auf ein einzelnes Regal-Preisschild.
 - `ShopWithMeTests/ReceiptScanServiceTests.swift`, `ShopWithMeTests/ModelTests.swift`.
 
 ## Ablauf
 
-1. **Aufnahme** (`AufnahmeAnsicht` in `BelegScanView.swift`): Foto per Kamera oder aus
-   der Mediathek (`PhotosPicker`).
+1. **Aufnahme** (`AufnahmeAnsicht` in `BelegScanView.swift`): Scan per
+   `DokumentScanView` (VisionKit, `VNDocumentCameraViewController`) oder Foto aus
+   der Mediathek (`PhotosPicker`). Der Dokumentenscanner erkennt automatisch die
+   Kanten des Kassenbons, korrigiert die Perspektive und optimiert Kontrast/
+   Belichtung, bevor das Bild überhaupt zur OCR geht — deutlich zuverlässiger als
+   ein rohes Kamerafoto bei schräg gehaltenen, verknitterten oder schlecht
+   beleuchteten Bons. Verfügbarkeit wird über
+   `VNDocumentCameraViewController.isSupported` geprüft (im Simulator ohne Kamera
+   `false`, dann bleibt nur die Mediathek-Auswahl).
 2. **OCR** (`VisionFoundationModelsReceiptScanner.erkenneText`): `VNRecognizeTextRequest`
-   (Vision, `.accurate`, Sprachen `de-DE`/`en-US`) liefert pro Zeile Text **und**
-   Position im Bild als `ErkannteZeile` (`text`, `boundingBox` — Visions
-   normalisiertes Koordinatensystem, Ursprung unten links, 0–1). Grundlage für die
-   Positions-Markierung im Original-Beleg (siehe „Originalbeleg anzeigen“ unten).
+   (Vision, `.accurate`, Sprachen `de-DE`/`en-US`, `minimumTextHeight = 0.01` für
+   kleine Thermodruck-Schrift) liefert pro Zeile Text **und** Position im Bild als
+   `ErkannteZeile` (`text`, `boundingBox` — Visions normalisiertes
+   Koordinatensystem, Ursprung unten links, 0–1). Die Zeilen werden vor der
+   Weitergabe an das Sprachmodell per `[ErkannteZeile].sortiertInLeserichtung()`
+   explizit von oben nach unten (bei gleicher Zeile links nach rechts) sortiert —
+   Visions eigene Ausgabereihenfolge ist bei einer leicht schiefen Aufnahme nicht
+   garantiert lesereihenfolge-treu, was Artikelname und Preis unterschiedlicher
+   Zeilen fälschlich hätte zusammenführen können. Die `boundingBox`en bleiben
+   zusätzlich Grundlage für die Positions-Markierung im Original-Beleg (siehe
+   „Originalbeleg anzeigen“ unten).
 3. **Strukturextraktion** (`VisionFoundationModelsReceiptScanner.extrahiere`): Eine
    `LanguageModelSession` (FoundationModels, on-device) bekommt nur die
    zusammengefügten Texte der `ErkannteZeile`n und wandelt sie in ein

@@ -63,4 +63,29 @@ struct ReceiptScanServiceTests {
         #expect(zeilen.boundingBox(fuerArtikelName: "Vollmilch") == CGRect(x: 0, y: 0.5, width: 1, height: 0.05))
         #expect(zeilen.boundingBox(fuerArtikelName: "Butter") == nil)
     }
+
+    // MARK: - [ErkannteZeile].sortiertInLeserichtung
+
+    @Test
+    func sortiertInLeserichtungOrdnetVonObenNachUnten() {
+        // Vision liefert boundingBox mit Ursprung unten links — ein höherer y-Wert
+        // liegt weiter oben im Bild und muss daher zuerst kommen.
+        let kopf = ErkannteZeile(text: "REWE", boundingBox: CGRect(x: 0, y: 0.9, width: 1, height: 0.05))
+        let position = ErkannteZeile(text: "Milch", boundingBox: CGRect(x: 0, y: 0.5, width: 1, height: 0.05))
+        let summe = ErkannteZeile(text: "Summe", boundingBox: CGRect(x: 0, y: 0.1, width: 1, height: 0.05))
+
+        let sortiert = [summe, kopf, position].sortiertInLeserichtung()
+
+        #expect(sortiert.map(\.text) == ["REWE", "Milch", "Summe"])
+    }
+
+    @Test
+    func sortiertInLeserichtungOrdnetInnerhalbDerselbenZeileLinksNachRechts() {
+        let name = ErkannteZeile(text: "Milch", boundingBox: CGRect(x: 0, y: 0.5, width: 0.5, height: 0.05))
+        let preis = ErkannteZeile(text: "1,29", boundingBox: CGRect(x: 0.7, y: 0.5, width: 0.3, height: 0.05))
+
+        let sortiert = [preis, name].sortiertInLeserichtung()
+
+        #expect(sortiert.map(\.text) == ["Milch", "1,29"])
+    }
 }

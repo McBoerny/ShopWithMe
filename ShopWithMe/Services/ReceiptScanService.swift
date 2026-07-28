@@ -76,6 +76,23 @@ extension Array where Element == ErkannteZeile {
             return text.count >= 3 && artikelName.localizedCaseInsensitiveContains(text)
         }?.boundingBox
     }
+
+    /// Sortiert nach Leserichtung (oben nach unten, bei gleicher Zeile links nach
+    /// rechts) statt Visions Ausgabereihenfolge zu übernehmen — die ist bei gut
+    /// ausgerichteten Dokumenten meist schon lesereihenfolge-treu, aber nicht
+    /// garantiert, insbesondere bei einer leicht schiefen Aufnahme. Wichtig, weil
+    /// ``VisionFoundationModelsReceiptScanner`` die Zeilen als einzelnen
+    /// zusammenhängenden Text an das Sprachmodell übergibt — eine durcheinander
+    /// geratene Reihenfolge kann Artikelname und Preis unterschiedlicher Zeilen
+    /// fälschlich zusammenführen. Visions `boundingBox` hat den Ursprung unten
+    /// links, daher absteigend nach `y` (oben zuerst).
+    func sortiertInLeserichtung() -> [ErkannteZeile] {
+        sorted { erste, zweite in
+            erste.boundingBox.origin.y != zweite.boundingBox.origin.y
+                ? erste.boundingBox.origin.y > zweite.boundingBox.origin.y
+                : erste.boundingBox.origin.x < zweite.boundingBox.origin.x
+        }
+    }
 }
 
 /// Ergebnis eines vollständigen Belegscans: die strukturierten Daten (``BelegErgebnis``)
@@ -148,6 +165,10 @@ struct VisionFoundationModelsReceiptScanner: ReceiptScanService {
         anfrage.recognitionLevel = .accurate
         anfrage.usesLanguageCorrection = true
         anfrage.recognitionLanguages = ["de-DE", "en-US"]
+        // Erkennt auch die kleine Thermodruck-Schrift typischer Kassenbons — ohne
+        // diese Untergrenze übersieht Vision manche Positionszeilen auf einem eng
+        // beschriebenen, aber vergleichsweise groß eingescannten Beleg.
+        anfrage.minimumTextHeight = 0.01
 
         // Ohne explizite `orientation` interpretiert Vision den rohen, oft gedrehten
         // Kamera-Pixelpuffer — die zurückgegebenen `boundingBox`en passen dann nicht
@@ -164,6 +185,7 @@ struct VisionFoundationModelsReceiptScanner: ReceiptScanService {
             guard let text = beobachtung.topCandidates(1).first?.string else { return nil }
             return ErkannteZeile(text: text, boundingBox: beobachtung.boundingBox)
         }
+        .sortiertInLeserichtung()
         guard !zeilen.isEmpty else {
             throw ReceiptScanError.keinTextErkannt
         }
