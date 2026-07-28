@@ -87,6 +87,25 @@ final class SyncEvent {
         self.wallClock = wallClock
         self.hochgeladen = false
     }
+
+    /// Rekonstruiert ein von einem Peer empfangenes Event unverändert (Phase 2,
+    /// ``SyncEventService/uebernehmen(_:context:)``) — im Unterschied zum
+    /// regulären Init werden `id`, `lamportZaehler`, `lamportGeraeteID` und
+    /// `autorGeraeteID` direkt übernommen statt neu vergeben, damit die
+    /// ursprüngliche Urheberschaft erhalten bleibt (sonst würde dieses Gerät sich
+    /// fälschlich eine fremde Aktion zuschreiben). `hochgeladen` wird auf `true`
+    /// gesetzt, da dieses Event bereits in einem fremden Peer-Ordner liegt und
+    /// nicht zusätzlich in den eigenen re-exportiert werden soll.
+    init(empfangen: SyncEventExportDarstellung) {
+        self.id = empfangen.id
+        self.artRaw = empfangen.art
+        self.nutzlast = empfangen.nutzlast
+        self.lamportZaehler = empfangen.lamportZaehler
+        self.lamportGeraeteID = empfangen.lamportGeraeteID
+        self.autorGeraeteID = empfangen.autorGeraeteID
+        self.wallClock = empfangen.wallClock
+        self.hochgeladen = true
+    }
 }
 
 extension SyncEvent {

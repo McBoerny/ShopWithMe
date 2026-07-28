@@ -47,8 +47,12 @@ final class Einkaufsvorgang {
     /// (``Artikel/fuehrendeKategorie(inGeschaeft:context:)``) erhalten denselben
     /// ``KaufEintrag/kategorieBesuchsIndex``, neue Kategorien den jeweils nächsten
     /// Index — das ist die Rohdatenbasis für ``WarengruppenDistanzService``. Artikel
-    /// ohne eigene Kategorie fallen dabei automatisch unter "Sonstiges".
-    func artikelAbhaken(_ artikel: Artikel, context: ModelContext) {
+    /// ohne eigene Kategorie fallen dabei automatisch unter "Sonstiges". Reine
+    /// Zustandsmutation ohne Event-Aufzeichnung, siehe ``artikelAbhaken(_:context:)``.
+    /// Liefert `true`, falls tatsächlich ein ``KaufEintrag`` entstanden ist
+    /// (Grundlage dafür, ob die aufzeichnende Variante ein Event erzeugt).
+    @discardableResult
+    func artikelAbhakenOhneEventAufzeichnung(_ artikel: Artikel, context: ModelContext) -> Bool {
         // Dedupe-Schutz gegen das in `docs/DATABASE_CONCURRENCY.md` dokumentierte
         // Restrisiko (Sync-Latenz-Kollisionsfenster bei zeitgleichem Abhaken auf zwei
         // Geräten): pro (Einkaufsvorgang, Artikel) darf nur ein `KaufEintrag`
@@ -65,7 +69,7 @@ final class Einkaufsvorgang {
             if let listenEintrag {
                 context.delete(listenEintrag)
             }
-            return
+            return false
         }
 
         let kategorie = artikel.fuehrendeKategorie(inGeschaeft: geschaeft, context: context)
@@ -82,18 +86,39 @@ final class Einkaufsvorgang {
         if let listenEintrag {
             context.delete(listenEintrag)
         }
+        return true
+    }
+
+    /// Wie ``artikelAbhakenOhneEventAufzeichnung(_:context:)``, zeichnet
+    /// zusätzlich (nur bei tatsächlicher Neuanlage) ein
+    /// ``SyncEventArt/artikelAbgehakt``-Event auf (Phase 0,
+    /// `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`).
+    func artikelAbhaken(_ artikel: Artikel, context: ModelContext) {
+        guard artikelAbhakenOhneEventAufzeichnung(artikel, context: context) else { return }
         SyncEventService.aufzeichnen(.artikelAbgehakt, bezugsID: id, artikelID: artikel.id, context: context)
     }
 
     /// Macht ``artikelAbhaken(_:context:)`` rückgängig: löscht den zugehörigen
     /// ``KaufEintrag`` und setzt den Artikel zurück auf ``einkaufsliste`` (inkl.
     /// Zurücksetzen von Menge/temporärer Notiz, siehe
-    /// ``Einkaufsliste/artikelHinzufuegen(_:context:)``).
-    func artikelAbwaehlen(_ artikel: Artikel, context: ModelContext) {
-        guard let index = kaufEintraege.firstIndex(where: { $0.artikel == artikel }) else { return }
+    /// ``Einkaufsliste/artikelHinzufuegenOhneEventAufzeichnung(_:context:)``).
+    /// Reine Zustandsmutation ohne eigene Event-Aufzeichnung, siehe
+    /// ``artikelAbwaehlen(_:context:)``. Liefert `true`, falls tatsächlich ein
+    /// ``KaufEintrag`` gelöscht wurde.
+    @discardableResult
+    func artikelAbwaehlenOhneEventAufzeichnung(_ artikel: Artikel, context: ModelContext) -> Bool {
+        guard let index = kaufEintraege.firstIndex(where: { $0.artikel == artikel }) else { return false }
         let eintrag = kaufEintraege.remove(at: index)
         context.delete(eintrag)
-        einkaufsliste?.artikelHinzufuegen(artikel, context: context)
+        einkaufsliste?.artikelHinzufuegenOhneEventAufzeichnung(artikel, context: context)
+        return true
+    }
+
+    /// Wie ``artikelAbwaehlenOhneEventAufzeichnung(_:context:)``, zeichnet
+    /// zusätzlich (nur bei tatsächlicher Rücknahme) ein
+    /// ``SyncEventArt/artikelAbgewaehlt``-Event auf.
+    func artikelAbwaehlen(_ artikel: Artikel, context: ModelContext) {
+        guard artikelAbwaehlenOhneEventAufzeichnung(artikel, context: context) else { return }
         SyncEventService.aufzeichnen(.artikelAbgewaehlt, bezugsID: id, artikelID: artikel.id, context: context)
     }
 
@@ -103,11 +128,21 @@ final class Einkaufsvorgang {
     /// nach ``artikelAbhaken(_:context:)`` bereits war). Nur der zugehörige
     /// ``KaufEintrag`` wird gelöscht, damit der Artikel auch aus der
     /// "abgehakt"-Ansicht dieses Einkaufs verschwindet, statt versehentlich per Tipp
-    /// wieder zurückgeholt werden zu können.
-    func artikelDauerhaftEntfernen(_ artikel: Artikel, context: ModelContext) {
-        guard let index = kaufEintraege.firstIndex(where: { $0.artikel == artikel }) else { return }
+    /// wieder zurückgeholt werden zu können. Reine Zustandsmutation ohne
+    /// Event-Aufzeichnung, siehe ``artikelDauerhaftEntfernen(_:context:)``.
+    @discardableResult
+    func artikelDauerhaftEntfernenOhneEventAufzeichnung(_ artikel: Artikel, context: ModelContext) -> Bool {
+        guard let index = kaufEintraege.firstIndex(where: { $0.artikel == artikel }) else { return false }
         let eintrag = kaufEintraege.remove(at: index)
         context.delete(eintrag)
+        return true
+    }
+
+    /// Wie ``artikelDauerhaftEntfernenOhneEventAufzeichnung(_:context:)``,
+    /// zeichnet zusätzlich (nur bei tatsächlicher Entfernung) ein
+    /// ``SyncEventArt/artikelDauerhaftEntfernt``-Event auf.
+    func artikelDauerhaftEntfernen(_ artikel: Artikel, context: ModelContext) {
+        guard artikelDauerhaftEntfernenOhneEventAufzeichnung(artikel, context: context) else { return }
         SyncEventService.aufzeichnen(.artikelDauerhaftEntfernt, bezugsID: id, artikelID: artikel.id, context: context)
     }
 

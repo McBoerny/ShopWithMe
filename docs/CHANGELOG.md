@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.7 (Build 112) — Datensynchronisation Phase 2: Bereich-A-Import (GitHub #39)
+
+- Neuer `SyncImportService` — liest Event-Dateien aus allen fremden
+  Peer-Ordnern und wendet sie an, ausgelöst über denselben
+  „Jetzt synchronisieren"-Button wie der Export. Bereits bekannte Events werden
+  nicht erneut angewendet; konkurrierende Events zum selben Artikel/Bezug
+  werden über die neue `SyncKonfliktAufloesung` entschieden ("dauerhaft
+  entfernt" schlägt alles, "abwählen" schlägt "abhaken", sonst gewinnt der
+  höhere Lamport-Zähler).
+- Die 5 Bereich-A-Mutationsfunktionen (`Einkaufsliste.artikelHinzufuegen`,
+  `Einkaufsvorgang.artikelAbhaken` u.a.) sind jetzt in eine reine
+  Zustandsmutation und einen aufzeichnenden Wrapper aufgeteilt — verhindert,
+  dass beim Anwenden eines empfangenen Events fälschlich ein neues, selbst
+  authored Event entsteht. `SyncEventService.uebernehmen(_:context:)` fügt ein
+  empfangenes Event stattdessen unverändert (mit ursprünglicher
+  Geräte-Urheberschaft) lokal ein.
+- Bekannte Grenze dieser Phase (dokumentiert in
+  `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`): Ohne den noch ausstehenden
+  Bereich-B/C/D-Import (Phase 3) funktioniert der Bereich-A-Import nur
+  zuverlässig für Listen/Einkäufe/Artikel, die auf dem empfangenden Gerät
+  bereits bekannt sind. Nicht anwendbare Events werden nicht als erledigt
+  markiert und bei jedem weiteren Sync-Zyklus automatisch erneut versucht.
+
 ## v0.7 (Build 111) — Datensynchronisation Phase 1b: Bereich-B/C/D-Snapshot-Export (GitHub #39)
 
 - Neues `SyncSnapshot`-DTO-Format (Bereich B: Geschäftstypen, Kategorien,

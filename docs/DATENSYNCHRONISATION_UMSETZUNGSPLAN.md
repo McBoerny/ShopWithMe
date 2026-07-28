@@ -41,7 +41,44 @@ beschriebene Fälligkeits-/Konsolidierungslogik — die kommt mit Phase 4). Die
 noch offenen Merge-Regeln für additive Zähler sind in 4.2a vorgemerkt, aber
 noch nicht implementiert (Import/Merge ist Phase 2/3).
 
-Phase 2+ noch nicht begonnen.
+**Status: Phase 2 umgesetzt** (Bereich-A-Import): `SyncImportService` liest
+Event-Dateien aus allen fremden Peer-Ordnern, wendet ``SyncKonfliktAufloesung``
+(neu als echter Code implementiert, vorher nur Doku-Skizze in Abschnitt 4.4) je
+(`bezugsID`, `artikelID`)-Paar an und materialisiert das Ergebnis über
+dieselben Mutationsfunktionen wie lokale Aktionen. Dafür wurden die 5
+Mutationsfunktionen in eine reine `…OhneEventAufzeichnung`-Variante und einen
+aufzeichnenden Wrapper aufgeteilt (siehe „Wichtiger Zusatzfund" unten) und
+``SyncEventService.uebernehmen(_:context:)`` ergänzt, das ein empfangenes Event
+unverändert (fremde Lamport-Zähler/Geräte-ID) lokal übernimmt, statt es
+fälschlich neu zu authoren.
+
+**Wichtiger Zusatzfund beim Entwurf von Phase 2 (jetzt gelöst):** Die 5
+Mutationsfunktionen riefen bisher immer `SyncEventService.aufzeichnen` auf.
+Hätte der Import dieselben Funktionen direkt wiederverwendet, hätte jedes
+angewendete fremde Event zusätzlich ein neues, selbst-authored Event mit der
+eigenen Lamport-Uhr erzeugt — fremde Aktionen wären fälschlich diesem Gerät
+zugeschrieben und beim nächsten Export dupliziert an alle Peers zurückgespiegelt
+worden. Gelöst durch Aufteilung in reine Zustandsmutation + aufzeichnenden
+Wrapper (siehe Code).
+
+**Bekannte, bewusst nicht in dieser Phase gelöste Grenze:** Ein empfangenes
+Event referenziert seine `Einkaufsliste`/seinen `Einkaufsvorgang`/seinen
+`Artikel` nur über deren `UUID`. Bevor Phase 3 (Import Bereich B/C/D)
+existiert, kann diese Referenz bei einem frisch beigetretenen Gerät noch fehlen
+— das Event wird dann bewusst NICHT als bekannt markiert, sondern bei jedem
+weiteren Sync-Zyklus automatisch erneut versucht, bis die Referenz (durch
+Phase 3 oder eine direkt lokal ausgeführte Aktion) existiert. Ein Nebeneffekt:
+ein bereits anwendbares, aber schwächeres Event kann übergangsweise vor einem
+noch nicht anwendbaren stärkeren Event materialisiert werden; das System
+konvergiert danach selbstständig auf den korrekten Endzustand (die
+Mutationsfunktionen sind idempotent/selbstkorrigierend), siehe
+`SyncImportService`-Doku-Kommentar im Code für Details. **Ohne Phase 3 ist
+Phase 2 also nur für Entitäten korrekt, die auf beiden Geräten bereits vor dem
+Sync existierten** (z.B. weil sie schon vor dem Verbinden des Sync-Ordners lokal
+angelegt wurden) — für den vollständigen Mehrgeräte-Fall braucht es beide
+Phasen zusammen.
+
+Phase 3+ noch nicht begonnen.
 
 ---
 
@@ -360,8 +397,10 @@ spiegeln, statt auf den nächsten Polling-Zyklus zu warten).
    - **1b (umgesetzt):** Bereich-B/C/D-Snapshot (`SyncSnapshot`,
      `SyncSnapshotExportService`) aus dem aktuellen Modellzustand abgeleitet und
      als `export.json` geschrieben.
-3. **Phase 2 — Import Bereich A:** fremde Events lesen, Konfliktregeln (4.4)
-   anwenden, über bestehende Mutations-Funktionen lokal einspielen.
+3. **Phase 2 (umgesetzt) — Import Bereich A:** fremde Events lesen,
+   Konfliktregeln (4.4, jetzt `SyncKonfliktAufloesung`) anwenden, über
+   bestehende (nicht-aufzeichnende) Mutations-Funktionen lokal einspielen
+   (`SyncImportService`).
 4. **Phase 3 — Import Bereich B/C/D:** Stammdaten-/Historien-/Lern-Merge beim
    Einlesen fremder `export.json`-Dateien.
 5. **Phase 4 — Konsolidierung + adaptives Polling** (Abschnitt 5.4/5.5).

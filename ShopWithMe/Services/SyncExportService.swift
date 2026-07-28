@@ -6,12 +6,19 @@ import SwiftData
 /// JSON-Dateien in den eigenen Peer-Ordner (`peers/{geraeteID}/events/`). Reines
 /// Schreiben — Lesen fremder Peer-Ordner (Import) ist Phase 2/3 des Plans.
 enum SyncExportService {
-    /// Der Event-Ordner dieses Geräts innerhalb des Sync-Ordners.
-    static func eigenerEventsOrdner(in syncOrdner: URL) -> URL {
+    /// Der Event-Ordner eines beliebigen Geräts (eigenes oder fremdes) innerhalb
+    /// des Sync-Ordners — siehe ``SyncImportService`` für das Lesen fremder
+    /// Ordner.
+    static func eventsOrdner(fuerPeer geraeteID: String, in syncOrdner: URL) -> URL {
         syncOrdner
             .appendingPathComponent("peers", isDirectory: true)
-            .appendingPathComponent(DatabaseLeaseService.geraeteID, isDirectory: true)
+            .appendingPathComponent(geraeteID, isDirectory: true)
             .appendingPathComponent("events", isDirectory: true)
+    }
+
+    /// Der Event-Ordner dieses Geräts innerhalb des Sync-Ordners.
+    static func eigenerEventsOrdner(in syncOrdner: URL) -> URL {
+        eventsOrdner(fuerPeer: DatabaseLeaseService.geraeteID, in: syncOrdner)
     }
 
     /// Schreibt alle noch nicht hochgeladenen `SyncEvent`s in den eigenen

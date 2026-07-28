@@ -59,37 +59,62 @@ extension Einkaufsliste {
     /// Setzt `artikel` (neu oder erneut) auf diese Liste: legt bei Bedarf einen
     /// neuen ``EinkaufslistenEintrag`` an, oder setzt einen bestehenden zurück auf
     /// ``Artikel/mengenSchritt`` und leert dessen Notiz — unabhängig vom zuletzt vor
-    /// dem Abhaken gewählten Wert. Zentrale Stelle für alle Orte, die einen Artikel
-    /// (neu oder erneut) auf eine Liste setzen (siehe ``ArtikelHinzufuegenView``,
-    /// ``Einkaufsvorgang/artikelAbwaehlen(_:context:)``). Zeichnet dafür ein
-    /// ``SyncEventArt/artikelHinzugefuegt``-Event auf (Phase 0,
-    /// `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`) — bewusst auch dann, wenn
-    /// diese Funktion nur als Seiteneffekt von ``Einkaufsvorgang/artikelAbwaehlen(_:context:)``
-    /// aufgerufen wird (zwei Events für eine Nutzeraktion, unkritisch, da
-    /// erneutes Anwenden idempotent ist) — eine Verfeinerung dafür ist für Phase 2
-    /// des Plans vorgesehen, sobald echte Replay-Logik entsteht.
+    /// dem Abhaken gewählten Wert. Reine Zustandsmutation ohne Event-Aufzeichnung —
+    /// siehe ``artikelHinzufuegen(_:context:)`` für die reguläre, aufzeichnende
+    /// Variante. Wird von ``SyncImportService`` genutzt, um ein empfangenes
+    /// ``SyncEventArt/artikelHinzugefuegt``-Event zu materialisieren, ohne es
+    /// dabei fälschlich diesem Gerät als Urheber zuzuschreiben (siehe
+    /// `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`, Phase 2).
     @discardableResult
-    func artikelHinzufuegen(_ artikel: Artikel, context: ModelContext) -> EinkaufslistenEintrag {
+    func artikelHinzufuegenOhneEventAufzeichnung(_ artikel: Artikel, context: ModelContext) -> EinkaufslistenEintrag {
         if let bestehender = eintrag(fuer: artikel) {
             bestehender.menge = artikel.mengenSchritt
             bestehender.notiz = nil
-            SyncEventService.aufzeichnen(.artikelHinzugefuegt, bezugsID: id, artikelID: artikel.id, context: context)
             return bestehender
         }
         let neuer = EinkaufslistenEintrag(einkaufsliste: self, artikel: artikel, menge: artikel.mengenSchritt)
         context.insert(neuer)
-        SyncEventService.aufzeichnen(.artikelHinzugefuegt, bezugsID: id, artikelID: artikel.id, context: context)
         return neuer
     }
 
+    /// Wie ``artikelHinzufuegenOhneEventAufzeichnung(_:context:)``, zeichnet
+    /// zusätzlich ein ``SyncEventArt/artikelHinzugefuegt``-Event auf (Phase 0,
+    /// `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`) — die Stelle für alle lokal
+    /// ausgelösten Aktionen, die einen Artikel (neu oder erneut) auf eine Liste
+    /// setzen (siehe ``ArtikelHinzufuegenView``,
+    /// ``Einkaufsvorgang/artikelAbwaehlen(_:context:)``). Zeichnet bewusst auch
+    /// dann ein Event auf, wenn diese Funktion nur als Seiteneffekt von
+    /// ``Einkaufsvorgang/artikelAbwaehlen(_:context:)`` aufgerufen wird (zwei
+    /// Events für eine Nutzeraktion) — akzeptierte Vereinfachung, da erneutes
+    /// Anwenden idempotent ist.
+    @discardableResult
+    func artikelHinzufuegen(_ artikel: Artikel, context: ModelContext) -> EinkaufslistenEintrag {
+        let eintrag = artikelHinzufuegenOhneEventAufzeichnung(artikel, context: context)
+        SyncEventService.aufzeichnen(.artikelHinzugefuegt, bezugsID: id, artikelID: artikel.id, context: context)
+        return eintrag
+    }
+
     /// Nimmt `artikel` wieder von dieser Liste — Gegenstück zu
-    /// ``artikelHinzufuegen(_:context:)``, ohne Wirkung falls er nicht darauf
-    /// steht. Rein die Listenmitgliedschaft betreffend, nicht zu verwechseln mit
+    /// ``artikelHinzufuegenOhneEventAufzeichnung(_:context:)``, ohne Wirkung falls
+    /// er nicht darauf steht. Reine Zustandsmutation ohne Event-Aufzeichnung,
+    /// siehe ``artikelEntfernen(_:context:)``. Liefert `true`, falls tatsächlich
+    /// etwas entfernt wurde (Grundlage dafür, ob die aufzeichnende Variante ein
+    /// Event erzeugt).
+    @discardableResult
+    func artikelEntfernenOhneEventAufzeichnung(_ artikel: Artikel, context: ModelContext) -> Bool {
+        guard let bestehender = eintrag(fuer: artikel) else { return false }
+        context.delete(bestehender)
+        return true
+    }
+
+    /// Wie ``artikelEntfernenOhneEventAufzeichnung(_:context:)``, zeichnet
+    /// zusätzlich (nur bei tatsächlicher Entfernung) ein
+    /// ``SyncEventArt/artikelEntfernt``-Event auf. Rein die Listenmitgliedschaft
+    /// betreffend, nicht zu verwechseln mit
     /// ``Einkaufsvorgang/artikelAbwaehlen(_:context:)`` (macht ein Abhaken
     /// während eines laufenden Einkaufs rückgängig, GitHub #45).
     func artikelEntfernen(_ artikel: Artikel, context: ModelContext) {
-        guard let bestehender = eintrag(fuer: artikel) else { return }
-        context.delete(bestehender)
+        guard artikelEntfernenOhneEventAufzeichnung(artikel, context: context) else { return }
         SyncEventService.aufzeichnen(.artikelEntfernt, bezugsID: id, artikelID: artikel.id, context: context)
     }
 }

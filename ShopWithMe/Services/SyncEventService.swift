@@ -30,4 +30,28 @@ enum SyncEventService {
         context.insert(event)
         return event
     }
+
+    /// Übernimmt ein von einem Peer empfangenes Event unverändert in die lokale
+    /// Datenbank (Phase 2, `SyncImportService`) — im Unterschied zu
+    /// ``aufzeichnen(_:bezugsID:artikelID:context:)`` wird KEIN neuer
+    /// Lamport-Zähler vergeben und KEINE eigene Autorenschaft gesetzt (siehe
+    /// ``SyncEvent/init(empfangen:)``). Gleicht die eigene Uhr über
+    /// ``LamportClock/beiEmpfang(fremderZaehler:)`` ab.
+    @discardableResult
+    static func uebernehmen(_ empfangen: SyncEventExportDarstellung, context: ModelContext) -> SyncEvent {
+        LamportClock.beiEmpfang(fremderZaehler: empfangen.lamportZaehler)
+        let event = SyncEvent(empfangen: empfangen)
+        context.insert(event)
+        return event
+    }
+
+    /// Ob bereits ein lokales ``SyncEvent`` mit dieser `id` existiert — Grundlage
+    /// für die Idempotenz des Imports (``SyncImportService``): ein Event, das
+    /// schon einmal übernommen wurde (eigenes oder bereits importiertes fremdes),
+    /// darf nicht ein zweites Mal angewendet werden.
+    static func istBereitsBekannt(_ id: UUID, context: ModelContext) -> Bool {
+        var deskriptor = FetchDescriptor<SyncEvent>(predicate: #Predicate { $0.id == id })
+        deskriptor.fetchLimit = 1
+        return ((try? context.fetchCount(deskriptor)) ?? 0) > 0
+    }
 }
