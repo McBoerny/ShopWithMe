@@ -199,7 +199,10 @@ enum GeschaeftErkennungService {
     /// `toleranz` ist standardmäßig ``koordinatenTreffertoleranz``, aber für ein
     /// konkretes ``Geschaeft`` mit individuellem ``Geschaeft/erkennungsradius``
     /// überschreibbar (siehe ``istBekannterTreffer(_:fuer:)``, GitHub #41).
-    private static func istGleicherOrt(
+    /// Bewusst `internal` statt `private` — ``SyncSnapshotImportService``
+    /// (Phase 3) nutzt dieselbe Logik für das Bereich-B-Matching zweier
+    /// ``Geschaeft``e ohne den Umweg über ein `MKMapItem`.
+    static func istGleicherOrt(
         nameA: String,
         koordinatenA: (breitengrad: Double, laengengrad: Double)?,
         nameB: String,

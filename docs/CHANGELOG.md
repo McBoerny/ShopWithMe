@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.7 (Build 113) — Datensynchronisation Phase 3a: Bereich-B-Import (GitHub #39)
+
+- Neuer `SyncSnapshotImportService` — liest `export.json` aus allen fremden
+  Peer-Ordnern und merged Stammdaten (Geschäftstypen, Kategorien, Geschäfte,
+  Artikel, Einkaufslisten) in den lokalen Bestand, unter Wiederverwendung
+  bestehender Matching-Bausteine (Namensabgleich, Standort-Erkennung). Kein
+  bereits lokal gesetzter Wert wird dabei überschrieben — nur fehlende Werte
+  werden ergänzt, Mengen (Kategorien, ignorierte Artikel, alternative Namen)
+  vereinigt.
+- `Geschaeft.anzahlEinkaufsvorgaenge` wird jetzt korrekt additiv über mehrere
+  Geräte gemergt (neuer `SyncPeerZaehlerStand`-Zähler-Zuwachs pro Peer, kein
+  Überschreiben und keine Doppelzählung bei wiederholtem Sync);
+  `umbauVerdacht` per Oder-Verknüpfung.
+- Neue `SyncEntitaetsAlias`-Tabelle: da Artikel über Namensabgleich statt über
+  die ID gematcht werden, aber weiterhin von Bereich-A-Ereignissen über die
+  ursprüngliche Geräte-ID referenziert werden, merkt sich diese Tabelle die
+  Zuordnung — verhindert, dass künftige Ereignisse für einen zusammengeführten
+  Artikel ins Leere laufen.
+- Noch nicht enthalten (Phase 3b): Merge von Einkaufsvorgängen, Kaufeinträgen
+  und der Warengruppen-Distanzmatrix.
+
 ## v0.7 (Build 112) — Datensynchronisation Phase 2: Bereich-A-Import (GitHub #39)
 
 - Neuer `SyncImportService` — liest Event-Dateien aus allen fremden

@@ -12,12 +12,19 @@ import SwiftData
 enum SyncSnapshotExportService {
     private static let dateiName = "export.json"
 
-    /// Die `export.json`-URL dieses Geräts innerhalb des Sync-Ordners.
-    static func eigeneExportURL(in syncOrdner: URL) -> URL {
+    /// Die `export.json`-URL eines beliebigen Geräts (eigenes oder fremdes)
+    /// innerhalb des Sync-Ordners — siehe ``SyncSnapshotImportService`` für das
+    /// Lesen fremder Snapshots.
+    static func exportURL(fuerPeer geraeteID: String, in syncOrdner: URL) -> URL {
         syncOrdner
             .appendingPathComponent("peers", isDirectory: true)
-            .appendingPathComponent(DatabaseLeaseService.geraeteID, isDirectory: true)
+            .appendingPathComponent(geraeteID, isDirectory: true)
             .appendingPathComponent(dateiName)
+    }
+
+    /// Die `export.json`-URL dieses Geräts innerhalb des Sync-Ordners.
+    static func eigeneExportURL(in syncOrdner: URL) -> URL {
+        exportURL(fuerPeer: DatabaseLeaseService.geraeteID, in: syncOrdner)
     }
 
     /// Baut den ``SyncSnapshot`` aus dem aktuellen Modellzustand und schreibt ihn

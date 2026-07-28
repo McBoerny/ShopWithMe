@@ -36,6 +36,8 @@ enum SchemaV1: VersionedSchema {
             IgnorierterGeschaeftsVorschlag.self,
             IgnorierterArtikel.self,
             SyncEvent.self,
+            SyncEntitaetsAlias.self,
+            SyncPeerZaehlerStand.self,
         ]
     }
 }

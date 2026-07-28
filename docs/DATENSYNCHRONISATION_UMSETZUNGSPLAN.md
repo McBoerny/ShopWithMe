@@ -78,7 +78,45 @@ Sync existierten** (z.B. weil sie schon vor dem Verbinden des Sync-Ordners lokal
 angelegt wurden) — für den vollständigen Mehrgeräte-Fall braucht es beide
 Phasen zusammen.
 
-Phase 3+ noch nicht begonnen.
+**Status: Phase 3a umgesetzt** (Bereich-B-Import: Stammdaten) —
+`SyncSnapshotImportService` liest `export.json` aus allen fremden Peer-Ordnern
+und merged `GeschaeftTyp`/`ArtikelKategorie`/`Geschaeft`/`Artikel`/
+`Einkaufsliste` dependency-geordnet in den lokalen Bestand, unter
+Wiederverwendung der in `docs/DATENBANK_BACKUP_RESTORE_BEWERTUNG.md` §5.1
+hergeleiteten Matching-Bausteine (`GeschaeftTyp.mitNamen`,
+`GeschaeftErkennungService.istGleicherOrt`, Namensabgleich für
+`ArtikelKategorie`/`Artikel`). Grundprinzip aller Merge-Regeln: **nie
+destruktiv** — ein bestehender lokaler Wert wird nie durch einen abweichenden
+Remote-Wert überschrieben, nur fehlende Werte werden ergänzt und Mengen
+(Kategorien, Typen, ignorierte Artikel, alternative Namen) vereinigt. Die
+additive Merge-Regel für `Geschaeft.anzahlEinkaufsvorgaenge` (Abschnitt 4.2a)
+ist jetzt über ``SyncPeerZaehlerStand`` (Zähler-Zuwachs seit dem zuletzt
+bekannten Stand jedes Peers) tatsächlich implementiert, `umbauVerdacht` per
+ODER-Verknüpfung, `unauffaelligeEinkaeufeInFolge` bewusst weiterhin
+ungemergt.
+
+**Neu ergänzt: `SyncEntitaetsAlias`.** Da `Artikel` (anders als
+`Einkaufsliste`/`Einkaufsvorgang`) über Namensabgleich statt über die ID
+gematcht wird, aber trotzdem von Bereich-A-`SyncEvent`s über die
+ursprüngliche Peer-ID referenziert wird, merkt sich diese neue,
+additive Tabelle "fremde ID X entspricht lokaler ID Y", sobald ein
+Namens-Match zwei unterschiedliche UUIDs zusammenführt.
+``SyncImportService``s `artikel(mitID:)`-Auflösung (Phase 2, rückwirkend
+ergänzt) schlägt hier zuerst nach, bevor sie direkt per ID sucht — ohne diesen
+Fallback wären künftige Events dieses Peers für den betroffenen Artikel
+dauerhaft ins Leere gelaufen.
+
+`Einkaufsliste` wird bewusst NICHT namensbasiert gematcht (anders als in der
+ursprünglichen Bootstrap-Merge-Tabelle empfohlen), sondern wie
+`Einkaufsvorgang` per ID — sonst hätte ein Namens-Match zwei tatsächlich
+unterschiedliche Listen (z.B. je Gerät automatisch angelegte Standardliste)
+fälschlich zusammenführen können. Zwei gleichnamige Listen nach dem Sync sind
+eine bewusst in Kauf genommene, unkritische Konsequenz.
+
+**Phase 3b (Historie/Lernen: `Einkaufsvorgang`, `KaufEintrag`,
+`WarengruppenDistanz`) ist noch nicht umgesetzt** — die o.g. Zuordnungstabellen
+(`GeschaeftTyp`/`ArtikelKategorie`/`Geschaeft`/`Artikel`/`Einkaufsliste`) aus
+Phase 3a werden dafür direkt wiederverwendet.
 
 ---
 
@@ -403,6 +441,11 @@ spiegeln, statt auf den nächsten Polling-Zyklus zu warten).
    (`SyncImportService`).
 4. **Phase 3 — Import Bereich B/C/D:** Stammdaten-/Historien-/Lern-Merge beim
    Einlesen fremder `export.json`-Dateien.
+   - **3a (umgesetzt):** Stammdaten (`GeschaeftTyp`, `ArtikelKategorie`,
+     `Geschaeft`, `Artikel`, `Einkaufsliste`) via `SyncSnapshotImportService` +
+     `SyncEntitaetsAlias` (fremde↔lokale ID bei Namens-Matches).
+   - **3b (offen):** Historie/Lernen (`Einkaufsvorgang`, `KaufEintrag`,
+     `WarengruppenDistanz`).
 5. **Phase 4 — Konsolidierung + adaptives Polling** (Abschnitt 5.4/5.5).
 6. **Phase 5 — Gruppen-Setup-UX + Bootstrap** (Abschnitt 6), inkl.
    Wiederverwendung der #50-Merge-Logik.
