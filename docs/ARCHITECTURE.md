@@ -201,7 +201,10 @@ App-Hilfe. Koordinierter Mehrbenutzerzugriff auf einen solchen Fileshare-Ordner
 umgesetzt: siehe `docs/DATABASE_CONCURRENCY.md`. Bewertung und bewusste Ablehnung
 eines weitergehenden Event-Sourcing-/CRDT-/Multipeer-Sync-Vorschlags (GitHub #39),
 inkl. der daraus übernommenen, angepassten Überkauf-Erkennung: siehe
-`docs/DATENSYNCHRONISATION_BEWERTUNG.md`.
+`docs/DATENSYNCHRONISATION_BEWERTUNG.md`. Geplante Backup-/Restore-/Merge-Architektur
+für einen zweiten, nur gelegentlich (nicht dauerhaft aktiv) genutzten
+Remote-Ordner (GitHub #50, löst die bisherige „Speicherort wechseln"-Funktion
+perspektivisch ab): siehe `docs/DATENBANK_BACKUP_RESTORE_BEWERTUNG.md`.
 
 ## Builds, Versionierung & Migrationen
 
