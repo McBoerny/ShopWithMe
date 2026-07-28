@@ -19,7 +19,8 @@ Die App startet immer direkt mit der Einkaufsliste.
   ersetzt aber nicht die weiteren Belegscan-Wege aus dem Einkaufen-Tab bzw. aus der
   Geschäfts-Detailansicht.
 - **Einstellungen** — Hilfe, Artikel- und Geschäfte-Verwaltung (inkl. Kategorien
-  pro Geschäft), Geschäftstypen-Verwaltung, Datenbank-Speicherort.
+  pro Geschäft), Geschäftstypen-Verwaltung, Datenbank-Speicherort,
+  Datensynchronisation.
 
 ## Artikel
 
@@ -127,6 +128,10 @@ dem Abschließen ein kurzer Hinweis, dass sich die App automatisch anpasst.
   bleiben einfach auf der globalen Liste. Der „Einkauf abschließen“-Button zeigt
   dabei die Anzahl bereits abgehakter Artikel und färbt sich in der Akzentfarbe,
   sobald mindestens einer abgehakt wurde.
+- **Gemeinsam einkaufen (Datensynchronisation aktiv, siehe unten):** Hakt ein
+  anderes Gerät einen Artikel ab, bevor du selbst dazu kommst, zeigt ein kurzer,
+  sich von selbst wieder ausblendender Hinweis („Bereits von {Gerätename}
+  abgehakt“), dass es sich erledigt hat — kein Dialog zum Wegklicken nötig.
 - **„Artikel hinzufügen“** zeigt unter dem Titel zusätzlich den Namen der
   Einkaufsliste. Die Suche erkennt Singular und Plural gleichermaßen (z.B.
   findet „Äpfel“ auch den Artikel „Apfel“). Bereits auf der Liste stehende
@@ -191,6 +196,31 @@ Bereits vorhandene Artikel werden nur auf die gewählte Liste gesetzt, nie
 dupliziert; einzelne Artikel lassen sich vor dem Übernehmen per Wischgeste aus dem
 Import ausschließen.
 
+## Datensynchronisation (gemeinsam einkaufen)
+
+Über einen geteilten Ordner (z.B. iCloud Drive oder Synology Drive) gleichen
+sich mehrere Geräte gegenseitig ab — Einkaufslisten-Änderungen, Abhaken,
+Geschäfte, Artikel, Kaufhistorie und die gelernte Warengruppen-Reihenfolge.
+Anders als bei „Datenbank & Speicherort“ (siehe unten) bleibt dabei die
+eigentliche Datenbank jedes Geräts unverändert an ihrem Ort — nur Änderungen
+werden ausgetauscht.
+
+- **Einrichten:** Einstellungen → „Datensynchronisation“ → „Ordner wählen…“.
+  Enthält der gewählte Ordner bereits Daten anderer Geräte (z.B. weil ein
+  Mitnutzer schon eingerichtet hat), werden sie direkt beim Verknüpfen mit
+  deinem eigenen Bestand zusammengeführt.
+- **Läuft automatisch,** solange die App im Vordergrund ist — kein manueller
+  Sync-Tap nötig. Ein zusätzlicher „Jetzt synchronisieren“-Button steht für den
+  seltenen Fall bereit, dass du sofort statt in ein paar Sekunden abgleichen
+  möchtest.
+- **Nur im Vordergrund:** Bei gesperrtem Gerät oder geschlossener App pausiert
+  der automatische Abgleich — er läuft beim nächsten Öffnen sofort weiter.
+- **„Synchronisierung deaktivieren“** trennt die Verbindung zum Ordner wieder,
+  ohne bereits ausgetauschte Daten zu löschen.
+- **Sync-Debug-Modus** (eigener Einstellungen-Eintrag) — zeichnet zur
+  Fehlersuche/Optimierung lokal auf, wie lange ein Abgleich dauert und wie
+  aktuell empfangene Änderungen waren; im Normalbetrieb nicht nötig.
+
 ## Einstellungen
 
 - **Hilfe & Anleitungen** — kuratierte Kurzhilfe zu den komplexeren Funktionen
@@ -216,3 +246,5 @@ Import ausschließen.
   nach einem Neustart der App.
 - **DB-Debug-Modus** — Diagnose-Protokollierung für den Mehrgeräte-Zugriff, im
   Normalbetrieb nicht nötig.
+- **Datensynchronisation / Sync-Debug-Modus** — siehe eigener Abschnitt
+  „Datensynchronisation (gemeinsam einkaufen)“ oben.
