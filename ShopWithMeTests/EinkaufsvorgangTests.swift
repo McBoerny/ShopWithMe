@@ -176,4 +176,72 @@ struct EinkaufsvorgangTests {
         #expect(einkauf.kaufEintraege.count == 1)
         #expect(liste.enthaelt(apfel) == false)
     }
+
+    @Test
+    func artikelAbhakenLiefertAbgehaktBeimErstenUndBereitsAbgehaktVonBeimZweitenAufruf() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let geschaeft = Geschaeft(name: "Testladen", typen: [lebensmittelTyp()])
+        context.insert(geschaeft)
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759")
+        context.insert(apfel)
+        liste.artikelHinzufuegen(apfel, context: context)
+        let einkauf = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste)
+        context.insert(einkauf)
+
+        let erstesErgebnis = einkauf.artikelAbhaken(apfel, context: context)
+        try context.save()
+        let zweitesErgebnis = einkauf.artikelAbhaken(apfel, context: context)
+
+        #expect(erstesErgebnis == .abgehakt)
+        guard case .bereitsAbgehaktVon(let geraeteID) = zweitesErgebnis else {
+            Issue.record("Erwartete .bereitsAbgehaktVon, bekam \(zweitesErgebnis)")
+            return
+        }
+        #expect(geraeteID == DatabaseLeaseService.geraeteID)
+    }
+
+    /// GitHub #48: Ein von einem Peer per Bereich-A-Import empfangenes
+    /// "abgehakt"-Event (siehe `SyncImportServiceTests`) muss beim eigenen
+    /// `artikelAbhaken`-Aufruf als `.bereitsAbgehaktVon` mit der Geräte-ID des
+    /// ursprünglichen Peers erkannt werden, nicht als neue eigene Aktion.
+    @Test
+    func artikelAbhakenErkenntFremdesGeraetAlsUrsprungNachBereichAImport() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let geschaeft = Geschaeft(name: "Testladen", typen: [lebensmittelTyp()])
+        context.insert(geschaeft)
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759")
+        context.insert(apfel)
+        let einkauf = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste)
+        context.insert(einkauf)
+
+        // Simuliert ein bereits importiertes Fremd-Event (siehe
+        // SyncEventService.uebernehmen) statt den echten Dateisystem-Import
+        // aufzurufen — der Kern hier ist SyncEventService.aktuellerGewinner.
+        let empfangenesEvent = SyncEventExportDarstellung(
+            id: UUID(), art: SyncEventArt.artikelAbgehakt.rawValue,
+            nutzlast: try JSONEncoder().encode(SyncEventNutzlast(bezugsID: einkauf.id, artikelID: apfel.id)),
+            lamportZaehler: 1, lamportGeraeteID: "fremdes-geraet", autorGeraeteID: "fremdes-geraet", wallClock: Date()
+        )
+        SyncEventService.uebernehmen(empfangenesEvent, context: context)
+        // Das eigentliche Abhaken (KaufEintrag) übernimmt der Import separat —
+        // hier direkt nachgebildet, um den Fokus auf aktuellerGewinner zu halten.
+        einkauf.artikelAbhakenOhneEventAufzeichnung(apfel, context: context)
+        try context.save()
+
+        let ergebnis = einkauf.artikelAbhaken(apfel, context: context)
+
+        guard case .bereitsAbgehaktVon(let geraeteID) = ergebnis else {
+            Issue.record("Erwartete .bereitsAbgehaktVon, bekam \(ergebnis)")
+            return
+        }
+        #expect(geraeteID == "fremdes-geraet")
+    }
 }

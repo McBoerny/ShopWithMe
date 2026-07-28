@@ -85,36 +85,21 @@ enum SyncImportService {
         SyncEventService.uebernehmen(empfangen, context: context)
     }
 
-    /// Sammelt alle lokal bekannten Events (eigene wie bereits importierte
-    /// fremde) für dasselbe (`bezugsID`, `artikelID`)-Paar und prüft per
-    /// ``SyncKonfliktAufloesung``, ob das neue Event gegen den bisherigen
-    /// Gewinner besteht. Ohne konkurrierende Events gewinnt das neue Event
-    /// automatisch.
-    ///
-    /// Performance-Hinweis: durchsucht aktuell alle lokalen `SyncEvent`s (kein
-    /// indiziertes Prädikat auf der JSON-kodierten Nutzlast möglich) — für den
-    /// heutigen Umfang unkritisch, potenzieller Optimierungspunkt, falls der
-    /// Event-Log deutlich wächst.
+    /// Prüft per ``SyncEventService/aktuellerGewinner(bezugsID:artikelID:context:)``,
+    /// ob das neue Event gegen den bisher bekannten Gewinner für dasselbe
+    /// (`bezugsID`, `artikelID`)-Paar besteht. Ohne konkurrierende Events
+    /// gewinnt das neue Event automatisch.
     @MainActor
     private static func darfAngewendetWerden(
         art: SyncEventArt, lamportZaehler: UInt64, bezugsID: UUID, artikelID: UUID, context: ModelContext
     ) -> Bool {
+        guard let bisherigerGewinner = SyncEventService.aktuellerGewinner(bezugsID: bezugsID, artikelID: artikelID, context: context),
+              let bisherigeArt = bisherigerGewinner.art
+        else { return true }
+
         let neuerKandidat = SyncKonfliktAufloesung.Kandidat(art: art, lamportZaehler: lamportZaehler)
-        let bekannteKandidaten = ((try? context.fetch(FetchDescriptor<SyncEvent>())) ?? [])
-            .compactMap { event -> SyncKonfliktAufloesung.Kandidat? in
-                guard let bekannteArt = event.art, let bekannteNutzlast = event.nutzlastDekodiert,
-                      bekannteNutzlast.bezugsID == bezugsID, bekannteNutzlast.artikelID == artikelID
-                else { return nil }
-                return SyncKonfliktAufloesung.Kandidat(art: bekannteArt, lamportZaehler: event.lamportZaehler)
-            }
-
-        let reduziert: SyncKonfliktAufloesung.Kandidat? = bekannteKandidaten.reduce(nil) { bisher, kandidat in
-            guard let bisher else { return kandidat }
-            return SyncKonfliktAufloesung.gewinnt(kandidat, ueber: bisher) ? kandidat : bisher
-        }
-        guard let bisherigerGewinner = reduziert else { return true }
-
-        return SyncKonfliktAufloesung.gewinnt(neuerKandidat, ueber: bisherigerGewinner)
+        let bisherigerKandidat = SyncKonfliktAufloesung.Kandidat(art: bisherigeArt, lamportZaehler: bisherigerGewinner.lamportZaehler)
+        return SyncKonfliktAufloesung.gewinnt(neuerKandidat, ueber: bisherigerKandidat)
     }
 
     /// Wendet die dem `art` entsprechende, nicht-aufzeichnende Mutationsfunktion

@@ -54,6 +54,8 @@ enum SyncSnapshotImportService {
 
     @MainActor
     private static func merge(_ snapshot: SyncSnapshot, peerGeraeteID: String, context: ModelContext) {
+        SyncPeerInfo.aktualisiere(peerGeraeteID: peerGeraeteID, geraeteName: snapshot.geraeteName, context: context)
+
         let typZuordnung = mergeGeschaeftsTypen(snapshot.geschaeftsTypen, context: context)
         let kategorieZuordnung = mergeArtikelKategorien(snapshot.artikelKategorien, typZuordnung: typZuordnung, context: context)
         let geschaeftZuordnung = mergeGeschaefte(

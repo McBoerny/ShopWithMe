@@ -30,6 +30,11 @@ struct SyncSnapshot: Codable {
     var formatVersion: Int
     var erzeugtAm: Date
     var geraeteID: String
+    /// Anzeigename dieses Geräts (``DatabaseLeaseService/geraeteName``) — nicht
+    /// für Bereich-B-Matching genutzt, sondern nur zur Auflösung von
+    /// `SyncEvent.autorGeraeteID` in eine menschenlesbare Form, siehe
+    /// ``SyncPeerInfo`` (GitHub #48, Überkauf-Hinweis).
+    var geraeteName: String
 
     var geschaeftsTypen: [GeschaeftTypSnapshot]
     var artikelKategorien: [ArtikelKategorieSnapshot]

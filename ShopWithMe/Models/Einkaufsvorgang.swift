@@ -1,6 +1,22 @@
 import Foundation
 import SwiftData
 
+/// Ergebnis von ``Einkaufsvorgang/artikelAbhaken(_:context:)`` (GitHub #48,
+/// Überkauf-Hinweis) — unterscheidet eine tatsächliche Neuanlage von einem
+/// bereits (von diesem oder einem anderen Gerät) abgehakten Artikel, damit die
+/// UI im zweiten Fall einen kurzen, nicht blockierenden Hinweis zeigen kann,
+/// statt den Vorgang stillschweigend zu ignorieren.
+enum AbhakErgebnis: Equatable {
+    case abgehakt
+    /// `geraeteID` ist die `SyncEvent.autorGeraeteID` des ursprünglich
+    /// abhakenden Geräts (siehe
+    /// ``SyncEventService/aktuellerGewinner(bezugsID:artikelID:context:)``),
+    /// `nil` falls kein zugehöriges Event gefunden wurde (z.B. eine vor
+    /// Einführung der Datensynchronisation entstandene Altlast). Eine
+    /// menschenlesbare Form liefert ``SyncPeerInfo/geraeteName(fuer:context:)``.
+    case bereitsAbgehaktVon(geraeteID: String?)
+}
+
 /// Ein einzelner Einkaufsvorgang (Ladenbesuch) in einem bestimmten ``Geschaeft``.
 ///
 /// Während eines Einkaufsvorgangs entstehen ``KaufEintrag``e, aus deren
@@ -49,10 +65,12 @@ final class Einkaufsvorgang {
     /// Index — das ist die Rohdatenbasis für ``WarengruppenDistanzService``. Artikel
     /// ohne eigene Kategorie fallen dabei automatisch unter "Sonstiges". Reine
     /// Zustandsmutation ohne Event-Aufzeichnung, siehe ``artikelAbhaken(_:context:)``.
-    /// Liefert `true`, falls tatsächlich ein ``KaufEintrag`` entstanden ist
-    /// (Grundlage dafür, ob die aufzeichnende Variante ein Event erzeugt).
+    /// Liefert ``AbhakErgebnis/abgehakt``, falls tatsächlich ein ``KaufEintrag``
+    /// entstanden ist (Grundlage dafür, ob die aufzeichnende Variante ein Event
+    /// erzeugt) — sonst ``AbhakErgebnis/bereitsAbgehaktVon(geraeteID:)`` (GitHub
+    /// #48, Überkauf-Hinweis).
     @discardableResult
-    func artikelAbhakenOhneEventAufzeichnung(_ artikel: Artikel, context: ModelContext) -> Bool {
+    func artikelAbhakenOhneEventAufzeichnung(_ artikel: Artikel, context: ModelContext) -> AbhakErgebnis {
         // Dedupe-Schutz gegen das in `docs/DATABASE_CONCURRENCY.md` dokumentierte
         // Restrisiko (Sync-Latenz-Kollisionsfenster bei zeitgleichem Abhaken auf zwei
         // Geräten): pro (Einkaufsvorgang, Artikel) darf nur ein `KaufEintrag`
@@ -69,7 +87,8 @@ final class Einkaufsvorgang {
             if let listenEintrag {
                 context.delete(listenEintrag)
             }
-            return false
+            let gewinner = SyncEventService.aktuellerGewinner(bezugsID: id, artikelID: artikel.id, context: context)
+            return .bereitsAbgehaktVon(geraeteID: gewinner?.autorGeraeteID)
         }
 
         let kategorie = artikel.fuehrendeKategorie(inGeschaeft: geschaeft, context: context)
@@ -86,16 +105,20 @@ final class Einkaufsvorgang {
         if let listenEintrag {
             context.delete(listenEintrag)
         }
-        return true
+        return .abgehakt
     }
 
     /// Wie ``artikelAbhakenOhneEventAufzeichnung(_:context:)``, zeichnet
     /// zusätzlich (nur bei tatsächlicher Neuanlage) ein
     /// ``SyncEventArt/artikelAbgehakt``-Event auf (Phase 0,
     /// `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`).
-    func artikelAbhaken(_ artikel: Artikel, context: ModelContext) {
-        guard artikelAbhakenOhneEventAufzeichnung(artikel, context: context) else { return }
-        SyncEventService.aufzeichnen(.artikelAbgehakt, bezugsID: id, artikelID: artikel.id, context: context)
+    @discardableResult
+    func artikelAbhaken(_ artikel: Artikel, context: ModelContext) -> AbhakErgebnis {
+        let ergebnis = artikelAbhakenOhneEventAufzeichnung(artikel, context: context)
+        if ergebnis == .abgehakt {
+            SyncEventService.aufzeichnen(.artikelAbgehakt, bezugsID: id, artikelID: artikel.id, context: context)
+        }
+        return ergebnis
     }
 
     /// Macht ``artikelAbhaken(_:context:)`` rückgängig: löscht den zugehörigen

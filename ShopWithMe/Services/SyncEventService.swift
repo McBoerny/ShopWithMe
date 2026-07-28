@@ -54,4 +54,35 @@ enum SyncEventService {
         deskriptor.fetchLimit = 1
         return ((try? context.fetchCount(deskriptor)) ?? 0) > 0
     }
+
+    /// Das unter allen lokal bekannten Events (eigene wie bereits importierte
+    /// fremde) zu diesem (`bezugsID`, `artikelID`)-Paar aktuell gewinnende Event
+    /// laut ``SyncKonfliktAufloesung`` — `nil`, falls keines bekannt ist.
+    ///
+    /// Genutzt sowohl von ``SyncImportService`` (Konfliktprüfung vor dem
+    /// Anwenden eines neu empfangenen Events) als auch vom Überkauf-Hinweis
+    /// (GitHub #48, ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:)``),
+    /// um herauszufinden, welches Gerät einen bereits vorhandenen `KaufEintrag`
+    /// ursprünglich ausgelöst hat.
+    ///
+    /// Performance-Hinweis: durchsucht aktuell alle lokalen `SyncEvent`s (kein
+    /// indiziertes Prädikat auf der JSON-kodierten Nutzlast möglich) — für den
+    /// heutigen Umfang unkritisch, potenzieller Optimierungspunkt, falls der
+    /// Event-Log deutlich wächst.
+    static func aktuellerGewinner(bezugsID: UUID, artikelID: UUID, context: ModelContext) -> SyncEvent? {
+        let kandidaten = ((try? context.fetch(FetchDescriptor<SyncEvent>())) ?? []).filter { event in
+            guard let nutzlast = event.nutzlastDekodiert else { return false }
+            return nutzlast.bezugsID == bezugsID && nutzlast.artikelID == artikelID
+        }
+        return kandidaten.reduce(nil) { (bisher: SyncEvent?, kandidat: SyncEvent) -> SyncEvent? in
+            guard let bisher, let bisherigeArt = bisher.art, let kandidatArt = kandidat.art else {
+                return bisher == nil ? kandidat : bisher
+            }
+            let gewinntKandidat = SyncKonfliktAufloesung.gewinnt(
+                SyncKonfliktAufloesung.Kandidat(art: kandidatArt, lamportZaehler: kandidat.lamportZaehler),
+                ueber: SyncKonfliktAufloesung.Kandidat(art: bisherigeArt, lamportZaehler: bisher.lamportZaehler)
+            )
+            return gewinntKandidat ? kandidat : bisher
+        }
+    }
 }

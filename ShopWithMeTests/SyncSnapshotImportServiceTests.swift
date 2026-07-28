@@ -10,7 +10,7 @@ struct SyncSnapshotImportServiceTests {
             Artikel.self, ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self,
             Einkaufsvorgang.self, KaufEintrag.self, WarengruppenDistanz.self,
             Einkaufsliste.self, EinkaufslistenEintrag.self, IgnorierterArtikel.self,
-            SyncEvent.self, SyncEntitaetsAlias.self, SyncPeerZaehlerStand.self,
+            SyncEvent.self, SyncEntitaetsAlias.self, SyncPeerZaehlerStand.self, SyncPeerInfo.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
@@ -23,9 +23,9 @@ struct SyncSnapshotImportServiceTests {
         return ordner
     }
 
-    private func leererSnapshot(geraeteID: String) -> SyncSnapshot {
+    private func leererSnapshot(geraeteID: String, geraeteName: String = "Fremdes iPhone") -> SyncSnapshot {
         SyncSnapshot(
-            formatVersion: SyncSnapshot.aktuelleFormatVersion, erzeugtAm: Date(), geraeteID: geraeteID,
+            formatVersion: SyncSnapshot.aktuelleFormatVersion, erzeugtAm: Date(), geraeteID: geraeteID, geraeteName: geraeteName,
             geschaeftsTypen: [], artikelKategorien: [], geschaefte: [], artikel: [],
             einkaufslisten: [], einkaufsvorgaenge: [], kaufEintraege: [], warengruppenDistanzen: []
         )
@@ -386,5 +386,26 @@ struct SyncSnapshotImportServiceTests {
         let alleDistanzen = try context.fetch(FetchDescriptor<WarengruppenDistanz>())
         #expect(alleDistanzen.count == 1)
         #expect(alleDistanzen.first?.distanz == 0.5) // (0.2 + 0.8) / 2
+    }
+
+    /// GitHub #48: Der Gerätename aus dem Snapshot muss für die spätere
+    /// Auflösung von `SyncEvent.autorGeraeteID` (Überkauf-Hinweis) gemerkt
+    /// werden — und bei einem erneuten Sync aktualisiert werden können.
+    @Test
+    func geraeteNameWirdAusSnapshotGemerktUndAktualisiert() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        try schreibeFremdenSnapshot(leererSnapshot(geraeteID: "fremdes-geraet", geraeteName: "Annas iPhone"), fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+        #expect(SyncPeerInfo.geraeteName(fuer: "fremdes-geraet", context: context) == "Annas iPhone")
+
+        try schreibeFremdenSnapshot(leererSnapshot(geraeteID: "fremdes-geraet", geraeteName: "Annas neues iPhone"), fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+        #expect(SyncPeerInfo.geraeteName(fuer: "fremdes-geraet", context: context) == "Annas neues iPhone")
+        #expect(try context.fetch(FetchDescriptor<SyncPeerInfo>()).count == 1)
     }
 }

@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.7 (Build 115) — Überkauf-Hinweis beim gemeinsamen Einkaufen (GitHub #48)
+
+- Wenn zwei Geräte im selben Einkauf denselben Artikel abhaken, zeigt
+  `EinkaufenView` jetzt einen kurzen, sich selbst ausblendenden Hinweis
+  („Bereits von {Gerätename} abgehakt“) statt den zweiten Versuch
+  stillschweigend zu ignorieren.
+- `Einkaufsvorgang.artikelAbhaken(_:context:)` liefert dafür ein neues
+  `AbhakErgebnis` (`.abgehakt`/`.bereitsAbgehaktVon(geraeteID:)`), ermittelt
+  über die bereits für die Datensynchronisation vorhandene
+  Konfliktauflösung — kein zusätzliches Datenfeld auf `KaufEintrag` nötig.
+- Neues, kleines `SyncPeerInfo`-Modell merkt sich die Anzeigenamen bekannter
+  Peer-Geräte (aus dem neuen `SyncSnapshot.geraeteName`-Feld), um die
+  Geräte-ID im Hinweis in einen lesbaren Namen aufzulösen.
+- Damit ist Phase 6 des Datensynchronisations-Umsetzungsplans (GitHub #39)
+  abgeschlossen.
+
 ## v0.7 (Build 114) — Datensynchronisation Phase 3b: Bereich-C/D-Import (GitHub #39)
 
 - `SyncSnapshotImportService` merged jetzt auch Historie und Lernen:

@@ -737,6 +737,12 @@ private struct EinkaufslisteView: View {
     /// Warengruppen-Reihenfolge festgestellt hat (``Geschaeft/umbauVerdacht``,
     /// Architekturvorschlag Abschnitt 4.4/7).
     @State private var zeigeUmbauHinweis = false
+    /// Kurzer, nicht blockierender Hinweis, wenn ein Artikel beim Abhaken
+    /// bereits (von diesem oder einem anderen Gerät) abgehakt war (GitHub #48,
+    /// Überkauf-Hinweis) — bewusst kein Bestätigungsdialog (YAGNI, siehe
+    /// `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` Abschnitt 8). Blendet sich
+    /// nach kurzer Zeit von selbst wieder aus (``ueberkaufHinweisAnzeigen(fuer:)``).
+    @State private var ueberkaufHinweisText: String?
 
     private var abgehakteArtikelIDs: Set<PersistentIdentifier> {
         Set(einkaufsvorgang.kaufEintraege.compactMap { $0.artikel?.persistentModelID })
@@ -1022,6 +1028,18 @@ private struct EinkaufslisteView: View {
         } message: {
             Text("Die Reihenfolge weicht deutlich von der bisherigen Erfahrung ab. Wir passen uns mit den nächsten Einkäufen automatisch an.")
         }
+        .overlay(alignment: .top) {
+            if let ueberkaufHinweisText {
+                Text(ueberkaufHinweisText)
+                    .font(.footnote)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.thinMaterial, in: Capsule())
+                    .padding(.top, 8)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.default, value: ueberkaufHinweisText)
     }
 
     private func istAbgehakt(_ artikel: Artikel) -> Bool {
@@ -1030,13 +1048,36 @@ private struct EinkaufslisteView: View {
 
     private func umschalten(_ artikel: Artikel) {
         Task {
+            var abhakErgebnis: AbhakErgebnis?
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
                 if istAbgehakt(artikel) {
                     einkaufsvorgang.artikelAbwaehlen(artikel, context: modelContext)
                 } else {
-                    einkaufsvorgang.artikelAbhaken(artikel, context: modelContext)
+                    abhakErgebnis = einkaufsvorgang.artikelAbhaken(artikel, context: modelContext)
                 }
             }
+            if let abhakErgebnis {
+                ueberkaufHinweisAnzeigen(fuer: abhakErgebnis)
+            }
+        }
+    }
+
+    /// Zeigt bei ``AbhakErgebnis/bereitsAbgehaktVon(geraeteID:)`` kurz einen
+    /// Hinweis (GitHub #48) und blendet ihn nach 3 Sekunden von selbst wieder
+    /// aus. Nennt den Gerätenamen nur, wenn ein ANDERES Gerät (nicht dieses)
+    /// den Artikel abgehakt hat und dessen Name bekannt ist (``SyncPeerInfo``)
+    /// — sonst ein neutraler Hinweis ohne Zuschreibung.
+    private func ueberkaufHinweisAnzeigen(fuer ergebnis: AbhakErgebnis) {
+        guard case .bereitsAbgehaktVon(let geraeteID) = ergebnis else { return }
+        if let geraeteID, geraeteID != DatabaseLeaseService.geraeteID,
+           let name = SyncPeerInfo.geraeteName(fuer: geraeteID, context: modelContext) {
+            ueberkaufHinweisText = "Bereits von \(name) abgehakt"
+        } else {
+            ueberkaufHinweisText = "Bereits abgehakt"
+        }
+        Task {
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            ueberkaufHinweisText = nil
         }
     }
 

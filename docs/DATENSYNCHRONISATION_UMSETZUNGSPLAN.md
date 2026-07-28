@@ -410,10 +410,21 @@ spiegeln, statt auf den nächsten Polling-Zyklus zu warten).
 
 ## 8. Verhältnis zu #48 und #50
 
-- **#48 (Überkauf-Hinweis):** wird durch echte Events **einfacher** als ursprünglich
-  geplant — `SyncEvent.autorGeraeteID` liefert direkt, wer einen Artikel abgehakt
-  hat; kein zusätzliches `KaufEintrag.abgehaktVonGeraet`-Feld nötig, die
-  Information steht schon im zugehörigen Event.
+- **#48 (Überkauf-Hinweis) — umgesetzt (Phase 6):** wie vorhergesagt einfacher
+  als ursprünglich geplant. `Einkaufsvorgang.artikelAbhaken(_:context:)`
+  liefert jetzt ein `AbhakErgebnis` (`.abgehakt` oder
+  `.bereitsAbgehaktVon(geraeteID:)`); die Geräte-ID kommt aus
+  `SyncEventService.aktuellerGewinner(bezugsID:artikelID:context:)` (derselben
+  Konfliktauflösung wie Phase 2) statt aus einem neuen
+  `KaufEintrag.abgehaktVonGeraet`-Feld. Einzige Ergänzung ggü. der
+  ursprünglichen Einschätzung: `SyncEvent.autorGeraeteID` ist nur eine UUID,
+  für einen lesbaren Namen kam ein neues, kleines `SyncPeerInfo`-Modell dazu
+  (peerGeraeteID → geraeteName, gefüllt aus dem neuen `SyncSnapshot.geraeteName`-Feld
+  bei jedem Bereich-B-Import) — das war in der ursprünglichen Einschätzung nicht
+  bedacht. `EinkaufenView` zeigt bei Überkauf einen kurzen, selbst
+  ausblendenden Hinweis („Bereits von {Gerätename} abgehakt“ bzw. neutral
+  „Bereits abgehakt“, falls Name/Gerät nicht auflösbar) statt eines
+  Bestätigungsdialogs (YAGNI, wie im ursprünglichen Issue #48 vorgeschlagen).
 - **#50 (Ersetzen/Merge beim Beitritt):** wird zum Bootstrap-Baustein aus
   Abschnitt 6 — nicht mehr die tragende Architektur für laufenden Betrieb (das
   übernehmen jetzt die Events), aber weiterhin exakt der Mechanismus für den
@@ -461,7 +472,9 @@ spiegeln, statt auf den nächsten Polling-Zyklus zu warten).
    durch Phase 3 bereits abgedeckt (dieselbe Merge-Logik läuft unabhängig
    davon, ob ein Peer-Ordner beim Verbinden schon Daten enthält oder nicht);
    offen bleibt nur noch eine freundlichere Beitritts-UX.
-7. **Phase 6 — #48 auf Basis echter Events** umsetzen.
+7. **Phase 6 (umgesetzt) — #48 auf Basis echter Events**: `AbhakErgebnis`,
+   `SyncEventService.aktuellerGewinner`, `SyncPeerInfo` (Geräte-Namen),
+   nicht-blockierender Hinweis in `EinkaufenView`.
 8. **Phase 7 (separates Issue #49, weiterhin an Bedingungen geknüpft):**
    Multipeer als zusätzlicher Beschleunigungs-Kanal, falls nach Phase 0–6 im
    echten Gebrauch tatsächlich benötigt.

@@ -149,6 +149,7 @@ enum SyncSnapshotExportService {
             formatVersion: SyncSnapshot.aktuelleFormatVersion,
             erzeugtAm: Date(),
             geraeteID: DatabaseLeaseService.geraeteID,
+            geraeteName: DatabaseLeaseService.geraeteName,
             geschaeftsTypen: geschaeftsTypen,
             artikelKategorien: artikelKategorien,
             geschaefte: geschaefte,
