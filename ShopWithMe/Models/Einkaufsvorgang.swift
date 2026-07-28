@@ -82,6 +82,7 @@ final class Einkaufsvorgang {
         if let listenEintrag {
             context.delete(listenEintrag)
         }
+        SyncEventService.aufzeichnen(.artikelAbgehakt, bezugsID: id, artikelID: artikel.id, context: context)
     }
 
     /// Macht ``artikelAbhaken(_:context:)`` rückgängig: löscht den zugehörigen
@@ -93,6 +94,7 @@ final class Einkaufsvorgang {
         let eintrag = kaufEintraege.remove(at: index)
         context.delete(eintrag)
         einkaufsliste?.artikelHinzufuegen(artikel, context: context)
+        SyncEventService.aufzeichnen(.artikelAbgewaehlt, bezugsID: id, artikelID: artikel.id, context: context)
     }
 
     /// Entfernt einen bereits abgehakten Artikel dauerhaft aus der Einkaufsliste-Ansicht
@@ -106,6 +108,7 @@ final class Einkaufsvorgang {
         guard let index = kaufEintraege.firstIndex(where: { $0.artikel == artikel }) else { return }
         let eintrag = kaufEintraege.remove(at: index)
         context.delete(eintrag)
+        SyncEventService.aufzeichnen(.artikelDauerhaftEntfernt, bezugsID: id, artikelID: artikel.id, context: context)
     }
 
     private func naechsterKategorieBesuchsIndex(fuer kategorie: ArtikelKategorie) -> Int {

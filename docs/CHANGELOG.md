@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.7 (Build 109) — Datensynchronisation Phase 0: LamportClock + SyncEvent-Grundgerüst (GitHub #39)
+
+- Neue `LamportClock` (`Services/LamportClock.swift`) — lokale logische Uhr als
+  Basis für eine geräteübergreifend eindeutige Ereignisreihenfolge, siehe
+  `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`.
+- Neues additives SwiftData-Modell `SyncEvent` (`Models/SyncEvent.swift`) +
+  `SyncEventService.aufzeichnen(...)` — zeichnet Artikel-Hinzufügen/-Entfernen
+  auf einer Einkaufsliste sowie Abhaken/Abwählen/dauerhaftes Entfernen auf einem
+  Einkaufsvorgang als lokale Events auf.
+- Noch kein Export/Import — reine lokale Aufzeichnung (Phase 0 von 7, siehe
+  Phasenplan im Umsetzungsplan-Dokument). Kein Verhaltensunterschied für
+  Nutzer:innen in dieser Phase.
+
 ## v0.7 (Build 104) — Architekturbewertung: Datenbank-Backup/Restore/Merge (GitHub #50)
 
 - Neue `docs/DATENBANK_BACKUP_RESTORE_BEWERTUNG.md` — Architektur für Backup,

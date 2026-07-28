@@ -61,16 +61,24 @@ extension Einkaufsliste {
     /// ``Artikel/mengenSchritt`` und leert dessen Notiz — unabhängig vom zuletzt vor
     /// dem Abhaken gewählten Wert. Zentrale Stelle für alle Orte, die einen Artikel
     /// (neu oder erneut) auf eine Liste setzen (siehe ``ArtikelHinzufuegenView``,
-    /// ``Einkaufsvorgang/artikelAbwaehlen(_:context:)``).
+    /// ``Einkaufsvorgang/artikelAbwaehlen(_:context:)``). Zeichnet dafür ein
+    /// ``SyncEventArt/artikelHinzugefuegt``-Event auf (Phase 0,
+    /// `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`) — bewusst auch dann, wenn
+    /// diese Funktion nur als Seiteneffekt von ``Einkaufsvorgang/artikelAbwaehlen(_:context:)``
+    /// aufgerufen wird (zwei Events für eine Nutzeraktion, unkritisch, da
+    /// erneutes Anwenden idempotent ist) — eine Verfeinerung dafür ist für Phase 2
+    /// des Plans vorgesehen, sobald echte Replay-Logik entsteht.
     @discardableResult
     func artikelHinzufuegen(_ artikel: Artikel, context: ModelContext) -> EinkaufslistenEintrag {
         if let bestehender = eintrag(fuer: artikel) {
             bestehender.menge = artikel.mengenSchritt
             bestehender.notiz = nil
+            SyncEventService.aufzeichnen(.artikelHinzugefuegt, bezugsID: id, artikelID: artikel.id, context: context)
             return bestehender
         }
         let neuer = EinkaufslistenEintrag(einkaufsliste: self, artikel: artikel, menge: artikel.mengenSchritt)
         context.insert(neuer)
+        SyncEventService.aufzeichnen(.artikelHinzugefuegt, bezugsID: id, artikelID: artikel.id, context: context)
         return neuer
     }
 
@@ -82,5 +90,6 @@ extension Einkaufsliste {
     func artikelEntfernen(_ artikel: Artikel, context: ModelContext) {
         guard let bestehender = eintrag(fuer: artikel) else { return }
         context.delete(bestehender)
+        SyncEventService.aufzeichnen(.artikelEntfernt, bezugsID: id, artikelID: artikel.id, context: context)
     }
 }

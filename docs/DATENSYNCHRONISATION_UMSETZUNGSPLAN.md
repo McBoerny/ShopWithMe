@@ -16,7 +16,9 @@ Issue #49) — dieser Plan deckt ausschließlich den FileProvider-Kanal
 bleibt als Aufzeichnung der ursprünglichen Abwägung bestehen, ist für den
 Mehrbenutzer-Anwendungsfall aber durch diesen Plan **ersetzt**.
 
-**Status: Plan, nicht umgesetzt.**
+**Status: Phase 0 umgesetzt (`LamportClock`, `SyncEvent`-Modell,
+`SyncEventService`, lokale Aufzeichnung in allen 5 relevanten
+Mutationsfunktionen), Phase 1+ noch nicht begonnen.**
 
 ---
 

@@ -8,7 +8,7 @@ struct WarengruppenDistanzServiceTests {
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {
         let schema = Schema([
             Artikel.self, ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self,
-            Einkaufsvorgang.self, KaufEintrag.self, WarengruppenDistanz.self,
+            Einkaufsvorgang.self, KaufEintrag.self, WarengruppenDistanz.self, SyncEvent.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
