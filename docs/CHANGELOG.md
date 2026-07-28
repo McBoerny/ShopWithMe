@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.7 (Build 104) — Architekturbewertung: Datenbank-Backup/Restore/Merge (GitHub #50)
+
+- Neue `docs/DATENBANK_BACKUP_RESTORE_BEWERTUNG.md` — Architektur für Backup,
+  Wiederherstellung und Merge über einen Remote-Ordner, der (anders als die
+  bisherige `DatabaseLocationService`-Funktion) nicht der aktive Speicherort
+  wird, sondern nur für einmalige, manuell ausgelöste Vorgänge dient. Noch nicht
+  implementiert — siehe Phasenplan im Dokument.
+
 ## v0.7 (Build 103) — Belegscan-Qualität: Dokumentenscanner, Zeilen-Leserichtung
 
 - **Dokumentenoptimierte Aufnahme:** `BelegScanView` nutzt jetzt
@@ -1452,7 +1460,7 @@ echte Bugs in der v0.5-Ladenerkennung auf, beide jetzt behoben:
   bearbeiten, löschen. Kategorie ist nach Anlage schreibgeschützt.
 - Artikel-Tab in `RootView` verdrahtet.
 
-## v0.1 (Build 104) — Projekt-Scaffold
+## v0.1 (Build 105) — Projekt-Scaffold
 
 - XcodeGen-Setup (`project.yml`), iOS-26-Target, Bundle-ID `com.made4me.ShopWithMe`.
 - Doku-Grundgerüst: `PRODUCT_SPEC.md`, `ARCHITECTURE.md`, `ROADMAP.md`, `DECISIONS.md`.
