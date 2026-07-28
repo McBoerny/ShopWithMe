@@ -113,10 +113,20 @@ unterschiedliche Listen (z.B. je Gerät automatisch angelegte Standardliste)
 fälschlich zusammenführen können. Zwei gleichnamige Listen nach dem Sync sind
 eine bewusst in Kauf genommene, unkritische Konsequenz.
 
-**Phase 3b (Historie/Lernen: `Einkaufsvorgang`, `KaufEintrag`,
-`WarengruppenDistanz`) ist noch nicht umgesetzt** — die o.g. Zuordnungstabellen
+**Status: Phase 3b umgesetzt** (Historie/Lernen) — `SyncSnapshotImportService`
+merged jetzt auch `Einkaufsvorgang` (ID-basiert wie `Einkaufsliste`, damit
+Bereich-A-Events ihn weiterhin auflösen können; ein bereits lokal
+abgeschlossener Einkauf wird nie wieder geöffnet, nur eine fehlende `endZeit`
+nachgetragen — bewusst ohne `abschliessen()` aufzurufen, sonst würde
+`Geschaeft.anzahlEinkaufsvorgaenge` zusätzlich zur bereits laufenden additiven
+Zähler-Merge-Regel ein zweites Mal erhöht), `KaufEintrag` (Union nach `id`,
+unveränderliche Historie) und `WarengruppenDistanz` (einfacher Mittelwert bei
+bereits vorhandenem Eintrag, sonst Übernahme — vereinfacht ggü. der im
+#39-Vorschlag skizzierten besuchsgewichteten Mittelung, da der Snapshot keine
+Besuchszahl je Eintrag mitführt). Die Zuordnungstabellen
 (`GeschaeftTyp`/`ArtikelKategorie`/`Geschaeft`/`Artikel`/`Einkaufsliste`) aus
-Phase 3a werden dafür direkt wiederverwendet.
+Phase 3a werden dafür direkt wiederverwendet. **Damit ist Phase 3 (Import
+Bereich B/C/D) vollständig umgesetzt.**
 
 ---
 
@@ -439,16 +449,18 @@ spiegeln, statt auf den nächsten Polling-Zyklus zu warten).
    Konfliktregeln (4.4, jetzt `SyncKonfliktAufloesung`) anwenden, über
    bestehende (nicht-aufzeichnende) Mutations-Funktionen lokal einspielen
    (`SyncImportService`).
-4. **Phase 3 — Import Bereich B/C/D:** Stammdaten-/Historien-/Lern-Merge beim
-   Einlesen fremder `export.json`-Dateien.
+4. **Phase 3 (umgesetzt) — Import Bereich B/C/D:** Stammdaten-/Historien-/
+   Lern-Merge beim Einlesen fremder `export.json`-Dateien.
    - **3a (umgesetzt):** Stammdaten (`GeschaeftTyp`, `ArtikelKategorie`,
      `Geschaeft`, `Artikel`, `Einkaufsliste`) via `SyncSnapshotImportService` +
      `SyncEntitaetsAlias` (fremde↔lokale ID bei Namens-Matches).
-   - **3b (offen):** Historie/Lernen (`Einkaufsvorgang`, `KaufEintrag`,
-     `WarengruppenDistanz`).
+   - **3b (umgesetzt):** Historie/Lernen (`Einkaufsvorgang` ID-basiert,
+     `KaufEintrag` als Union nach `id`, `WarengruppenDistanz` gemittelt).
 5. **Phase 4 — Konsolidierung + adaptives Polling** (Abschnitt 5.4/5.5).
-6. **Phase 5 — Gruppen-Setup-UX + Bootstrap** (Abschnitt 6), inkl.
-   Wiederverwendung der #50-Merge-Logik.
+6. **Phase 5 — Gruppen-Setup-UX** (Abschnitt 6) — der Bootstrap-Merge-Teil ist
+   durch Phase 3 bereits abgedeckt (dieselbe Merge-Logik läuft unabhängig
+   davon, ob ein Peer-Ordner beim Verbinden schon Daten enthält oder nicht);
+   offen bleibt nur noch eine freundlichere Beitritts-UX.
 7. **Phase 6 — #48 auf Basis echter Events** umsetzen.
 8. **Phase 7 (separates Issue #49, weiterhin an Bedingungen geknüpft):**
    Multipeer als zusätzlicher Beschleunigungs-Kanal, falls nach Phase 0–6 im

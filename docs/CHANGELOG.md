@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.7 (Build 114) — Datensynchronisation Phase 3b: Bereich-C/D-Import (GitHub #39)
+
+- `SyncSnapshotImportService` merged jetzt auch Historie und Lernen:
+  Einkaufsvorgänge (ID-basiert übernommen, damit Bereich-A-Ereignisse sie
+  weiterhin auflösen können; ein bereits abgeschlossener Einkauf wird nie
+  wieder geöffnet), Kaufeinträge (unveränderliche Historie, Duplikate anhand
+  ihrer ID ausgeschlossen) und die Warengruppen-Distanzmatrix (Mittelwert bei
+  bereits vorhandenem Eintrag, sonst Übernahme).
+- Damit ist die Datensynchronisation aus GitHub #39 (ohne den bewusst
+  zurückgestellten Multipeer-Kanal) in ihrer Kernfunktion vollständig: Export
+  und Import für alle vier Datenbereiche laufen über denselben
+  „Jetzt synchronisieren"-Button.
+
 ## v0.7 (Build 113) — Datensynchronisation Phase 3a: Bereich-B-Import (GitHub #39)
 
 - Neuer `SyncSnapshotImportService` — liest `export.json` aus allen fremden

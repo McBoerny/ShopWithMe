@@ -1,14 +1,16 @@
 import Foundation
 import SwiftData
 
-/// Bereich-B-Import (`docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` Abschnitt
-/// 5.3, Phase 3a): liest `export.json`-Snapshots aus allen fremden
+/// Bereich-B/C/D-Import (`docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`
+/// Abschnitt 5.3, Phase 3): liest `export.json`-Snapshots aus allen fremden
 /// Peer-Ordnern und merged Stammdaten (``GeschaeftTyp``, ``ArtikelKategorie``,
-/// ``Geschaeft``, ``Artikel``, ``Einkaufsliste``) dependency-geordnet in den
-/// lokalen Bestand — Matching-Bausteine wiederverwendet aus
+/// ``Geschaeft``, ``Artikel``, ``Einkaufsliste``, Bereich B), Historie
+/// (``Einkaufsvorgang``, ``KaufEintrag``, Bereich C) und Lernen
+/// (``WarengruppenDistanz``, Bereich D) dependency-geordnet in den lokalen
+/// Bestand — Matching-Bausteine für Bereich B wiederverwendet aus
 /// `docs/DATENBANK_BACKUP_RESTORE_BEWERTUNG.md` §5.1.
 ///
-/// **Grundprinzip aller Merge-Regeln hier: nie destruktiv.** Ein bereits
+/// **Grundprinzip aller Bereich-B-Merge-Regeln: nie destruktiv.** Ein bereits
 /// lokal gesetzter Wert wird nie durch einen abweichenden Remote-Wert
 /// überschrieben (es gibt keine feldweise Zeitstempel-/Lamport-Ordnung für
 /// Bereich B, die entscheiden könnte, welcher Wert "neuer" ist) — stattdessen
@@ -17,8 +19,15 @@ import SwiftData
 /// ersetzt. Die additiven Zähler auf ``Geschaeft`` (Abschnitt 4.2a) haben eine
 /// eigene, dedizierte Regel, siehe ``SyncPeerZaehlerStand``.
 ///
-/// **Historie/Lernen (Bereich C/D: `Einkaufsvorgang`, `KaufEintrag`,
-/// `WarengruppenDistanz`) sind Phase 3b, hier noch nicht enthalten.**
+/// **Bereich C ist Union nach `id`** (jeder Kauf/Einkauf ein unveränderliches
+/// historisches Ereignis, nie ein Konflikt) — ``Einkaufsvorgang`` bewusst
+/// unter Erhalt seiner ID übernommen (wie ``Einkaufsliste``, siehe dort), damit
+/// Bereich-A-Events, die ihn referenzieren, ihn weiterhin auflösen können; ein
+/// bereits abgeschlossener lokaler Einkauf wird nie wieder "geöffnet".
+/// **Bereich D mittelt** bei bereits vorhandenem Distanz-Eintrag, sonst wird
+/// er übernommen (vereinfacht ggü. der im #39-Vorschlag skizzierten
+/// besuchsgewichteten Mittelung, da der Snapshot keine Besuchszahl je Eintrag
+/// mitführt).
 enum SyncSnapshotImportService {
     @MainActor
     static func importiereSnapshots(context: ModelContext) async {
@@ -44,11 +53,7 @@ enum SyncSnapshotImportService {
     }
 
     @MainActor
-    @discardableResult
-    private static func merge(_ snapshot: SyncSnapshot, peerGeraeteID: String, context: ModelContext) -> (
-        typen: [UUID: GeschaeftTyp], kategorien: [UUID: ArtikelKategorie], geschaefte: [UUID: Geschaeft],
-        artikel: [UUID: Artikel], einkaufslisten: [UUID: Einkaufsliste]
-    ) {
+    private static func merge(_ snapshot: SyncSnapshot, peerGeraeteID: String, context: ModelContext) {
         let typZuordnung = mergeGeschaeftsTypen(snapshot.geschaeftsTypen, context: context)
         let kategorieZuordnung = mergeArtikelKategorien(snapshot.artikelKategorien, typZuordnung: typZuordnung, context: context)
         let geschaeftZuordnung = mergeGeschaefte(
@@ -57,7 +62,16 @@ enum SyncSnapshotImportService {
         )
         let artikelZuordnung = mergeArtikel(snapshot.artikel, kategorieZuordnung: kategorieZuordnung, context: context)
         let listeZuordnung = mergeEinkaufslisten(snapshot.einkaufslisten, context: context)
-        return (typZuordnung, kategorieZuordnung, geschaeftZuordnung, artikelZuordnung, listeZuordnung)
+        let einkaufsvorgangZuordnung = mergeEinkaufsvorgaenge(
+            snapshot.einkaufsvorgaenge, geschaeftZuordnung: geschaeftZuordnung, listeZuordnung: listeZuordnung, context: context
+        )
+        mergeKaufEintraege(
+            snapshot.kaufEintraege, artikelZuordnung: artikelZuordnung, einkaufsvorgangZuordnung: einkaufsvorgangZuordnung,
+            geschaeftZuordnung: geschaeftZuordnung, kategorieZuordnung: kategorieZuordnung, context: context
+        )
+        mergeWarengruppenDistanzen(
+            snapshot.warengruppenDistanzen, geschaeftZuordnung: geschaeftZuordnung, kategorieZuordnung: kategorieZuordnung, context: context
+        )
     }
 
     /// Vereinigt zwei Listen unter Erhalt der bestehenden Reihenfolge (relevant
@@ -242,5 +256,108 @@ enum SyncSnapshotImportService {
             zuordnung[eintrag.id] = neue
         }
         return zuordnung
+    }
+
+    // MARK: - Einkaufsvorgang (Bereich C)
+
+    /// ID-basiert wie ``mergeEinkaufslisten(_:context:)`` und aus demselben
+    /// Grund: Bereich-A-Events referenzieren einen ``Einkaufsvorgang`` über
+    /// seine ID, außerdem ist ein gemeinsamer Einkaufsvorgang (beide Geräte
+    /// kaufen gemeinsam im selben Laden ein) genau der Fall, in dem beide
+    /// Geräte über dieselbe Identität sprechen sollen. Ein bereits lokal
+    /// abgeschlossener Einkauf wird nie durch einen (älteren) Remote-Stand
+    /// wieder geöffnet — nur eine noch fehlende ``Einkaufsvorgang/endZeit``
+    /// wird nachgetragen.
+    @MainActor
+    private static func mergeEinkaufsvorgaenge(
+        _ remote: [EinkaufsvorgangSnapshot], geschaeftZuordnung: [UUID: Geschaeft], listeZuordnung: [UUID: Einkaufsliste],
+        context: ModelContext
+    ) -> [UUID: Einkaufsvorgang] {
+        var zuordnung: [UUID: Einkaufsvorgang] = [:]
+        let alleLokalen = (try? context.fetch(FetchDescriptor<Einkaufsvorgang>())) ?? []
+        for eintrag in remote {
+            if let vorhandener = alleLokalen.first(where: { $0.id == eintrag.id }) {
+                if vorhandener.endZeit == nil, let remoteEndZeit = eintrag.endZeit {
+                    vorhandener.endZeit = remoteEndZeit
+                }
+                zuordnung[eintrag.id] = vorhandener
+                continue
+            }
+            // Bewusst kein `abschliessen()` (würde zusätzlich
+            // `Geschaeft.anzahlEinkaufsvorgaenge` erhöhen — das übernimmt
+            // bereits die additive Zähler-Merge-Regel in ``mergeGeschaefte``,
+            // ein zweites Mal hier wäre Doppelzählung).
+            let neuer = Einkaufsvorgang(
+                geschaeft: eintrag.geschaeftID.flatMap { geschaeftZuordnung[$0] },
+                einkaufsliste: eintrag.einkaufslisteID.flatMap { listeZuordnung[$0] },
+                startZeit: eintrag.startZeit
+            )
+            neuer.id = eintrag.id
+            neuer.endZeit = eintrag.endZeit
+            context.insert(neuer)
+            zuordnung[eintrag.id] = neuer
+        }
+        return zuordnung
+    }
+
+    // MARK: - KaufEintrag (Bereich C)
+
+    /// Union nach `id` — ein ``KaufEintrag`` ist ein unveränderliches
+    /// historisches Ereignis, ein bereits lokal bekannter wird nie verändert,
+    /// ein fehlender einfach übernommen (Referenzen auf die per Bereich-B
+    /// gemergten lokalen Gegenstücke umgebogen).
+    @MainActor
+    private static func mergeKaufEintraege(
+        _ remote: [KaufEintragSnapshot], artikelZuordnung: [UUID: Artikel], einkaufsvorgangZuordnung: [UUID: Einkaufsvorgang],
+        geschaeftZuordnung: [UUID: Geschaeft], kategorieZuordnung: [UUID: ArtikelKategorie], context: ModelContext
+    ) {
+        let alleLokalen = (try? context.fetch(FetchDescriptor<KaufEintrag>())) ?? []
+        for eintrag in remote {
+            guard alleLokalen.first(where: { $0.id == eintrag.id }) == nil else { continue }
+            let neuer = KaufEintrag(
+                artikel: eintrag.artikelID.flatMap { artikelZuordnung[$0] },
+                geschaeft: eintrag.geschaeftID.flatMap { geschaeftZuordnung[$0] },
+                kategorie: eintrag.kategorieID.flatMap { kategorieZuordnung[$0] },
+                preis: eintrag.preis,
+                menge: eintrag.menge,
+                datum: eintrag.datum,
+                kategorieBesuchsIndex: eintrag.kategorieBesuchsIndex
+            )
+            neuer.id = eintrag.id
+            neuer.einkaufsvorgang = eintrag.einkaufsvorgangID.flatMap { einkaufsvorgangZuordnung[$0] }
+            // Original-Schnappschuss-Namen erhalten statt aus den (ggf. seither
+            // umbenannten) gemergten Objekten neu abzuleiten.
+            neuer.artikelNameSnapshot = eintrag.artikelNameSnapshot
+            neuer.geschaeftNameSnapshot = eintrag.geschaeftNameSnapshot
+            neuer.produktName = eintrag.produktName
+            neuer.alternativerName = eintrag.alternativerName
+            context.insert(neuer)
+        }
+    }
+
+    // MARK: - WarengruppenDistanz (Bereich D)
+
+    @MainActor
+    private static func mergeWarengruppenDistanzen(
+        _ remote: [WarengruppenDistanzSnapshot], geschaeftZuordnung: [UUID: Geschaeft], kategorieZuordnung: [UUID: ArtikelKategorie],
+        context: ModelContext
+    ) {
+        let alleLokalen = (try? context.fetch(FetchDescriptor<WarengruppenDistanz>())) ?? []
+        for eintrag in remote {
+            guard let kategorieA = kategorieZuordnung[eintrag.kategorieAID],
+                  let kategorieB = kategorieZuordnung[eintrag.kategorieBID]
+            else { continue }
+            let geschaeft = eintrag.geschaeftID.flatMap { geschaeftZuordnung[$0] }
+            let (kanonA, kanonB) = WarengruppenDistanz.kanonischesPaar(kategorieA, kategorieB)
+
+            if let vorhandener = alleLokalen.first(where: {
+                $0.geschaeft == geschaeft && $0.kategorieA == kanonA && $0.kategorieB == kanonB
+            }) {
+                vorhandener.distanz = (vorhandener.distanz + eintrag.distanz) / 2
+            } else {
+                let neuer = WarengruppenDistanz(geschaeft: geschaeft, kategorieA: kanonA, kategorieB: kanonB, distanz: eintrag.distanz)
+                context.insert(neuer)
+            }
+        }
     }
 }

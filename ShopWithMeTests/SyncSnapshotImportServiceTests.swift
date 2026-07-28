@@ -217,4 +217,174 @@ struct SyncSnapshotImportServiceTests {
         // Zwei verschiedene IDs -> bewusst zwei Listen, auch bei gleichem Namen.
         #expect(try context.fetch(FetchDescriptor<Einkaufsliste>()).count == 2)
     }
+
+    @Test
+    func einkaufsvorgangWirdPerIDUebernommenUndNieWiederGeoeffnet() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let typ = GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")
+        context.insert(typ)
+        let geschaeft = Geschaeft(name: "Rewe", typen: [typ])
+        context.insert(geschaeft)
+        let laufenderVorgang = Einkaufsvorgang(geschaeft: geschaeft)
+        context.insert(laufenderVorgang)
+        try context.save()
+
+        // Peer kennt denselben Einkaufsvorgang (ID-gleich, gemeinsamer Einkauf)
+        // und hat ihn bereits abgeschlossen.
+        let abschlusszeit = Date()
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.einkaufsvorgaenge = [
+            EinkaufsvorgangSnapshot(id: laufenderVorgang.id, geschaeftID: nil, einkaufslisteID: nil, startZeit: laufenderVorgang.startZeit, endZeit: abschlusszeit),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        #expect(try context.fetch(FetchDescriptor<Einkaufsvorgang>()).count == 1)
+        #expect(laufenderVorgang.endZeit == abschlusszeit)
+
+        // Ein zweiter, "älterer" Remote-Stand ohne endZeit darf den bereits
+        // abgeschlossenen Einkauf nicht wieder öffnen.
+        var aelterSnapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        aelterSnapshot.einkaufsvorgaenge = [
+            EinkaufsvorgangSnapshot(id: laufenderVorgang.id, geschaeftID: nil, einkaufslisteID: nil, startZeit: laufenderVorgang.startZeit, endZeit: nil),
+        ]
+        try schreibeFremdenSnapshot(aelterSnapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        #expect(laufenderVorgang.endZeit == abschlusszeit)
+    }
+
+    @Test
+    func neuerEinkaufsvorgangVomPeerErhoehtNichtZusaetzlichDenZaehler() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let typ = GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")
+        context.insert(typ)
+        let geschaeft = Geschaeft(name: "Rewe", typen: [typ])
+        context.insert(geschaeft)
+        try context.save()
+
+        let remoteGeschaeftID = UUID()
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.geschaefte = [
+            GeschaeftSnapshot(
+                id: remoteGeschaeftID, name: "Rewe", typIDs: [], adresse: nil, breitengrad: nil, laengengrad: nil,
+                erkennungsradius: nil, kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
+                ignorierteArtikelNamen: [], anzahlEinkaufsvorgaenge: 1, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
+            ),
+        ]
+        snapshot.einkaufsvorgaenge = [
+            EinkaufsvorgangSnapshot(id: UUID(), geschaeftID: remoteGeschaeftID, einkaufslisteID: nil, startZeit: Date(), endZeit: Date()),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        // Nur die additive Zähler-Merge-Regel (aus dem Geschaeft-Snapshot) darf
+        // den Zähler erhöhen, nicht zusätzlich das Anlegen des Einkaufsvorgangs.
+        #expect(geschaeft.anzahlEinkaufsvorgaenge == 1)
+        #expect(try context.fetch(FetchDescriptor<Einkaufsvorgang>()).count == 1)
+    }
+
+    @Test
+    func kaufEintragWirdAlsUnveraenderlicheHistorieUebernommenOhneDuplikat() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759")
+        context.insert(apfel)
+        try context.save()
+
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        // Ein realer Export enthält jeden referenzierten Artikel immer auch in
+        // Bereich B (SyncSnapshotExportService exportiert alle lokalen Artikel
+        // unbedingt) — für den Test hier explizit nachgebildet, damit
+        // artikelZuordnung den Verweis auflösen kann.
+        snapshot.artikel = [
+            ArtikelSnapshot(
+                id: apfel.id, name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759",
+                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+            ),
+        ]
+        let kaufEintragID = UUID()
+        snapshot.kaufEintraege = [
+            KaufEintragSnapshot(
+                id: kaufEintragID, artikelID: apfel.id, einkaufsvorgangID: nil, geschaeftID: nil, kategorieID: nil,
+                artikelNameSnapshot: "Apfel", geschaeftNameSnapshot: "", produktName: nil, alternativerName: nil,
+                datum: Date(), preis: 1.49, menge: 3, kategorieBesuchsIndex: nil
+            ),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+        await SyncSnapshotImportService.importiereSnapshots(context: context) // wiederholter Sync
+
+        let alleEintraege = try context.fetch(FetchDescriptor<KaufEintrag>())
+        #expect(alleEintraege.count == 1)
+        #expect(alleEintraege.first?.id == kaufEintragID)
+        #expect(alleEintraege.first?.artikel?.id == apfel.id)
+        #expect(alleEintraege.first?.preis == 1.49)
+    }
+
+    @Test
+    func warengruppenDistanzWirdGemitteltBeiVorhandenemEintragSonstUebernommen() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let typ = GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")
+        context.insert(typ)
+        let geschaeft = Geschaeft(name: "Rewe", typen: [typ])
+        context.insert(geschaeft)
+        let kategorieA = ArtikelKategorie(name: "Obst", standardSymbol: "carrot", standardFarbeHex: "#34C759")
+        let kategorieB = ArtikelKategorie(name: "Milchprodukte", standardSymbol: "drop", standardFarbeHex: "#007AFF")
+        context.insert(kategorieA)
+        context.insert(kategorieB)
+        // Wie im echten Code (WarengruppenDistanzService) immer über
+        // kanonischesPaar konstruieren, sonst kann die spätere Zuordnung im
+        // Merge (der ebenfalls kanonisiert) nicht zuverlässig matchen.
+        let (kanonA, kanonB) = WarengruppenDistanz.kanonischesPaar(kategorieA, kategorieB)
+        let bestehendeDistanz = WarengruppenDistanz(geschaeft: geschaeft, kategorieA: kanonA, kategorieB: kanonB, distanz: 0.2)
+        context.insert(bestehendeDistanz)
+        try context.save()
+
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.geschaeftsTypen = [GeschaeftTypSnapshot(id: UUID(), name: "Lebensmittel", symbolName: "cart.fill", farbeHex: "#8E8E93", sortIndex: 0)]
+        snapshot.artikelKategorien = [
+            ArtikelKategorieSnapshot(id: kategorieA.id, name: "Obst", standardSymbol: "carrot", standardFarbeHex: "#34C759", sortIndex: 0, geschaeftsTypIDs: []),
+            ArtikelKategorieSnapshot(id: kategorieB.id, name: "Milchprodukte", standardSymbol: "drop", standardFarbeHex: "#007AFF", sortIndex: 1, geschaeftsTypIDs: []),
+        ]
+        snapshot.geschaefte = [
+            GeschaeftSnapshot(
+                id: geschaeft.id, name: "Rewe", typIDs: [], adresse: nil, breitengrad: nil, laengengrad: nil,
+                erkennungsradius: nil, kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
+                ignorierteArtikelNamen: [], anzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
+            ),
+        ]
+        snapshot.warengruppenDistanzen = [
+            WarengruppenDistanzSnapshot(id: UUID(), geschaeftID: geschaeft.id, kategorieAID: kategorieA.id, kategorieBID: kategorieB.id, distanz: 0.8),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        let alleDistanzen = try context.fetch(FetchDescriptor<WarengruppenDistanz>())
+        #expect(alleDistanzen.count == 1)
+        #expect(alleDistanzen.first?.distanz == 0.5) // (0.2 + 0.8) / 2
+    }
 }
