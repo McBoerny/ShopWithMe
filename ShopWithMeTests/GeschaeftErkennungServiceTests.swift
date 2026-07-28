@@ -218,4 +218,44 @@ struct GeschaeftErkennungServiceTests {
 
         #expect(dedupliziert.count == 1)
     }
+
+    @Test
+    func erkenntGeschaeftNurMitVergroessertemIndividuellenRadius() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let geschaeft = Geschaeft(name: "Handelshof", typen: [lebensmittelTyp()])
+        geschaeft.breitengrad = 52.5
+        geschaeft.laengengrad = 13.4
+        context.insert(geschaeft)
+
+        // ~200m entfernt (Namen bewusst ohne jede Teilstring-Überschneidung, damit
+        // nur der Koordinatenabgleich greift) — außerhalb der globalen
+        // Standardtoleranz (75m), aber innerhalb eines individuell größeren Radius.
+        let treffer = mapItem(name: "Nordmarkt", latitude: 52.5018, longitude: 13.4)
+
+        #expect(GeschaeftErkennungService.istBekannterTreffer(geschaeft, fuer: treffer) == false)
+
+        geschaeft.erkennungsradius = 300
+        #expect(GeschaeftErkennungService.istBekannterTreffer(geschaeft, fuer: treffer) == true)
+    }
+
+    @Test
+    func effektiverSuchradiusErweitertSichAufGroesstenIndividuellenRadius() {
+        let a = Geschaeft(name: "A", typen: [lebensmittelTyp()])
+        let b = Geschaeft(name: "B", typen: [lebensmittelTyp()])
+        b.erkennungsradius = 400
+
+        let radius = GeschaeftErkennungService.effektiverSuchradius(basis: 150, vorhandeneGeschaefte: [a, b])
+
+        #expect(radius == 400)
+    }
+
+    @Test
+    func effektiverSuchradiusBleibtBeiBasisOhneIndividuelleRadien() {
+        let a = Geschaeft(name: "A", typen: [lebensmittelTyp()])
+
+        let radius = GeschaeftErkennungService.effektiverSuchradius(basis: 150, vorhandeneGeschaefte: [a])
+
+        #expect(radius == 150)
+    }
 }

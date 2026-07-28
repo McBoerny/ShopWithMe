@@ -36,9 +36,39 @@ diesem Checkpoint).
    statt `private` für direkte Testbarkeit ohne echtes CoreLocation/MapKit):
    sortiert Treffer nach Entfernung, prüft zuerst auf ein bereits bekanntes
    `Geschaeft` (`istBekannterTreffer`: Namensübereinstimmung ODER Koordinaten
-   innerhalb `koordinatenTreffertoleranz`, 75m — deckt eine spätere Umbenennung in der
-   App ab), sonst wird der nächstgelegene Treffer als `.unbekannt(MKMapItem)`
-   vorgeschlagen.
+   innerhalb der Trefftoleranz — Standard `koordinatenTreffertoleranz`, 75m, deckt
+   eine spätere Umbenennung in der App ab), sonst wird der nächstgelegene Treffer
+   als `.unbekannt(MKMapItem)` vorgeschlagen.
+
+## Individueller Erkennungsradius pro Geschäft
+
+**Status: Umgesetzt** (GitHub #41).
+
+Die feste 75m-Trefftoleranz passt nicht für jedes Geschäft — ein Baumarkt mit
+großem Parkplatz braucht einen größeren Radius, dicht benachbarte kleine Läden in
+einer Fußgängerzone eher einen kleineren, um Verwechslungen zu vermeiden.
+
+- `Geschaeft.erkennungsradius: Double` (additiv-optionaler Rohwert
+  `erkennungsradiusRaw`, Fallback auf `koordinatenTreffertoleranz`) ersetzt in
+  `istBekannterTreffer(_:fuer:)` die feste globale Toleranz für dieses eine
+  Geschäft — `istGleicherOrt(...)` bekam dafür einen `toleranz`-Parameter.
+- Einstellbar per Slider (20–500m) in `GeschaeftStammdatenEditView`, direkt unter
+  der Karte — ein `MapCircle`-Overlay zeichnet den gewählten Radius um den
+  Standort-Pin ein, die Kartenregion zoomt beim Verschieben des Sliders passend
+  mit (`kameraZentrieren(auf:radius:)`, mindestens das Dreifache des Radius als
+  Kantenlänge, sonst 500m).
+- **Wichtig — Suchradius muss mitwachsen:** `MKLocalPointsOfInterestRequest`
+  sucht nur innerhalb von `suchradius`/`alleInDerNaeheRadius` (150m/100m) um den
+  *aktuellen Standort* — ein größerer individueller Erkennungsradius eines
+  Geschäfts würde sonst wirkungslos bleiben, weil Apple Maps den betreffenden
+  Laden bei größerer Entfernung als der Suchradius gar nicht erst zurückliefert,
+  bevor `istBekannterTreffer` überhaupt geprüft werden kann.
+  `effektiverSuchradius(basis:vorhandeneGeschaefte:)` erweitert den Suchradius
+  deshalb vor jeder Anfrage auf `max(basis, größter individueller Radius unter
+  allen Geschäften)`.
+  Andere Aufrufer von `istGleicherOrt(...)` (`istSelberLaden`, `istIgnoriert`,
+  `ignorierteEintraege`) betreffen kein konkretes `Geschaeft` und bleiben beim
+  globalen Standardwert.
 
 ## UI-Fluss
 

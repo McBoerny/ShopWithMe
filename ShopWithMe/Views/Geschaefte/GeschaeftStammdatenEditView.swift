@@ -16,7 +16,9 @@ import CoreLocation
 /// Koordinaten, nur solange noch keine gesetzt sind — überschreibt keinen bereits
 /// manuell gesetzten Pin), oder direkt auf die Karte tippen, um den Pin exakt zu
 /// setzen (füllt die Adresse per Reverse-Geocoding nur nach, falls sie noch leer
-/// ist).
+/// ist). Ein Slider darunter setzt ``Geschaeft/erkennungsradius`` (GitHub #41,
+/// Grundlage für ``GeschaeftErkennungService/istBekannterTreffer(_:fuer:)``) —
+/// als `MapCircle` direkt auf der Karte eingezeichnet.
 struct GeschaeftStammdatenEditView: View {
     @Bindable var geschaeft: Geschaeft
     let istNeu: Bool
@@ -30,6 +32,12 @@ struct GeschaeftStammdatenEditView: View {
     @Query(sort: \GeschaeftTyp.sortIndex) private var alleTypen: [GeschaeftTyp]
     @State private var standortWirdErmittelt = false
     @State private var zeigeNeuerTyp = false
+    /// Gebunden statt `initialPosition`, damit die Kartenregion sowohl beim
+    /// Verschieben des Pins als auch beim Ändern von
+    /// ``Geschaeft/erkennungsradius`` (GitHub #41, Slider unten) neu zentriert
+    /// werden kann — `initialPosition` wird von MapKit nur beim allerersten
+    /// Erscheinen der Karte ausgewertet, nicht bei späteren Änderungen.
+    @State private var kameraPosition: MapCameraPosition = .automatic
 
     var body: some View {
         if istNeu {
@@ -95,14 +103,11 @@ struct GeschaeftStammdatenEditView: View {
                 Section {
                     if let koordinate = geschaeft.koordinate {
                         MapReader { proxy in
-                            Map(initialPosition: .region(
-                                MKCoordinateRegion(
-                                    center: koordinate,
-                                    latitudinalMeters: 500,
-                                    longitudinalMeters: 500
-                                )
-                            )) {
+                            Map(position: $kameraPosition) {
                                 Marker(geschaeft.name.isEmpty ? "Geschäft" : geschaeft.name, coordinate: koordinate)
+                                MapCircle(center: koordinate, radius: geschaeft.erkennungsradius)
+                                    .foregroundStyle(Color.accentColor.opacity(0.15))
+                                    .stroke(Color.accentColor, lineWidth: 1)
                             }
                             .frame(height: 200)
                             .onTapGesture { bildschirmPunkt in
@@ -111,6 +116,24 @@ struct GeschaeftStammdatenEditView: View {
                             }
                         }
                         .listRowInsets(EdgeInsets())
+                        .onAppear { kameraZentrieren(auf: koordinate, radius: geschaeft.erkennungsradius) }
+                        // CLLocationCoordinate2D ist nicht Equatable — Breiten-/
+                        // Längengrad einzeln beobachten statt der Koordinate als
+                        // Ganzes.
+                        .onChange(of: koordinate.latitude) { _, _ in
+                            kameraZentrieren(auf: koordinate, radius: geschaeft.erkennungsradius)
+                        }
+                        .onChange(of: koordinate.longitude) { _, _ in
+                            kameraZentrieren(auf: koordinate, radius: geschaeft.erkennungsradius)
+                        }
+                        .onChange(of: geschaeft.erkennungsradius) { _, neuerRadius in
+                            kameraZentrieren(auf: koordinate, radius: neuerRadius)
+                        }
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Erkennungsradius: \(Int(geschaeft.erkennungsradius)) m")
+                            Slider(value: $geschaeft.erkennungsradius, in: 20...500, step: 10)
+                        }
                     }
 
                     Button {
@@ -128,7 +151,7 @@ struct GeschaeftStammdatenEditView: View {
                 } footer: {
                     Text(geschaeft.koordinate == nil
                          ? "Adresse eingeben und bestätigen oder den aktuellen Standort verwenden, um die Karte zu sehen."
-                         : "Tippe auf die Karte, um den Standort-Pin exakt zu setzen.")
+                         : "Tippe auf die Karte, um den Standort-Pin exakt zu setzen. Der eingezeichnete Kreis zeigt den Umkreis, innerhalb dessen die App dieses Geschäft automatisch erkennt — bei einem großen Gelände (z.B. Baumarkt) größer wählen, bei dicht benachbarten Geschäften kleiner.")
                 }
 
                 if !istNeu {
@@ -183,6 +206,16 @@ struct GeschaeftStammdatenEditView: View {
             aktuelle.append(typ)
         }
         geschaeft.typen = aktuelle
+    }
+
+    /// Zentriert ``kameraPosition`` auf `koordinate` mit einer Kartenregion, die
+    /// groß genug ist, um den ``MapCircle`` mit `radius` vollständig zu zeigen
+    /// (GitHub #41) — mindestens 500m Kantenlänge, sonst das Dreifache des
+    /// Radius, damit auch ein großzügig gewählter Erkennungsradius nicht über
+    /// den sichtbaren Kartenausschnitt hinausragt.
+    private func kameraZentrieren(auf koordinate: CLLocationCoordinate2D, radius: Double) {
+        let spanne = max(500, radius * 3)
+        kameraPosition = .region(MKCoordinateRegion(center: koordinate, latitudinalMeters: spanne, longitudinalMeters: spanne))
     }
 
     /// Setzt den Standort-Pin auf `koordinate` und trägt — nur falls noch keine

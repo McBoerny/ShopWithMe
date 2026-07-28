@@ -45,6 +45,22 @@ final class Geschaeft {
     var breitengrad: Double?
     /// Längengrad — siehe ``breitengrad``.
     var laengengrad: Double?
+    /// Rohspeicher für ``erkennungsradius`` — additiv optional, `nil` solange
+    /// nicht individuell gesetzt (dann gilt
+    /// ``GeschaeftErkennungService/koordinatenTreffertoleranz`` als Standard).
+    /// Bewusst nicht `private`, damit ``GeschaeftErkennungService`` den größten
+    /// individuellen Radius unter allen Geschäften ermitteln kann (siehe dort,
+    /// „effektiver Suchradius“).
+    var erkennungsradiusRaw: Double?
+    /// Individueller Umkreis (in Metern) um ``koordinate``, innerhalb dessen ein
+    /// Apple-Maps-Treffer als dieses Geschäft erkannt wird (GitHub #41) — z.B.
+    /// größer für einen Baumarkt mit großem Parkplatz, kleiner für einen
+    /// einzelnen Laden in einer Fußgängerzone mit dicht benachbarten Geschäften.
+    /// Fällt ohne explizite Wahl auf den globalen Standard zurück.
+    var erkennungsradius: Double {
+        get { erkennungsradiusRaw ?? GeschaeftErkennungService.koordinatenTreffertoleranz }
+        set { erkennungsradiusRaw = newValue }
+    }
     /// Artikelkategorien, die diesem Geschäft zugeordnet sind — der einzige Weg,
     /// eine Kategorie in einem Geschäft verfügbar zu machen (siehe
     /// ``verfuegbareKategorien``).

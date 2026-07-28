@@ -120,9 +120,20 @@ enum GeschaeftErkennungService {
         ignorierteVorschlaege: [IgnorierterGeschaeftsVorschlag] = []
     ) async -> GeschaeftVorschlag? {
         guard let standort = await EinmaligerStandortAbruf().standortErmitteln() else { return nil }
-        guard let treffer = try? await nahegelegeneLaeden(bei: standort, radius: suchradius), !treffer.isEmpty else { return nil }
+        let radius = effektiverSuchradius(basis: suchradius, vorhandeneGeschaefte: vorhandeneGeschaefte)
+        guard let treffer = try? await nahegelegeneLaeden(bei: standort, radius: radius), !treffer.isEmpty else { return nil }
         let relevante = treffer.filter { !istIgnoriert($0, ignorierte: ignorierteVorschlaege) }
         return passendenVorschlag(aus: relevante, standort: standort, vorhandeneGeschaefte: vorhandeneGeschaefte)
+    }
+
+    /// Erweitert `basis` (den globalen Standard-Suchradius) auf den größten unter
+    /// `vorhandeneGeschaefte` individuell gesetzten ``Geschaeft/erkennungsradius``
+    /// (GitHub #41) — sonst würde ein größerer individueller Radius wirkungslos
+    /// bleiben, weil `MKLocalPointsOfInterestRequest` den betreffenden Laden bei
+    /// größerer Entfernung als `basis` gar nicht erst zurückliefert, bevor
+    /// ``istBekannterTreffer(_:fuer:)`` überhaupt geprüft werden kann.
+    static func effektiverSuchradius(basis: CLLocationDistance, vorhandeneGeschaefte: [Geschaeft]) -> CLLocationDistance {
+        max(basis, vorhandeneGeschaefte.compactMap(\.erkennungsradiusRaw).max() ?? 0)
     }
 
     /// Sucht (unabhängig vom automatischen Einzelvorschlag) alle Läden im engeren
@@ -138,7 +149,8 @@ enum GeschaeftErkennungService {
         ignorierteVorschlaege: [IgnorierterGeschaeftsVorschlag]
     ) async -> [GeschaeftInDerNaeheEintrag]? {
         guard let standort = await EinmaligerStandortAbruf().standortErmitteln() else { return nil }
-        guard let treffer = try? await nahegelegeneLaeden(bei: standort, radius: alleInDerNaeheRadius) else { return nil }
+        let radius = effektiverSuchradius(basis: alleInDerNaeheRadius, vorhandeneGeschaefte: vorhandeneGeschaefte)
+        guard let treffer = try? await nahegelegeneLaeden(bei: standort, radius: radius) else { return nil }
         let sortiert = treffer.sorted { entfernung(zu: $0, von: standort) < entfernung(zu: $1, von: standort) }
         let eintraege = sortiert.map { item -> GeschaeftInDerNaeheEintrag in
             let vorschlag: GeschaeftVorschlag
@@ -183,20 +195,23 @@ enum GeschaeftErkennungService {
     /// ``istSelberLaden(_:_:)`` und ``ignorierteEintraege(fuer:in:)`` gemeinsam
     /// nutzen: Namensübereinstimmung (exakt ODER Teilstring in beide Richtungen —
     /// deckt Kurzformen wie Apple-Maps-„REWE“ vs. selbst vergebenem „Rewe am Markt“
-    /// ab) ODER Koordinaten innerhalb ``koordinatenTreffertoleranz``, falls für beide
-    /// Seiten vorhanden.
+    /// ab) ODER Koordinaten innerhalb `toleranz`, falls für beide Seiten vorhanden.
+    /// `toleranz` ist standardmäßig ``koordinatenTreffertoleranz``, aber für ein
+    /// konkretes ``Geschaeft`` mit individuellem ``Geschaeft/erkennungsradius``
+    /// überschreibbar (siehe ``istBekannterTreffer(_:fuer:)``, GitHub #41).
     private static func istGleicherOrt(
         nameA: String,
         koordinatenA: (breitengrad: Double, laengengrad: Double)?,
         nameB: String,
-        koordinatenB: (breitengrad: Double, laengengrad: Double)?
+        koordinatenB: (breitengrad: Double, laengengrad: Double)?,
+        toleranz: CLLocationDistance = koordinatenTreffertoleranz
     ) -> Bool {
         if nameA.localizedCaseInsensitiveCompare(nameB) == .orderedSame { return true }
         if nameA.localizedCaseInsensitiveContains(nameB) || nameB.localizedCaseInsensitiveContains(nameA) { return true }
         if let koordinatenA, let koordinatenB {
             let ortA = CLLocation(latitude: koordinatenA.breitengrad, longitude: koordinatenA.laengengrad)
             let ortB = CLLocation(latitude: koordinatenB.breitengrad, longitude: koordinatenB.laengengrad)
-            return ortA.distance(from: ortB) < koordinatenTreffertoleranz
+            return ortA.distance(from: ortB) < toleranz
         }
         return false
     }
@@ -320,7 +335,8 @@ enum GeschaeftErkennungService {
     static func istBekannterTreffer(_ geschaeft: Geschaeft, fuer item: MKMapItem) -> Bool {
         istGleicherOrt(
             nameA: geschaeft.name, koordinatenA: koordinatenPaar(geschaeft.breitengrad, geschaeft.laengengrad),
-            nameB: item.name ?? "", koordinatenB: koordinaten(fuer: item)
+            nameB: item.name ?? "", koordinatenB: koordinaten(fuer: item),
+            toleranz: geschaeft.erkennungsradius
         )
     }
 

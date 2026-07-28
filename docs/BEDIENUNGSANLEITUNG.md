@@ -65,6 +65,13 @@ Standort verwenden“ Adresse und Koordinaten direkt aus deinem GPS-Standort, od
 du tippst eine Adresse ein und bestätigst mit der Eingabetaste — die Koordinaten
 werden dann automatisch ermittelt, solange noch kein Standort gesetzt ist.
 
+**Erkennungsradius:** Unter der Karte legt ein Schieberegler (20–500m) fest, in
+welchem Umkreis um den Standort-Pin die App dieses Geschäft automatisch erkennt
+— als Kreis direkt auf der Karte eingezeichnet, der sich beim Verschieben live
+mitanpasst. Standardmäßig 75m; bei einem großen Gelände (z.B. Baumarkt mit
+großem Parkplatz) lohnt sich ein größerer Radius, bei mehreren dicht benachbarten
+Geschäften ein kleinerer, um Verwechslungen zu vermeiden.
+
 **Favoriten:** Sowohl in der Geschäfte-Übersicht (Einstellungen) als auch in der
 Geschäftsauswahl beim Einkaufen erscheinen deine meistgenutzten Geschäfte vorab in
 einer eigenen „Favoriten“-Sektion — ermittelt aus abgeschlossenen Einkäufen

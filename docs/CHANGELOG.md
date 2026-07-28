@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.7 (Build 101) — Individueller Erkennungsradius pro Geschäft (GitHub #41)
+
+- Neues additiv-optionales `Geschaeft.erkennungsradius` (Fallback: der bisherige
+  globale Standard `GeschaeftErkennungService.koordinatenTreffertoleranz`, 75m)
+  ersetzt für `istBekannterTreffer(_:fuer:)` die feste globale Trefftoleranz —
+  einstellbar per Slider (20–500m) in `GeschaeftStammdatenEditView`, direkt unter
+  der Karte, mit einem `MapCircle`-Overlay, das den Radius am Standort-Pin
+  einzeichnet und sich beim Verschieben des Sliders live mit der Kartenregion
+  mitzoomt.
+- `effektiverSuchradius(basis:vorhandeneGeschaefte:)`: der eigentliche Apple-Maps-
+  Suchradius (`suchradius`/`alleInDerNaeheRadius`) wächst jetzt automatisch auf
+  den größten individuell konfigurierten Erkennungsradius mit — sonst würde ein
+  größerer individueller Radius wirkungslos bleiben, weil `MKLocalPointsOfInterestRequest`
+  den betreffenden Laden bei größerer Entfernung als der (bisher festen)
+  Suchradius-Grenze gar nicht erst zurückliefert.
+- Details in `docs/GESCHAEFTSERKENNUNG.md` → „Individueller Erkennungsradius pro
+  Geschäft".
+
 ## v0.7 (Build 99) — Geschäft-Detail/-typ-Kategorien, Umlaut-Sortierung, Tap-Flächen (GitHub #34, #37, #38, #40)
 
 - **Umlaut-Sortierung (GitHub #34):** Neue `String`-Extension
