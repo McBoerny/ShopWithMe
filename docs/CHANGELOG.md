@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.7 (Build 121) — Fix: wiederkehrender Absturz beim App-Start durch baumelnde Fremdreferenzen
+
+- Behoben: Der erste Fix (siehe unten, "Absturz bei veralteter Geschäft-Referenz
+  nach Standorterkennung") beseitigte nicht die eigentliche Ursache eines
+  wiederkehrenden Absturzes direkt beim App-Start (immer derselbe
+  `PersistentIdentifier`, `Geschaeft/p9`) — die tatsächliche Ursache waren acht
+  Relationship-Eigenschaften im Datenmodell ohne `@Relationship(inverse:)`, die
+  SwiftData beim Löschen des referenzierten Objekts nicht zuverlässig
+  nullifizieren/kaskadieren ließ. Dadurch blieben "baumelnde" Referenzen auf
+  bereits gelöschte Datensätze im Store liegen; `SyncSnapshotExportService`,
+  das bei jedem App-Start sofort läuft, griff ungeschützt auf `.id` dieser
+  Referenzen zu und crashte. Fix: alle acht fehlenden `inverse:`-Deklarationen
+  ergänzt (verhindert künftige Korruption) sowie `SyncSnapshotExportService.erstelleSnapshot`
+  gegen bereits bestehende baumelnde Referenzen abgesichert (degradiert zu
+  `nil`/übersprungen statt Absturz, protokolliert über den neuen
+  `SyncDebugLogger`-Eventtyp `sync_baumelnde_referenz_gefunden`). Details in
+  `docs/DATABASE_CONCURRENCY.md`, Abschnitt „Behobener Absturz: fehlende
+  `inverse`-Deklarationen führen zu baumelnden Referenzen".
+
 ## v0.7 (Build 119) — Fix: Absturz bei veralteter Geschäft-Referenz nach Standorterkennung
 
 - Behoben: Die automatische Standort-Ladenerkennung

@@ -34,6 +34,32 @@ final class ArtikelKategorie {
     /// Geschäfte, in denen diese Kategorie verfügbar ist — siehe
     /// ``Geschaeft/kategorien``.
     var geschaefte: [Geschaeft] = []
+    /// Geschäfte, die diese Kategorie individuell ausgeschlossen haben —
+    /// inverse zu ``Geschaeft/ausgeschlosseneKategorien``. Ohne diese
+    /// `inverse`-Deklaration bliebe der Ausschluss-Eintrag beim Löschen der
+    /// Kategorie eine "baumelnde" Referenz (Absturzrisiko wie bei
+    /// ``Geschaeft/einkaufsvorgaenge`` beschrieben) statt automatisch aus dem
+    /// Array entfernt zu werden.
+    @Relationship(inverse: \Geschaeft.ausgeschlosseneKategorien)
+    var geschaefteMitAusschluss: [Geschaeft] = []
+
+    /// Kaufeinträge, deren Kategorie-Schnappschuss auf diese Kategorie
+    /// verweist — inverse zu ``KaufEintrag/kategorie``. Nullify: die
+    /// Kaufhistorie bleibt bestehen, auch wenn die Kategorie später gelöscht
+    /// wird (Absturzrisiko ohne diese `inverse`-Deklaration wie bei
+    /// ``Geschaeft/einkaufsvorgaenge`` beschrieben).
+    @Relationship(deleteRule: .nullify, inverse: \KaufEintrag.kategorie)
+    var kaufEintraege: [KaufEintrag] = []
+    /// Gelernte Warengruppen-Distanzen, an denen diese Kategorie als "erste"
+    /// Seite beteiligt ist — inverse zu ``WarengruppenDistanz/kategorieA``.
+    /// Kaskadierend: ohne die Kategorie ist der Distanz-Eintrag bedeutungslos.
+    @Relationship(deleteRule: .cascade, inverse: \WarengruppenDistanz.kategorieA)
+    var distanzenAlsKategorieA: [WarengruppenDistanz] = []
+    /// Wie ``distanzenAlsKategorieA``, für die "zweite" Seite
+    /// (``WarengruppenDistanz/kategorieB``) — zwei getrennte Inverse-Arrays,
+    /// da es sich um zwei unabhängige Relationship-Kanten handelt.
+    @Relationship(deleteRule: .cascade, inverse: \WarengruppenDistanz.kategorieB)
+    var distanzenAlsKategorieB: [WarengruppenDistanz] = []
 
     /// Rohwert für ``geschaeftsTypen`` von vor Einführung von ``GeschaeftTyp`` als
     /// eigenständigem SwiftData-Modell (GitHub #25) — enum-Rohwerte wie

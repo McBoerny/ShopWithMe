@@ -9,6 +9,19 @@ import SwiftData
 /// Neuaufbau — welcher Zeitpunkt dafür sinnvoll ist (Konsolidierung/adaptives
 /// Polling), entscheidet erst Phase 4; hier wird bei jedem Aufruf unbedingt
 /// geschrieben. Reines Schreiben — Lesen fremder Snapshots ist Phase 3.
+/// Modelle mit einer stabilen `UUID`-`id` — Voraussetzung für die
+/// `sichereID`/`sichereIDs`-Absicherung in ``SyncSnapshotExportService``
+/// gegen bereits "baumelnde" Referenzen auf gelöschte Objekte.
+private protocol SyncSnapshotIdentifizierbar: PersistentModel {
+    var id: UUID { get }
+}
+extension Geschaeft: SyncSnapshotIdentifizierbar {}
+extension GeschaeftTyp: SyncSnapshotIdentifizierbar {}
+extension ArtikelKategorie: SyncSnapshotIdentifizierbar {}
+extension Artikel: SyncSnapshotIdentifizierbar {}
+extension Einkaufsliste: SyncSnapshotIdentifizierbar {}
+extension Einkaufsvorgang: SyncSnapshotIdentifizierbar {}
+
 enum SyncSnapshotExportService {
     private static let dateiName = "export.json"
 
@@ -53,32 +66,38 @@ enum SyncSnapshotExportService {
 
     @MainActor
     static func erstelleSnapshot(context: ModelContext) -> SyncSnapshot {
-        let geschaeftsTypen = ((try? context.fetch(FetchDescriptor<GeschaeftTyp>())) ?? []).map {
+        let alleGeschaeftsTypen = (try? context.fetch(FetchDescriptor<GeschaeftTyp>())) ?? []
+        let gueltigeGeschaeftsTypIDs = Set(alleGeschaeftsTypen.map(\.persistentModelID))
+        let geschaeftsTypen = alleGeschaeftsTypen.map {
             GeschaeftTypSnapshot(id: $0.id, name: $0.name, symbolName: $0.symbolName, farbeHex: $0.farbeHex, sortIndex: $0.sortIndex)
         }
 
-        let artikelKategorien = ((try? context.fetch(FetchDescriptor<ArtikelKategorie>())) ?? []).map {
+        let alleArtikelKategorien = (try? context.fetch(FetchDescriptor<ArtikelKategorie>())) ?? []
+        let gueltigeKategorieIDs = Set(alleArtikelKategorien.map(\.persistentModelID))
+        let artikelKategorien = alleArtikelKategorien.map {
             ArtikelKategorieSnapshot(
                 id: $0.id,
                 name: $0.name,
                 standardSymbol: $0.standardSymbol,
                 standardFarbeHex: $0.standardFarbeHex,
                 sortIndex: $0.sortIndex,
-                geschaeftsTypIDs: $0.geschaeftsTypen.map(\.id)
+                geschaeftsTypIDs: sichereIDs($0.geschaeftsTypen, gueltigeIDs: gueltigeGeschaeftsTypIDs)
             )
         }
 
-        let geschaefte = ((try? context.fetch(FetchDescriptor<Geschaeft>())) ?? []).map { geschaeft in
+        let alleGeschaefte = (try? context.fetch(FetchDescriptor<Geschaeft>())) ?? []
+        let gueltigeGeschaeftIDs = Set(alleGeschaefte.map(\.persistentModelID))
+        let geschaefte = alleGeschaefte.map { geschaeft in
             GeschaeftSnapshot(
                 id: geschaeft.id,
                 name: geschaeft.name,
-                typIDs: geschaeft.typen.map(\.id),
+                typIDs: sichereIDs(geschaeft.typen, gueltigeIDs: gueltigeGeschaeftsTypIDs),
                 adresse: geschaeft.adresse,
                 breitengrad: geschaeft.breitengrad,
                 laengengrad: geschaeft.laengengrad,
                 erkennungsradius: geschaeft.erkennungsradiusRaw,
-                kategorieIDs: geschaeft.kategorien.map(\.id),
-                ausgeschlosseneKategorieIDs: geschaeft.ausgeschlosseneKategorien.map(\.id),
+                kategorieIDs: sichereIDs(geschaeft.kategorien, gueltigeIDs: gueltigeKategorieIDs),
+                ausgeschlosseneKategorieIDs: sichereIDs(geschaeft.ausgeschlosseneKategorien, gueltigeIDs: gueltigeKategorieIDs),
                 alternativeNamen: geschaeft.alternativeNamen,
                 ignorierteArtikelNamen: geschaeft.ignorierteArtikel.map(\.erkannterName),
                 anzahlEinkaufsvorgaenge: geschaeft.anzahlEinkaufsvorgaenge,
@@ -87,10 +106,12 @@ enum SyncSnapshotExportService {
             )
         }
 
-        let artikel = ((try? context.fetch(FetchDescriptor<Artikel>())) ?? []).map { artikel in
+        let alleArtikel = (try? context.fetch(FetchDescriptor<Artikel>())) ?? []
+        let gueltigeArtikelIDs = Set(alleArtikel.map(\.persistentModelID))
+        let artikel = alleArtikel.map { artikel -> ArtikelSnapshot in
             let kategorieIDs = artikel.kategorien.isEmpty
-                ? (artikel.kategorie.map { [$0.id] } ?? [])
-                : artikel.kategorien.map(\.id)
+                ? sichereIDs(artikel.kategorie.map { [$0] } ?? [], gueltigeIDs: gueltigeKategorieIDs)
+                : sichereIDs(artikel.kategorien, gueltigeIDs: gueltigeKategorieIDs)
             return ArtikelSnapshot(
                 id: artikel.id,
                 name: artikel.name,
@@ -107,24 +128,26 @@ enum SyncSnapshotExportService {
         let einkaufslisten = ((try? context.fetch(FetchDescriptor<Einkaufsliste>())) ?? []).map {
             EinkaufslisteSnapshot(id: $0.id, name: $0.name, erstelltAm: $0.erstelltAm)
         }
+        let gueltigeEinkaufslistenIDs = Set((try? context.fetch(FetchDescriptor<Einkaufsliste>()))?.map(\.persistentModelID) ?? [])
 
         let einkaufsvorgaenge = ((try? context.fetch(FetchDescriptor<Einkaufsvorgang>())) ?? []).map {
             EinkaufsvorgangSnapshot(
                 id: $0.id,
-                geschaeftID: $0.geschaeft?.id,
-                einkaufslisteID: $0.einkaufsliste?.id,
+                geschaeftID: sichereID($0.geschaeft, gueltigeIDs: gueltigeGeschaeftIDs),
+                einkaufslisteID: sichereID($0.einkaufsliste, gueltigeIDs: gueltigeEinkaufslistenIDs),
                 startZeit: $0.startZeit,
                 endZeit: $0.endZeit
             )
         }
+        let gueltigeEinkaufsvorgangIDs = Set((try? context.fetch(FetchDescriptor<Einkaufsvorgang>()))?.map(\.persistentModelID) ?? [])
 
         let kaufEintraege = ((try? context.fetch(FetchDescriptor<KaufEintrag>())) ?? []).map {
             KaufEintragSnapshot(
                 id: $0.id,
-                artikelID: $0.artikel?.id,
-                einkaufsvorgangID: $0.einkaufsvorgang?.id,
-                geschaeftID: $0.geschaeft?.id,
-                kategorieID: $0.kategorie?.id,
+                artikelID: sichereID($0.artikel, gueltigeIDs: gueltigeArtikelIDs),
+                einkaufsvorgangID: sichereID($0.einkaufsvorgang, gueltigeIDs: gueltigeEinkaufsvorgangIDs),
+                geschaeftID: sichereID($0.geschaeft, gueltigeIDs: gueltigeGeschaeftIDs),
+                kategorieID: sichereID($0.kategorie, gueltigeIDs: gueltigeKategorieIDs),
                 artikelNameSnapshot: $0.artikelNameSnapshot,
                 geschaeftNameSnapshot: $0.geschaeftNameSnapshot,
                 produktName: $0.produktName,
@@ -138,12 +161,14 @@ enum SyncSnapshotExportService {
 
         let warengruppenDistanzen = ((try? context.fetch(FetchDescriptor<WarengruppenDistanz>())) ?? [])
             .compactMap { distanz -> WarengruppenDistanzSnapshot? in
-                guard let kategorieA = distanz.kategorieA, let kategorieB = distanz.kategorieB else { return nil }
+                guard let kategorieAID = sichereID(distanz.kategorieA, gueltigeIDs: gueltigeKategorieIDs),
+                      let kategorieBID = sichereID(distanz.kategorieB, gueltigeIDs: gueltigeKategorieIDs)
+                else { return nil }
                 return WarengruppenDistanzSnapshot(
                     id: distanz.id,
-                    geschaeftID: distanz.geschaeft?.id,
-                    kategorieAID: kategorieA.id,
-                    kategorieBID: kategorieB.id,
+                    geschaeftID: sichereID(distanz.geschaeft, gueltigeIDs: gueltigeGeschaeftIDs),
+                    kategorieAID: kategorieAID,
+                    kategorieBID: kategorieBID,
                     distanz: distanz.distanz
                 )
             }
@@ -162,6 +187,28 @@ enum SyncSnapshotExportService {
             kaufEintraege: kaufEintraege,
             warengruppenDistanzen: warengruppenDistanzen
         )
+    }
+
+    /// Liefert die `id` von `objekt`, aber nur, falls es tatsächlich in
+    /// `gueltigeIDs` enthalten ist. Schützt vor bereits (durch fehlende
+    /// `inverse`-Deklarationen, siehe ``Geschaeft/einkaufsvorgaenge``)
+    /// "baumelnden" Referenzen auf gelöschte Objekte: `persistentModelID` ist
+    /// reines Identitäts-Metadatum und daher auch auf einer baumelnden
+    /// Referenz sicher lesbar, während der Zugriff auf `id` (oder jede andere
+    /// Eigenschaft) in diesem Fall mit einem SwiftData-Fatal-Error abstürzt.
+    private static func sichereID<T: SyncSnapshotIdentifizierbar>(_ objekt: T?, gueltigeIDs: Set<PersistentIdentifier>) -> UUID? {
+        guard let objekt else { return nil }
+        guard gueltigeIDs.contains(objekt.persistentModelID) else {
+            SyncDebugLogger.log(.baumelndeReferenzGefunden, details: "typ=\(T.self) referenz=\(objekt.persistentModelID)")
+            return nil
+        }
+        return objekt.id
+    }
+
+    /// Wie ``sichereID(_:gueltigeIDs:)``, für Arrays — verwaiste Einträge
+    /// werden stillschweigend herausgefiltert statt die App abstürzen zu lassen.
+    private static func sichereIDs<T: SyncSnapshotIdentifizierbar>(_ objekte: [T], gueltigeIDs: Set<PersistentIdentifier>) -> [UUID] {
+        objekte.compactMap { sichereID($0, gueltigeIDs: gueltigeIDs) }
     }
 
     /// Schreibt über `NSFileCoordinator`, damit File-Provider-Erweiterungen von

@@ -153,7 +153,11 @@ den Optimierungszweck nötig zu sein.
 — Differenz zwischen jetzt und dem Erzeugungszeitpunkt auf dem
 Herkunftsgerät, nur für tatsächlich neu angewendete Updates, nicht für
 Verlierer im Konfliktfall), `sync_ordner_zugriff_fehlgeschlagen` (Details:
-welche Funktion), `debug_mode_{enabled,disabled}`.
+welche Funktion), `sync_baumelnde_referenz_gefunden` (Details: Modelltyp +
+`PersistentIdentifier` — siehe `docs/DATABASE_CONCURRENCY.md`, Abschnitt
+„Behobener Absturz: fehlende `inverse`-Deklarationen führen zu baumelnden
+Referenzen"; markiert eine bereits vor diesem Fix entstandene, still
+ignorierte Fremdreferenz beim Snapshot-Export), `debug_mode_{enabled,disabled}`.
 
 **Bewusste Wiederverwendung von `wallClock`/`erzeugtAm` für die
 Latenzmessung:** Diese Felder sind in `SyncEvent`/`SyncSnapshot` als „nur

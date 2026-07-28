@@ -32,6 +32,7 @@ enum SyncDebugLogger {
         case eventEmpfangen = "sync_event_empfangen"
         case snapshotEmpfangen = "sync_snapshot_empfangen"
         case ordnerZugriffFehlgeschlagen = "sync_ordner_zugriff_fehlgeschlagen"
+        case baumelndeReferenzGefunden = "sync_baumelnde_referenz_gefunden"
         case debugModeEnabled = "debug_mode_enabled"
         case debugModeDisabled = "debug_mode_disabled"
     }

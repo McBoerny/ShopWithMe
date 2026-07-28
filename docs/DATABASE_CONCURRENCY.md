@@ -368,6 +368,60 @@ Zukunft bleiben, kein Server/CloudKit jetzt):
 - Eigener Backend-Server (REST/GraphQL + z.B. PostgreSQL).
 - Backend-as-a-Service (z.B. Firebase/Supabase).
 
+## Behobener Absturz: fehlende `inverse`-Deklarationen führen zu baumelnden Referenzen
+
+Wiederkehrender Absturz direkt beim App-Start: `SwiftData/BackingData.swift:1039:
+Fatal error: This model instance was invalidated because its backing data could
+no longer be found in the store`, ausgelöst beim Zugriff auf `Geschaeft.id` in
+`SyncSnapshotExportService.erstelleSnapshot`. Auffällig: derselbe
+`PersistentIdentifier` (`Geschaeft/p9`) trat über mehrere Launches und
+App-Versionen hinweg unverändert wieder auf — ein Hinweis darauf, dass es sich
+nicht um eine flüchtige Race (siehe `GeschaeftErkennungService`-Fix in
+`docs/GESCHAEFTSERKENNUNG.md`), sondern um **bereits dauerhaft im Store
+gespeicherte, kaputte Daten** handelte.
+
+**Ursache:** Acht Relationship-Eigenschaften im Datenmodell hatten keine
+`@Relationship(inverse:)`-Deklaration auf der Gegenseite:
+`Einkaufsvorgang.geschaeft`, `Einkaufsvorgang.einkaufsliste`,
+`KaufEintrag.artikel`, `KaufEintrag.kategorie`, `WarengruppenDistanz.geschaeft`,
+`WarengruppenDistanz.kategorieA`, `WarengruppenDistanz.kategorieB` und
+`Geschaeft.ausgeschlosseneKategorien`. Ohne diese Deklaration entfernt/nullifiziert
+SwiftData eine solche Relationship beim Löschen des referenzierten Objekts
+**nicht zuverlässig** — die Referenz bleibt als "baumelnder" Verweis auf eine
+nicht mehr existierende Store-Zeile bestehen. Jeder spätere Zugriff auf eine
+Eigenschaft dieser Referenz (auch nur `.id`) stürzt dann mit dem oben genannten
+Fatal Error ab; das Lesen der Relationship-Referenz selbst (z.B. `vorgang.geschaeft`)
+ist dagegen unauffällig, da SwiftData sie zunächst nur als Fault-Proxy liefert.
+
+**Fix, zweistufig:**
+
+1. **Zukünftige Korruption verhindern:** Alle acht fehlenden `inverse:`-Paare in
+   `Geschaeft.swift`, `Einkaufsliste.swift`, `Artikel.swift` und
+   `ArtikelKategorie.swift` ergänzt, jeweils mit passendem `deleteRule`
+   (`.nullify`, wo die referenzierende Historie erhalten bleiben soll, z.B.
+   `Einkaufsvorgang` nach Löschen seines `Geschaeft`s; `.cascade`, wo der
+   referenzierende Datensatz ohne sein Ziel bedeutungslos wird, z.B.
+   `WarengruppenDistanz`).
+2. **Bereits bestehende Korruption defensiv abfangen:** `SyncSnapshotExportService.erstelleSnapshot`
+   las an mehreren Stellen ungeprüft `.geschaeft?.id`/`.artikel?.id`/etc. — der
+   einzige Aufrufpfad im Code, der das tat, und zugleich der, der bei jedem
+   App-Start sofort läuft (`SyncPollingService.starten` löst beim ersten Zyklus
+   unmittelbar `exportiereSnapshot` aus). Die Funktion baut jetzt für jeden
+   referenzierten Modelltyp vorab ein `Set<PersistentIdentifier>` aus einem
+   eigenen Fetch und liest jede Fremdreferenz über eine kleine Hilfsfunktion
+   (`sichereID`/`sichereIDs`), die zuerst `persistentModelID` (reines
+   Identitäts-Metadatum, sicher lesbar auch auf einer baumelnden Referenz) gegen
+   dieses Set prüft, bevor sie `.id` liest. Eine bereits verwaiste Referenz wird
+   dadurch still zu `nil`/ausgelassen degradiert statt die App zum Absturz zu
+   bringen — und über `SyncDebugLogger` (`sync_baumelnde_referenz_gefunden`,
+   mit Modelltyp und `PersistentIdentifier`) protokolliert, sofern der
+   Sync-Debug-Modus aktiv ist, um zukünftige Funde nachvollziehbar zu machen.
+
+Punkt 2 repariert die schon vorhandenen kaputten Datensätze nicht rückwirkend
+(sie bleiben als „still ignorierte" Referenzen im Store liegen), verhindert aber
+zuverlässig den Absturz beim Export — die einzige Stelle, an der sie bisher
+zum Problem wurden.
+
 ## Diagnose-Logging (DB-Debug-Modus)
 
 Für den geplanten Live-Test mit mehreren Geräten ist ein optionaler,

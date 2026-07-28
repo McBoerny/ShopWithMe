@@ -84,6 +84,25 @@ final class Geschaeft {
     /// Ignorier-Einträge.
     @Relationship(deleteRule: .cascade, inverse: \IgnorierterArtikel.geschaeft)
     var ignorierteArtikel: [IgnorierterArtikel] = []
+    /// Einkaufsvorgänge, die in diesem Geschäft stattfanden — inverse zu
+    /// ``Einkaufsvorgang/geschaeft``. Bewusst NICHT kaskadierend: ein gelöschtes
+    /// Geschäft soll die historische Tatsache "hier fand ein Einkauf statt"
+    /// nicht mit auslöschen, nur den Bezug dazu verlieren. Ohne diese
+    /// `inverse`-Deklaration bleibt `Einkaufsvorgang.geschaeft` beim Löschen
+    /// eines Geschäfts eine "baumelnde" Referenz auf eine nicht mehr
+    /// existierende Zeile im Store, statt automatisch auf `nil` gesetzt zu
+    /// werden — ein späterer Zugriff auf eine Eigenschaft dieser Referenz
+    /// crasht dann mit einem SwiftData-Fatal-Error (siehe
+    /// `docs/DATABASE_CONCURRENCY.md`, Abschnitt zu diesem Fund).
+    @Relationship(deleteRule: .nullify, inverse: \Einkaufsvorgang.geschaeft)
+    var einkaufsvorgaenge: [Einkaufsvorgang] = []
+    /// Gelernte Warengruppen-Distanzen für dieses Geschäft — inverse zu
+    /// ``WarengruppenDistanz/geschaeft``. Kaskadierend: ohne das Geschäft sind
+    /// geschäftsspezifisch gelernte Distanzen bedeutungslos (siehe
+    /// ``einkaufsvorgaenge`` oben für die Begründung, warum eine fehlende
+    /// `inverse`-Deklaration hier ein Absturzrisiko ist).
+    @Relationship(deleteRule: .cascade, inverse: \WarengruppenDistanz.geschaeft)
+    var warengruppenDistanzen: [WarengruppenDistanz] = []
     /// Rohwert für ``alternativeNamen`` — durch `\n` getrennt gespeichert. Optional,
     /// damit vor Einführung dieses Attributs angelegte Geschäfte beim automatischen
     /// Laden nicht abstürzen (siehe `docs/BELEGSCAN.md`).

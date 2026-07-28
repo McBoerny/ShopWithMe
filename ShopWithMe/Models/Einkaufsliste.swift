@@ -20,6 +20,14 @@ final class Einkaufsliste {
     /// Die Artikel, die aktuell auf dieser Liste stehen.
     @Relationship(deleteRule: .cascade, inverse: \EinkaufslistenEintrag.einkaufsliste)
     var eintraege: [EinkaufslistenEintrag] = []
+    /// Einkaufsvorgänge, die aus dieser Liste heraus abgehakt wurden — inverse
+    /// zu ``Einkaufsvorgang/einkaufsliste``. Bewusst NICHT kaskadierend: eine
+    /// gelöschte Liste soll die historischen Einkaufsvorgänge nicht mit
+    /// löschen, nur den Bezug dazu verlieren (siehe
+    /// ``Geschaeft/einkaufsvorgaenge`` für dieselbe Begründung inkl.
+    /// Absturzrisiko ohne diese `inverse`-Deklaration).
+    @Relationship(deleteRule: .nullify, inverse: \Einkaufsvorgang.einkaufsliste)
+    var einkaufsvorgaenge: [Einkaufsvorgang] = []
 
     init(name: String) {
         self.id = UUID()
