@@ -24,12 +24,20 @@ sed -E -i '' "s/(CURRENT_PROJECT_VERSION: )\"[0-9]+\"/\1\"$next\"/" "$PROJECT_YM
 git add "$PROJECT_YML"
 
 if [ -f "$CHANGELOG" ]; then
+  # Nur die OBERSTE "## v..."-Überschrift betrachten, nicht die erste beliebige
+  # ohne Build-Nummer irgendwo im Dokument — sonst landet die Build-Nummer bei
+  # einem Commit ohne neuen Changelog-Eintrag fälschlich an einer viel älteren,
+  # bewusst unnummerierten historischen Überschrift (z.B. "v0.1 — Projekt-Scaffold").
+  # Hat die oberste Überschrift schon eine Build-Nummer, bleibt der Changelog
+  # unverändert.
   awk -v build="$next" '
-    !done && /^## v/ && $0 !~ /\(Build [0-9]+\)/ {
-      sep = index($0, " — ")
-      if (sep > 0) {
-        $0 = substr($0, 1, sep - 1) " (Build " build ")" substr($0, sep)
-        done = 1
+    /^## v/ && !seen {
+      seen = 1
+      if ($0 !~ /\(Build [0-9]+\)/) {
+        sep = index($0, " — ")
+        if (sep > 0) {
+          $0 = substr($0, 1, sep - 1) " (Build " build ")" substr($0, sep)
+        }
       }
     }
     { print }

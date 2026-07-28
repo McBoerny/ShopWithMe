@@ -1460,7 +1460,7 @@ echte Bugs in der v0.5-Ladenerkennung auf, beide jetzt behoben:
   bearbeiten, löschen. Kategorie ist nach Anlage schreibgeschützt.
 - Artikel-Tab in `RootView` verdrahtet.
 
-## v0.1 (Build 105) — Projekt-Scaffold
+## v0.1 — Projekt-Scaffold
 
 - XcodeGen-Setup (`project.yml`), iOS-26-Target, Bundle-ID `com.made4me.ShopWithMe`.
 - Doku-Grundgerüst: `PRODUCT_SPEC.md`, `ARCHITECTURE.md`, `ROADMAP.md`, `DECISIONS.md`.
