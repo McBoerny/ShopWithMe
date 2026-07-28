@@ -290,7 +290,8 @@ struct EinkaufenView: View {
     private func geschaeftErkennungPruefen() async {
         guard let vorschlag = await GeschaeftErkennungService.vorschlag(
             vorhandeneGeschaefte: geschaefte,
-            ignorierteVorschlaege: ignorierteVorschlaege
+            ignorierteVorschlaege: ignorierteVorschlaege,
+            context: modelContext
         ) else {
             geschaeftVorschlag = nil
             return
@@ -643,7 +644,8 @@ private struct GeschaeftAlleInDerNaeheSheet: View {
         .task {
             eintraege = await GeschaeftErkennungService.alleInDerNaehe(
                 vorhandeneGeschaefte: vorhandeneGeschaefte,
-                ignorierteVorschlaege: ignorierteVorschlaege
+                ignorierteVorschlaege: ignorierteVorschlaege,
+                context: modelContext
             )
             laeuft = false
         }

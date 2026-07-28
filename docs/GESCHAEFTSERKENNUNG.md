@@ -40,6 +40,32 @@ diesem Checkpoint).
    eine spätere Umbenennung in der App ab), sonst wird der nächstgelegene Treffer
    als `.unbekannt(MKMapItem)` vorgeschlagen.
 
+### Behobener Absturz: veraltete `Geschaeft`-Referenz nach Standort-/MapKit-Wartezeit
+
+`vorschlag(vorhandeneGeschaefte:ignorierteVorschlaege:context:)` und
+`alleInDerNaehe(vorhandeneGeschaefte:ignorierteVorschlaege:context:)` bekommen
+`vorhandeneGeschaefte` als Parameter (typischerweise aus einem `@Query` am
+Aufrufort) und durchlaufen danach zwei `await`-Wartepunkte, die in der Praxis
+mehrere Sekunden dauern können (Standortermittlung inkl. ggf.
+Berechtigungsdialog, MapKit-Suche). Wurde in dieser Zeitspanne ein
+`Geschaeft` aus `vorhandeneGeschaefte` gelöscht (durch den Nutzer selbst in
+`GeschaeftListView`, oder — seit der Datensynchronisation, GitHub #39 — durch
+einen automatischen `SyncPollingService`-Zyklus im Hintergrund, der zwar
+selbst nie ein `Geschaeft` löscht, aber durch die zusätzliche
+Hintergrundaktivität die Wahrscheinlichkeit erhöht, dass sich eine
+Nutzeraktion zeitlich mit einer laufenden Standorterkennung überschneidet),
+crashte der anschließende Zugriff auf eine Eigenschaft dieses `Geschaeft`
+(z.B. `.name`, `.erkennungsradius`) mit einem SwiftData-Fatal-Error
+(„backing data could no longer be found").
+
+**Fix:** Beide Funktionen laden `vorhandeneGeschaefte` nach den
+`await`-Wartepunkten frisch aus dem jetzt zusätzlich übergebenen
+`ModelContext` neu (`context.fetch(FetchDescriptor<Geschaeft>())`), statt die
+zu Beginn übergebenen, potenziell veralteten Objekte weiterzuverwenden.
+`effektiverSuchradius(basis:vorhandeneGeschaefte:)` wird bewusst VOR dem
+ersten `await` berechnet (zu diesem Zeitpunkt noch garantiert frische
+Objekte, da die Funktion bis dahin nicht pausiert hat).
+
 ## Individueller Erkennungsradius pro Geschäft
 
 **Status: Umgesetzt** (GitHub #41).

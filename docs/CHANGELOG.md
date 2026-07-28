@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.7 (Build 119) — Fix: Absturz bei veralteter Geschäft-Referenz nach Standorterkennung
+
+- Behoben: Die automatische Standort-Ladenerkennung
+  (`GeschaeftErkennungService.vorschlag`/`alleInDerNaehe`) hielt die zu Beginn
+  übergebene `Geschaeft`-Liste über zwei potenziell mehrsekündige
+  `await`-Wartepunkte (Standortermittlung, MapKit-Suche) hinweg fest. Wurde
+  in dieser Zeit ein `Geschaeft` gelöscht (durch den Nutzer selbst oder —
+  durch die neue Datensynchronisation wahrscheinlicher geworden — während
+  eines automatischen Hintergrund-Sync-Zyklus lief parallel etwas anderes),
+  crashte der App-Start bzw. die Standorterkennung mit einem
+  SwiftData-Fatal-Error. Beide Funktionen laden die Geschäfte jetzt nach den
+  Wartepunkten frisch aus dem `ModelContext`, bevor sie darauf zugreifen.
+  Details in `docs/GESCHAEFTSERKENNUNG.md`.
+
 ## v0.7 (Build 118) — Sync-Debug-Modus: Datengrundlage für spätere Polling-Optimierung (GitHub #39)
 
 - Neuer, optionaler „Sync-Debug-Modus" (Einstellungen, standardmäßig aus)

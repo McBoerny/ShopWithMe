@@ -114,16 +114,31 @@ enum GeschaeftErkennungService {
     /// über ``IgnorierterGeschaeftsVorschlag`` ignorierte Treffer (siehe
     /// ``istIgnoriert(_:ignorierte:)``) werden vorher aussortiert und deshalb auch
     /// nie erneut automatisch vorgeschlagen.
+    ///
+    /// `context` dient ausschließlich dazu, `vorhandeneGeschaefte` nach den
+    /// beiden `await`-Wartepunkten (Standortermittlung, MapKit-Suche — in der
+    /// Praxis mehrere Sekunden) frisch neu zu laden, statt die zu Beginn
+    /// übergebenen Objekte weiterzuverwenden: sie könnten in der Zwischenzeit
+    /// gelöscht worden sein (z.B. durch den Nutzer selbst in
+    /// ``GeschaeftListView`` oder — seit GitHub #39 — durch einen
+    /// automatischen Sync-Zyklus im Hintergrund, siehe ``SyncPollingService``).
+    /// Ohne diese Auffrischung crasht der Zugriff auf eine Eigenschaft eines
+    /// zwischenzeitlich gelöschten ``Geschaeft`` mit einem SwiftData-Fatal-Error
+    /// („backing data could no longer be found").
     @MainActor
     static func vorschlag(
         vorhandeneGeschaefte: [Geschaeft],
-        ignorierteVorschlaege: [IgnorierterGeschaeftsVorschlag] = []
+        ignorierteVorschlaege: [IgnorierterGeschaeftsVorschlag] = [],
+        context: ModelContext
     ) async -> GeschaeftVorschlag? {
-        guard let standort = await EinmaligerStandortAbruf().standortErmitteln() else { return nil }
+        // Radius bewusst VOR dem ersten `await` berechnet (noch garantiert
+        // frische Objekte, siehe Typ-Doku).
         let radius = effektiverSuchradius(basis: suchradius, vorhandeneGeschaefte: vorhandeneGeschaefte)
+        guard let standort = await EinmaligerStandortAbruf().standortErmitteln() else { return nil }
         guard let treffer = try? await nahegelegeneLaeden(bei: standort, radius: radius), !treffer.isEmpty else { return nil }
         let relevante = treffer.filter { !istIgnoriert($0, ignorierte: ignorierteVorschlaege) }
-        return passendenVorschlag(aus: relevante, standort: standort, vorhandeneGeschaefte: vorhandeneGeschaefte)
+        let aktuelleGeschaefte = (try? context.fetch(FetchDescriptor<Geschaeft>())) ?? vorhandeneGeschaefte
+        return passendenVorschlag(aus: relevante, standort: standort, vorhandeneGeschaefte: aktuelleGeschaefte)
     }
 
     /// Erweitert `basis` (den globalen Standard-Suchradius) auf den größten unter
@@ -143,18 +158,23 @@ enum GeschaeftErkennungService {
     /// als ``vorschlag(vorhandeneGeschaefte:ignorierteVorschlaege:)`` werden ignorierte
     /// Treffer hier bewusst NICHT aussortiert, sondern zusammen mit ihrem
     /// Ignoriert-Status geliefert. Liefert `nil` ohne Standortberechtigung.
+    /// `context` dient wie bei ``vorschlag(vorhandeneGeschaefte:ignorierteVorschlaege:context:)``
+    /// ausschließlich dazu, `vorhandeneGeschaefte` nach den `await`-Wartepunkten
+    /// frisch neu zu laden, siehe dortige Typ-Doku.
     @MainActor
     static func alleInDerNaehe(
         vorhandeneGeschaefte: [Geschaeft],
-        ignorierteVorschlaege: [IgnorierterGeschaeftsVorschlag]
+        ignorierteVorschlaege: [IgnorierterGeschaeftsVorschlag],
+        context: ModelContext
     ) async -> [GeschaeftInDerNaeheEintrag]? {
-        guard let standort = await EinmaligerStandortAbruf().standortErmitteln() else { return nil }
         let radius = effektiverSuchradius(basis: alleInDerNaeheRadius, vorhandeneGeschaefte: vorhandeneGeschaefte)
+        guard let standort = await EinmaligerStandortAbruf().standortErmitteln() else { return nil }
         guard let treffer = try? await nahegelegeneLaeden(bei: standort, radius: radius) else { return nil }
+        let aktuelleGeschaefte = (try? context.fetch(FetchDescriptor<Geschaeft>())) ?? vorhandeneGeschaefte
         let sortiert = treffer.sorted { entfernung(zu: $0, von: standort) < entfernung(zu: $1, von: standort) }
         let eintraege = sortiert.map { item -> GeschaeftInDerNaeheEintrag in
             let vorschlag: GeschaeftVorschlag
-            if let bekanntesGeschaeft = vorhandeneGeschaefte.first(where: { istBekannterTreffer($0, fuer: item) }) {
+            if let bekanntesGeschaeft = aktuelleGeschaefte.first(where: { istBekannterTreffer($0, fuer: item) }) {
                 vorschlag = .bekannt(bekanntesGeschaeft)
             } else {
                 vorschlag = .unbekannt(item)
