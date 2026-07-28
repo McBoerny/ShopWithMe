@@ -10,9 +10,11 @@ import UniformTypeIdentifiers
 /// unangetastet am Standardpfad. Siehe
 /// `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`.
 ///
-/// „Jetzt synchronisieren“ löst den Export manuell aus — ein automatisches,
-/// periodisches Auslösen (abhängig davon, ob z.B. gerade eingekauft wird) ist
-/// erst Phase 4 des Plans („adaptives Polling“).
+/// Ein erster Sync-Zyklus läuft automatisch direkt beim Verknüpfen eines
+/// Ordners (Bootstrap, GitHub #39 Phase 5) — „Jetzt synchronisieren“ danach
+/// weiterhin manuell auslösbar. Ein automatisches, periodisches Auslösen
+/// unabhängig von Nutzerinteraktion (abhängig davon, ob z.B. gerade
+/// eingekauft wird) ist erst Phase 4 des Plans („adaptives Polling“).
 struct SyncOrdnerSettingsView: View {
     @Environment(\.modelContext) private var modelContext
 
@@ -89,11 +91,17 @@ struct SyncOrdnerSettingsView: View {
         }
     }
 
+    /// Legt den Ordner fest und löst sofort einen ersten Sync-Zyklus aus
+    /// (GitHub #39, Phase 5 „Gruppen-Setup") — enthält bereits vorhandene
+    /// Peer-Daten im gewählten Ordner, wird ihr Bestand direkt beim
+    /// Verknüpfen gemergt (``SyncSnapshotImportService``), statt dass die
+    /// Person erst noch manuell auf „Jetzt synchronisieren" tippen muss.
     private func ordnerFestlegen(_ ordner: URL) {
         do {
             try SyncOrdnerService.ordnerFestlegen(ordner)
             ausgewaehlterOrdner = ordner
             fehlermeldung = nil
+            jetztSynchronisieren()
         } catch {
             fehlermeldung = error.localizedDescription
         }

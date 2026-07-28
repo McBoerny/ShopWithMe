@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.7 (Build 116) — Datensynchronisation Phase 5: automatischer Erst-Sync beim Verbinden (GitHub #39)
+
+- Sync-Ordner verknüpfen (Einstellungen → Datensynchronisation) löst jetzt
+  sofort einen ersten Sync-Zyklus aus, statt dass danach noch manuell auf
+  „Jetzt synchronisieren" getippt werden muss — enthält der Ordner bereits
+  Daten anderer Geräte, werden sie direkt beim Verbinden gemergt.
+- Damit ist Phase 5 des Datensynchronisations-Umsetzungsplans abgeschlossen.
+  Offen bleiben nur noch Phase 4 (automatisches Hintergrund-Polling) und das
+  separate, weiterhin zurückgestellte Multipeer-Vorhaben (Issue #49).
+
 ## v0.7 (Build 115) — Überkauf-Hinweis beim gemeinsamen Einkaufen (GitHub #48)
 
 - Wenn zwei Geräte im selben Einkauf denselben Artikel abhaken, zeigt

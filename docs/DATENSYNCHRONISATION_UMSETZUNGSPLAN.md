@@ -468,10 +468,14 @@ spiegeln, statt auf den nächsten Polling-Zyklus zu warten).
    - **3b (umgesetzt):** Historie/Lernen (`Einkaufsvorgang` ID-basiert,
      `KaufEintrag` als Union nach `id`, `WarengruppenDistanz` gemittelt).
 5. **Phase 4 — Konsolidierung + adaptives Polling** (Abschnitt 5.4/5.5).
-6. **Phase 5 — Gruppen-Setup-UX** (Abschnitt 6) — der Bootstrap-Merge-Teil ist
-   durch Phase 3 bereits abgedeckt (dieselbe Merge-Logik läuft unabhängig
-   davon, ob ein Peer-Ordner beim Verbinden schon Daten enthält oder nicht);
-   offen bleibt nur noch eine freundlichere Beitritts-UX.
+6. **Phase 5 (umgesetzt) — Gruppen-Setup-UX** (Abschnitt 6): der
+   Bootstrap-Merge-Teil war durch Phase 3 bereits abgedeckt (dieselbe
+   Merge-Logik läuft unabhängig davon, ob ein Peer-Ordner beim Verbinden schon
+   Daten enthält oder nicht); ergänzt wurde nur noch, dass
+   `SyncOrdnerSettingsView.ordnerFestlegen(_:)` direkt beim Verknüpfen eines
+   Ordners automatisch einen ersten Sync-Zyklus auslöst (Import + Export für
+   alle vier Bereiche), statt dass die Person danach erst manuell auf
+   „Jetzt synchronisieren" tippen muss.
 7. **Phase 6 (umgesetzt) — #48 auf Basis echter Events**: `AbhakErgebnis`,
    `SyncEventService.aktuellerGewinner`, `SyncPeerInfo` (Geräte-Namen),
    nicht-blockierender Hinweis in `EinkaufenView`.
