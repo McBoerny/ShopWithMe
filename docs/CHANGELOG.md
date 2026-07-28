@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.7 (Build 110) — Datensynchronisation Phase 1a: Bereich-A-Event-Export (GitHub #39)
+
+- Neuer Einstellungen-Bildschirm „Datensynchronisation" — Sync-Ordner (z.B.
+  iCloud Drive/Synology Drive) festlegen oder entfernen, bewusst getrennt vom
+  bestehenden Datenbank-Speicherort (die lokale Datenbank bleibt unverändert am
+  Standardpfad). Manueller „Jetzt synchronisieren"-Button für diese Phase —
+  automatisches, periodisches Auslösen folgt erst mit der in
+  `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` als Phase 4 geplanten
+  Konsolidierung/adaptivem Polling.
+- Neuer `SyncExportService` — schreibt lokale, noch nicht hochgeladene
+  `SyncEvent`s als einzelne JSON-Dateien in den eigenen Peer-Ordner
+  (`peers/{geraeteID}/events/`) und markiert sie danach als hochgeladen. Reines
+  Schreiben — Lesen fremder Peer-Ordner ist Phase 2.
+
 ## v0.7 (Build 109) — Datensynchronisation Phase 0: LamportClock + SyncEvent-Grundgerüst (GitHub #39)
 
 - Neue `LamportClock` (`Services/LamportClock.swift`) — lokale logische Uhr als

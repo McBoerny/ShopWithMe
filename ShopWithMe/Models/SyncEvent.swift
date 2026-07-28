@@ -39,9 +39,9 @@ struct SyncEventNutzlast: Codable {
 /// Ein einzelnes, unveränderliches Ereignis für die geplante
 /// Datensynchronisation (`docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`,
 /// GitHub #39) — additives SwiftData-Modell, keine Ablösung der bestehenden
-/// Modelle. Phase 0 (aktueller Stand): Events werden bei lokalen Aktionen
-/// aufgezeichnet (``SyncEventService``), aber noch nicht exportiert/importiert —
-/// das folgt in Phase 1/2 des Plans.
+/// Modelle. Events werden bei lokalen Aktionen aufgezeichnet
+/// (``SyncEventService``) und in den eigenen Peer-Ordner exportiert
+/// (``SyncExportService``, Phase 1). Import fremder Events ist Phase 2.
 @Model
 final class SyncEvent {
     var id: UUID
@@ -67,8 +67,7 @@ final class SyncEvent {
     /// zwischen Geräten verwendet (siehe ``LamportClock``-Doku).
     var wallClock: Date
     /// Ob dieses (lokal erzeugte) Event bereits in den eigenen Peer-Ordner
-    /// exportiert wurde — in Phase 0 noch ohne Wirkung, da es noch keinen Export
-    /// gibt.
+    /// exportiert wurde (siehe ``SyncExportService``).
     var hochgeladen: Bool
 
     init(
@@ -101,4 +100,33 @@ extension SyncEvent {
     var nutzlastDekodiert: SyncEventNutzlast? {
         try? JSONDecoder().decode(SyncEventNutzlast.self, from: nutzlast)
     }
+
+    /// Als eigenständiger Codable-Wert statt das `@Model` selbst zu kodieren —
+    /// SwiftData-Modellklassen sind nicht dafür ausgelegt, direkt durch
+    /// `JSONEncoder` zu laufen (u.a. wegen interner Storage-Attribute).
+    var exportDarstellung: SyncEventExportDarstellung {
+        SyncEventExportDarstellung(
+            id: id,
+            art: artRaw,
+            nutzlast: nutzlast,
+            lamportZaehler: lamportZaehler,
+            lamportGeraeteID: lamportGeraeteID,
+            autorGeraeteID: autorGeraeteID,
+            wallClock: wallClock
+        )
+    }
+}
+
+/// Peer-Dateiformat für ein einzelnes exportiertes ``SyncEvent`` (siehe
+/// ``SyncExportService``, `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`
+/// Abschnitt 5.1). Feldgleich zu ``SyncEvent``, aber als reiner Wert-Typ, den
+/// `JSONEncoder`/`JSONDecoder` direkt verarbeiten können.
+struct SyncEventExportDarstellung: Codable {
+    var id: UUID
+    var art: String
+    var nutzlast: Data
+    var lamportZaehler: UInt64
+    var lamportGeraeteID: String
+    var autorGeraeteID: String
+    var wallClock: Date
 }

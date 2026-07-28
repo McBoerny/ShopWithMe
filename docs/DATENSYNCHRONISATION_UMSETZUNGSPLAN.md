@@ -16,9 +16,27 @@ Issue #49) — dieser Plan deckt ausschließlich den FileProvider-Kanal
 bleibt als Aufzeichnung der ursprünglichen Abwägung bestehen, ist für den
 Mehrbenutzer-Anwendungsfall aber durch diesen Plan **ersetzt**.
 
-**Status: Phase 0 umgesetzt (`LamportClock`, `SyncEvent`-Modell,
+**Status: Phase 0 umgesetzt** (`LamportClock`, `SyncEvent`-Modell,
 `SyncEventService`, lokale Aufzeichnung in allen 5 relevanten
-Mutationsfunktionen), Phase 1+ noch nicht begonnen.**
+Mutationsfunktionen). **Phase 1a umgesetzt** (Bereich-A-Event-Export):
+`SyncOrdnerService` (Sync-Ordner-Bookmark, getrennt vom Datenbank-Speicherort),
+Settings-Bildschirm zum Festlegen/Entfernen des Ordners samt manuellem
+„Jetzt synchronisieren", `SyncExportService.exportiereNeueEvents(context:)`
+schreibt un-hochgeladene Events als JSON-Dateien nach
+`peers/{geraeteID}/events/`.
+
+**Scoping-Entscheidung zu Phase 1 (Abweichung von der ursprünglichen
+Formulierung unten):** Der volle Bereich-B/C/D-`export.json`-Snapshot
+(Stammdaten/Historie/Lernen) ist bewusst **nicht** Teil von Phase 1a, sondern
+wird auf Phase 1b verschoben. Begründung: Das DTO-/Matching-Design für diesen
+Snapshot ist selbst eine substantielle Entwurfsentscheidung (siehe Abschnitt
+4.2, „Offene Frage" zu `Geschaeft.erkennungsradius"), und ein sinnvoller
+Auslöse-Zeitpunkt dafür ergibt sich erst aus der in Phase 4 geplanten
+Konsolidierungslogik (Abschnitt 5.5). Phase 1a liefert bereits einen
+eigenständig sinnvollen, getesteten Baustein (Event-Export); Phase 1b folgt vor
+Phase 2 (Import Bereich A), da Phase 3 (Import Bereich B/C/D) sie voraussetzt.
+
+Phase 2+ noch nicht begonnen.
 
 ---
 
@@ -296,6 +314,10 @@ spiegeln, statt auf den nächsten Polling-Zyklus zu warten).
    lokal Events mitschreiben und in Tests prüfen, dass sie korrekt entstehen.
 2. **Phase 1 — Export:** eigene Events + periodischer `export.json` in den
    Peer-Ordner schreiben (nur schreiben, noch nicht lesen).
+   - **1a (umgesetzt):** Sync-Ordner-Auswahl (`SyncOrdnerService`) +
+     Bereich-A-Event-Export (`SyncExportService`).
+   - **1b (offen):** Bereich-B/C/D-Snapshot (`export.json`) aus dem aktuellen
+     Modellzustand ableiten und schreiben.
 3. **Phase 2 — Import Bereich A:** fremde Events lesen, Konfliktregeln (4.4)
    anwenden, über bestehende Mutations-Funktionen lokal einspielen.
 4. **Phase 3 — Import Bereich B/C/D:** Stammdaten-/Historien-/Lern-Merge beim
