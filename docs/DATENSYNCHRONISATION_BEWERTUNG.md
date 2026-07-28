@@ -1,5 +1,15 @@
 # Bewertung: Vorschlag Datensynchronisation (GitHub #39)
 
+**Korrektur/Überholt:** Nach erneuter, ausdrücklicher Nutzervorgabe wird die
+zentrale Empfehlung dieses Dokuments — die bestehende „geteilter Ordner +
+Lease"-Architektur reiche für Mehrgeräte-Zugriff aus, der Event-Sourcing-Teil von
+#39 sei nicht nötig — **nicht mehr verfolgt**. Umgesetzt werden soll stattdessen
+genau der hier in Abschnitt 3 als „nicht übernommen" bewertete
+Event-Sourcing-/Lamport-Ansatz (FileProvider-Kanal), nur ohne den
+MultipeerConnectivity-Teil. Der neue, maßgebliche Plan steht in
+`docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`. Dieses Dokument bleibt als
+Aufzeichnung der ursprünglichen (inzwischen überholten) Abwägung erhalten.
+
 **Bezug:** [Issue #39](https://github.com/McBoerny/ShopWithMe/issues/39) — vollständiger
 Architekturvorschlag für Event-Sourcing/CRDT (GRDB, Lamport-Timestamps) plus
 Dual-Channel-Sync (FileProvider + MultipeerConnectivity), Gruppen-/Vertrauensverwaltung

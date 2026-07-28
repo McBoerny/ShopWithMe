@@ -192,20 +192,28 @@ angewendet zu werden.
 
 ## Datenbank-Speicherort
 
-Standard: SwiftData-Standardpfad im App-Container. Alternative: vom Nutzer per
-`.fileImporter` gewählter Ordner (z.B. lokal gespiegelter Cloud-Ordner). Kein
-CloudKit/iCloud-Sync — bei Cloud-Sync-Ordnern liegt die Verantwortung für
-Konfliktvermeidung (nur ein aktiv schreibendes Gerät) beim Nutzer, dokumentiert in der
-App-Hilfe. Koordinierter Mehrbenutzerzugriff auf einen solchen Fileshare-Ordner
-(Micro-/Session-Lease über `NSFileCoordinator`/`NSFilePresenter`) ist seit Build 30
-umgesetzt: siehe `docs/DATABASE_CONCURRENCY.md`. Bewertung und bewusste Ablehnung
-eines weitergehenden Event-Sourcing-/CRDT-/Multipeer-Sync-Vorschlags (GitHub #39),
-inkl. der daraus übernommenen, angepassten Überkauf-Erkennung: siehe
-`docs/DATENSYNCHRONISATION_BEWERTUNG.md`. Geplante Ersetzen-/Merge-Abfrage beim
-Verknüpfen eines Ordners, der bereits eine fremde Datenbank enthält (GitHub #50,
-schließt eine Datenverlust-Lücke im bestehenden „Speicherort wechseln"-Weg für den
-Fall des gemeinsamen Einkaufens zu zweit): siehe
-`docs/DATENBANK_BACKUP_RESTORE_BEWERTUNG.md`.
+Standard: SwiftData-Standardpfad im App-Container, für den Einzelnutzer-Fall auch
+weiterhin auf einen vom Nutzer per `.fileImporter` gewählten Ordner verlegbar
+(reine Dateiverlagerung, kein Sync-Zusatzcode). Koordinierter Mehrbenutzerzugriff
+auf einen solchen Fileshare-Ordner (Micro-/Session-Lease über
+`NSFileCoordinator`/`NSFilePresenter`, seit Build 30) ist dokumentiert in
+`docs/DATABASE_CONCURRENCY.md` — bleibt für den Einzelnutzer-Fall relevant, wird
+aber für **gemeinsames Einkaufen mit mehreren Personen** durch die
+event-basierte Synchronisation unten abgelöst.
+
+**Für gemeinsames Einkaufen (Mehrbenutzer):** geplante, event-basierte
+Synchronisation über einen geteilten Ordner (GitHub #39/#50) — jedes Gerät führt
+seine eigene, lokale, live genutzte SwiftData-Datenbank; ein zusätzliches,
+additives `SyncEvent`-Modell samt Lamport-Uhr wird periodisch mit dem geteilten
+Ordner abgeglichen (kein Wechsel der Persistenzschicht, kein aktiv aus mehreren
+Geräten gleichzeitig beschriebener Store mehr). Bewusst ohne den
+MultipeerConnectivity-Kanal (WiFi/Bluetooth-Echtzeitaustausch im Laden, dafür
+weiterhin Issue #49, an Bedingungen geknüpft). Maßgeblicher Plan:
+`docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`. Die ursprüngliche, inzwischen
+überholte Abwägung (weshalb dieser Ansatz zunächst nicht verfolgt wurde) steht in
+`docs/DATENSYNCHRONISATION_BEWERTUNG.md`; die Ersetzen-/Merge-Logik für den
+einmaligen Beitritts-/Bootstrap-Moment eines neuen Geräts in
+`docs/DATENBANK_BACKUP_RESTORE_BEWERTUNG.md`. Noch nicht umgesetzt.
 
 ## Builds, Versionierung & Migrationen
 
