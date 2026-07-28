@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.7 (Build 111) — Datensynchronisation Phase 1b: Bereich-B/C/D-Snapshot-Export (GitHub #39)
+
+- Neues `SyncSnapshot`-DTO-Format (Bereich B: Geschäftstypen, Kategorien,
+  Geschäfte, Artikel, Einkaufslisten; Bereich C: Einkaufsvorgänge, Kaufeinträge;
+  Bereich D: Warengruppen-Distanzen) mit Format-Versionsfeld für künftige
+  Kompatibilität.
+- Neuer `SyncSnapshotExportService` — schreibt bei „Jetzt synchronisieren"
+  zusätzlich zu den Bereich-A-Events einen vollständigen `export.json`-Snapshot
+  des aktuellen Datenbestands in den eigenen Peer-Ordner. Reines Schreiben,
+  noch keine Fälligkeits-/Konsolidierungslogik (kommt mit Phase 4) und noch kein
+  Import (Phase 2/3).
+- `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` um mehrere beim Entwurf
+  getroffene/geklärte Entscheidungen ergänzt: `Geschaeft.erkennungsradius`
+  synchronisiert sich als Teil des Geschäfts; die Lernzähler
+  (`anzahlEinkaufsvorgaenge` u.a.) brauchen eine additive statt
+  überschreibende Merge-Regel (Phase 3); dauerhaft ignorierte
+  Belegscan-Positionen gelten als Eigenschaft des Geschäfts.
+
 ## v0.7 (Build 110) — Datensynchronisation Phase 1a: Bereich-A-Event-Export (GitHub #39)
 
 - Neuer Einstellungen-Bildschirm „Datensynchronisation" — Sync-Ordner (z.B.

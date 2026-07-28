@@ -27,14 +27,19 @@ schreibt un-hochgeladene Events als JSON-Dateien nach
 
 **Scoping-Entscheidung zu Phase 1 (Abweichung von der ursprünglichen
 Formulierung unten):** Der volle Bereich-B/C/D-`export.json`-Snapshot
-(Stammdaten/Historie/Lernen) ist bewusst **nicht** Teil von Phase 1a, sondern
-wird auf Phase 1b verschoben. Begründung: Das DTO-/Matching-Design für diesen
-Snapshot ist selbst eine substantielle Entwurfsentscheidung (siehe Abschnitt
-4.2, „Offene Frage" zu `Geschaeft.erkennungsradius"), und ein sinnvoller
-Auslöse-Zeitpunkt dafür ergibt sich erst aus der in Phase 4 geplanten
-Konsolidierungslogik (Abschnitt 5.5). Phase 1a liefert bereits einen
-eigenständig sinnvollen, getesteten Baustein (Event-Export); Phase 1b folgt vor
-Phase 2 (Import Bereich A), da Phase 3 (Import Bereich B/C/D) sie voraussetzt.
+(Stammdaten/Historie/Lernen) war bewusst **nicht** Teil von Phase 1a, sondern
+wurde auf Phase 1b verschoben, da das DTO-Design selbst eine substantielle
+Entwurfsentscheidung war (siehe Abschnitt 4.2/4.2a).
+
+**Status: Phase 1b umgesetzt** — `SyncSnapshot`-DTOs (Bereich B: `GeschaeftTyp`,
+`ArtikelKategorie`, `Geschaeft`, `Artikel`, `Einkaufsliste`; Bereich C: alle
+`Einkaufsvorgang`, `KaufEintrag`; Bereich D: `WarengruppenDistanz`) und
+`SyncSnapshotExportService.exportiereSnapshot(context:)`, der bei jedem
+manuellen „Jetzt synchronisieren" einen vollständigen `export.json` in den
+eigenen Peer-Ordner schreibt (unbedingt, ohne die in Abschnitt 5.5
+beschriebene Fälligkeits-/Konsolidierungslogik — die kommt mit Phase 4). Die
+noch offenen Merge-Regeln für additive Zähler sind in 4.2a vorgemerkt, aber
+noch nicht implementiert (Import/Merge ist Phase 2/3).
 
 Phase 2+ noch nicht begonnen.
 
@@ -151,16 +156,52 @@ angelehnt an die „Datenbereiche"-Tabelle aus dem #39-Vorschlag:
 | Bereich | Inhalt | Sync-Frequenz | Konfliktregel |
 |---|---|---|---|
 | **A — zeitkritisch** | `Einkaufsliste`-Mitgliedschaft (hinzufügen/entfernen/Menge), Abhaken/Abwählen (`Einkaufsvorgang`) | Bei jedem Sync-Zyklus (Abschnitt 5.3) | CRDT-Regeln (Abschnitt 4.4) |
-| **B — Stammdaten** | `Artikel`, `ArtikelKategorie`, `GeschaeftTyp`, `Geschaeft` (neu/geändert) | Export bei jedem Sync-Zyklus, weniger zeitkritisch | Namens-/Koordinaten-Matching (bereits vorhandene Bausteine, siehe `docs/DATENBANK_BACKUP_RESTORE_BEWERTUNG.md` §5.1) |
-| **C — Historie** | `KaufEintrag`, `Einkaufsvorgang` (abgeschlossen) | Export, seltener (z.B. nur bei Konsolidierung) | Union nach `id`, nie Konflikt (jeder Kauf ein abgeschlossenes Ereignis) |
+| **B — Stammdaten** | `Artikel`, `ArtikelKategorie`, `GeschaeftTyp`, `Geschaeft` (inkl. `erkennungsradius`, `ausgeschlosseneKategorien`, `IgnorierterArtikel` — siehe Entscheidungen unten), `Einkaufsliste` (nur `id`/`name`, siehe 4.2a) | Export bei jedem Sync-Zyklus, weniger zeitkritisch | Namens-/Koordinaten-Matching (bereits vorhandene Bausteine, siehe `docs/DATENBANK_BACKUP_RESTORE_BEWERTUNG.md` §5.1) |
+| **C — Historie** | `KaufEintrag`, **alle** `Einkaufsvorgang` (auch laufende, siehe 4.2a) | Export, seltener (z.B. nur bei Konsolidierung) | Union nach `id`, nie Konflikt (jeder Kauf ein abgeschlossenes Ereignis) |
 | **D — Lernen** | `WarengruppenDistanz` | Export, selten | Gewichteter Mittelwert (siehe #39-Vorschlag §5.2 „mergeDistanzMatrix", direkt übertragbar) |
-| **Nicht synchronisiert** | `DebugEinstellungen`, lokale UI-Zustände, `Geschaeft.erkennungsradius` (Meinungssache pro Gerät? — siehe „Offene Frage" unten) | — | — |
+| **Nicht synchronisiert** | `DebugEinstellungen`, lokale UI-Zustände, `IgnorierterGeschaeftsVorschlag` (siehe Entscheidungen unten) | — | — |
 
-**Offene Frage, die ich nicht selbst entscheiden will:** Soll `Geschaeft.erkennungsradius`
-(GitHub #41) geräteübergreifend gleich sein (Teil von Bereich B) oder darf jedes
-Gerät/jeder Nutzer seinen eigenen bevorzugen? Fachlich spricht mehr für „gehört
-zum Geschäft, also Bereich B" — aufgeführt, damit es nicht stillschweigend
-unterschiedlich behandelt wird.
+**Entscheidungen (Nutzer, nach Rückfrage):**
+- `Geschaeft.erkennungsradius` (GitHub #41) → **Bereich B**, gehört zum Geschäft.
+- `Geschaeft.anzahlEinkaufsvorgaenge`/`umbauVerdacht`/`unauffaelligeEinkaeufeInFolge` →
+  Bereich B, aber **additiv gemergt**, nicht per Last-Write-Wins überschrieben (siehe
+  4.2a).
+- `IgnorierterArtikel` (dauerhaft ignorierte Belegscan-Positionen, GitHub #19) →
+  **Bereich B**, wird als Eigenschaft/Ausnahme des Geschäfts betrachtet („obwohl es
+  ein Lebensmittelladen ist, gibt es dort kein XY").
+- `IgnorierterGeschaeftsVorschlag` (weggewischter Standort-Vorschlag,
+  `GeschaeftErkennungService`) → **nicht synchronisiert** — meine Einschätzung
+  (nicht explizit vom Nutzer bestätigt): eine reine Geräte-/GPS-Rauschen-Petitesse,
+  kein Fakt über das Geschäft. Bei Bedarf revidierbar.
+- Format-Versionsfeld im Bereich-B/C/D-Snapshot: **ja** (`SyncSnapshot.formatVersion`),
+  „universell sinnvoll". Für Bereich-A-Event-Dateien nicht zusätzlich nachgerüstet —
+  dort übernimmt bereits der String-statt-Enum-Rohwert von `SyncEventArt` denselben
+  Zweck (unbekannte künftige Event-Arten landen auf `nil` statt abzustürzen).
+
+### 4.2a Beim Entwurf des Snapshots (Phase 1b) entdeckte Ergänzungen
+
+- **`Einkaufsliste`/`Einkaufsvorgang`-Existenz-Lücke:** Bereich-A-`SyncEvent`s
+  referenzieren eine `Einkaufsliste` bzw. einen `Einkaufsvorgang` nur über deren
+  `UUID` (`bezugsID`) — beide Entitätstypen selbst waren in der ursprünglichen
+  Bereich-Tabelle aber gar nicht als synchronisiert vorgesehen. Ohne eigenen
+  Snapshot-Eintrag könnte ein Peer-Gerät ein empfangenes Bereich-A-Event (Phase 2)
+  nicht anwenden, dessen `bezugsID` auf eine ihm noch unbekannte Liste/einen noch
+  unbekannten, laufenden Einkauf verweist. Lösung: `Einkaufsliste` (nur `id`/`name`)
+  und **alle** `Einkaufsvorgang` (nicht nur abgeschlossene, `endZeit` bleibt
+  optional) sind jetzt Teil des Snapshots.
+- **Additive Zähler auf `Geschaeft` brauchen eine eigene Merge-Regel statt
+  Last-Write-Wins** (relevant für Phase 3, hier nur vorgemerkt, damit es nicht
+  vergessen wird): `anzahlEinkaufsvorgaenge` wird unabhängig von der eigentlichen
+  Kaufhistorie geführt und manuell zurücksetzbar (GitHub #30) — ein naives
+  Überschreiben beim Sync würde Besuche verlieren, die zwischen zwei Sync-Zyklen auf
+  einem Gerät entstanden sind. Braucht eine Delta-Merge-Regel (Summe der Zuwächse
+  seit dem zuletzt bekannten Stand jedes Peers), keine einfache Addition der
+  Rohwerte (sonst Doppelzählung bei wiederholtem Sync). `umbauVerdacht` eignet sich
+  für eine einfache ODER-Verknüpfung. `unauffaelligeEinkaeufeInFolge` ist trotz
+  Zähler-Charakter **kein** additiver Wert — er zählt unauffällige Einkäufe *in
+  Folge*; zwei Geräte-Werte zu addieren würde eine so nie stattgefundene Serie
+  vortäuschen. Vorschlag für Phase 3: diesen einen Wert bewusst gerätelokal
+  berechnet lassen statt zu mergen.
 
 ### 4.3 Wo Events erzeugt werden
 
@@ -316,8 +357,9 @@ spiegeln, statt auf den nächsten Polling-Zyklus zu warten).
    Peer-Ordner schreiben (nur schreiben, noch nicht lesen).
    - **1a (umgesetzt):** Sync-Ordner-Auswahl (`SyncOrdnerService`) +
      Bereich-A-Event-Export (`SyncExportService`).
-   - **1b (offen):** Bereich-B/C/D-Snapshot (`export.json`) aus dem aktuellen
-     Modellzustand ableiten und schreiben.
+   - **1b (umgesetzt):** Bereich-B/C/D-Snapshot (`SyncSnapshot`,
+     `SyncSnapshotExportService`) aus dem aktuellen Modellzustand abgeleitet und
+     als `export.json` geschrieben.
 3. **Phase 2 — Import Bereich A:** fremde Events lesen, Konfliktregeln (4.4)
    anwenden, über bestehende Mutations-Funktionen lokal einspielen.
 4. **Phase 3 — Import Bereich B/C/D:** Stammdaten-/Historien-/Lern-Merge beim

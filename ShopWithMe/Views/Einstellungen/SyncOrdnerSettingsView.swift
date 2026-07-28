@@ -104,6 +104,7 @@ struct SyncOrdnerSettingsView: View {
         wirdSynchronisiert = true
         Task {
             await SyncExportService.exportiereNeueEvents(context: modelContext)
+            await SyncSnapshotExportService.exportiereSnapshot(context: modelContext)
             wirdSynchronisiert = false
             letzterSyncErfolgreich = true
         }
