@@ -1,112 +1,126 @@
-# Datenbank-Backup, -Restore und -Merge — Architektur (GitHub #50)
+# Geteilte Datenbank für gemeinsames Einkaufen — Architektur (GitHub #50)
 
-**Bezug:** [Issue #50](https://github.com/McBoerny/ShopWithMe/issues/50). Auf ausdrücklichen
-Wunsch mit derselben Gründlichkeit behandelt wie
-`docs/DATENSYNCHRONISATION_BEWERTUNG.md` (GitHub #39) — als dauerhafte, nicht als
-provisorische Lösung, und als erster Baustein für spätere Mehrgeräte-Fähigkeit
-(siehe Abschnitt 10, Verhältnis zu #48/#49).
+**Bezug:** [Issue #50](https://github.com/McBoerny/ShopWithMe/issues/50).
 
-**Status: Architektur festgelegt, Umsetzung ausstehend (siehe Phasenplan, Abschnitt 12).**
+**Korrektur gegenüber der ursprünglichen Fassung dieses Dokuments:** Die erste
+Fassung ging von „lokal bleibt immer die aktive Datenbank, Remote nur für
+gelegentliches Backup" aus. Das war falsch priorisiert. Das eigentliche Ziel von
+#50 ist **gemeinsames Einkaufen mit geteiltem, aktuellem Datenstand** — mehrere
+Personen sehen dieselbe Einkaufsliste, denselben Abhak-Fortschritt. Dafür müssen
+lokal und remote **synchron bleiben**, nicht nur gelegentlich abgeglichen werden.
+Reines Backup/Restore (ohne laufende gemeinsame Nutzung) bleibt ein Nebennutzen,
+aber nicht der Entwurfstreiber.
+
+**Status: Architektur festgelegt, Umsetzung ausstehend (siehe Phasenplan, Abschnitt 8).**
 
 ---
 
-## 1. Ausgangslage: Issue #50 vs. aktuelle Architektur
+## 1. Erneute Prüfung: Was #39 dazu bereits gezeigt hat
 
-`DatabaseLocationService` **verschiebt** den aktiven SwiftData-Store aktuell
-komplett an einen gewählten Ordner (`ordnerFestlegen(_:aktuelleStoreURL:)` kopiert
-die Store-Dateien einmalig, danach ist der gewählte Ordner die alleinige aktive
-`ModelConfiguration` — siehe `aktiveStoreURL(schema:)`). Es gibt zu jedem Zeitpunkt
-**genau einen** aktiven Speicherort, lokal *oder* remote, nie beides.
+Zur Erinnerung, `docs/DATENSYNCHRONISATION_BEWERTUNG.md` Abschnitt 1–2: „Synchron
+bleiben" ist in dieser App **bereits gelöst** — und zwar nicht durch Nachrichten
+zwischen zwei Datenbanken, sondern dadurch, dass es bei gemeinsamem Einkaufen
+**gar keine zwei Datenbanken gibt**:
 
-Issue #50 will etwas anderes: lokal bleibt **immer** die aktive, führende Datenbank
-(„Prio 1"); ein Remote-Ordner wird nur für zwei Zwecke verwendet:
+- `DatabaseLocationService` kann den aktiven SwiftData-Store in einen vom Nutzer
+  gewählten, lokal gespiegelten Cloud-Ordner (iCloud Drive, Synology Drive, …)
+  verlegen. Zeigen zwei Geräte auf **denselben** Ordner, greifen beide auf
+  **dieselbe** Datei zu — der Cloud-Anbieter synchronisiert sie dateisystemseitig,
+  die App selbst muss nichts synchronisieren.
+- `DatabaseLeaseService` (`docs/DATABASE_CONCURRENCY.md`) verhindert, dass zwei
+  Geräte gleichzeitig in diese eine Datei schreiben und sie beschädigen
+  (Single-Writer-Micro-Lease, Sekundenbruchteile Sperrdauer).
+- Ergebnis: „synchron bleiben" ist kein Merge-Problem, weil nichts divergiert —
+  es ist ein Schreibkoordinations-Problem, und das ist bereits gelöst.
 
-1. **Wiederherstellung** (Backup einspielen).
-2. **Teilen mit einem anderen Nutzer**, der auf denselben Ordner zugreift — mit
-   Abfrage **Ersetzen** oder **Merge**, falls dort bereits eine Datenbank liegt.
+**Das bestätigt sich erneut: Für den Anwendungsfall „gemeinsam einkaufen" ist
+NICHT die in der ersten Doku-Fassung entworfene Backup/Merge-Architektur die
+Lösung, sondern die bereits existierende „gemeinsamer Ordner + Lease"-Architektur.**
+#50 muss diese also nicht ersetzen, sondern an einer konkreten Lücke ergänzen —
+Abschnitt 2.
 
-Das ist ein **echter Architekturwechsel**, kein additives Feature — und passt sehr
-gut zur Session-Entscheidung „wir bleiben bei der Default-Datenbank" für die
-aktive Speicherort-Einstellung: In der #50-Architektur gibt es diese Wahl gar nicht
-mehr — lokal ist immer aktiv, ein Ordnerwechsel des *aktiven* Stores (das bisherige
-`DatabaseLocationService`-Feature) entfällt konzeptionell.
+## 2. Die tatsächliche Lücke: das „Beitreten" ist heute ungeschützt
 
-## 2. Warum das hier kein #39-Problem ist
+Code-Prüfung von `DatabaseLocationService.ordnerFestlegen(_:aktuelleStoreURL:)`
+und `kopiereStoreDateien(von:nachOrdner:)`: Beim Verknüpfen eines Ordners wird der
+lokale Store **immer** dorthin kopiert — existiert am Ziel bereits eine Datei
+(gleichen Namens, `ShopWithMe.store`), wird sie ohne jede Prüfung oder Rückfrage
+gelöscht und überschrieben:
 
-#39 scheiterte an der Grundannahme divergierender, **kontinuierlich gleichzeitig
-beschriebener** Geräte-Datenbanken, die per Event-Log/CRDT gemerged werden müssten
-— dafür bräuchte es Lamport-Timestamps, eine eigene Event-Persistenz, laufende
-Konfliktauflösung.
-
-Backup/Restore/Merge nach #50 sind dagegen **einmalige, bewusst vom Nutzer
-ausgelöste, im Vordergrund laufende Vorgänge** — nie zwei gleichzeitig geöffnete,
-aktiv beschriebene Stores. Das umgeht die gesamte Lease-/Korruptionsproblematik aus
-`docs/DATABASE_CONCURRENCY.md` von vornherein: Merge liest den Remote-Store einmal
-komplett, verarbeitet ihn lokal, fertig — kein Dauerzustand, keine Wettlaufsituation.
-
-Der schwierige Teil ist nicht *wann* gemerged wird, sondern *wie* — dazu Abschnitt 6.
-
-## 3. Zielarchitektur im Überblick
-
-```
-┌─────────────────────┐         ┌──────────────────────┐
-│  Lokaler Store       │  Export  │  Remote-Ordner        │
-│  (immer aktiv,       │ ───────► │  (Backup-Kopie oder   │
-│   Standardpfad)       │         │   Store eines anderen │
-│                       │ ◄─────── │   Nutzers)             │
-└─────────────────────┘  Import/  └──────────────────────┘
-                          Merge
+```swift
+if dateiManager.fileExists(atPath: zielDatei.path) {
+    try dateiManager.removeItem(at: zielDatei)   // ← keine Prüfung, keine Rückfrage
+}
+try dateiManager.copyItem(at: quellDatei, to: zielDatei)
 ```
 
-- **Export** („Sichern"): Kopie des lokalen Stores in den gewählten Ordner —
-  bestehende `kopiereStoreDateien`-Logik, Richtung wie heute (lokal → Ziel).
-- **Import „Ersetzen"**: Kopie vom Remote-Ordner **über** den lokalen Store —
-  destruktiv, braucht Bestätigung (siehe „Explizite Genehmigung erforderlich" in
-  den Sicherheitsregeln dieses Environments).
-- **Import „Merge"**: Remote-Store zusätzlich zum lokalen einlesen, fehlende
-  Objekte in den lokalen Store übernehmen (Abschnitt 6).
+**Das ist der konkrete, heute schon bestehende Fehler, den #50 mit
+„Ersetzen/Merge-Abfrage" beheben will:** Wenn Person A bereits einen geteilten
+Ordner mit ihrer Einkaufsliste eingerichtet hat und Person B diesen Ordner in
+ihren eigenen Einstellungen auswählt, um beizutreten, **löscht die App
+stillschweigend Person As gesamte Datenbank** und ersetzt sie durch eine Kopie von
+Person Bs (meist leerer oder anderer) lokaler Datenbank — Totalverlust ohne
+Warnung. Das ist kein theoretisches Risiko, sondern der Standardfall beim
+Onboarding einer zweiten Person.
 
-## 4. Baustein: Backup-Ziel merken (optional, eigene Entscheidung)
+## 3. Zielverhalten
 
-Getrennt von der (abgelehnten) Frage „soll der *aktive* Speicherort eine
-Neuinstallation überleben" ist die neue, kleinere Frage: soll der **Backup-Zielordner**
-dauerhaft gemerkt werden, damit man ihn nicht bei jedem Sichern/Wiederherstellen neu
-auswählen muss?
+Beim Verknüpfen eines Ordners (`ordnerFestlegen`) prüfen, ob dort bereits eine
+**fremde** Datenbank liegt (siehe Abschnitt 3.1 zur Erkennung „fremd" vs. „eigene,
+bereits verknüpfte"), und falls ja, statt stillem Überschreiben:
 
-**Vorschlag:** Ja, aber bewusst klein gehalten — ein Security-Scoped-Bookmark,
-diesmal für das *Backup-Ziel* statt den *aktiven Store*. Speicherung im
-Schlüsselbund (nicht `UserDefaults`), aus genau dem Grund, der die
-Neuinstallations-Frage ursprünglich aufgeworfen hat: ein Backup ist gerade dafür
-da, auch nach Geräteverlust/-wechsel/Neuinstallation nutzbar zu sein — ein
-Bookmark, das selbst bei einer Neuinstallation verschwindet, wäre für genau den
-Wiederherstellungsfall unbrauchbar, für den es gedacht ist. Kein Pflichtbestandteil
-von Phase 1 (Abschnitt 12) — der Ordner lässt sich auch jedes Mal neu wählen, wenn
-das vorerst reicht.
+| Wahl | Verhalten |
+|---|---|
+| **Ersetzen** | Wie heute — lokale Kopie überschreibt das Ziel. Für den Fall, dass die Zieldatei nur eine leere Platzhalter-Struktur oder veraltete Daten ist, die bewusst verworfen werden sollen. |
+| **Merge** | Lokale und Remote-Daten werden zusammengeführt (Abschnitt 5), das Ergebnis wird die neue geteilte Datei. Für den eigentlich erwarteten Fall: beide Personen hatten schon eigene Einkaufslisten/-historie. |
+| **Abbrechen** | Ordner wird nicht verknüpft, nichts verändert. |
 
-## 5. Export/Ersetzen — geringes Risiko, zuerst umsetzen
+Nach Ersetzen oder Merge läuft **ab sofort alles über die bereits existierende
+Lease-Architektur** — kein weiterer Sync-Mechanismus nötig, weil beide Geräte
+danach dieselbe Datei verwenden (Abschnitt 1).
 
-Beide Richtungen sind dieselbe Dateikopie, nur mit vertauschter Quelle/Ziel — die
-bestehende `kopiereStoreDateien(von:nachOrdner:)`-Logik lässt sich direkt
-wiederverwenden (Store + `-wal`/`-shm`-Sidecar-Dateien). Vor „Ersetzen" **immer**
-automatisch eine Sicherungskopie des aktuellen lokalen Stores anlegen (z.B. in
-`Application Support/Backups/vor-ersetzen-<Datum>.store`) — macht einen
-versehentlichen/unerwünschten Restore rückgängig machbar, statt destruktiv-endgültig
-zu sein.
+### 3.1 Woran erkennt die App „fremd" vs. „bereits meine eigene Verknüpfung"?
 
-## 6. Merge — der eigentlich schwierige Teil
+Wichtig, damit die Abfrage nicht bei jedem erneuten Öffnen der App am selben,
+längst verknüpften Ordner nervt:
 
-### 6.1 Grundprinzip
+- Ist der gewählte Ordner **identisch** mit dem bereits über
+  `gewaehlterOrdner()` hinterlegten (per Bookmark) → keine Abfrage, normales
+  Verhalten (der Store dort ist ohnehin schon meiner).
+- Ist der Ordner **neu** (noch nicht mein aktueller Speicherort) und enthält
+  bereits eine `ShopWithMe.store`-Datei → das ist der Beitritts-/Konfliktfall,
+  Abfrage erforderlich.
+- Ist der Ordner neu und leer → keine Abfrage nötig, normales „an neuen Ort
+  verschieben" wie heute.
 
-Der Remote-Store wird als **zweiter, read-only `ModelContainer`** geöffnet
-(dieselbe `Schema`, andere `ModelConfiguration(url:)`). Für jeden Modelltyp wird
-geprüft, ob ein „gleichwertiges" lokales Objekt bereits existiert; wenn nicht, wird
-eine Kopie lokal angelegt. Referenzen zwischen Objekten müssen dabei auf die
-**lokalen** (ggf. schon vorhandenen) Gegenstücke umgebogen werden, nicht blind die
-Remote-Relationship übernehmen.
+## 4. Sicherheitsnetz
 
-**Zentrale Erkenntnis, die das Risiko deutlich senkt:** Für fast jeden Modelltyp
-existiert die nötige Gleichheits-Prüfung bereits im Code — Merge ist überwiegend
-eine **Orchestrierung bestehender, bereits bewährter Bausteine**, keine neue
+Vor **Ersetzen** und vor **Merge** automatisch eine Sicherungskopie des aktuellen
+lokalen Stores anlegen (z.B. `Application Support/Backups/vor-beitritt-<Datum>.store`)
+— macht eine unerwünschte Entscheidung rückgängig machbar. Nach den
+Sicherheitsregeln dieses Environments zählen beide als schwer rückgängig zu
+machende bzw. destruktive Aktionen und brauchen eine explizite Bestätigung in der
+UI, keine stille Ausführung.
+
+## 5. Merge — Design (aus der ersten Fassung übernommen, weiterhin gültig)
+
+Der einzige Teil der ursprünglichen Analyse, der unverändert stimmt: *wie* man
+zwei unabhängig entstandene Datenbanken zusammenführt, ändert sich nicht dadurch,
+*wann* man es tut (beim Beitreten statt bei einem Backup-Restore).
+
+### 5.1 Grundprinzip
+
+Der Remote-Store (die Datei am Zielort) wird als **zweiter, read-only
+`ModelContainer`** geöffnet (dieselbe `Schema`, andere `ModelConfiguration(url:)`).
+Für jeden Modelltyp wird geprüft, ob ein „gleichwertiges" lokales Objekt bereits
+existiert; wenn nicht, wird eine Kopie lokal angelegt. Referenzen zwischen
+Objekten werden dabei auf die **lokalen** (ggf. schon vorhandenen) Gegenstücke
+umgebogen. Das Ergebnis (der lokale Store nach dem Merge) wird anschließend an den
+Zielort kopiert und wird dort zur neuen geteilten Wahrheit.
+
+**Zentrale Erkenntnis, die das Risiko senkt:** Für fast jeden Modelltyp existiert
+die nötige Gleichheits-Prüfung bereits im Code — Merge ist überwiegend eine
+**Orchestrierung bestehender, bereits bewährter Bausteine**, keine neue
 Fuzzy-Matching-Logik:
 
 | Modell | Bereits vorhandenes Matching | Merge-Strategie |
@@ -123,9 +137,7 @@ Fuzzy-Matching-Logik:
 | `IgnorierterArtikel` | — (neu) | Namens- + Geschäft-Abgleich, sonst übernehmen |
 | `IgnorierterGeschaeftsVorschlag` | `GeschaeftErkennungService.istGleicherOrt(...)` | Direkt wiederverwendbar |
 
-### 6.2 Reihenfolge (Abhängigkeiten zuerst)
-
-Merge muss in dieser Reihenfolge laufen, da spätere Typen frühere referenzieren:
+### 5.2 Reihenfolge (Abhängigkeiten zuerst)
 
 1. `GeschaeftTyp`
 2. `ArtikelKategorie` (referenziert `GeschaeftTyp`)
@@ -143,85 +155,57 @@ Während des Durchlaufs wird pro Typ eine Zuordnungstabelle
 `[PersistentIdentifier (remote): PersistentIdentifier (lokal)]` aufgebaut — spätere
 Schritte nutzen sie, um Relationship-Referenzen korrekt umzubiegen.
 
-### 6.3 Bewusste Grenze (nicht stillschweigend übergehen)
+### 5.3 Bewusste Grenze
 
 Zwei unabhängig entstandene Datenbanken können für „real dieselbe" Kategorie/denselben
 Artikel unterschiedliche Namen verwenden (z.B. „Milch" vs. „Vollmilch") — das
 Namens-Matching erkennt das nicht, es entstehen zwei separate Objekte. Für v1 wird
-das bewusst in Kauf genommen (manuelles Zusammenführen/Löschen danach über die
-ohnehin vorhandene Kategorien-/Artikel-Verwaltung) statt eines fehleranfälligen
-Ähnlichkeits-Abgleichs — passt zum bisherigen Muster dieser Session (lieber einfach
-und ehrlich begrenzt als scheinbar vollständig, aber fehleranfällig). Ein
-automatischer Modus für „ähnliche, aber nicht exakt gleiche Namen anzeigen und
-Nutzer entscheiden lassen" wäre ein sinnvoller, aber eigenständiger
-Ausbauschritt — nicht Teil von v1.
+das bewusst in Kauf genommen (manuelles Zusammenführen danach über die ohnehin
+vorhandene Kategorien-/Artikel-Verwaltung) statt eines fehleranfälligen
+Ähnlichkeits-Abgleichs.
 
-## 7. Sicherheitsnetz
+## 6. Voraussetzung, die jetzt an Bedeutung gewinnt
 
-Vor **jedem** Ersetzen oder Merge automatisch eine Sicherungskopie des aktuellen
-lokalen Stores anlegen (siehe Abschnitt 5) — macht beide Vorgänge im Zweifel
-rückgängig machbar, statt einer einzigen, unwiderruflichen Aktion. Nach den
-Sicherheitsregeln dieses Environments zählt „Ersetzen" als destruktive, „Merge" als
-schwer rückgängig zu machende Aktion — beide brauchen eine explizite Bestätigung in
-der UI, keine stille Ausführung.
+`docs/DATABASE_CONCURRENCY.md`s offener Punkt — ein echter Live-Test des
+Lease-Verfahrens mit mehreren physischen Geräten gegen einen tatsächlich
+installierten Cloud-Provider — war bisher „nice to have vor jeder Erweiterung".
+Jetzt, wo #50 diese Architektur als **die** Grundlage für gemeinsames Einkaufen
+festschreibt (statt einer bloß theoretischen Möglichkeit), sollte dieser Test
+**vor oder parallel zu Phase 1** stattfinden — sonst wird eine Beitritts-Funktion
+auf ein in der Praxis nie mit echten Geräten verifiziertes Fundament gebaut.
 
-## 8. UI/Auslöser
+## 7. Was weiterhin nicht Ziel ist
 
-Ausschließlich manuell in den Einstellungen (`DatabaseLocationSettingsView` wird zu
-einer neuen, z.B. `DatenbankSicherungView`): „Sichern" (Export), „Wiederherstellen…"
-(öffnet Ordnerauswahl, erkennt automatisch, ob dort ein Store liegt, fragt dann
-Ersetzen/Merge/Abbrechen). Kein Hintergrund-Trigger, kein automatischer Zeitplan in
-v1 — passt zum bewusst seltenen, gezielten Charakter dieser Vorgänge.
+- **Automatische, kontinuierliche Hintergrund-Synchronisation** über die
+  bestehende Datei-Sync-des-Cloud-Anbieters hinaus — bewusst nicht Ziel (siehe
+  #39-Bewertung). Für Latenzverbesserung siehe #49 (Multipeer, zurückgestellt,
+  eigene Bedingungen).
+- **Konfliktauflösung bei echtzeit-gleichzeitiger Bearbeitung** — das leistet
+  weiterhin ausschließlich das Lease-Verfahren; Merge betrifft nur den einmaligen
+  Beitritts-Moment.
 
-## 9. Was hier NICHT gelöst wird
+## 8. Phasenplan
 
-- **Gleichzeitige Bearbeitung durch zwei Personen während eines laufenden
-  Einkaufs** — dafür bleibt (falls weiterhin gewünscht) das bestehende
-  Lease-Verfahren (`docs/DATABASE_CONCURRENCY.md`) mit einem tatsächlich geteilten,
-  aktiven Ordner zuständig. Das ist ein anderer Anwendungsfall (Dauerbetrieb) als
-  Backup/Restore/Merge (gelegentliche, bewusste Aktion) — beide können
-  nebeneinander bestehen, sind aber unabhängig.
-- **Automatische, kontinuierliche Synchronisation** — bewusst nicht Ziel (siehe
-  #39-Bewertung).
-
-## 10. Verhältnis zu #48/#49
-
-Dieser Baustein ist Voraussetzung für nichts an #48 (Überkauf-Hinweis, betrifft nur
-den aktiven Lease-Store) — aber er **ist** die praktische Grundlage, um überhaupt
-einen zweiten Nutzer/ein zweites Gerät mit sinnvollem Startzustand auszustatten
-(„Wiederherstellen" von einem bestehenden Backup, statt bei null anzufangen), bevor
-#49 (Multipeer, weiterhin an Bedingungen geknüpft) überhaupt relevant würde. In
-diesem Sinn ist es tatsächlich der von dir genannte „erste Baustein".
-
-## 11. Risiken
-
-- **Merge-Komplexität** ist trotz Wiederverwendung bestehender Bausteine der mit
-  Abstand aufwändigste Teil dieser Session-Arbeit bisher — realistisch mehrere
-  Arbeitsschritte, nicht ein einzelner Commit.
-- **Testbarkeit:** jeder Merge-Schritt braucht einen eigenen Unit-Test mit zwei
-  In-Memory-`ModelContainer`n (lokal + „remote" simuliert) — umfangreicher
-  Testaufwand, aber gut isolierbar pro Modelltyp (passt zur Reihenfolge aus 6.2).
-- **Store-Kompatibilität:** ein Merge setzt voraus, dass Remote- und lokaler Store
-  vom selben Schema (`SchemaV1`) sind — bei einer künftigen echten `SchemaVN` müsste
-  Merge das prüfen und ggf. ablehnen statt falsch zu interpretieren.
-
-## 12. Phasenplan
-
-1. **Phase 1 — Export + Ersetzen** (Abschnitt 5): geringes Risiko, sofort
-   nutzbarer Wert (Backup/Wiederherstellung für ein einzelnes Gerät, z.B. vor
-   einem Geräte-/App-Wechsel). Inkl. automatischer Sicherungskopie vor „Ersetzen".
-2. **Phase 2 — Merge, Stammdaten** (`GeschaeftTyp`, `ArtikelKategorie`, `Geschaeft`,
+1. **Phase 0 — Live-Test (Voraussetzung, siehe Abschnitt 6):** bestehendes
+   Lease-Verfahren mit zwei echten Geräten gegen einen echten Cloud-Ordner
+   verifizieren, bevor darauf aufgebaut wird.
+2. **Phase 1 — Konflikterkennung + Ersetzen:** `ordnerFestlegen` erkennt eine
+   fremde Zieldatenbank (Abschnitt 3.1), fragt Ersetzen/Abbrechen (Merge noch
+   nicht implementiert, aber schon als Option sichtbar mit „bald verfügbar" oder
+   ausgegraut) — schließt sofort die in Abschnitt 2 beschriebene
+   Datenverlust-Lücke, auch ohne fertigen Merge.
+3. **Phase 2 — Merge, Stammdaten** (`GeschaeftTyp`, `ArtikelKategorie`, `Geschaeft`,
    `Artikel`, `Einkaufsliste`): nutzt ausschließlich bereits vorhandene
-   Matching-Bausteine (Tabelle in 6.1).
-3. **Phase 3 — Merge, abhängige/historische Daten**
+   Matching-Bausteine (Tabelle in 5.1).
+4. **Phase 3 — Merge, abhängige/historische Daten**
    (`EinkaufslistenEintrag`, `Einkaufsvorgang`, `KaufEintrag`,
    `WarengruppenDistanz`, `IgnorierterArtikel`, `IgnorierterGeschaeftsVorschlag`):
    nutzt die in Phase 2 aufgebauten Zuordnungstabellen.
-4. **Phase 4 — UI-Politur**: Zusammenfassung „X neue Kategorien, Y neue Artikel, Z
+5. **Phase 4 — UI-Politur:** Zusammenfassung „X neue Kategorien, Y neue Artikel, Z
    neue Käufe übernommen" nach einem Merge, statt eines stillen Abschlusses.
 
-Empfehlung: nach Phase 1 innehalten und im echten Gebrauch prüfen, ob Merge
-(Phasen 2–4) tatsächlich gebraucht wird, oder ob Export+Ersetzen für den
-eigentlichen Anwendungsfall schon ausreicht — Merge ist die mit Abstand teuerste
-Phase, für einen Anwendungsfall (unabhängig entstandene zweite Datenbank
-zusammenführen), der seltener vorkommen dürfte als reines Backup/Restore.
+**Phase 1 ist die dringendste** — sie behebt einen echten, bereits vorhandenen
+Datenverlust-Bug im Beitritts-Weg, unabhängig davon, ob/wann Merge folgt. Bis
+Merge fertig ist, bleibt „Ersetzen" (mit vorherigem automatischem Backup, Abschnitt 4)
+die einzige Option für den Beitritts-Fall — nicht ideal, aber immnoch weit
+sicherer als das heutige stille Überschreiben ohne jede Rückfrage.
