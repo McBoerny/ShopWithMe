@@ -1,5 +1,56 @@
 # Changelog
 
+## v0.7 (Build 99) — Geschäft-Detail/-typ-Kategorien, Umlaut-Sortierung, Tap-Flächen (GitHub #34, #37, #38, #40)
+
+- **Umlaut-Sortierung (GitHub #34):** Neue `String`-Extension
+  (`alphabetischerAnfangsbuchstabe`/`vergleicheAlphabetisch(mit:)`) sortiert und
+  gruppiert Namen mit Umlauten jetzt bei ihrem Basisbuchstaben (Ä bei A, Ö bei
+  O, Ü bei U) statt — wie beim reinen Unicode-Codepoint-Vergleich zuvor —
+  fälschlich ans Listenende. Angewandt in `GeschaeftListView`,
+  `ArtikelHinzufuegenView`, `EinkaufenView`, `ArtikelPreisSpanne`,
+  `GeschaeftHaeufigkeitService`, `ArtikelListView` und `GeschaeftsTypKategorienView`.
+- **Geschäft-Detail zeigt alle verfügbaren Kategorien (GitHub #37):** Der
+  „Kategorien“-Abschnitt in `GeschaeftDetailView` zeigt jetzt manuell
+  zugeordnete **und** über den Geschäftstyp automatisch verfügbare Kategorien
+  gemeinsam, alphabetisch, automatische Kategorien mit Untertitel „Automatisch
+  über Geschäftstyp“ gekennzeichnet und nicht direkt entfernbar (nur manuell
+  zugeordnete lassen sich per Wischgeste entfernen).
+- **Geschäftstyp bearbeiten (GitHub #40):** `GeschaeftTyp` hat jetzt ein
+  Farbfeld (`farbeHex`, additiv-optional). Die Detailansicht eines
+  Geschäftstyps erlaubt jetzt zusätzlich zur Kategorien-Zuordnung das Ändern
+  von Name, Symbol und Farbe (wiederverwendete `SymbolFarbAuswahlZeile`,
+  auch beim Neuanlegen eines Geschäftstyps). Gerade per „KI-Vorschlag“
+  vorgeschlagene Warengruppen sind für die Dauer der Sitzung zusätzlich mit
+  „KI-Vorschlag“ markiert (bewusst nicht dauerhaft persistiert).
+- **Ganze Zeile tippbar (GitHub #38):** Die Typ-Auswahlzeilen in
+  `GeschaeftStammdatenEditView` sowie die Kategorie-Toggle-Zeilen in
+  `GeschaeftsTypKategorienView` und die gemeinsame `SymbolFarbAuswahlZeile`
+  reagieren jetzt über die volle Zeilenbreite auf Taps (`.contentShape(Rectangle())`)
+  statt nur auf den sichtbaren Text/Icon-Inhalt.
+- GitHub #36 (adaptive Einkaufslistenoptimierung) ist mit der Regal-Entfernung
+  (Build 96) vollständig abgeschlossen.
+
+## v0.7 (Build 98) — Code-Review-Fixes (Umbau-Hinweis, Import-Duplikate, Doppelberechnung)
+
+- **Umbau-Hinweis-Dialog** feuerte bei jedem Einkauf erneut, solange der
+  Verdacht bestehen blieb, statt nur beim erstmaligen Erkennen
+  (`WarengruppenDistanzService`/`EinkaufenView`).
+- **MilkForUs-Import** und **KI-Warengruppen-Vorschlag** konnten bei doppeltem
+  Namen im selben Lauf jeweils ein Duplikat anlegen (stale Artikel-/
+  Kategorien-Snapshot innerhalb der Schleife).
+- **Kategorie-Editor** zeigte Artikel, die nur über die alte, einzelwertige
+  Kategorie-Zuordnung bestehen, nicht in der Artikel-Liste an.
+- **EinkaufenView** berechnete Kategorien-Gruppierung/-Sortierung und
+  Artikel-Filter pro Render mehrfach statt einmal.
+- **Einkaufsbesuch unter einer Minute** zeigte eine leere Dauer im
+  Besuchsprotokoll.
+- Totes Fallback in der Startpunkt-Wahl des Sortier-Algorithmus entfernt.
+- Ergebnis eines `/code-review` über den v0.6-Zyklus — Details siehe Commit
+  `6c5aad6`. Zwei weitere Findings (Regal-only-Kategorien und
+  Geschäftstyp-Migration können bei bereits migrierten Altgeräten Daten
+  verloren haben) werden manuell statt per Code-Fix nachgereicht, da die App
+  nicht produktiv ist.
+
 ## v0.7 (Build 97) — Versions-Checkpoint: v0.6-Zyklus abgeschlossen
 
 - Minor-Version auf `0.7` angehoben (Nutzervorgabe) — der `v0.6`-Zyklus (adaptive

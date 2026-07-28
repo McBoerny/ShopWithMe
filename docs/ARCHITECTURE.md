@@ -198,7 +198,10 @@ CloudKit/iCloud-Sync — bei Cloud-Sync-Ordnern liegt die Verantwortung für
 Konfliktvermeidung (nur ein aktiv schreibendes Gerät) beim Nutzer, dokumentiert in der
 App-Hilfe. Koordinierter Mehrbenutzerzugriff auf einen solchen Fileshare-Ordner
 (Micro-/Session-Lease über `NSFileCoordinator`/`NSFilePresenter`) ist seit Build 30
-umgesetzt: siehe `docs/DATABASE_CONCURRENCY.md`.
+umgesetzt: siehe `docs/DATABASE_CONCURRENCY.md`. Bewertung und bewusste Ablehnung
+eines weitergehenden Event-Sourcing-/CRDT-/Multipeer-Sync-Vorschlags (GitHub #39),
+inkl. der daraus übernommenen, angepassten Überkauf-Erkennung: siehe
+`docs/DATENSYNCHRONISATION_BEWERTUNG.md`.
 
 ## Builds, Versionierung & Migrationen
 
