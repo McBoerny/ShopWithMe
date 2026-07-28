@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.7 (Build 117) — Datensynchronisation Phase 4: automatisches Hintergrund-Polling (GitHub #39)
+
+- Neuer `SyncPollingService` synchronisiert jetzt automatisch, solange die
+  App im Vordergrund ist — sofort bei App-Start bzw. Rückkehr aus dem
+  Hintergrund, danach alle 5 Sekunden während aktiv gemeinsam eingekauft wird
+  (Einkaufen-Bildschirm sichtbar), sonst alle 60 Sekunden. Manuelles
+  „Jetzt synchronisieren" bleibt zusätzlich weiter verfügbar.
+- Läuft nur im Vordergrund (iOS pausiert reine In-App-Timer im Hintergrund) —
+  echte Synchronisation bei gesperrtem Gerät bräuchte das
+  `BackgroundTasks`-Framework und ist bewusst nicht Teil dieser Phase.
+- Kein Fehler-Backoff und keine separate Konsolidierungslogik umgesetzt
+  (Details und Begründung in `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`).
+- Damit sind alle sechs Phasen des Datensynchronisations-Umsetzungsplans
+  umgesetzt (mit den oben und im Plan-Dokument genannten, bewussten
+  Vereinfachungen). Offen bleibt nur noch das separate, weiterhin
+  zurückgestellte Multipeer-Vorhaben (Issue #49).
+
 ## v0.7 (Build 116) — Datensynchronisation Phase 5: automatischer Erst-Sync beim Verbinden (GitHub #39)
 
 - Sync-Ordner verknüpfen (Einstellungen → Datensynchronisation) löst jetzt

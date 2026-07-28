@@ -128,6 +128,52 @@ Besuchszahl je Eintrag mitführt). Die Zuordnungstabellen
 Phase 3a werden dafür direkt wiederverwendet. **Damit ist Phase 3 (Import
 Bereich B/C/D) vollständig umgesetzt.**
 
+**Status: Phase 5 umgesetzt** (Gruppen-Setup-UX, siehe Abschnitt 6) —
+`SyncOrdnerSettingsView.ordnerFestlegen(_:)` löst direkt beim Verknüpfen eines
+Ordners einen ersten vollständigen Sync-Zyklus aus, statt dass danach noch
+manuell auf „Jetzt synchronisieren" getippt werden muss. Der eigentliche
+Bootstrap-Merge war durch Phase 3 bereits abgedeckt.
+
+**Status: Phase 6 umgesetzt** (GitHub #48, Überkauf-Hinweis) — siehe
+Abschnitt 8 unten für Details.
+
+**Status: Phase 4 umgesetzt** (Konsolidierung + adaptives Polling, Abschnitt
+5.4/5.5) — mit einer per Nutzerentscheidung abweichenden, einfacheren
+Intervall-Logik als ursprünglich skizziert:
+
+- Neuer `SyncPollingService` führt einen vollständigen Sync-Zyklus (Import +
+  Export für alle vier Bereiche) automatisch aus, solange die App im
+  Vordergrund ist — sofort beim App-Start bzw. bei Rückkehr aus dem
+  Hintergrund, danach alle 5 Sekunden, solange `EinkaufslisteView` sichtbar
+  ist (aktiv gemeinsam eingekauft wird), sonst alle 60 Sekunden. Abweichung
+  von der ursprünglichen 5s/30s-Tabelle: kein separates
+  Hintergrund-Intervall, da ein reiner In-App-`Task`-Loop ohnehin pausiert,
+  sobald iOS die App suspendiert (siehe „Bekannte Grenze" unten) — die
+  Unterscheidung wäre wirkungslos gewesen.
+- **Kein Fehler-Backoff umgesetzt** (die im Plan skizzierte Eskalation bis
+  120s bei wiederholten Fehlern) — alle Sync-Funktionen sind heute
+  best-effort mit stillem Fehlschlagen (`try?`) ohne auswertbares
+  Erfolgs-/Fehlersignal; ein Backoff hätte zunächst eine Erfolgs-/Fehler-
+  Rückmeldung aus jeder Sync-Funktion gebraucht. Bei Bedarf nachrüstbar.
+- **Konsolidierung (Abschnitt 5.5, „wann einen vollen Snapshot schreiben")
+  nicht separat umgesetzt** — `SyncSnapshotExportService` schreibt (wie seit
+  Phase 1b) bei jedem Zyklus unbedingt einen vollen `export.json`. Bei 60s-
+  bzw. 5s-Takt ist das schreibhäufiger als die ursprünglich elizierte
+  24h/50-Event-Schwelle, aber unkritisch für den heutigen Umfang (kleine
+  JSON-Dateien, kein Löschen alter Event-Dateien nötig, da noch keins
+  angelegt wird).
+- **Bekannte, bewusst nicht gelöste Grenze:** Ein In-App-`Task`-Loop läuft
+  nur, während die App im Vordergrund ist — iOS pausiert ihn beim Wechsel in
+  den Hintergrund (siehe `ShopWithMeApp`, das `starten`/`stoppen` an
+  `scenePhase` koppelt). Echte Synchronisation bei gesperrtem Gerät oder
+  schon vor dem Öffnen der App bräuchte das `BackgroundTasks`-Framework mit
+  eigenen Entitlements und System-Throttling — nicht Teil dieser Phase.
+- **Offene Alt-Datei-Frage:** Event-Dateien in `peers/{geraeteID}/events/`
+  werden nie gelöscht — wächst über Zeit unbegrenzt. War in der
+  ursprünglichen Planung Teil der jetzt nicht umgesetzten Konsolidierung
+  (Löschen nach 2h-Sicherheitsfenster). Für den aktuellen Umfang unkritisch
+  (kleine JSON-Dateien), aber ein späterer Aufräum-Mechanismus bleibt sinnvoll.
+
 ---
 
 ## 1. Architekturüberblick
@@ -467,7 +513,10 @@ spiegeln, statt auf den nächsten Polling-Zyklus zu warten).
      `SyncEntitaetsAlias` (fremde↔lokale ID bei Namens-Matches).
    - **3b (umgesetzt):** Historie/Lernen (`Einkaufsvorgang` ID-basiert,
      `KaufEintrag` als Union nach `id`, `WarengruppenDistanz` gemittelt).
-5. **Phase 4 — Konsolidierung + adaptives Polling** (Abschnitt 5.4/5.5).
+5. **Phase 4 (umgesetzt, vereinfacht) — Konsolidierung + adaptives Polling**
+   (Abschnitt 5.4/5.5): `SyncPollingService` (5s aktiv einkaufend / 60s
+   ruhend, nur im Vordergrund) — ohne Fehler-Backoff und ohne separate
+   Konsolidierungslogik, siehe Details oben.
 6. **Phase 5 (umgesetzt) — Gruppen-Setup-UX** (Abschnitt 6): der
    Bootstrap-Merge-Teil war durch Phase 3 bereits abgedeckt (dieselbe
    Merge-Logik läuft unabhängig davon, ob ein Peer-Ordner beim Verbinden schon

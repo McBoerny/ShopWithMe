@@ -10,6 +10,8 @@ import SwiftData
 @main
 struct ShopWithMeApp: App {
     let modelContainer: ModelContainer
+    @StateObject private var syncPollingService = SyncPollingService()
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         let schema = SchemaDefinition.schema
@@ -55,7 +57,17 @@ struct ShopWithMeApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                .environmentObject(syncPollingService)
+                .task { syncPollingService.starten(context: modelContainer.mainContext) }
         }
         .modelContainer(modelContainer)
+        .onChange(of: scenePhase) { _, neuePhase in
+            switch neuePhase {
+            case .active:
+                syncPollingService.starten(context: modelContainer.mainContext)
+            default:
+                syncPollingService.stoppen()
+            }
+        }
     }
 }

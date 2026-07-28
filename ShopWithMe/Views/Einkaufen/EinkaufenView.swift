@@ -712,6 +712,7 @@ private struct EinkaufslisteView: View {
     let einkaufsvorgang: Einkaufsvorgang
 
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var syncPollingService: SyncPollingService
 
     @State private var zeigeBelegScanAngebot = false
     @State private var zeigeBelegScan = false
@@ -1040,6 +1041,8 @@ private struct EinkaufslisteView: View {
             }
         }
         .animation(.default, value: ueberkaufHinweisText)
+        .onAppear { syncPollingService.einkaufAktiv = true }
+        .onDisappear { syncPollingService.einkaufAktiv = false }
     }
 
     private func istAbgehakt(_ artikel: Artikel) -> Bool {
