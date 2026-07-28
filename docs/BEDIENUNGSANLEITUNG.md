@@ -50,6 +50,13 @@ Geschäftstyp. Die Reihenfolge, in der die Kategorien beim Einkaufen erscheinen,
 legst du nicht manuell fest — die App lernt sie automatisch aus deinem
 Abhakverhalten (siehe „Einkaufen“ unten).
 
+In der Detailansicht eines Geschäfts siehst du alle verfügbaren Kategorien
+gemeinsam, alphabetisch — automatisch über den Geschäftstyp verfügbare sind mit
+„Automatisch über Geschäftstyp“ gekennzeichnet und lassen sich dort nicht
+entfernen (dafür den Geschäftstyp ändern oder die Warengruppe in dessen
+Verwaltung entfernen); manuell zugeordnete entfernst du wie gewohnt per
+Wischgeste.
+
 **Standort beim Anlegen/Bearbeiten:** Sobald ein Geschäft Koordinaten hat, zeigt
 das Bearbeiten-Formular eine kleine Karte mit einem Pin — durch Antippen der
 Karte lässt sich der Standort exakt setzen (die Adresse wird dabei automatisch
@@ -178,11 +185,14 @@ Import ausschließen.
   Einkaufsliste, Artikel und Geschäfte sind daher nur noch hier erreichbar.
 - **Geschäftstypen** — legt je Geschäftstyp (Lebensmittel, Drogerie, …) fest,
   welche Kategorien als Standard-Warengruppen gelten und dadurch automatisch in
-  jedem Geschäft dieses Typs verfügbar sind (siehe „Geschäfte“ oben). Ist Apple
-  Intelligence verfügbar, schlägt ein „KI-Vorschlag“-Knopf passende Warengruppen
-  vor, bevorzugt aus bereits vorhandenen Kategorien. Reicht die vorinstallierte
-  Auswahl an Geschäftstypen nicht aus, lässt sich hier oder direkt beim Anlegen
-  eines Geschäfts (Abschnitt „Typ“) ein neuer, eigener Geschäftstyp anlegen.
+  jedem Geschäft dieses Typs verfügbar sind (siehe „Geschäfte“ oben). Name,
+  Symbol und Farbe eines Geschäftstyps lassen sich in derselben Ansicht ändern.
+  Ist Apple Intelligence verfügbar, schlägt ein „KI-Vorschlag“-Knopf passende
+  Warengruppen vor, bevorzugt aus bereits vorhandenen Kategorien — gerade
+  vorgeschlagene Warengruppen sind für die Dauer der Sitzung zusätzlich mit
+  „KI-Vorschlag“ markiert. Reicht die vorinstallierte Auswahl an Geschäftstypen
+  nicht aus, lässt sich hier oder direkt beim Anlegen eines Geschäfts (Abschnitt
+  „Typ“) ein neuer, eigener Geschäftstyp (inkl. Symbol/Farbe) anlegen.
 - **Preishistorie** — Aufbewahrungsdauer/Bereinigung alter Preiseinträge.
 - **Datenbank & Speicherort** — verlegt deine Daten in einen selbst gewählten
   Ordner, z.B. einen lokal gespiegelten Cloud-Ordner. Kein automatischer

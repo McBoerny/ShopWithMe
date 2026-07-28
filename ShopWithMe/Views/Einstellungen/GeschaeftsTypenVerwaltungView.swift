@@ -38,18 +38,23 @@ struct GeschaeftsTypenVerwaltungView: View {
     }
 }
 
-/// Toggle-Liste aller ``ArtikelKategorie``n für einen ``GeschaeftTyp`` — Checkmark
-/// markiert die aktuell zugeordneten Standard-Warengruppen, analog dem
-/// Mehrfachauswahl-Muster in ``ArtikelEditView``. Zeigt die Liste alphabetisch,
-/// mit bereits ausgewählten Kategorien zuerst (``sortierteKategorien``).
+/// Bearbeitet Name, Symbol und Farbe eines ``GeschaeftTyp`` (GitHub #40) sowie die
+/// ihm zugeordneten Standard-Warengruppen — Checkmark markiert die aktuell
+/// zugeordneten Kategorien, analog dem Mehrfachauswahl-Muster in
+/// ``ArtikelEditView``. Zeigt die Liste alphabetisch, mit bereits ausgewählten
+/// Kategorien zuerst (``sortierteKategorien``). Kategorien, die im laufenden
+/// Aufruf von ``kiVorschlagAnfordern()`` markiert wurden, sind zusätzlich mit
+/// „KI-Vorschlag" gekennzeichnet — bewusst nur für die Dauer dieser Sitzung
+/// (``kiVorgeschlageneKategorieIDs``), kein zusätzliches persistentes Feld.
 private struct GeschaeftsTypKategorienView: View {
-    let typ: GeschaeftTyp
+    @Bindable var typ: GeschaeftTyp
 
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \ArtikelKategorie.sortIndex) private var alleKategorien: [ArtikelKategorie]
     @State private var zeigeNeueKategorie = false
     @State private var kiVorschlagLaeuft = false
     @State private var kiFehlermeldung: String?
+    @State private var kiVorgeschlageneKategorieIDs: Set<PersistentIdentifier> = []
 
     /// ``alleKategorien`` alphabetisch, aber mit den für ``typ`` bereits
     /// ausgewählten Kategorien zuerst — eine sich beim Umschalten sofort dynamisch
@@ -64,7 +69,7 @@ private struct GeschaeftsTypKategorienView: View {
             }
         }
         func alphabetisch(_ kategorien: [ArtikelKategorie]) -> [ArtikelKategorie] {
-            kategorien.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            kategorien.sorted { $0.name.vergleicheAlphabetisch(mit: $1.name) == .orderedAscending }
         }
         return alphabetisch(ausgewaehlt) + alphabetisch(uebrige)
     }
@@ -76,6 +81,12 @@ private struct GeschaeftsTypKategorienView: View {
     private var formInhalt: some View {
         Form {
             Section {
+                TextField("Name", text: $typ.name)
+                    .font(.title3)
+                SymbolFarbAuswahlZeile(symbolName: $typ.symbolName, farbeHex: $typ.farbeHex)
+            }
+
+            Section {
                 ForEach(sortierteKategorien) { kategorie in
                     Button {
                         kategorieToggeln(kategorie)
@@ -83,12 +94,20 @@ private struct GeschaeftsTypKategorienView: View {
                         HStack {
                             Label(kategorie.name, systemImage: kategorie.standardSymbol)
                                 .foregroundStyle(.primary)
+                            if kiVorgeschlageneKategorieIDs.contains(kategorie.persistentModelID) {
+                                Text("KI-Vorschlag")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
                             Spacer()
                             if kategorie.geschaeftsTypen.contains(typ) {
                                 Image(systemName: "checkmark")
                                     .foregroundStyle(Color.accentColor)
                             }
                         }
+                        // Ohne contentShape reagiert nur der sichtbare Inhalt auf
+                        // Taps, nicht der leere Spacer-Bereich dazwischen (GitHub #38).
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
@@ -121,7 +140,7 @@ private struct GeschaeftsTypKategorienView: View {
                         .foregroundStyle(.orange)
                 }
             } footer: {
-                Text("Markierte Warengruppen sind automatisch in jedem Geschäft mit diesem Typ verfügbar, ohne sie dort einzeln zuzuordnen. Mehrfachauswahl möglich.")
+                Text("Markierte Warengruppen sind automatisch in jedem Geschäft mit diesem Typ verfügbar, ohne sie dort einzeln zuzuordnen. Mehrfachauswahl möglich. Die „KI-Vorschlag“-Markierung gilt nur für die aktuelle Sitzung, zur Überprüfung des letzten Vorschlags.")
             }
         }
         .navigationTitle(typ.name)
@@ -165,6 +184,10 @@ private struct GeschaeftsTypKategorienView: View {
                 // Eindeutigkeit) würde die zweite Fundstelle die gerade erst
                 // angelegte Kategorie sonst nicht sehen und ein Duplikat anlegen.
                 var bekannteKategorien = alleKategorien
+                // Nur die Vorschläge DIESES Aufrufs markieren, nicht mit einer
+                // eventuell früheren Markierung derselben Sitzung vermischen
+                // (GitHub #40) — rein session-lokal, kein persistentes Feld.
+                var neuVorgeschlagen: Set<PersistentIdentifier> = []
                 for name in vorschlag.kategorieNamen {
                     let getrimmt = name.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !getrimmt.isEmpty else { continue }
@@ -174,6 +197,7 @@ private struct GeschaeftsTypKategorienView: View {
                         if !bestehende.geschaeftsTypen.contains(typ) {
                             bestehende.geschaeftsTypen = bestehende.geschaeftsTypen + [typ]
                         }
+                        neuVorgeschlagen.insert(bestehende.persistentModelID)
                     } else {
                         let naechsterIndex = (bekannteKategorien.map(\.sortIndex).max() ?? -1) + 1
                         let neue = ArtikelKategorie(
@@ -185,8 +209,10 @@ private struct GeschaeftsTypKategorienView: View {
                         neue.geschaeftsTypen = [typ]
                         modelContext.insert(neue)
                         bekannteKategorien.append(neue)
+                        neuVorgeschlagen.insert(neue.persistentModelID)
                     }
                 }
+                kiVorgeschlageneKategorieIDs = neuVorgeschlagen
             } catch {
                 kiFehlermeldung = "KI-Vorschlag fehlgeschlagen."
             }

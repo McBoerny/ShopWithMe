@@ -40,6 +40,9 @@ struct SymbolFarbAuswahlZeile: View {
                     .foregroundStyle(.secondary)
                     .font(.footnote)
             }
+            // Ohne contentShape reagiert nur der sichtbare Inhalt auf Taps, nicht
+            // der leere Spacer-Bereich dazwischen (GitHub #38).
+            .contentShape(Rectangle())
         }
         .sheet(isPresented: $zeigeAuswahl) {
             SymbolAuswahlSheet(symbolName: $symbolName, farbeHex: $farbeHex)

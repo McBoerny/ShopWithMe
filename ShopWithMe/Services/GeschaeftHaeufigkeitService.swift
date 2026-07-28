@@ -61,7 +61,7 @@ enum GeschaeftHaeufigkeitService {
             .sorted { lhs, rhs in
                 lhs.anzahl != rhs.anzahl
                     ? lhs.anzahl > rhs.anzahl
-                    : lhs.geschaeft.name.localizedCaseInsensitiveCompare(rhs.geschaeft.name) == .orderedAscending
+                    : lhs.geschaeft.name.vergleicheAlphabetisch(mit: rhs.geschaeft.name) == .orderedAscending
             }
             .prefix(anzahl)
             .map(\.geschaeft)

@@ -47,12 +47,11 @@ struct ArtikelHinzufuegenView: View {
     }
 
     /// ``gefilterteArtikel`` gruppiert nach Anfangsbuchstaben, alphabetisch — die
-    /// Grundlage für die automatische A–Z-Sprungleiste (GitHub #8).
+    /// Grundlage für die automatische A–Z-Sprungleiste (GitHub #8). Umlaute
+    /// einsortiert bei ihrem Basisbuchstaben (GitHub #34).
     private var gruppierteArtikel: [(buchstabe: String, artikel: [Artikel])] {
-        let gruppen = Dictionary(grouping: gefilterteArtikel) { artikel -> String in
-            guard let erstesZeichen = artikel.name.first else { return "#" }
-            return String(erstesZeichen).uppercased()
-        }
+        let sortiert = gefilterteArtikel.sorted { $0.name.vergleicheAlphabetisch(mit: $1.name) == .orderedAscending }
+        let gruppen = Dictionary(grouping: sortiert) { $0.name.alphabetischerAnfangsbuchstabe }
         return gruppen.keys.sorted().map { buchstabe in (buchstabe, gruppen[buchstabe] ?? []) }
     }
 

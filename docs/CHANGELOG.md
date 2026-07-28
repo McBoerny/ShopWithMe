@@ -1375,7 +1375,7 @@ echte Bugs in der v0.5-Ladenerkennung auf, beide jetzt behoben:
   automatisch die beim Einkaufen in diesem Geschäft verfügbaren Kategorien.
 - Geschäfte-Tab in `RootView` verdrahtet.
 
-## v0.2 — Artikel-Verwaltung
+## v0.2 (Build 100) — Artikel-Verwaltung
 
 - `DesignSystem/GlassStyles.swift`: `glassCard`-Modifier und `GlassSymbolBadge` als
   wiederverwendbare Liquid-Glass-Bausteine.

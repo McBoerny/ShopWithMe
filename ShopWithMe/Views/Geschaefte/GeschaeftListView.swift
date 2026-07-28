@@ -38,12 +38,11 @@ struct GeschaeftListView: View {
         GeschaeftHaeufigkeitService.favoriten(aus: einkaufsvorgaenge)
     }
 
-    /// ``geschaefte`` gruppiert nach Anfangsbuchstaben, alphabetisch.
+    /// ``geschaefte`` gruppiert nach Anfangsbuchstaben, alphabetisch — Umlaute
+    /// einsortiert bei ihrem Basisbuchstaben (GitHub #34).
     private var gruppierteGeschaefte: [(buchstabe: String, geschaefte: [Geschaeft])] {
-        let gruppen = Dictionary(grouping: geschaefte) { geschaeft -> String in
-            guard let erstesZeichen = geschaeft.name.first else { return "#" }
-            return String(erstesZeichen).uppercased()
-        }
+        let sortiert = geschaefte.sorted { $0.name.vergleicheAlphabetisch(mit: $1.name) == .orderedAscending }
+        let gruppen = Dictionary(grouping: sortiert) { $0.name.alphabetischerAnfangsbuchstabe }
         return gruppen.keys.sorted().map { buchstabe in (buchstabe, gruppen[buchstabe] ?? []) }
     }
 

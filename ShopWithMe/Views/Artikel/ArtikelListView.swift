@@ -51,7 +51,7 @@ struct ArtikelListView: View {
         }
         return nachKategorie.values.sorted {
             $0.kategorie.sortIndex == $1.kategorie.sortIndex
-                ? $0.kategorie.name < $1.kategorie.name
+                ? $0.kategorie.name.vergleicheAlphabetisch(mit: $1.kategorie.name) == .orderedAscending
                 : $0.kategorie.sortIndex < $1.kategorie.sortIndex
         }
     }

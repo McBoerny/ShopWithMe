@@ -22,11 +22,22 @@ final class GeschaeftTyp {
     /// Warengruppen, die für diesen Typ als Standard gelten — inverse zu
     /// ``ArtikelKategorie/geschaeftsTypen`` (GitHub #5).
     var standardKategorien: [ArtikelKategorie] = []
+    /// Rohspeicher für ``farbeHex`` — additiv optional, damit vor GitHub #40
+    /// angelegte Geschäftstypen (inkl. der zehn vorinstallierten Standardtypen)
+    /// ohne Migration einen sinnvollen Fallback erhalten.
+    private var farbeHexRaw: String?
+    /// Anzeigefarbe dieses Geschäftstyps (GitHub #40) — frei wählbar, fällt ohne
+    /// explizite Wahl auf eine neutrale Standardfarbe zurück.
+    var farbeHex: String {
+        get { farbeHexRaw ?? "#8E8E93" }
+        set { farbeHexRaw = newValue }
+    }
 
-    init(name: String, symbolName: String, sortIndex: Int = 0) {
+    init(name: String, symbolName: String, farbeHex: String? = nil, sortIndex: Int = 0) {
         self.id = UUID()
         self.name = name
         self.symbolName = symbolName
+        self.farbeHexRaw = farbeHex
         self.sortIndex = sortIndex
     }
 }

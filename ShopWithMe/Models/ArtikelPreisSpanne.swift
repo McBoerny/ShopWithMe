@@ -32,6 +32,6 @@ extension ArtikelPreisSpanne {
             guard let artikel = artikelProID[artikelID] else { return nil }
             return ArtikelPreisSpanne(artikel: artikel, eintraege: gruppenEintraege)
         }
-        .sorted { $0.artikel.name.localizedCaseInsensitiveCompare($1.artikel.name) == .orderedAscending }
+        .sorted { $0.artikel.name.vergleicheAlphabetisch(mit: $1.artikel.name) == .orderedAscending }
     }
 }

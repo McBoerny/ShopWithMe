@@ -846,9 +846,10 @@ private struct EinkaufslisteView: View {
             let kategorie = effektiveKategorie(fuer: artikel)
             nachKategorie[kategorie.persistentModelID, default: KategorieGruppe(kategorie: kategorie, artikel: [])].artikel.append(artikel)
         }
-        let alphabetisch = nachKategorie.values.map(\.kategorie).sorted { $0.name < $1.name }
+        let alphabetisch = nachKategorie.values.map(\.kategorie)
+            .sorted { $0.name.vergleicheAlphabetisch(mit: $1.name) == .orderedAscending }
         guard let geschaeft else {
-            return nachKategorie.values.sorted { $0.kategorie.name < $1.kategorie.name }
+            return nachKategorie.values.sorted { $0.kategorie.name.vergleicheAlphabetisch(mit: $1.kategorie.name) == .orderedAscending }
         }
         let sortiert = WarengruppenDistanzService.sortierteReihenfolge(
             offeneKategorien: alphabetisch,

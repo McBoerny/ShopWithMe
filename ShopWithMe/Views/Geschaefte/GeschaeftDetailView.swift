@@ -4,7 +4,10 @@ import SwiftData
 /// Detailansicht eines ``Geschaeft``s: Stammdaten, Kategorien-Verwaltung sowie
 /// Kaufbeleg- und Preisschild-Scan.
 ///
-/// Der „Kategorien“-Abschnitt zeigt ``Geschaeft/verfuegbareKategorien`` — die
+/// Der „Kategorien“-Abschnitt zeigt alle verfügbaren Kategorien
+/// (``Geschaeft/verfuegbareKategorien(alleKategorien:)``, GitHub #37) — manuell
+/// zugeordnete und über den Geschäftstyp automatische gemeinsam, alphabetisch,
+/// automatische Kategorien speziell markiert und nicht direkt entfernbar. Die
 /// Reihenfolge beim Einkaufen wird nicht hier manuell festgelegt, sondern von
 /// ``WarengruppenDistanzService`` aus dem bisherigen Abhakverhalten gelernt.
 ///
@@ -40,6 +43,7 @@ private enum GeschaeftDetailNavigationsziel: Hashable {
 struct GeschaeftDetailView: View {
     @Bindable var geschaeft: Geschaeft
     @Environment(\.modelContext) private var modelContext
+    @Query private var alleKategorien: [ArtikelKategorie]
     @State private var zeigeStammdatenEdit = false
     @State private var zeigeBelegScan = false
     @State private var zeigePreisschildScan = false
@@ -47,6 +51,16 @@ struct GeschaeftDetailView: View {
 
     init(geschaeft: Geschaeft) {
         self.geschaeft = geschaeft
+    }
+
+    /// Alle für dieses Geschäft verfügbaren Kategorien (manuell zugeordnete +
+    /// über den Geschäftstyp automatische, GitHub #37), alphabetisch — mit
+    /// Kennzeichnung, ob eine Kategorie automatisch über den Geschäftstyp
+    /// verfügbar ist (dann nicht direkt entfernbar, siehe ``kategorieEntfernen(_:)``).
+    private var kategorienAnzeige: [(kategorie: ArtikelKategorie, automatisch: Bool)] {
+        geschaeft.verfuegbareKategorien(alleKategorien: alleKategorien)
+            .sorted { $0.name.vergleicheAlphabetisch(mit: $1.name) == .orderedAscending }
+            .map { ($0, !geschaeft.kategorien.contains($0)) }
     }
 
     var body: some View {
@@ -82,10 +96,29 @@ struct GeschaeftDetailView: View {
             }
 
             Section {
-                ForEach(geschaeft.verfuegbareKategorien) { kategorie in
-                    Label(kategorie.name, systemImage: kategorie.standardSymbol)
+                ForEach(kategorienAnzeige, id: \.kategorie.id) { eintrag in
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(eintrag.kategorie.name)
+                            if eintrag.automatisch {
+                                Text("Automatisch über Geschäftstyp")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    } icon: {
+                        Image(systemName: eintrag.kategorie.standardSymbol)
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: !eintrag.automatisch) {
+                        if !eintrag.automatisch {
+                            Button(role: .destructive) {
+                                kategorieEntfernen(eintrag.kategorie)
+                            } label: {
+                                Label("Entfernen", systemImage: "trash")
+                            }
+                        }
+                    }
                 }
-                .onDelete(perform: kategorieEntfernen)
 
                 Button {
                     zeigeKategorieHinzufuegen = true
@@ -95,7 +128,7 @@ struct GeschaeftDetailView: View {
             } header: {
                 Text("Kategorien")
             } footer: {
-                Text("Kategorien sind sofort verfügbar. Die Reihenfolge beim Einkaufen lernt die App automatisch aus deinem bisherigen Abhakverhalten. Zum Entfernen nach links wischen.")
+                Text("Kategorien sind sofort verfügbar. Die Reihenfolge beim Einkaufen lernt die App automatisch aus deinem bisherigen Abhakverhalten. Automatisch über den Geschäftstyp verfügbare Kategorien lassen sich hier nicht entfernen — dafür den Geschäftstyp ändern oder die Warengruppe in dessen Verwaltung entfernen. Manuell zugeordnete Kategorien: zum Entfernen nach links wischen.")
             }
 
             Section {
@@ -145,11 +178,8 @@ struct GeschaeftDetailView: View {
         }
     }
 
-    private func kategorieEntfernen(at offsets: IndexSet) {
-        let kategorien = geschaeft.verfuegbareKategorien
-        for index in offsets {
-            geschaeft.kategorien.removeAll { $0 == kategorien[index] }
-        }
+    private func kategorieEntfernen(_ kategorie: ArtikelKategorie) {
+        geschaeft.kategorien.removeAll { $0 == kategorie }
     }
 }
 

@@ -14,17 +14,15 @@ struct NeuerGeschaeftsTypSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var symbolName = "shippingbox.fill"
+    @State private var farbeHex = Color.artikelPalette[0]
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    HStack(spacing: 16) {
-                        GlassSymbolBadge(symbolName: symbolName, farbe: .accentColor, groesse: 56)
-                        TextField("Name", text: $name)
-                            .font(.title3)
-                    }
-                    TextField("SF-Symbol", text: $symbolName)
+                    TextField("Name", text: $name)
+                        .font(.title3)
+                    SymbolFarbAuswahlZeile(symbolName: $symbolName, farbeHex: $farbeHex)
                 }
             }
             .navigationTitle("Neuer Geschäftstyp")
@@ -39,6 +37,7 @@ struct NeuerGeschaeftsTypSheet: View {
                         let typ = GeschaeftTyp(
                             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
                             symbolName: getrimmtesSymbol.isEmpty ? "shippingbox.fill" : getrimmtesSymbol,
+                            farbeHex: farbeHex,
                             sortIndex: naechsterSortIndex
                         )
                         Task {

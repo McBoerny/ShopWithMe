@@ -60,6 +60,10 @@ struct GeschaeftStammdatenEditView: View {
                                         .foregroundStyle(Color.accentColor)
                                 }
                             }
+                            // Ohne contentShape reagiert nur der sichtbare Inhalt
+                            // (Label/Checkmark) auf Taps, nicht der leere
+                            // Spacer-Bereich dazwischen (GitHub #38).
+                            .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                     }
