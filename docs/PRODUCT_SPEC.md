@@ -25,9 +25,12 @@ Geschäfte und den Einkaufsvorgang selbst intelligent unterstützt.
   Apotheke, …, z.B. Drogerie + Lebensmittel bei einem dm) sowie eigene
   **Kategorien**: ein Geschäft kann Kategorien direkt zugeordnet bekommen — nur
   diese (bzw. über den Geschäftstyp automatisch verfügbaren) Kategorien werden
-  beim Einkaufen für dieses Geschäft angezeigt. Die Reihenfolge, in der sie beim
-  Einkaufen erscheinen, wird nicht manuell festgelegt, sondern automatisch aus dem
-  Abhakverhalten gelernt (siehe „Einkaufsvorgang“ unten).
+  beim Einkaufen für dieses Geschäft angezeigt. Eine automatisch über den
+  Geschäftstyp verfügbare Kategorie lässt sich zusätzlich für ein einzelnes
+  Geschäft ausschließen (Negativliste), ohne sie generell vom Geschäftstyp zu
+  entfernen (GitHub #43). Die Reihenfolge, in der sie beim Einkaufen erscheinen,
+  wird nicht manuell festgelegt, sondern automatisch aus dem Abhakverhalten
+  gelernt (siehe „Einkaufsvorgang“ unten).
 
 ## Artikel-Anlage mit KI-Unterstützung
 

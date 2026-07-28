@@ -73,4 +73,14 @@ extension Einkaufsliste {
         context.insert(neuer)
         return neuer
     }
+
+    /// Nimmt `artikel` wieder von dieser Liste — Gegenstück zu
+    /// ``artikelHinzufuegen(_:context:)``, ohne Wirkung falls er nicht darauf
+    /// steht. Rein die Listenmitgliedschaft betreffend, nicht zu verwechseln mit
+    /// ``Einkaufsvorgang/artikelAbwaehlen(_:context:)`` (macht ein Abhaken
+    /// während eines laufenden Einkaufs rückgängig, GitHub #45).
+    func artikelEntfernen(_ artikel: Artikel, context: ModelContext) {
+        guard let bestehender = eintrag(fuer: artikel) else { return }
+        context.delete(bestehender)
+    }
 }

@@ -37,15 +37,26 @@ struct ArtikelListView: View {
         var id: PersistentIdentifier { kategorie.persistentModelID }
     }
 
-    /// ``artikel``, gruppiert nach der ersten ``Artikel/effektiveKategorien(context:)``
-    /// und nach ``ArtikelKategorie/sortIndex`` sortiert — nur relevant im
+    /// ``artikel``, alphabetisch sortiert — Umlaute einsortiert bei ihrem
+    /// Basisbuchstaben (GitHub #46) statt in der rohen `@Query`-Reihenfolge
+    /// (reine Unicode-Codepoint-Sortierung durch SwiftData/SQLite), die
+    /// umlauthaltige Namen ans Ende sortiert. Grundlage für beide
+    /// ``ArtikelSortierung``-Modi, damit auch innerhalb einer Kategorie-Gruppe
+    /// (``kategorieGruppen``) alphabetisch korrekt sortiert ist.
+    private var alphabetischSortiert: [Artikel] {
+        artikel.sorted { $0.name.vergleicheAlphabetisch(mit: $1.name) == .orderedAscending }
+    }
+
+    /// ``alphabetischSortiert``, gruppiert nach der ersten
+    /// ``Artikel/effektiveKategorien(context:)`` und nach
+    /// ``ArtikelKategorie/sortIndex`` sortiert — nur relevant im
     /// ``ArtikelSortierung/kategorie``-Modus. Rein geschäftsunabhängige
     /// Verwaltungsansicht, daher (anders als beim Einkaufen) keine „führende
     /// Kategorie pro Geschäft“-Auflösung nötig — einfach die erste zugeordnete
     /// Kategorie.
     private var kategorieGruppen: [KategorieGruppe] {
         var nachKategorie: [PersistentIdentifier: KategorieGruppe] = [:]
-        for eintrag in artikel {
+        for eintrag in alphabetischSortiert {
             let kategorie = eintrag.effektiveKategorien(context: modelContext)[0]
             nachKategorie[kategorie.persistentModelID, default: KategorieGruppe(kategorie: kategorie, artikel: [])].artikel.append(eintrag)
         }
@@ -60,11 +71,11 @@ struct ArtikelListView: View {
         List {
             switch sortierung {
             case .alphabetisch:
-                ForEach(artikel) { eintrag in
+                ForEach(alphabetischSortiert) { eintrag in
                     artikelZeile(eintrag)
                 }
                 .onDelete { offsets in
-                    artikelLoeschen(offsets.map { artikel[$0] })
+                    artikelLoeschen(offsets.map { alphabetischSortiert[$0] })
                 }
             case .kategorie:
                 ForEach(kategorieGruppen) { gruppe in

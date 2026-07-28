@@ -67,6 +67,11 @@ struct KategorieHinzufuegenSheet: View {
 
     private func kategorieHinzufuegen(_ kategorie: ArtikelKategorie) {
         geschaeft.kategorien.append(kategorie)
+        // Falls die Kategorie zuvor als automatisch-über-Geschäftstyp
+        // ausgeschlossen war (GitHub #43): Ausschluss aufräumen, da sie jetzt
+        // ohnehin direkt zugeordnet ist — sonst bliebe ein wirkungsloser,
+        // verwaister Eintrag in `ausgeschlosseneKategorien` stehen.
+        geschaeft.ausgeschlosseneKategorien.removeAll { $0 == kategorie }
     }
 }
 

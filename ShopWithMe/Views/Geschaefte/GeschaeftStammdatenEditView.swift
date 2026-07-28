@@ -32,12 +32,6 @@ struct GeschaeftStammdatenEditView: View {
     @Query(sort: \GeschaeftTyp.sortIndex) private var alleTypen: [GeschaeftTyp]
     @State private var standortWirdErmittelt = false
     @State private var zeigeNeuerTyp = false
-    /// Gebunden statt `initialPosition`, damit die Kartenregion sowohl beim
-    /// Verschieben des Pins als auch beim Ändern von
-    /// ``Geschaeft/erkennungsradius`` (GitHub #41, Slider unten) neu zentriert
-    /// werden kann — `initialPosition` wird von MapKit nur beim allerersten
-    /// Erscheinen der Karte ausgewertet, nicht bei späteren Änderungen.
-    @State private var kameraPosition: MapCameraPosition = .automatic
 
     var body: some View {
         if istNeu {
@@ -103,7 +97,7 @@ struct GeschaeftStammdatenEditView: View {
                 Section {
                     if let koordinate = geschaeft.koordinate {
                         MapReader { proxy in
-                            Map(position: $kameraPosition) {
+                            Map(initialPosition: .region(kartenRegion(fuer: koordinate, radius: geschaeft.erkennungsradius))) {
                                 Marker(geschaeft.name.isEmpty ? "Geschäft" : geschaeft.name, coordinate: koordinate)
                                 MapCircle(center: koordinate, radius: geschaeft.erkennungsradius)
                                     .foregroundStyle(Color.accentColor.opacity(0.15))
@@ -116,19 +110,6 @@ struct GeschaeftStammdatenEditView: View {
                             }
                         }
                         .listRowInsets(EdgeInsets())
-                        .onAppear { kameraZentrieren(auf: koordinate, radius: geschaeft.erkennungsradius) }
-                        // CLLocationCoordinate2D ist nicht Equatable — Breiten-/
-                        // Längengrad einzeln beobachten statt der Koordinate als
-                        // Ganzes.
-                        .onChange(of: koordinate.latitude) { _, _ in
-                            kameraZentrieren(auf: koordinate, radius: geschaeft.erkennungsradius)
-                        }
-                        .onChange(of: koordinate.longitude) { _, _ in
-                            kameraZentrieren(auf: koordinate, radius: geschaeft.erkennungsradius)
-                        }
-                        .onChange(of: geschaeft.erkennungsradius) { _, neuerRadius in
-                            kameraZentrieren(auf: koordinate, radius: neuerRadius)
-                        }
 
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Erkennungsradius: \(Int(geschaeft.erkennungsradius)) m")
@@ -208,14 +189,16 @@ struct GeschaeftStammdatenEditView: View {
         geschaeft.typen = aktuelle
     }
 
-    /// Zentriert ``kameraPosition`` auf `koordinate` mit einer Kartenregion, die
-    /// groß genug ist, um den ``MapCircle`` mit `radius` vollständig zu zeigen
-    /// (GitHub #41) — mindestens 500m Kantenlänge, sonst das Dreifache des
-    /// Radius, damit auch ein großzügig gewählter Erkennungsradius nicht über
-    /// den sichtbaren Kartenausschnitt hinausragt.
-    private func kameraZentrieren(auf koordinate: CLLocationCoordinate2D, radius: Double) {
+    /// Anfängliche Kartenregion, groß genug, um den ``MapCircle`` mit `radius`
+    /// vollständig zu zeigen (GitHub #41) — mindestens 500m Kantenlänge, sonst
+    /// das Dreifache des Radius. Bewusst nur als `initialPosition` verwendet,
+    /// nicht als gebundene, live nachgeführte Kameraposition — der Nutzer soll
+    /// die Karte nach dem ersten Anzeigen frei zoomen/verschieben können, ohne
+    /// dass ein Wechsel von Pin oder Radius das automatisch überschreibt
+    /// (GitHub #42).
+    private func kartenRegion(fuer koordinate: CLLocationCoordinate2D, radius: Double) -> MKCoordinateRegion {
         let spanne = max(500, radius * 3)
-        kameraPosition = .region(MKCoordinateRegion(center: koordinate, latitudinalMeters: spanne, longitudinalMeters: spanne))
+        return MKCoordinateRegion(center: koordinate, latitudinalMeters: spanne, longitudinalMeters: spanne)
     }
 
     /// Setzt den Standort-Pin auf `koordinate` und trägt — nur falls noch keine

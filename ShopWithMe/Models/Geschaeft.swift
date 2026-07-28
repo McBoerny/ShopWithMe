@@ -66,6 +66,14 @@ final class Geschaeft {
     /// ``verfuegbareKategorien``).
     @Relationship(inverse: \ArtikelKategorie.geschaefte)
     var kategorien: [ArtikelKategorie] = []
+    /// Kategorien, die trotz automatischer Verfügbarkeit über einen der
+    /// ``typen`` (``ArtikelKategorie/geschaeftsTypen``) für dieses eine
+    /// Geschäft ausgeschlossen sind (GitHub #43) — eine Negativliste zusätzlich
+    /// zur Positivliste ``kategorien``. Wird eine hier gelistete Kategorie
+    /// später direkt zu ``kategorien`` hinzugefügt (z.B. über
+    /// ``KategorieHinzufuegenSheet``), sticht das den Ausschluss (siehe
+    /// ``verfuegbareKategorien(alleKategorien:)``).
+    var ausgeschlosseneKategorien: [ArtikelKategorie] = []
     /// Preishistorie (``KaufEintrag``), die in diesem Geschäft erfasst wurde. Wird das
     /// Geschäft gelöscht, wird auch seine gesamte Preishistorie gelöscht — siehe
     /// `docs/GESCHAEFTSERKENNUNG.md`.
@@ -258,13 +266,20 @@ final class Geschaeft {
     /// Wie ``verfuegbareKategorien``, ergänzt um Kategorien, die zwar nicht
     /// ``kategorien`` dieses Geschäfts zugeordnet sind, aber laut
     /// ``ArtikelKategorie/geschaeftsTypen`` als typische Warengruppe für einen der
-    /// ``typen`` dieses Geschäfts gelten (GitHub #5). Wird für die tatsächliche
-    /// Verfügbarkeit beim Einkaufen genutzt (siehe ``ArtikelVerfuegbarkeitService``,
-    /// ``Artikel/fuehrendeKategorie(inGeschaeft:context:)``) — `alleKategorien`
-    /// kommt dort aus einem ``ModelContext``-Fetch bzw. einem bestehenden `@Query`.
+    /// ``typen`` dieses Geschäfts gelten (GitHub #5) — abzüglich individuell
+    /// ``ausgeschlosseneKategorien`` (GitHub #43). Eine ausgeschlossene Kategorie,
+    /// die trotzdem direkt zu ``kategorien`` hinzugefügt wird, bleibt verfügbar —
+    /// der Ausschluss betrifft nur den automatischen, typ-basierten Weg. Wird für
+    /// die tatsächliche Verfügbarkeit beim Einkaufen genutzt (siehe
+    /// ``ArtikelVerfuegbarkeitService``, ``Artikel/fuehrendeKategorie(inGeschaeft:context:)``)
+    /// — `alleKategorien` kommt dort aus einem ``ModelContext``-Fetch bzw. einem
+    /// bestehenden `@Query`.
     func verfuegbareKategorien(alleKategorien: [ArtikelKategorie]) -> [ArtikelKategorie] {
         let eigeneTypen = Set(typen)
-        let typBasiert = alleKategorien.filter { !Set($0.geschaeftsTypen).isDisjoint(with: eigeneTypen) }
+        let ausgeschlossen = Set(ausgeschlosseneKategorien.map(\.persistentModelID))
+        let typBasiert = alleKategorien.filter {
+            !Set($0.geschaeftsTypen).isDisjoint(with: eigeneTypen) && !ausgeschlossen.contains($0.persistentModelID)
+        }
         var gesehen = Set<PersistentIdentifier>()
         return (verfuegbareKategorien + typBasiert)
             .filter { gesehen.insert($0.persistentModelID).inserted }

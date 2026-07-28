@@ -109,8 +109,14 @@ struct GeschaeftDetailView: View {
                     } icon: {
                         Image(systemName: eintrag.kategorie.standardSymbol)
                     }
-                    .swipeActions(edge: .trailing, allowsFullSwipe: !eintrag.automatisch) {
-                        if !eintrag.automatisch {
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        if eintrag.automatisch {
+                            Button(role: .destructive) {
+                                kategorieAusschliessen(eintrag.kategorie)
+                            } label: {
+                                Label("Ausschließen", systemImage: "eye.slash")
+                            }
+                        } else {
                             Button(role: .destructive) {
                                 kategorieEntfernen(eintrag.kategorie)
                             } label: {
@@ -128,7 +134,7 @@ struct GeschaeftDetailView: View {
             } header: {
                 Text("Kategorien")
             } footer: {
-                Text("Kategorien sind sofort verfügbar. Die Reihenfolge beim Einkaufen lernt die App automatisch aus deinem bisherigen Abhakverhalten. Automatisch über den Geschäftstyp verfügbare Kategorien lassen sich hier nicht entfernen — dafür den Geschäftstyp ändern oder die Warengruppe in dessen Verwaltung entfernen. Manuell zugeordnete Kategorien: zum Entfernen nach links wischen.")
+                Text("Kategorien sind sofort verfügbar. Die Reihenfolge beim Einkaufen lernt die App automatisch aus deinem bisherigen Abhakverhalten. Automatisch über den Geschäftstyp verfügbare Kategorien lassen sich für dieses eine Geschäft ausschließen, ohne sie generell vom Geschäftstyp zu entfernen — sie tauchen danach wieder unter „Kategorie hinzufügen“ auf. Manuell zugeordnete Kategorien: zum Entfernen nach links wischen.")
             }
 
             Section {
@@ -180,6 +186,14 @@ struct GeschaeftDetailView: View {
 
     private func kategorieEntfernen(_ kategorie: ArtikelKategorie) {
         geschaeft.kategorien.removeAll { $0 == kategorie }
+    }
+
+    /// Schließt eine automatisch über den Geschäftstyp verfügbare Kategorie für
+    /// dieses eine Geschäft aus (GitHub #43), ohne sie generell vom Geschäftstyp
+    /// zu entfernen. Taucht danach wieder in ``KategorieHinzufuegenSheet`` auf.
+    private func kategorieAusschliessen(_ kategorie: ArtikelKategorie) {
+        guard !geschaeft.ausgeschlosseneKategorien.contains(kategorie) else { return }
+        geschaeft.ausgeschlosseneKategorien.append(kategorie)
     }
 }
 

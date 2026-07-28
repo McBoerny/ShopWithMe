@@ -52,10 +52,11 @@ Abhakverhalten (siehe „Einkaufen“ unten).
 
 In der Detailansicht eines Geschäfts siehst du alle verfügbaren Kategorien
 gemeinsam, alphabetisch — automatisch über den Geschäftstyp verfügbare sind mit
-„Automatisch über Geschäftstyp“ gekennzeichnet und lassen sich dort nicht
-entfernen (dafür den Geschäftstyp ändern oder die Warengruppe in dessen
-Verwaltung entfernen); manuell zugeordnete entfernst du wie gewohnt per
-Wischgeste.
+„Automatisch über Geschäftstyp“ gekennzeichnet. Per Wischgeste lässt sich eine
+solche automatische Kategorie für dieses eine Geschäft ausschließen, ohne sie
+generell vom Geschäftstyp zu entfernen — sie taucht danach wieder unter
+„Kategorie hinzufügen“ auf, falls du sie doch wieder brauchst. Manuell
+zugeordnete Kategorien entfernst du wie gewohnt per Wischgeste.
 
 **Standort beim Anlegen/Bearbeiten:** Sobald ein Geschäft Koordinaten hat, zeigt
 das Bearbeiten-Formular eine kleine Karte mit einem Pin — durch Antippen der
@@ -67,10 +68,12 @@ werden dann automatisch ermittelt, solange noch kein Standort gesetzt ist.
 
 **Erkennungsradius:** Unter der Karte legt ein Schieberegler (20–500m) fest, in
 welchem Umkreis um den Standort-Pin die App dieses Geschäft automatisch erkennt
-— als Kreis direkt auf der Karte eingezeichnet, der sich beim Verschieben live
-mitanpasst. Standardmäßig 75m; bei einem großen Gelände (z.B. Baumarkt mit
-großem Parkplatz) lohnt sich ein größerer Radius, bei mehreren dicht benachbarten
-Geschäften ein kleinerer, um Verwechslungen zu vermeiden.
+— als Kreis direkt auf der Karte eingezeichnet. Die Karte zoomt dabei bewusst
+nicht automatisch mit (weder beim Verschieben des Pins noch beim Ändern des
+Radius) — Zoom/Ausschnitt bestimmst du selbst per Fingergeste. Standardmäßig
+75m; bei einem großen Gelände (z.B. Baumarkt mit großem Parkplatz) lohnt sich
+ein größerer Radius, bei mehreren dicht benachbarten Geschäften ein kleinerer,
+um Verwechslungen zu vermeiden.
 
 **Favoriten:** Sowohl in der Geschäfte-Übersicht (Einstellungen) als auch in der
 Geschäftsauswahl beim Einkaufen erscheinen deine meistgenutzten Geschäfte vorab in
@@ -124,6 +127,11 @@ dem Abschließen ein kurzer Hinweis, dass sich die App automatisch anpasst.
   bleiben einfach auf der globalen Liste. Der „Einkauf abschließen“-Button zeigt
   dabei die Anzahl bereits abgehakter Artikel und färbt sich in der Akzentfarbe,
   sobald mindestens einer abgehakt wurde.
+- **„Artikel hinzufügen“** zeigt unter dem Titel zusätzlich den Namen der
+  Einkaufsliste. Die Suche erkennt Singular und Plural gleichermaßen (z.B.
+  findet „Äpfel“ auch den Artikel „Apfel“). Bereits auf der Liste stehende
+  Artikel sind mit dem Abhak-Symbol markiert — erneutes Antippen nimmt sie
+  wieder von der Liste.
 
 ## Belegscan & Preisschild-Scan
 

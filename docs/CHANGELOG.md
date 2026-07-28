@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.7 (Build 102) — Warengruppen-Ausschluss, Singular/Plural-Suche, Karten-/Sortier-Fixes (GitHub #42–#46)
+
+- **Karten-Auto-Zoom entfernt (GitHub #42):** Korrektur der #41-Umsetzung — die
+  Karte in `GeschaeftStammdatenEditView` zoomt nicht mehr automatisch nach, wenn
+  Pin oder Erkennungsradius geändert werden; nur noch eine radius-bewusste
+  Anfangsansicht (`initialPosition`, einmalig).
+- **Automatisch zugeordnete Warengruppen einzeln ausschließbar (GitHub #43):**
+  Neues `Geschaeft.ausgeschlosseneKategorien` (Negativliste) — eine über den
+  Geschäftstyp automatisch verfügbare Kategorie lässt sich für ein einzelnes
+  Geschäft per Wischgeste ausschließen, ohne sie generell vom Geschäftstyp zu
+  entfernen. Taucht danach wieder unter „Kategorie hinzufügen“ auf.
+- **Singular/Plural-unabhängige Artikelsuche (GitHub #44):** Neue
+  `String.passtAlsSingularPluralZu(_:)` kombiniert eine deterministische
+  Wortstamm-Heuristik (Umlaut-Faltung + Präfix-Vergleich gegen gängige deutsche
+  Pluralendungen) mit `NLTagger`s `.lemma`-Schema als Zusatzsignal. Empirisch
+  gegen 15 typische Einkaufs-Wortpaare getestet: die Heuristik allein deckt alle
+  Fälle korrekt ab, `NLTagger` allein nur rund die Hälfte (und einmal aktiv
+  falsch) — deshalb nur additiv verwendet, nie als alleinige Grundlage.
+- **Artikel-hinzufügen-Sheet (GitHub #45):** Titel zeigt jetzt zusätzlich den
+  Namen der Einkaufsliste; bereits auf der Liste stehende Artikel zeigen das
+  App-weit einheitliche Abhak-Symbol statt „Auf Liste“-Text und lassen sich per
+  erneutem Tap wieder von der Liste nehmen (neues
+  `Einkaufsliste.artikelEntfernen(_:context:)`).
+- **Umlaut-Sortierung in „Einstellungen → Artikel“ (GitHub #46):** Folgefall zu
+  #34 — der „Alphabetisch“-Modus sowie die Reihenfolge innerhalb einer
+  Kategorie-Gruppe im „Nach Kategorie“-Modus nutzten noch die rohe
+  `@Query`-Reihenfolge statt der bereits vorhandenen `vergleicheAlphabetisch`-Extension.
+
 ## v0.7 (Build 101) — Individueller Erkennungsradius pro Geschäft (GitHub #41)
 
 - Neues additiv-optionales `Geschaeft.erkennungsradius` (Fallback: der bisherige

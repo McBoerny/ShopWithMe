@@ -54,9 +54,14 @@ einer Fußgängerzone eher einen kleineren, um Verwechslungen zu vermeiden.
   Geschäft — `istGleicherOrt(...)` bekam dafür einen `toleranz`-Parameter.
 - Einstellbar per Slider (20–500m) in `GeschaeftStammdatenEditView`, direkt unter
   der Karte — ein `MapCircle`-Overlay zeichnet den gewählten Radius um den
-  Standort-Pin ein, die Kartenregion zoomt beim Verschieben des Sliders passend
-  mit (`kameraZentrieren(auf:radius:)`, mindestens das Dreifache des Radius als
-  Kantenlänge, sonst 500m).
+  Standort-Pin ein. Die anfängliche Kartenregion (`kartenRegion(fuer:radius:)`,
+  mindestens das Dreifache des Radius als Kantenlänge, sonst 500m) berücksichtigt
+  den beim Öffnen bereits gesetzten Radius, zoomt aber bewusst **nicht** erneut
+  automatisch mit, wenn Pin oder Radius danach geändert werden (`initialPosition`
+  statt einer gebundenen, live nachgeführten Kameraposition) — der Nutzer soll
+  die Karte frei zoomen/verschieben können, ohne dass das überschrieben wird
+  (GitHub #42, Korrektur einer ursprünglich automatisch nachzentrierenden
+  Fassung).
 - **Wichtig — Suchradius muss mitwachsen:** `MKLocalPointsOfInterestRequest`
   sucht nur innerhalb von `suchradius`/`alleInDerNaeheRadius` (150m/100m) um den
   *aktuellen Standort* — ein größerer individueller Erkennungsradius eines

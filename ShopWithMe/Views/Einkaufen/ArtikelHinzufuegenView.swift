@@ -3,14 +3,17 @@ import SwiftData
 
 /// Sheet zum Hinzufügen von Artikeln zu ``einkaufsliste``.
 ///
-/// Bietet eine Suche über alle bereits angelegten Artikel an, alphabetisch nach
-/// Anfangsbuchstaben gruppiert — bei vielen Artikeln zeigt iOS dafür automatisch
-/// eine A–Z-Sprungleiste am rechten Rand, wie im Adressbuch (GitHub #8). Ein Tap
-/// auf einen Artikel fügt ihn sofort zu ``einkaufsliste`` hinzu, ganz ohne
-/// zusätzlichen Bestätigungsschritt — die Zeile zeigt danach „Auf Liste“ und ist
-/// nicht mehr antippbar. Findet die Suche keinen exakten Treffer, kann der
-/// gesuchte Artikel direkt hier angelegt werden — er landet danach ebenfalls
-/// sofort auf der Liste (GitHub #6).
+/// Bietet eine Suche über alle bereits angelegten Artikel an (Singular/Plural-
+/// unabhängig, siehe ``String/passtAlsSingularPluralZu(_:)``, GitHub #44),
+/// alphabetisch nach Anfangsbuchstaben gruppiert — bei vielen Artikeln zeigt
+/// iOS dafür automatisch eine A–Z-Sprungleiste am rechten Rand, wie im
+/// Adressbuch (GitHub #8). Ein Tap auf einen Artikel fügt ihn sofort zu
+/// ``einkaufsliste`` hinzu, ganz ohne zusätzlichen Bestätigungsschritt — die
+/// Zeile zeigt danach das Standard-Abhak-Symbol und bleibt tappbar, um den
+/// Artikel wieder zu entfernen (echtes An-/Abwähl-Toggle, GitHub #45). Findet
+/// die Suche keinen exakten Treffer, kann der gesuchte Artikel direkt hier
+/// angelegt werden — er landet danach ebenfalls sofort auf der Liste
+/// (GitHub #6).
 struct ArtikelHinzufuegenView: View {
     let einkaufsliste: Einkaufsliste
 
@@ -35,9 +38,18 @@ struct ArtikelHinzufuegenView: View {
         suchtext.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// Zusätzlich zum Teilstring-Vergleich auch Singular/Plural-unabhängig
+    /// (GitHub #44, ``String/passtAlsSingularPluralZu(_:)``) — pro Wort des
+    /// Artikelnamens, damit auch mehrteilige Namen (z.B. "Roter Apfel") erfasst
+    /// werden, wenn nach "Äpfel" gesucht wird.
     private var gefilterteArtikel: [Artikel] {
         guard !getrimmterSuchtext.isEmpty else { return alleArtikel }
-        return alleArtikel.filter { $0.name.localizedCaseInsensitiveContains(getrimmterSuchtext) }
+        return alleArtikel.filter { artikel in
+            artikel.name.localizedCaseInsensitiveContains(getrimmterSuchtext)
+                || artikel.name.split(separator: " ").contains {
+                    String($0).passtAlsSingularPluralZu(getrimmterSuchtext)
+                }
+        }
     }
 
     private var existiertGenau: Bool {
@@ -73,12 +85,15 @@ struct ArtikelHinzufuegenView: View {
                         ForEach(gruppe.artikel) { artikel in
                             let bereitsAufListe = einkaufsliste.enthaelt(artikel)
                             Button {
-                                hinzufuegen(artikel)
+                                if bereitsAufListe {
+                                    entfernen(artikel)
+                                } else {
+                                    hinzufuegen(artikel)
+                                }
                             } label: {
                                 ArtikelAuswahlZeile(artikel: artikel, bereitsAufListe: bereitsAufListe)
                             }
                             .buttonStyle(.plain)
-                            .disabled(bereitsAufListe)
                         }
                     }
                 }
@@ -95,6 +110,19 @@ struct ArtikelHinzufuegenView: View {
             .navigationTitle("Artikel hinzufügen")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                // Eigener zweizeiliger Titel (Name der Einkaufsliste darunter,
+                // GitHub #45) statt des einzeiligen `.navigationTitle` —
+                // `.navigationTitle` bleibt trotzdem gesetzt, dient hier nur noch
+                // als Accessibility-Titel.
+                ToolbarItem(placement: .principal) {
+                    VStack(spacing: 0) {
+                        Text("Artikel hinzufügen")
+                            .font(.headline)
+                        Text(einkaufsliste.name)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Fertig") { dismiss() }
                 }
@@ -113,6 +141,17 @@ struct ArtikelHinzufuegenView: View {
         }
     }
 
+    /// Nimmt `artikel` wieder von ``einkaufsliste`` — Gegenstück zu
+    /// ``hinzufuegen(_:)``, macht die Zeile hier zu einem echten An-/Abwähl-
+    /// Toggle statt eines einmaligen Hinzufügens (GitHub #45).
+    private func entfernen(_ artikel: Artikel) {
+        Task {
+            await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                einkaufsliste.artikelEntfernen(artikel, context: modelContext)
+            }
+        }
+    }
+
     private func neuenArtikelAnlegen() {
         let entwurf = Artikel(
             name: getrimmterSuchtext,
@@ -125,8 +164,8 @@ struct ArtikelHinzufuegenView: View {
 
     /// Wurde der Entwurf tatsächlich gesichert (also in den Model-Context
     /// eingefügt), landet er sofort auf ``einkaufsliste`` (GitHub #6) — ohne
-    /// zusätzlichen Tap auf „Hinzufügen”. Die Zeile zeigt danach automatisch „Auf
-    /// Liste” (``ArtikelAuswahlZeile``/``bereitsAufListe``).
+    /// zusätzlichen Tap auf „Hinzufügen”. Die Zeile zeigt danach automatisch das
+    /// Abhak-Symbol (``ArtikelAuswahlZeile``/``bereitsAufListe``).
     private func nachNeuanlageAufraeumen() {
         defer { zuletztAngelegterEntwurf = nil }
         guard let entwurf = zuletztAngelegterEntwurf, entwurf.modelContext != nil else { return }
@@ -135,9 +174,10 @@ struct ArtikelHinzufuegenView: View {
     }
 }
 
-/// Eine kompakte Zeile in der Artikelsuche: Kategorie-Icon/Farbe, Name und —
-/// falls der Artikel bereits auf der aktuellen Einkaufsliste steht — ein Hinweis
-/// statt der Möglichkeit, ihn erneut hinzuzufügen (GitHub #8).
+/// Eine kompakte Zeile in der Artikelsuche: Kategorie-Icon/Farbe, Name und das
+/// App-weit einheitliche Abhak-Symbol (GitHub #8), das anzeigt, ob der Artikel
+/// bereits auf der aktuellen Einkaufsliste steht — Tippen schaltet um
+/// (GitHub #45).
 private struct ArtikelAuswahlZeile: View {
     let artikel: Artikel
     let bereitsAufListe: Bool
@@ -158,11 +198,8 @@ private struct ArtikelAuswahlZeile: View {
 
             Spacer()
 
-            if bereitsAufListe {
-                Text("Auf Liste")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            Image(systemName: bereitsAufListe ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(bereitsAufListe ? Color.accentColor : .secondary)
         }
         .contentShape(Rectangle())
     }
