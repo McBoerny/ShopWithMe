@@ -3,28 +3,28 @@ import SwiftData
 import Testing
 @testable import ShopWithMe
 
-/// Tests für ``DatenintegritaetsService`` (Reperaturlauf gegen baumelnde
-/// Referenzen, GitHub-Absturzmeldung zu `Geschaeft/p9`).
+/// Tests für ``DatenintegritaetsService`` (Erkennung baumelnder Referenzen,
+/// GitHub-Absturzmeldung zu `Geschaeft/p9`).
 ///
-/// **Bewusst kein Test, der eine echte "baumelnde" Referenz nachstellt:** Seit
-/// den `@Relationship(inverse:)`-Deklarationen auf allen hier relevanten
-/// Beziehungen (Geschaeft/Artikel/ArtikelKategorie/Einkaufsliste) sorgt SwiftData
-/// bei jedem `context.delete()` selbst dafür, dass abhängige Referenzen genullt
-/// oder kaskadiert werden — das ist ja genau der bereits vorhandene Schutz für
-/// künftige Daten. Ein Versuch, den echten Fehlerzustand über zwei unabhängige
-/// ``ModelContainer`` auf derselben Datei nachzustellen, erwies sich beim Bau
-/// dieses Tests als nicht verlässlich reproduzierbar (abhängig von internem,
-/// nicht dokumentiertem Cache-/Merge-Verhalten von SwiftData zwischen Contexts)
-/// und wurde deshalb verworfen, statt einen brüchigen Test beizubehalten. Die
-/// Reparatur derartiger, bereits auf der Festplatte bestehender Altkorruption
-/// lässt sich mit dem aktuellen Modell grundsätzlich nicht mehr über eine normale
-/// Programmoperation künstlich erzeugen — sie betrifft ausschließlich Daten von
-/// vor Einführung dieser `inverse`-Deklarationen. Verifiziert wird die
-/// Nullungs-/Lösch-Logik daher hier nur indirekt (Idempotenz auf sauberen
-/// Daten) — die eigentliche Reparaturwirkung am real betroffenen, bereits
-/// korrumpierten Datenbestand lässt sich nur auf dem betroffenen Gerät selbst
-/// beobachten (kein Absturz mehr, siehe Debug-Menü-Bericht nach dem nächsten
-/// Start).
+/// **Bewusst rein lesend, keine Reparatur mehr:** Ein früherer Versuch, eine
+/// erkannte baumelnde Referenz per Setter zu nullen (`eintrag.artikel = nil`),
+/// verursachte selbst einen Absturz (`Artikel/p19`, Crash-Log
+/// `ShopWithMe-2026-07-30-000333.ips`) — SwiftDatas Setter für eine Beziehung
+/// mit `inverse:`-Deklaration muss beim Nullen die alte Gegenseite auffalten,
+/// um sich selbst aus deren inversem Array zu entfernen; ist genau diese alte
+/// Gegenseite bereits baumelnd, stürzt exakt dort derselbe Fatal Error, den die
+/// Reparatur beheben sollte. Siehe Typ-Dokumentation von
+/// ``DatenintegritaetsService`` für die vollständige Erklärung.
+///
+/// **Bewusst auch kein Test, der eine echte "baumelnde" Referenz nachstellt:**
+/// Seit den `@Relationship(inverse:)`-Deklarationen auf allen hier relevanten
+/// Beziehungen sorgt SwiftData bei jedem `context.delete()` selbst dafür, dass
+/// abhängige Referenzen genullt oder kaskadiert werden — sie lassen sich mit
+/// dem aktuellen Modell grundsätzlich nicht mehr über eine normale
+/// Programmoperation künstlich erzeugen, sie betreffen ausschließlich Daten von
+/// vor Einführung dieser `inverse`-Deklarationen. Verifiziert wird hier daher
+/// nur, dass ``DatenintegritaetsService/pruefe(context:)`` auf sauberen Daten
+/// nichts fälschlich meldet und nichts verändert.
 @MainActor
 struct DatenintegritaetsServiceTests {
     private let schema = Schema([
@@ -41,7 +41,7 @@ struct DatenintegritaetsServiceTests {
     }
 
     @Test
-    func reparaturAufVollstaendigIntaktenDatenIstNoOp() throws {
+    func pruefungAufVollstaendigIntaktenDatenMeldetNichts() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
@@ -53,7 +53,7 @@ struct DatenintegritaetsServiceTests {
         context.insert(kaufEintrag)
         try context.save()
 
-        let befunde = DatenintegritaetsService.repariereFallsNoetig(context: context)
+        let befunde = DatenintegritaetsService.pruefe(context: context)
 
         #expect(befunde.isEmpty)
         #expect(kaufEintrag.artikel === artikel)
@@ -62,7 +62,7 @@ struct DatenintegritaetsServiceTests {
     }
 
     @Test
-    func reparaturLoeschtNichtsBeiVollstaendigVerknuepfterWarengruppenDistanz() throws {
+    func pruefungVeraendertVollstaendigVerknuepfteWarengruppenDistanzNicht() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
@@ -74,7 +74,7 @@ struct DatenintegritaetsServiceTests {
         context.insert(distanz)
         try context.save()
 
-        let befunde = DatenintegritaetsService.repariereFallsNoetig(context: context)
+        let befunde = DatenintegritaetsService.pruefe(context: context)
 
         #expect(befunde.isEmpty)
         #expect((try? context.fetchCount(FetchDescriptor<WarengruppenDistanz>())) == 1)

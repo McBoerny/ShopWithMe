@@ -167,11 +167,12 @@ private struct BekannteSyncPeersSection: View {
     }
 }
 
-/// Zeigt den Bericht des letzten (automatisch beim App-Start gelaufenen)
-/// ``DatenintegritaetsService/repariereFallsNoetig(context:)`` und erlaubt eine
-/// manuelle erneute Prüfung sowie das Exportieren des vollständigen,
-/// dauerhaften Protokolls — Stufe 2 des mit dem Anwender abgestimmten
-/// zweistufigen Vorgehens (Stufe 1: stille automatische Reparatur beim Start).
+/// Zeigt den Bericht der letzten (automatisch beim App-Start gelaufenen)
+/// ``DatenintegritaetsService/pruefe(context:)`` und erlaubt eine manuelle
+/// erneute Prüfung sowie das Exportieren des vollständigen, dauerhaften
+/// Protokolls. Rein informativ — siehe Typ-Dokumentation von
+/// ``DatenintegritaetsService``, warum eine automatische Reparatur baumelnder
+/// Referenzen über die normale SwiftData-API selbst zum Absturz führen kann.
 private struct DatenintegritaetSection: View {
     @Environment(\.modelContext) private var modelContext
     @State private var bericht = DatenintegritaetsService.letzterBericht
@@ -190,7 +191,7 @@ private struct DatenintegritaetSection: View {
                 }
             }
             Button("Jetzt erneut prüfen") {
-                bericht = DatenintegritaetsService.repariereFallsNoetig(context: modelContext).map(\.beschreibung)
+                bericht = DatenintegritaetsService.pruefe(context: modelContext).map(\.beschreibung)
                 logGroesse = DatenintegritaetsLogger.gesamtGroesse()
             }
             Button("Protokoll teilen…") {
@@ -200,7 +201,7 @@ private struct DatenintegritaetSection: View {
         } header: {
             Text("Datenintegrität")
         } footer: {
-            Text("Repariert automatisch bei jedem App-Start baumelnde Referenzen auf bereits gelöschte Objekte (z.B. nach einer fehlerhaften Synchronisation) und verhindert dadurch Abstürze. Zeigt den zuletzt gefundenen Bestand — das vollständige Protokoll aller bisherigen Reparaturen lässt sich über „Protokoll teilen…“ exportieren.")
+            Text("Zeigt bei jedem App-Start erkannte baumelnde Referenzen auf bereits gelöschte Objekte (z.B. nach einer fehlerhaften Synchronisation) — rein informativ, keine automatische Reparatur. Das vollständige Protokoll lässt sich über „Protokoll teilen…“ exportieren.")
         }
         .sheet(isPresented: $zeigeTeilen) {
             DebugLogTeilenView(urls: DatenintegritaetsLogger.exportURLs)

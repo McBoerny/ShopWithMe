@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.8 (Build 136) — KRITISCH: Absturz-Loop durch den Reparaturlauf selbst behoben
+
+Build 134s neuer `DatenintegritaetsService.repariereFallsNoetig` (siehe unten)
+verursachte bei betroffenen Datenbeständen einen **deterministischen
+Absturz-Loop bei jedem App-Start** (`Artikel/p19` in `KaufEintrag.artikel.setter`,
+Crash-Log `ShopWithMe-2026-07-30-000333.ips`): der Versuch, eine erkannte
+baumelnde Referenz per Setter zu nullen (`eintrag.artikel = nil`), stürzte
+selbst ab — SwiftDatas Setter muss beim Nullen die alte Gegenseite auffalten,
+um sich aus deren inversem Array zu entfernen, und genau diese alte Gegenseite
+ist die bereits baumelnde. Da der Absturz vor `context.save()` auftrat, blieb
+nichts vom Lauf erhalten — jeder Neustart wiederholte denselben Absturz.
+
+- Behoben: `DatenintegritaetsService` (umbenannt: `repariereFallsNoetig` →
+  `pruefe`) ist jetzt bewusst rein lesend, keine automatische Reparatur mehr.
+  Details und Begründung in `docs/DATABASE_CONCURRENCY.md` → „Nachtrag:
+  rückwirkende Reparatur bereits bestehender Korruption" (Korrektur-Abschnitt).
+- Debugging-Bildschirm → Sektion „Datenintegrität" entsprechend angepasst
+  (zeigt weiterhin gefundene baumelnde Referenzen, repariert aber nichts mehr
+  automatisch).
+
 ## v0.8 (Build 135) — Absturz durch nebenläufige Löschung während eines Micro-Lease-Erwerbs
 
 - Behoben: Absturz `Artikel/p19` in `KaufEintrag.artikel.setter` — anders als

@@ -507,32 +507,45 @@ Verfahren würde den Absturz nicht zuverlässig verhindern, da er auf dem
 allerersten Bildschirm nach dem Start auftreten kann, bevor der Anwender je das
 Debug-Menü öffnet):
 
-1. **`DatenintegritaetsService.repariereFallsNoetig(context:)`** — läuft still
-   bei jedem App-Start (`ShopWithMeApp.init()`, vor `SyncPollingService`).
-   Baut wie `SyncSnapshotExportService` für jeden betroffenen Modelltyp ein
-   `Set<PersistentIdentifier>` gültiger Objekte und nullt/löscht jede
-   baumelnde Referenz: `KaufEintrag.artikel`/`.geschaeft`/`.kategorie`/
-   `.einkaufsvorgang`, `Einkaufsvorgang.geschaeft`/`.einkaufsliste`,
-   `Artikel.kategorie` (veraltetes Einzelwert-Feld), sowie
-   `WarengruppenDistanz`-Zeilen (gelöscht, falls `kategorieA`/`kategorieB`
-   betroffen ist — reine Lerndaten, werden neu gelernt; sonst nur `geschaeft`
-   genullt). Idempotent, verändert auf bereits sauberen Daten nichts.
+1. **`DatenintegritaetsService.pruefe(context:)`** — läuft still bei jedem
+   App-Start (`ShopWithMeApp.init()`, vor `SyncPollingService`). Baut wie
+   `SyncSnapshotExportService` für jeden betroffenen Modelltyp ein
+   `Set<PersistentIdentifier>` gültiger Objekte und **erkennt** jede baumelnde
+   Referenz: `KaufEintrag.artikel`/`.geschaeft`/`.kategorie`/`.einkaufsvorgang`,
+   `Einkaufsvorgang.geschaeft`/`.einkaufsliste`, `Artikel.kategorie`
+   (veraltetes Einzelwert-Feld), `WarengruppenDistanz`.
 2. **`DebuggingView` → Sektion „Datenintegrität"** — zeigt den beim letzten
    Start erzeugten Bericht (persistiert über `DatenintegritaetsService.letzterBericht`),
    erlaubt eine manuelle erneute Prüfung sowie den Export des vollständigen,
    dauerhaften Protokolls (`DatenintegritaetsLogger`, anders als
    `SyncDebugLogger`/`DatabaseDebugLogger` **nicht** an einen Debug-Schalter
-   gekoppelt, da Reparaturen selten, aber sicherheitsrelevant sind). Für
-   `KaufEintrag`-Fälle geht dank `artikelNameSnapshot`/`geschaeftNameSnapshot`
-   keine sichtbare Information verloren — für `Einkaufsvorgang.geschaeft` (kein
-   Namens-Schnappschuss vorhanden) wird der wahrscheinliche Ladenname
-   best-effort aus den zugehörigen `KaufEintrag`-Schnappschüssen rekonstruiert
-   und im Bericht vermerkt, statt kommentarlos zu verschwinden.
+   gekoppelt).
 
-**Bewusst nicht:** eine blockierende Bestätigung vor jeder Reparatur — das
-würde den Start verzögern und den Absturz nicht verhindern, falls der Anwender
-das Debug-Menü nie öffnet. Die Transparenz kommt stattdessen über den
-nachträglich einsehbaren/exportierbaren Bericht.
+**Korrektur (wichtig):** Ursprünglich versuchte `pruefe` (damals
+`repariereFallsNoetig`) jede erkannte baumelnde Referenz auch gleich zu nullen
+(z.B. `eintrag.artikel = nil`) bzw. bei `WarengruppenDistanz` die ganze Zeile
+zu löschen. Das verursachte selbst einen Absturz (`Artikel/p19` in
+`KaufEintrag.artikel.setter`, Crash-Log `ShopWithMe-2026-07-30-000333.ips`) —
+und zwar bei **jedem** App-Start deterministisch, da der Absturz vor
+`context.save()` auftrat und daher nichts vom vorherigen Lauf übernommen wurde
+(vollständiger Crash-Loop). Ursache: SwiftDatas Setter für eine Beziehung mit
+`inverse:`-Deklaration muss beim Nullen die **alte** Gegenseite auffalten, um
+sich selbst aus deren inversem Array zu entfernen (hier `Artikel.kaufEintraege`)
+— ist genau diese alte Gegenseite die bereits baumelnde, stürzt exakt dort
+derselbe Fatal Error, den die Reparatur beheben sollte. `persistentModelID`
+bleibt zwar sicher lesbar (siehe `sichereID` oben), das schützt aber nur
+Lesezugriffe — **jede** schreibende Operation auf eine bereits baumelnde
+Beziehung ist über die normale SwiftData-Objektgraph-API unsicher, gerade WEIL
+die `inverse:`-Deklaration (die künftige Korruption verhindert) hier existiert.
+Eine echte rückwirkende Reparatur bräuchte einen direkten Zugriff auf die
+SQLite-Datei unterhalb von SwiftData/CoreData (nicht trivial, noch nicht
+umgesetzt) — bis dahin ist `pruefe` bewusst rein lesend.
+
+**Bewusst nicht (weiterhin):** eine blockierende Bestätigung vor der Anzeige —
+das würde den Start verzögern, ohne einen Absturz zu verhindern (es wird ja
+nichts mehr automatisch verändert). Die eigentliche Absturz-Absicherung muss an
+den einzelnen Lesepfaden erfolgen (siehe `GeschaeftHaeufigkeitService.favoriten`
+oben) — nicht (mehr) durch Reparatur des zugrundeliegenden Datenbestands.
 
 ## Nachtrag: nebenläufige Löschung während eines Micro-Lease-Erwerbs
 
