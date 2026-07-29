@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.8 (Build 138) — Neu: Ersetzen/Backup/Wiederherstellen für Sync-Beitritt (GitHub #63)
+
+- Neu: `SyncErsetzenService` — beim erstmaligen Verknüpfen eines
+  Sync-Ordners mit bereits vorhandenen Peer-Daten kann jetzt zwischen
+  „Zusammenführen" (Standard, unverändert) und „Ersetzen" (lokale Daten durch
+  Peer-Stand ersetzen, z.B. um private Kaufhistorie nicht in eine geteilte
+  Gruppe einfließen zu lassen) gewählt werden. Vor dem Ersetzen wird
+  automatisch ein lokales Backup angelegt, bei „Synchronisierung
+  deaktivieren" kann es wiederhergestellt werden.
+- Neu: Debugging-Bildschirm → „Gerät zurücksetzen und von Sync-Gerät neu
+  aufbauen…" — nutzt denselben Mechanismus als Korruptions-Recovery: löscht
+  die lokale Datenbank physisch (vorher gesichert) und baut sie ausschließlich
+  aus einem erreichbaren Peer-Snapshot neu auf. Umgeht damit strukturell das
+  Problem, dass eine bereits korrumpierte Zeile (siehe Build 136/137) über
+  die normale SwiftData-API nicht reparierbar ist.
+- `ModelContainer` ist jetzt zur Laufzeit austauschbar (`ModelContainerController`)
+  statt fest in `ShopWithMeApp` verdrahtet — Voraussetzung für das
+  physische Ersetzen ohne App-Neustart.
+
 ## v0.8 (Build 137) — Weitere Abstürze auf demselben baumelnden `Geschaeft` behoben
 
 Build 136 stoppte den Absturz-Loop, reparierte aber nicht den zugrundeliegenden

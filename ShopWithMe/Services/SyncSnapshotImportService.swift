@@ -82,6 +82,19 @@ enum SyncSnapshotImportService {
         try? context.save()
     }
 
+    /// Wendet einen einzelnen, bereits vorliegenden Snapshot an (z.B. aus einem
+    /// lokalen Backup, ``SyncErsetzenService``) — dieselbe Merge-Pipeline wie
+    /// ``importiereSnapshots(context:)``, nur ohne den Peer-Ordner-Scan. Da der
+    /// Kontext nach einem vorangegangenen
+    /// ``ModelContainerController/ersetzeDurchLeerenContainer()`` leer ist, IST
+    /// dieser einzelne Merge-Durchlauf bereits der vollständige Neuaufbau —
+    /// jede `mergeX`-Funktion legt bei fehlendem lokalem Treffer frisch an.
+    @MainActor
+    static func importiereEinzelnenSnapshot(_ snapshot: SyncSnapshot, peerGeraeteID: String, context: ModelContext) {
+        merge(snapshot, peerGeraeteID: peerGeraeteID, context: context)
+        try? context.save()
+    }
+
     /// Diagnose für Fälle wie GitHub #52-Nachfolgefund (unsichtbare
     /// Einkaufslisten-Dublette): protokolliert nach jedem Merge-Durchlauf den
     /// kompletten lokalen Einkaufslisten-Bestand samt Eintrags-Anzahl, damit

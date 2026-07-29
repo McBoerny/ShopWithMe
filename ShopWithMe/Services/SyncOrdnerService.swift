@@ -57,4 +57,21 @@ enum SyncOrdnerService {
     static func ordnerEntfernen() {
         UserDefaults.standard.removeObject(forKey: bookmarkSchluessel)
     }
+
+    /// Ob `ordner` bereits Peer-Unterordner anderer Geräte enthält (unter
+    /// `peers/`, das eigene Gerät ausgenommen) — Grundlage für die
+    /// „Zusammenführen"/„Ersetzen"-Abfrage beim erstmaligen Verknüpfen
+    /// (``SyncErsetzenService``, GitHub #63). `false` sowohl bei einem völlig
+    /// neuen Ordner als auch, falls der Zugriff fehlschlägt.
+    static func hatVorhandenePeers(in ordner: URL) -> Bool {
+        guard ordner.startAccessingSecurityScopedResource() else { return false }
+        defer { ordner.stopAccessingSecurityScopedResource() }
+
+        let peersOrdner = ordner.appendingPathComponent("peers", isDirectory: true)
+        guard let peerVerzeichnisse = try? FileManager.default.contentsOfDirectory(
+            at: peersOrdner, includingPropertiesForKeys: nil
+        ) else { return false }
+
+        return peerVerzeichnisse.contains { $0.lastPathComponent != DatabaseLeaseService.geraeteID }
+    }
 }

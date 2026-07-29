@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 import UniformTypeIdentifiers
 
 /// Einstellung für den geteilten Sync-Ordner (Datensynchronisation, GitHub #39).
@@ -18,12 +19,16 @@ import UniformTypeIdentifiers
 struct SyncOrdnerSettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var syncPollingService: SyncPollingService
+    @EnvironmentObject private var containerController: ModelContainerController
 
     @State private var zeigeOrdnerauswahl = false
     @State private var fehlermeldung: String?
     @State private var ausgewaehlterOrdner: URL? = SyncOrdnerService.gewaehlterOrdner()
     @State private var wirdSynchronisiert = false
     @State private var letzterSyncErfolgreich = false
+
+    @State private var zeigeBeitrittsWahl = false
+    @State private var zeigeAustrittsWahl = false
 
     var body: some View {
         Form {
@@ -45,8 +50,7 @@ struct SyncOrdnerSettingsView: View {
                 }
                 if ausgewaehlterOrdner != nil {
                     Button("Synchronisierung deaktivieren", role: .destructive) {
-                        SyncOrdnerService.ordnerEntfernen()
-                        ausgewaehlterOrdner = nil
+                        deaktivierenGetappt()
                     }
                 }
             } footer: {
@@ -90,19 +94,53 @@ struct SyncOrdnerSettingsView: View {
                 fehlermeldung = error.localizedDescription
             }
         }
+        // GitHub #63: Alternative zum automatischen Zusammenführen, falls der
+        // gewählte Ordner bereits Daten anderer Geräte enthält — z.B. für
+        // private Kaufhistorie, die nicht additiv in eine geteilte
+        // Gruppen-Historie einfließen soll (siehe ``SyncErsetzenService``).
+        .confirmationDialog("Bestehende Daten gefunden", isPresented: $zeigeBeitrittsWahl) {
+            Button("Zusammenführen") {
+                jetztSynchronisieren()
+            }
+            Button("Ersetzen", role: .destructive) {
+                ersetzenGetappt()
+            }
+            Button("Abbrechen", role: .cancel) {
+                SyncOrdnerService.ordnerEntfernen()
+                ausgewaehlterOrdner = nil
+            }
+        } message: {
+            Text("In diesem Ordner sind bereits Daten anderer Geräte vorhanden. „Zusammenführen“ übernimmt sie zusätzlich zu deinen eigenen. „Ersetzen“ sichert deine lokalen Daten (wiederherstellbar bei Austritt) und übernimmt danach ausschließlich den Stand der anderen Geräte.")
+        }
+        .confirmationDialog("Synchronisierung deaktivieren", isPresented: $zeigeAustrittsWahl) {
+            Button("Vorherigen Stand wiederherstellen") {
+                wiederherstellenUndDeaktivieren()
+            }
+            Button("Ohne Wiederherstellung deaktivieren", role: .destructive) {
+                SyncOrdnerService.ordnerEntfernen()
+                ausgewaehlterOrdner = nil
+            }
+            Button("Abbrechen", role: .cancel) {}
+        } message: {
+            Text("Es ist ein lokales Backup von vor dem letzten Beitritt/Ersetzen vorhanden. Möchtest du deinen damaligen Stand wiederherstellen?")
+        }
     }
 
-    /// Legt den Ordner fest und löst sofort einen ersten Sync-Zyklus aus
-    /// (GitHub #39, Phase 5 „Gruppen-Setup") — enthält bereits vorhandene
-    /// Peer-Daten im gewählten Ordner, wird ihr Bestand direkt beim
-    /// Verknüpfen gemergt (``SyncSnapshotImportService``), statt dass die
-    /// Person erst noch manuell auf „Jetzt synchronisieren" tippen muss.
+    /// Legt den Ordner fest. Enthält er bereits Daten anderer Geräte (GitHub
+    /// #63), fragt eine Wahl zwischen Zusammenführen und Ersetzen — sonst
+    /// löst das direkt einen ersten Sync-Zyklus aus (GitHub #39, Phase 5
+    /// „Gruppen-Setup"), statt dass die Person erst noch manuell auf „Jetzt
+    /// synchronisieren" tippen muss.
     private func ordnerFestlegen(_ ordner: URL) {
         do {
             try SyncOrdnerService.ordnerFestlegen(ordner)
             ausgewaehlterOrdner = ordner
             fehlermeldung = nil
-            jetztSynchronisieren()
+            if SyncOrdnerService.hatVorhandenePeers(in: ordner) {
+                zeigeBeitrittsWahl = true
+            } else {
+                jetztSynchronisieren()
+            }
         } catch {
             fehlermeldung = error.localizedDescription
         }
@@ -120,11 +158,57 @@ struct SyncOrdnerSettingsView: View {
             letzterSyncErfolgreich = true
         }
     }
+
+    /// Pausiert den Hintergrund-Timer für die Dauer des Austauschs (sonst
+    /// könnte er mitten in den Container-Wechsel schreiben, siehe
+    /// `docs/DATABASE_CONCURRENCY.md`) und startet ihn danach mit dem neuen
+    /// Context neu.
+    private func ersetzenGetappt() {
+        letzterSyncErfolgreich = false
+        wirdSynchronisiert = true
+        syncPollingService.stoppen()
+        Task {
+            do {
+                let neuerContext = try await SyncErsetzenService.ersetzenDurchPeer(containerController: containerController)
+                syncPollingService.starten(context: neuerContext)
+                letzterSyncErfolgreich = true
+            } catch {
+                fehlermeldung = error.localizedDescription
+                syncPollingService.starten(context: containerController.modelContainer.mainContext)
+            }
+            wirdSynchronisiert = false
+        }
+    }
+
+    private func deaktivierenGetappt() {
+        if SyncErsetzenService.vorhandenesBackup() != nil {
+            zeigeAustrittsWahl = true
+        } else {
+            SyncOrdnerService.ordnerEntfernen()
+            ausgewaehlterOrdner = nil
+        }
+    }
+
+    private func wiederherstellenUndDeaktivieren() {
+        syncPollingService.stoppen()
+        do {
+            let neuerContext = try SyncErsetzenService.wiederherstellenAusBackup(containerController: containerController)
+            SyncOrdnerService.ordnerEntfernen()
+            ausgewaehlterOrdner = nil
+            syncPollingService.starten(context: neuerContext)
+        } catch {
+            fehlermeldung = error.localizedDescription
+            syncPollingService.starten(context: containerController.modelContainer.mainContext)
+        }
+    }
 }
 
 #Preview {
+    let container = try! ModelContainer(for: SchemaDefinition.schema, configurations: .init(isStoredInMemoryOnly: true))
     NavigationStack {
         SyncOrdnerSettingsView()
     }
     .environmentObject(SyncPollingService())
+    .environmentObject(ModelContainerController(modelContainer: container))
+    .modelContainer(container)
 }

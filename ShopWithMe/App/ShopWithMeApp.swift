@@ -9,28 +9,17 @@ import SwiftData
 /// Standardpfad — und sät beim ersten Start die Standardkategorien via ``SeedData``.
 @main
 struct ShopWithMeApp: App {
-    let modelContainer: ModelContainer
+    @StateObject private var containerController: ModelContainerController
     @StateObject private var syncPollingService = SyncPollingService()
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
-        let schema = SchemaDefinition.schema
-        let konfiguration: ModelConfiguration
-        var geteilterOrdner: URL?
-        if let ordner = DatabaseLocationService.gewaehlterOrdner(), ordner.startAccessingSecurityScopedResource() {
-            konfiguration = ModelConfiguration(schema: schema, url: DatabaseLocationService.storeURL(inOrdner: ordner))
-            geteilterOrdner = ordner
-        } else {
-            konfiguration = ModelConfiguration(schema: schema)
-        }
+        let (konfiguration, geteilterOrdner) = ModelContainerController.baueStandardKonfiguration()
 
         DatabaseDebugLogger.log(.storeOpenStart, details: konfiguration.url.path)
+        let container: ModelContainer
         do {
-            modelContainer = try ModelContainer(
-                for: schema,
-                migrationPlan: SchemaDefinition.migrationPlan,
-                configurations: [konfiguration]
-            )
+            container = try ModelContainerController.baueContainer(konfiguration: konfiguration)
         } catch {
             // Log ist Best-Effort: `fatalError` beendet den Prozess sofort danach,
             // das asynchrone Schreiben des Log-Eintrags kann daher vereinzelt nicht
@@ -40,7 +29,7 @@ struct ShopWithMeApp: App {
         }
         DatabaseDebugLogger.log(.storeOpenSuccess, details: konfiguration.url.path)
 
-        let context = modelContainer.mainContext
+        let context = container.mainContext
         // Autosave aus: alle Schreibzugriffe laufen ab jetzt über explizite,
         // Lease-geschützte `save()`-Aufrufe (siehe `docs/DATABASE_CONCURRENCY.md` →
         // „Voraussetzung: explizite Speicherpunkte statt implizitem Autosave“).
@@ -53,19 +42,26 @@ struct ShopWithMeApp: App {
         ArtikelKategorie.geschaeftsTypenMigrierenFallsNoetig(context: context)
         DatenintegritaetsService.pruefe(context: context)
         try? context.save()
+
+        _containerController = StateObject(wrappedValue: ModelContainerController(modelContainer: container))
     }
 
     var body: some Scene {
         WindowGroup {
             RootView()
+                // Erzwingt einen kompletten View-Baum-Neuaufbau nach einem
+                // ``SyncErsetzenService``-Austausch — siehe
+                // ``ModelContainerController/generation``.
+                .id(containerController.generation)
                 .environmentObject(syncPollingService)
-                .task { syncPollingService.starten(context: modelContainer.mainContext) }
+                .environmentObject(containerController)
+                .task { syncPollingService.starten(context: containerController.modelContainer.mainContext) }
         }
-        .modelContainer(modelContainer)
+        .modelContainer(containerController.modelContainer)
         .onChange(of: scenePhase) { _, neuePhase in
             switch neuePhase {
             case .active:
-                syncPollingService.starten(context: modelContainer.mainContext)
+                syncPollingService.starten(context: containerController.modelContainer.mainContext)
             default:
                 syncPollingService.stoppen()
             }

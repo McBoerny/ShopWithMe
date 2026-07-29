@@ -708,3 +708,86 @@ Empfehlung für den Einstieg: Phase 0 zuerst, in sich abgeschlossen und ohne
 Auswirkung auf bestehendes Verhalten (reines Mitschreiben, noch kein Sync) — gute
 Gelegenheit, das Event-Modell und die Mutations-Integration zu verproben, bevor
 Dateisystem-Sync (Phase 1+) dazukommt.
+
+## 13. `SyncErsetzenService` — Ersetzen/Backup/Wiederherstellen (GitHub #63)
+
+Zwei Beweggründe, ein Mechanismus:
+
+1. **GitHub #63** — Merge funktioniert seit #52 korrekt für den Regelfall
+   (frisches Gerät, nur Seed-Daten); offen blieb, dass Bereich C
+   (Kaufhistorie) immer additiv merged — ein Nutzer mit bereits bestehender,
+   privater Kaufhistorie kann aktuell nicht verhindern, dass sie beim
+   Beitritt zu einer geteilten Gruppe unwiderruflich einfließt.
+2. **Korruptions-Recovery**: ein bereits korrumpierter lokaler Datensatz
+   (baumelnde Referenz, siehe `docs/DATABASE_CONCURRENCY.md`) lässt sich über
+   die normale SwiftData-Objektgraph-API nicht sicher reparieren — jede
+   schreibende Operation muss die Inverse-Gegenseite auffalten und crasht
+   dabei, falls genau diese Gegenseite die bereits baumelnde ist. Ein
+   vollständiges Zurücksetzen umgeht das strukturell, da die korrumpierten
+   Zeilen nie wieder geöffnet werden.
+
+**Physisches Löschen statt zeilenweisem Wipe:** `ModelContainerController`
+(neu, `App/ModelContainerController.swift`) hält den `ModelContainer`
+austauschbar. `ersetzeDurchLeerenContainer()` löscht die Store-Datei (samt
+`-wal`/`-shm`) physisch und baut einen frischen, leeren Container an derselben
+URL — SwiftData öffnet dadurch nie wieder korrumpierte Zeilen, anders als bei
+einem zeilenweisen Wipe (auch über Batch-Delete), der dasselbe
+Inverse-Auffalten-Risiko wie ein normales Löschen trüge. Da SwiftData den
+Store einer laufenden `ModelContainer`-Instanz nicht austauschen kann, ändert
+sich bei jedem Ersetzen `ModelContainerController.generation` (`UUID`) —
+`ShopWithMeApp` bindet `RootView().id(containerController.generation)`, was
+SwiftUI zu einem kompletten View-Baum-Neuaufbau zwingt. Notwendig, weil jede
+Ansicht tiefer in einem NavigationStack/Sheet, die noch ein Modellobjekt aus
+dem alten (jetzt gelöschten) Store in `@State` hält, sonst beim nächsten
+Zugriff genau den Absturz auslösen würde, den dieses Feature vermeiden soll.
+
+**`SyncErsetzenService`** (neu, `Services/SyncErsetzenService.swift`) baut
+darauf auf:
+- `erstelleBackup(context:)` — lokales, nicht geteiltes Backup unter
+  `Application Support/Backups/ersetzen-backup.json`, wiederverwendet
+  `SyncSnapshotExportService.erstelleSnapshot(context:)`, ergänzt um
+  ``IgnorierterGeschaeftsVorschlag`` (gerätelokal, nicht Teil von
+  `SyncSnapshot`) in einer Backup-Hülle (`SyncErsetzenBackup`, neu,
+  `Models/SyncErsetzenBackup.swift`) — das Peer-Wire-Format bleibt
+  unangetastet. **Genau ein Backup, wird bei jedem Ersetzen/Beitritt
+  überschrieben** (mit dem Anwender abgestimmt) — löst die in #63 offene
+  „welches Backup beim Austritt"-Frage automatisch, da es nur eins gibt.
+- `ersetzenDurchPeer(containerController:)` — Backup, dann
+  `ersetzeDurchLeerenContainer()`, dann
+  `SyncSnapshotImportService.importiereSnapshots(context:)` gegen den neuen,
+  leeren Context (bereits vorhanden, keine Änderung nötig — jede
+  `mergeX`-Funktion legt bei fehlendem lokalem Treffer frisch an, ein leerer
+  Kontext wird dadurch automatisch korrekt neu aufgebaut).
+- `wiederherstellenAusBackup(containerController:)` — wie oben, aber
+  Neuaufbau aus dem eigenen Backup statt aus Peer-Snapshots, über den neuen,
+  schmalen Wrapper `SyncSnapshotImportService.importiereEinzelnenSnapshot(_:peerGeraeteID:context:)`
+  (ruft dieselbe private `merge`-Pipeline mit einer Sentinel-Geräte-ID auf,
+  damit kein Phantom-`SyncPeerInfo`-Eintrag entsteht).
+
+**UI, drei Einstiegspunkte, alle mit `.confirmationDialog`/`role: .destructive`,
+kein stilles Ausführen** (#63s eigene Anforderung):
+1. Erster Sync-Ordner-Beitritt (`SyncOrdnerSettingsView.ordnerFestlegen(_:)`) —
+   `SyncOrdnerService.hatVorhandenePeers(in:)` erkennt bereits vorhandene
+   Peer-Daten, bietet dann „Zusammenführen" (Standard, unverändert) vs.
+   „Ersetzen".
+2. Manuelles Zurücksetzen jederzeit (Korruptions-Recovery) —
+   `DebuggingView.DatenintegritaetSection`, direkt unter der Erklärung, warum
+   keine automatische Reparatur stattfindet; deaktiviert ohne konfigurierten
+   Sync-Ordner (ohne Peer kein Wiederaufbau möglich).
+3. Wiederherstellung bei Austritt — „Synchronisierung deaktivieren" bietet,
+   falls ein Backup existiert, dessen Wiederherstellung an.
+
+**Nebenläufigkeit:** `SyncPollingService` wird für die Dauer jeder der drei
+Operationen pausiert (`stoppen()`/`starten(context:)` mit dem neuen Context) —
+sonst könnte der Hintergrund-Timer mitten in den Container-Austausch
+schreiben (dieselbe Fehlerklasse wie in `docs/DATABASE_CONCURRENCY.md` →
+„Nachtrag: nebenläufige Löschung während eines Micro-Lease-Erwerbs").
+
+**Verifikationsstand:** Automatisierte Tests (`SyncErsetzenServiceTests.swift`)
+decken Wipe-Vollständigkeit, Backup-Rundlauf, Überschreib-Semantik,
+Ersetzen-statt-Merge und Wiederherstellung ab. **Nicht automatisiert
+verifizierbar** (siehe dortige Typ-Doku): dass `.id(generation)` in der
+echten App wirklich jede Ansicht mit einer Referenz auf den gelöschten Store
+verwirft — das muss manuell auf einem tatsächlich betroffenen Gerät geprüft
+werden, bevor das Feature als Korruptions-Recovery beworben wird; Ergebnis in
+`docs/DATABASE_CONCURRENCY.md` nachzutragen.

@@ -175,9 +175,14 @@ private struct BekannteSyncPeersSection: View {
 /// Referenzen über die normale SwiftData-API selbst zum Absturz führen kann.
 private struct DatenintegritaetSection: View {
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var syncPollingService: SyncPollingService
+    @EnvironmentObject private var containerController: ModelContainerController
     @State private var bericht = DatenintegritaetsService.letzterBericht
     @State private var logGroesse = DatenintegritaetsLogger.gesamtGroesse()
     @State private var zeigeTeilen = false
+    @State private var zeigeResetBestaetigung = false
+    @State private var wirdZurueckgesetzt = false
+    @State private var resetFehlermeldung: String?
 
     var body: some View {
         Section {
@@ -198,16 +203,56 @@ private struct DatenintegritaetSection: View {
                 zeigeTeilen = true
             }
             .disabled(logGroesse == 0)
+
+            // Korruptions-Recovery (siehe ``SyncErsetzenService``): eine
+            // automatische Reparatur ist über SwiftData nicht sicher möglich
+            // (siehe Footer/Typ-Doku von ``DatenintegritaetsService``) — dies
+            // ist die einzige verbleibende Abhilfe, sofern ein erreichbares
+            // Sync-Gerät existiert, aus dem sich der Bestand neu aufbauen lässt.
+            Button("Gerät zurücksetzen und von Sync-Gerät neu aufbauen…", role: .destructive) {
+                zeigeResetBestaetigung = true
+            }
+            .disabled(SyncOrdnerService.gewaehlterOrdner() == nil || wirdZurueckgesetzt)
+
+            if let resetFehlermeldung {
+                Label(resetFehlermeldung, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red)
+            }
         } header: {
             Text("Datenintegrität")
         } footer: {
-            Text("Zeigt bei jedem App-Start erkannte baumelnde Referenzen auf bereits gelöschte Objekte (z.B. nach einer fehlerhaften Synchronisation) — rein informativ, keine automatische Reparatur. Das vollständige Protokoll lässt sich über „Protokoll teilen…“ exportieren.")
+            Text("Zeigt bei jedem App-Start erkannte baumelnde Referenzen auf bereits gelöschte Objekte (z.B. nach einer fehlerhaften Synchronisation) — rein informativ, keine automatische Reparatur. Das vollständige Protokoll lässt sich über „Protokoll teilen…“ exportieren. „Gerät zurücksetzen“ sichert den aktuellen Bestand lokal und baut die Datenbank anschließend ausschließlich aus dem Stand eines erreichbaren Sync-Geräts neu auf — setzt eine aktive Datensynchronisation mit mindestens einem erreichbaren Gerät voraus.")
         }
         .sheet(isPresented: $zeigeTeilen) {
             DebugLogTeilenView(urls: DatenintegritaetsLogger.exportURLs)
         }
         .onAppear {
             logGroesse = DatenintegritaetsLogger.gesamtGroesse()
+        }
+        .confirmationDialog("Gerät zurücksetzen", isPresented: $zeigeResetBestaetigung, titleVisibility: .visible) {
+            Button("Zurücksetzen und neu aufbauen", role: .destructive) {
+                zuruecksetzen()
+            }
+            Button("Abbrechen", role: .cancel) {}
+        } message: {
+            Text("Löscht die lokale Datenbank vollständig (vorher gesichert) und baut sie ausschließlich aus dem Stand eines erreichbaren Sync-Geräts neu auf. Nicht rückgängig zu machen, außer über die Wiederherstellung bei „Synchronisierung deaktivieren“.")
+        }
+    }
+
+    private func zuruecksetzen() {
+        wirdZurueckgesetzt = true
+        resetFehlermeldung = nil
+        syncPollingService.stoppen()
+        Task {
+            do {
+                let neuerContext = try await SyncErsetzenService.ersetzenDurchPeer(containerController: containerController)
+                syncPollingService.starten(context: neuerContext)
+                bericht = DatenintegritaetsService.pruefe(context: neuerContext).map(\.beschreibung)
+            } catch {
+                resetFehlermeldung = error.localizedDescription
+                syncPollingService.starten(context: containerController.modelContainer.mainContext)
+            }
+            wirdZurueckgesetzt = false
         }
     }
 }
@@ -225,7 +270,11 @@ private struct DebugLogTeilenView: UIViewControllerRepresentable {
 }
 
 #Preview {
+    let container = try! ModelContainer(for: SchemaDefinition.schema, configurations: .init(isStoredInMemoryOnly: true))
     NavigationStack {
         DebuggingView()
     }
+    .environmentObject(SyncPollingService())
+    .environmentObject(ModelContainerController(modelContainer: container))
+    .modelContainer(container)
 }
