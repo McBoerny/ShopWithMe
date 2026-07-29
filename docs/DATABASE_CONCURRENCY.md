@@ -407,6 +407,35 @@ liest, nicht aber das eigentliche Platzhalter-Szenario selbst. Eine
 abschließende Verifikation erfordert einen echten Test mit einem neu
 beitretenden Gerät gegen einen echten Cloud-Anbieter.
 
+## Teilbehobenes Problem: langsamer App-Start durch Sync-Zyklus (GitHub #55)
+
+**Symptom:** Der App-Start (und jede Rückkehr aus dem Hintergrund) fühlt sich
+kurzzeitig träge an — `SyncPollingService.starten(context:)` löst dabei bewusst
+sofort einen ersten Sync-Zyklus aus (siehe Typ-Doku, Nutzerentscheidung für
+möglichst aktuelle Daten), der direkt mit dem initialen SwiftUI-Rendering um
+den `MainActor` konkurriert (auf dem sowohl UI-Arbeit als auch alle
+`ModelContext`-Zugriffe dieser App laufen, siehe `docs/DATABASE_CONCURRENCY.md`
+oben).
+
+**Umgesetzte Teilmaßnahme:** Der Polling-Loop läuft jetzt mit expliziter
+`.utility`-Priorität statt der ererbten Standardpriorität — das signalisiert
+dem kooperativen Scheduler, gerade konkurrierende UI-Arbeit vorzuziehen, statt
+den Sync-Zyklus stur dazwischenzudrängen. Ergänzt die in GitHub #52 bereits
+umgesetzte Auslagerung der Datei-I/O in `Task.detached`.
+
+**Bewusst nicht umgesetzt (größere Änderung, eigene Entscheidung nötig):** Die
+eigentliche Merge-/Speicherlogik (`SyncSnapshotImportService.merge`,
+`context.save()`, `SyncSnapshotExportService.erstelleSnapshot`) bleibt
+synchrone, `MainActor`-gebundene Arbeit — bei umfangreichem lokalem Bestand
+(viele Geschäfte/Artikel/Kaufeinträge) kann ein einzelner Sync-Zyklus dadurch
+weiterhin spürbar Zeit auf dem Hauptthread beanspruchen. Eine vollständige
+Lösung bräuchte einen zweiten, hintergrundgebundenen `ModelContext` für die
+Merge-Berechnung mit anschließendem Rücktransfer der Ergebnisse — ein größerer
+Architektur-Eingriff, der eine eigene Bewertung verdient, sollte die
+Priority-Maßnahme allein nicht ausreichen. Die bereits vorhandene
+Zyklusdauer-Protokollierung (`SyncDebugLogger`, `sync_zyklus_start`/`-ende`)
+liefert dafür bei Bedarf echte Messdaten statt Vermutungen.
+
 ## Behobener Absturz: fehlende `inverse`-Deklarationen führen zu baumelnden Referenzen
 
 Wiederkehrender Absturz direkt beim App-Start: `SwiftData/BackingData.swift:1039:

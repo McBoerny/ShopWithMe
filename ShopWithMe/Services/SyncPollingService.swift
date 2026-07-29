@@ -39,7 +39,13 @@ final class SyncPollingService: ObservableObject {
     func starten(context: ModelContext) {
         self.context = context
         guard schleife == nil else { return }
-        schleife = Task { [weak self] in
+        // Niedrige Priorität (GitHub #55): der Loop startet direkt beim
+        // App-Start bzw. bei jeder Rückkehr aus dem Hintergrund, exakt dann,
+        // wenn SwiftUI mit dem initialen Rendering/Layout um den MainActor
+        // konkurriert. `.utility` signalisiert dem kooperativen Scheduler,
+        // UI-Arbeit bei Bedarf vorzuziehen, statt den Sync-Zyklus stur mit
+        // Standardpriorität dazwischenzudrängen.
+        schleife = Task(priority: .utility) { [weak self] in
             while !Task.isCancelled {
                 await self?.syncZyklus()
                 guard !Task.isCancelled else { return }

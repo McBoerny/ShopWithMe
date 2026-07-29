@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.8 (Build 124) — Teilfix: langsamer App-Start durch Sync-Zyklus (GitHub #55)
+
+- `SyncPollingService`s Polling-Loop läuft jetzt mit `.utility`-Priorität statt
+  ererbter Standardpriorität, damit er bei der App-Start/Vordergrund-Rückkehr
+  konkurrierende SwiftUI-Rendering-Arbeit nicht blockiert. Teillösung — die
+  synchrone Merge-/Speicherlogik auf dem `MainActor` bleibt bei großem lokalem
+  Bestand weiterhin spürbar. Details in `docs/DATABASE_CONCURRENCY.md`.
+
 ## v0.8 (Build 123) — Fix: neu beigetretenes Gerät synchronisiert keine Bestandsdaten (GitHub #52)
 
 - Behoben: Die Sync-Lesepfade (`SyncImportService`, `SyncSnapshotImportService`)
