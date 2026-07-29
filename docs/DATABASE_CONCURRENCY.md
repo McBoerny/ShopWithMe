@@ -490,6 +490,50 @@ Punkt 2 repariert die schon vorhandenen kaputten Datensätze nicht rückwirkend
 zuverlässig den Absturz beim Export — die einzige Stelle, an der sie bisher
 zum Problem wurden.
 
+## Nachtrag: rückwirkende Reparatur bereits bestehender Korruption
+
+Derselbe `Geschaeft/p9`-Datensatz tauchte trotz Punkt 2 weiter als Absturz auf —
+nur an einer anderen, ungeschützten Stelle: `GeschaeftHaeufigkeitService.favoriten`
+liest `lhs.geschaeft.name` direkt auf einer über `Einkaufsvorgang.geschaeft`
+gehaltenen (baumelnden) Referenz, `KaufEintrag.anzeigeName`/`PreisHistorieZeile`
+entsprechend über `.artikel?.name`/`.geschaeft?.name`. Da praktisch jeder
+Lese-Pfad im Code auf dieselbe Weise verwundbar sein kann, ist eine
+Einzelfall-Absicherung wie `sichereID` (Punkt 2) an jeder Stelle nicht
+praktikabel — stattdessen wird die Korruption jetzt an der Quelle **rückwirkend
+repariert**, statt nur an einzelnen Lesepfaden abgefangen zu werden.
+
+**Zweistufiges Vorgehen** (mit dem Anwender abgestimmt — ein rein manuelles
+Verfahren würde den Absturz nicht zuverlässig verhindern, da er auf dem
+allerersten Bildschirm nach dem Start auftreten kann, bevor der Anwender je das
+Debug-Menü öffnet):
+
+1. **`DatenintegritaetsService.repariereFallsNoetig(context:)`** — läuft still
+   bei jedem App-Start (`ShopWithMeApp.init()`, vor `SyncPollingService`).
+   Baut wie `SyncSnapshotExportService` für jeden betroffenen Modelltyp ein
+   `Set<PersistentIdentifier>` gültiger Objekte und nullt/löscht jede
+   baumelnde Referenz: `KaufEintrag.artikel`/`.geschaeft`/`.kategorie`/
+   `.einkaufsvorgang`, `Einkaufsvorgang.geschaeft`/`.einkaufsliste`,
+   `Artikel.kategorie` (veraltetes Einzelwert-Feld), sowie
+   `WarengruppenDistanz`-Zeilen (gelöscht, falls `kategorieA`/`kategorieB`
+   betroffen ist — reine Lerndaten, werden neu gelernt; sonst nur `geschaeft`
+   genullt). Idempotent, verändert auf bereits sauberen Daten nichts.
+2. **`DebuggingView` → Sektion „Datenintegrität"** — zeigt den beim letzten
+   Start erzeugten Bericht (persistiert über `DatenintegritaetsService.letzterBericht`),
+   erlaubt eine manuelle erneute Prüfung sowie den Export des vollständigen,
+   dauerhaften Protokolls (`DatenintegritaetsLogger`, anders als
+   `SyncDebugLogger`/`DatabaseDebugLogger` **nicht** an einen Debug-Schalter
+   gekoppelt, da Reparaturen selten, aber sicherheitsrelevant sind). Für
+   `KaufEintrag`-Fälle geht dank `artikelNameSnapshot`/`geschaeftNameSnapshot`
+   keine sichtbare Information verloren — für `Einkaufsvorgang.geschaeft` (kein
+   Namens-Schnappschuss vorhanden) wird der wahrscheinliche Ladenname
+   best-effort aus den zugehörigen `KaufEintrag`-Schnappschüssen rekonstruiert
+   und im Bericht vermerkt, statt kommentarlos zu verschwinden.
+
+**Bewusst nicht:** eine blockierende Bestätigung vor jeder Reparatur — das
+würde den Start verzögern und den Absturz nicht verhindern, falls der Anwender
+das Debug-Menü nie öffnet. Die Transparenz kommt stattdessen über den
+nachträglich einsehbaren/exportierbaren Bericht.
+
 ## Diagnose-Logging (DB-Debug-Modus)
 
 Für den geplanten Live-Test mit mehreren Geräten ist ein optionaler,

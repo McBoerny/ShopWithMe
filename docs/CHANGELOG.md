@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.8 (Build 134) — Rückwirkende Reparatur baumelnder Referenzen (Absturz `Geschaeft/p9` u.ä.)
+
+- Neu: `DatenintegritaetsService.repariereFallsNoetig(context:)` läuft still bei
+  jedem App-Start und behebt bereits bestehende "baumelnde" Referenzen (Relikt
+  von vor den `inverse:`-Fixes in Build 30, siehe `docs/DATABASE_CONCURRENCY.md`
+  → „Nachtrag: rückwirkende Reparatur bereits bestehender Korruption") — Auslöser
+  war ein weiterhin auftretender Absturz (`Geschaeft/p9`, diesmal in
+  `GeschaeftHaeufigkeitService.favoriten`/`.name.getter`), obwohl die
+  `inverse:`-Deklarationen künftige Korruption bereits verhindern.
+- Neu: Debugging-Bildschirm → Sektion „Datenintegrität" zeigt den zuletzt
+  gefundenen/behobenen Bestand, erlaubt eine manuelle erneute Prüfung und den
+  Export des vollständigen Protokolls (`DatenintegritaetsLogger`, immer aktiv,
+  nicht an einen Debug-Schalter gekoppelt).
+
 ## v0.8 (Build 133) — Kritischer Fix: App-Hänger beim Start (schwarzer Bildschirm, kein Absturzprotokoll)
 
 Der in der letzten Version eingeführte `SyncOrdnerBeobachter` (`NSFilePresenter`

@@ -59,6 +59,8 @@ struct DebuggingView: View {
 
             BekannteSyncPeersSection()
 
+            DatenintegritaetSection()
+
             #if DEBUG
             SuchradiusUeberschreibungSection()
             #endif
@@ -161,6 +163,50 @@ private struct BekannteSyncPeersSection: View {
                 syncOrdner.stopAccessingSecurityScopedResource()
             }
             modelContext.delete(peer)
+        }
+    }
+}
+
+/// Zeigt den Bericht des letzten (automatisch beim App-Start gelaufenen)
+/// ``DatenintegritaetsService/repariereFallsNoetig(context:)`` und erlaubt eine
+/// manuelle erneute Prüfung sowie das Exportieren des vollständigen,
+/// dauerhaften Protokolls — Stufe 2 des mit dem Anwender abgestimmten
+/// zweistufigen Vorgehens (Stufe 1: stille automatische Reparatur beim Start).
+private struct DatenintegritaetSection: View {
+    @Environment(\.modelContext) private var modelContext
+    @State private var bericht = DatenintegritaetsService.letzterBericht
+    @State private var logGroesse = DatenintegritaetsLogger.gesamtGroesse()
+    @State private var zeigeTeilen = false
+
+    var body: some View {
+        Section {
+            if bericht.isEmpty {
+                Text("Beim letzten Start keine baumelnden Referenzen gefunden.")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(Array(bericht.enumerated()), id: \.offset) { _, zeile in
+                    Text(zeile)
+                        .font(.caption)
+                }
+            }
+            Button("Jetzt erneut prüfen") {
+                bericht = DatenintegritaetsService.repariereFallsNoetig(context: modelContext).map(\.beschreibung)
+                logGroesse = DatenintegritaetsLogger.gesamtGroesse()
+            }
+            Button("Protokoll teilen…") {
+                zeigeTeilen = true
+            }
+            .disabled(logGroesse == 0)
+        } header: {
+            Text("Datenintegrität")
+        } footer: {
+            Text("Repariert automatisch bei jedem App-Start baumelnde Referenzen auf bereits gelöschte Objekte (z.B. nach einer fehlerhaften Synchronisation) und verhindert dadurch Abstürze. Zeigt den zuletzt gefundenen Bestand — das vollständige Protokoll aller bisherigen Reparaturen lässt sich über „Protokoll teilen…“ exportieren.")
+        }
+        .sheet(isPresented: $zeigeTeilen) {
+            DebugLogTeilenView(urls: DatenintegritaetsLogger.exportURLs)
+        }
+        .onAppear {
+            logGroesse = DatenintegritaetsLogger.gesamtGroesse()
         }
     }
 }

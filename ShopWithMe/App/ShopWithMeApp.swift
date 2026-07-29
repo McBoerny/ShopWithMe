@@ -51,6 +51,7 @@ struct ShopWithMeApp: App {
         SeedData.seedeGeschaeftsTypenFallsLeer(context: context)
         Geschaeft.typenMigrierenFallsNoetig(context: context)
         ArtikelKategorie.geschaeftsTypenMigrierenFallsNoetig(context: context)
+        DatenintegritaetsService.repariereFallsNoetig(context: context)
         try? context.save()
     }
 

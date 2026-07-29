@@ -190,6 +190,37 @@ Geräteuhr hingegen genau der richtige Wert.
   (siehe oben) — für einen Vergleich mehrerer Geräte müssen die Protokolle
   aktuell manuell nebeneinandergelegt werden (z.B. Teilen-Button je Gerät).
 
+## Mechanismus: Datenintegrität (Reperaturlauf gegen baumelnde Referenzen)
+
+Anders als die beiden Mechanismen oben **nicht** an einen Debug-Schalter
+gekoppelt — Reparaturen an baumelnden Referenzen (siehe
+`docs/DATABASE_CONCURRENCY.md` → „Nachtrag: rückwirkende Reparatur bereits
+bestehender Korruption") sind selten, aber sicherheitsrelevant genug, dass sie
+unabhängig von einer laufenden Debug-Sitzung nachvollziehbar bleiben sollen.
+
+### Bausteine
+
+- **`DatenintegritaetsLogger`:** dünner, immer aktiver Wrapper um
+  `DebugLogWriter` (Kategorie `Datenintegritaet`, Datei `datenintegritaet.log`),
+  ohne eigenen Schalter.
+- **`DatenintegritaetsService.repariereFallsNoetig(context:)`:** läuft bei
+  jedem App-Start, protokolliert jede vorgenommene Reparatur als
+  Freitext-Ereignis (`reparatur`) und hält den zuletzt erzeugten Bericht
+  zusätzlich in `UserDefaults` (`DatenintegritaetsService.letzterBericht`) vor,
+  damit `DebuggingView` ihn ohne erneuten Lauf anzeigen kann.
+- **`DebuggingView` → Sektion „Datenintegrität":** zeigt den letzten Bericht,
+  Button „Jetzt erneut prüfen" (löst `repariereFallsNoetig` manuell erneut
+  aus), Button „Protokoll teilen…" (Share Sheet über das vollständige,
+  dauerhafte Protokoll).
+
+### Bekannte Grenzen
+
+- Rein lokales Diagnose-Werkzeug ohne geräteübergreifende Zusammenführung.
+- Der Bericht beschreibt nur, was in der aktuellen Sitzung repariert wurde —
+  keine rückwirkende Historie über App-Neuinstallationen hinweg (die
+  Protokolldatei selbst bleibt aber über Neuinstallationen der App hinweg
+  nicht erhalten, da sie im Dokumentenordner der App liegt).
+
 ## Weitere Mechanismen (geplant, noch nicht spezifiziert)
 
 Noch kein konkreter Bedarf dokumentiert. Künftige Kandidaten (z.B. Debugging
