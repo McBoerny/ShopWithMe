@@ -322,6 +322,51 @@ struct SyncSnapshotImportServiceTests {
     }
 
     @Test
+    func bereitsAbgehakterArtikelWirdNichtDurchSnapshotWiederAufDieListeGeholt() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
+        let artikel = Artikel(name: "Milch", symbolName: "drop.fill", farbeHex: "#34C759")
+        context.insert(artikel)
+        let vorgang = Einkaufsvorgang(einkaufsliste: liste)
+        context.insert(vorgang)
+        try context.save()
+
+        // Nutzer hakt Milch ab — entfernt den EinkaufslistenEintrag als
+        // Seiteneffekt, OHNE ein artikelEntfernt-Event (siehe
+        // Einkaufsvorgang.artikelAbhakenOhneEventAufzeichnung).
+        _ = vorgang.artikelAbhakenOhneEventAufzeichnung(artikel, context: context)
+        try context.save()
+        #expect(!liste.enthaelt(artikel))
+
+        // Ein Peer, der die Abwahl noch nicht mitbekommen hat, listet Milch
+        // in seinem Snapshot weiterhin als Mitglied der Liste.
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.einkaufslisten = [EinkaufslisteSnapshot(id: liste.id, name: "Einkaufsliste", erstelltAm: liste.erstelltAm)]
+        snapshot.artikel = [
+            ArtikelSnapshot(
+                id: artikel.id, name: "Milch", symbolName: "drop.fill", farbeHex: "#34C759",
+                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+            ),
+        ]
+        snapshot.einkaufslistenEintraege = [
+            EinkaufslistenEintragSnapshot(einkaufslisteID: liste.id, artikelID: artikel.id, menge: 1, notiz: nil),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        // Das Sicherheitsnetz darf den bereits abgehakten Artikel nicht
+        // wieder auf die offene Liste zurückholen (GitHub #52-Nachfolgefund).
+        #expect(!liste.enthaelt(artikel))
+    }
+
+    @Test
     func zuAlterSnapshotWirdIgnoriert() async throws {
         let (container, context) = try machtLeerenContainer()
         _ = container

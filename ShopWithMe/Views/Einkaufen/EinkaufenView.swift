@@ -758,14 +758,23 @@ private struct EinkaufslisteView: View {
         Set(einkaufsvorgang.kaufEintraege.compactMap { $0.artikel?.persistentModelID })
     }
 
-    /// Artikel, die noch auf ``einkaufsliste`` stehen.
+    /// Artikel, die noch auf ``einkaufsliste`` stehen — schließt bewusst
+    /// bereits abgehakte Artikel aus, auch wenn (z.B. durch einen inzwischen
+    /// behobenen Sync-Fehler, GitHub #52-Nachfolgefund) noch ein
+    /// ``EinkaufslistenEintrag`` für sie existiert. Verhindert, dass derselbe
+    /// Artikel gleichzeitig als „offen" und als „abgehakt" erscheint.
     private var offeneArtikel: [Artikel] {
-        einkaufsliste.eintraege.compactMap(\.artikel)
+        einkaufsliste.eintraege.compactMap(\.artikel).filter { !abgehakteArtikelIDs.contains($0.persistentModelID) }
     }
 
-    /// Artikel, die in diesem Einkaufsvorgang bereits abgehakt wurden.
+    /// Artikel, die in diesem Einkaufsvorgang bereits abgehakt wurden —
+    /// dedupliziert nach Artikel-Identität, falls (z.B. durch bereits vor
+    /// einem Sync-Fix entstandene doppelte ``KaufEintrag``e) mehrere Einträge
+    /// auf denselben Artikel verweisen; sonst tauchte er in der Ansicht doppelt
+    /// auf (GitHub #52-Nachfolgefund).
     private var abgehakteArtikel: [Artikel] {
-        einkaufsvorgang.kaufEintraege.compactMap(\.artikel).filter { abgehakteArtikelIDs.contains($0.persistentModelID) }
+        var gesehen = Set<PersistentIdentifier>()
+        return einkaufsvorgang.kaufEintraege.compactMap(\.artikel).filter { gesehen.insert($0.persistentModelID).inserted }
     }
 
     /// Der „Einkauf abschließen“-Button am unteren Bildschirmrand: zeigt die Anzahl

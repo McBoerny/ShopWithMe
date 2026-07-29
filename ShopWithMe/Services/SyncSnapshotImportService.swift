@@ -422,6 +422,18 @@ enum SyncSnapshotImportService {
     /// durch nachträgliches Namensmatching entstand (GitHub #52-Nachfolgefund).
     /// Entfernen bleibt weiterhin Aufgabe der `artikelEntfernt`-Events — hier
     /// wird nie etwas gelöscht.
+    ///
+    /// **Bug (GitHub #52-Nachfolgefund, behoben):** Ein Artikel, der lokal
+    /// bereits per ``Einkaufsvorgang/artikelAbhaken(_:context:)`` abgehakt
+    /// wurde, verliert dabei seinen ``EinkaufslistenEintrag`` als Seiteneffekt
+    /// (siehe dort) — OHNE ein eigenes `artikelEntfernt`-Event, das andere
+    /// Peers darüber informieren würde. Ein Peer, dessen Snapshot diesen
+    /// Zustandswechsel noch nicht kennt, listet den Artikel deshalb weiterhin
+    /// in ``SyncSnapshot/einkaufslistenEintraege`` — ohne diese Prüfung hätte
+    /// das den bereits abgehakten Artikel hier wieder auf die offene Liste
+    /// zurückgeholt (sichtbar als Artikel, der gleichzeitig "offen" und
+    /// "abgehakt" erschien, bei aktivierter "alle Artikel zeigen"-Option
+    /// sogar doppelt).
     @MainActor
     private static func mergeEinkaufslistenEintraege(
         _ remote: [EinkaufslistenEintragSnapshot], listeZuordnung: [UUID: Einkaufsliste], artikelZuordnung: [UUID: Artikel],
@@ -430,9 +442,22 @@ enum SyncSnapshotImportService {
         for eintrag in remote {
             guard let liste = listeZuordnung[eintrag.einkaufslisteID],
                   let artikel = artikelZuordnung[eintrag.artikelID],
-                  !liste.enthaelt(artikel)
+                  !liste.enthaelt(artikel),
+                  !istBereitsAbgehakt(artikel, aufListe: liste, context: context)
             else { continue }
             context.insert(EinkaufslistenEintrag(einkaufsliste: liste, artikel: artikel, menge: eintrag.menge, notiz: eintrag.notiz))
+        }
+    }
+
+    /// Ob `artikel` in einem lokal noch offenen ``Einkaufsvorgang`` von
+    /// `liste` bereits abgehakt ist (siehe Warnung in
+    /// ``mergeEinkaufslistenEintraege(_:listeZuordnung:artikelZuordnung:context:)``).
+    @MainActor
+    private static func istBereitsAbgehakt(_ artikel: Artikel, aufListe liste: Einkaufsliste, context: ModelContext) -> Bool {
+        let deskriptor = FetchDescriptor<Einkaufsvorgang>(predicate: #Predicate { $0.endZeit == nil })
+        let offeneVorgaenge = (try? context.fetch(deskriptor)) ?? []
+        return offeneVorgaenge.contains {
+            $0.einkaufsliste == liste && $0.kaufEintraege.contains { $0.artikel == artikel }
         }
     }
 

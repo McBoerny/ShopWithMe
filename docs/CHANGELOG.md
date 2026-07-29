@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.8 (Build 132) — Fix: Sicherheitsnetz holte bereits abgehakte Artikel zurück (+ vermutlicher Absturzauslöser)
+
+- Behoben: Ein bereits abgehakter Artikel erschien wieder in der "offenen"
+  Ansicht der Einkaufsliste — bei aktivierter "alle Artikel zeigen"-Option
+  sogar doppelt, begleitet von einer SwiftUI-`ForEach`-Warnung über doppelte
+  IDs (ein bekannter Absturzauslöser, passend zum gemeldeten Crash).
+  Ursache: Das in der letzten Version eingeführte Einkaufslisten-
+  Sicherheitsnetz (`mergeEinkaufslistenEintraege`) fügte einen Artikel additiv
+  wieder zur Liste hinzu, sobald ein Peer ihn noch listete — ohne zu prüfen,
+  ob er zwischenzeitlich bereits abgehakt wurde (Abhaken entfernt den
+  Listen-Eintrag als Seiteneffekt, ohne eigenes Sync-Event). Zusätzlich
+  defensiv abgesichert: `EinkaufenView` schließt abgehakte Artikel jetzt
+  explizit aus der offenen Liste aus und dedupliziert die abgehakte Liste
+  nach Artikel-Identität. Details in
+  `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`, Abschnitt 11b.
+
 ## v0.8 (Build 131) — Fix: Einkaufsvorgang-Dublette beim gemeinsamen Einkaufen
 
 - Behoben: Abgehakte Artikel erschienen auf einem Gerät, aber nicht auf dem

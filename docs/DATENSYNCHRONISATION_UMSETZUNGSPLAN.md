@@ -666,6 +666,31 @@ Kaufeinträge (aus zwei zuvor unabhängigen Einkaufsvorgängen) bleiben bestehen
 Preishistorie-Einträge lassen sich über die Geschäfts-Preisübersicht manuell
 entfernen (jetzt korrekt tombstoned, kommen also nicht zurück).
 
+### 11b. Nachtrag: Sicherheitsnetz holte bereits abgehakte Artikel zurück
+
+Ein weiterer Live-Test deckte einen direkten Bug im in Abschnitt 11
+eingeführten Einkaufslisten-Sicherheitsnetz auf: Ein bereits abgehakter
+Artikel erschien wieder in der "offenen" Ansicht — bei aktivierter "alle
+Artikel zeigen"-Option sogar doppelt (SwiftUI meldete dazu passend `ForEach`
+mit doppelten IDs, ein bekannter Absturzauslöser).
+
+**Ursache:** `Einkaufsvorgang.artikelAbhakenOhneEventAufzeichnung` entfernt
+den `EinkaufslistenEintrag` eines abgehakten Artikels als **Seiteneffekt**,
+ohne dafür ein eigenes `artikelEntfernt`-Event aufzuzeichnen (das Abhaken
+selbst ist bereits das maßgebliche Event). Ein Peer, dessen Snapshot diesen
+Zustandswechsel noch nicht kennt, listete den Artikel deshalb weiterhin in
+`einkaufslistenEintraege` — `mergeEinkaufslistenEintraege` (Abschnitt 11) hatte
+keine Prüfung dagegen und fügte ihn additiv wieder hinzu, obwohl er lokal
+bereits einen `KaufEintrag` hatte.
+
+**Fix:** `mergeEinkaufslistenEintraege` prüft jetzt zusätzlich, ob der Artikel
+in einem lokal noch offenen `Einkaufsvorgang` von derselben Liste bereits
+abgehakt ist, und überspringt die Wiederherstellung in diesem Fall. Zusätzlich
+defensiv abgesichert in `EinkaufenView`: `offeneArtikel` schließt jetzt
+abgehakte Artikel explizit aus, `abgehakteArtikel` dedupliziert nach
+Artikel-Identität (schützt auch gegen die in 11a beschriebenen, bereits
+bestehenden doppelten `KaufEintrag`e).
+
 ## 12. Restrisiko: unerreichbare Vorgeschichte vor Einführung dieses Features
 
 Einkaufslisten-Einträge, die entstanden, **bevor** Bereich-A-Events (Phase 0)
