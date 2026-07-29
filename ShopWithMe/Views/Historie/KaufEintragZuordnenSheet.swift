@@ -136,13 +136,20 @@ struct KaufEintragZuordnenSheet: View {
 
     private func speichern() {
         let getrimmterAlias = aliasText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let artikel = ausgewaehlterArtikel
+        // Nur die Identität über die `await`-Grenze hinweg sichern (siehe
+        // ``ModelReference``) — zwischen dem Erwerb des Micro-Lease und dieser
+        // Zuweisung kann ein nebenläufiger Sync-Zyklus genau diesen Artikel
+        // (per Tombstone eines Peers) gelöscht haben.
+        let eintragReferenz = ModelReference(eintrag)
+        let artikelReferenz = ModelReference(ausgewaehlterArtikel)
         Task {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
-                eintrag.alternativerName = getrimmterAlias.isEmpty ? nil : getrimmterAlias
-                eintrag.artikel = artikel
+                guard let eintragFrisch = eintragReferenz.resolved(in: modelContext) else { return }
+                let artikel = artikelReferenz?.resolved(in: modelContext)
+                eintragFrisch.alternativerName = getrimmterAlias.isEmpty ? nil : getrimmterAlias
+                eintragFrisch.artikel = artikel
                 if let artikel {
-                    eintrag.kategorie = artikel.fuehrendeKategorie(inGeschaeft: eintrag.geschaeft, context: modelContext)
+                    eintragFrisch.kategorie = artikel.fuehrendeKategorie(inGeschaeft: eintragFrisch.geschaeft, context: modelContext)
                 }
             }
             dismiss()

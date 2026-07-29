@@ -152,7 +152,13 @@ enum MilkForUsImportService {
         in einkaufsliste: Einkaufsliste,
         context: ModelContext
     ) async {
+        // Nur die Identität über die `await`-Grenze hinweg sichern (siehe
+        // ``ModelReference``) — der Anwender kann zwischen Datei-Auswahl und
+        // "Übernehmen" beliebig lange in der Vorschau verweilen, in der Zeit
+        // könnte die Zielliste anderweitig gelöscht worden sein.
+        let einkaufslisteReferenz = ModelReference(einkaufsliste)
         await DatabaseLeaseService.performMicroLease(context: context) {
+            guard let einkaufsliste = einkaufslisteReferenz.resolved(in: context) else { return }
             var naechsterSortIndex = ((try? context.fetch(FetchDescriptor<ArtikelKategorie>()))?.map(\.sortIndex).max() ?? -1) + 1
             // `var` statt `let`: derselbe Artikelname kann in mehreren Gruppen
             // dieses Imports auftauchen — neu angelegte Artikel werden unten

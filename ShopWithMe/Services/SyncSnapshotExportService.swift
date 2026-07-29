@@ -9,19 +9,6 @@ import SwiftData
 /// Neuaufbau — welcher Zeitpunkt dafür sinnvoll ist (Konsolidierung/adaptives
 /// Polling), entscheidet erst Phase 4; hier wird bei jedem Aufruf unbedingt
 /// geschrieben. Reines Schreiben — Lesen fremder Snapshots ist Phase 3.
-/// Modelle mit einer stabilen `UUID`-`id` — Voraussetzung für die
-/// `sichereID`/`sichereIDs`-Absicherung in ``SyncSnapshotExportService``
-/// gegen bereits "baumelnde" Referenzen auf gelöschte Objekte.
-private protocol SyncSnapshotIdentifizierbar: PersistentModel {
-    var id: UUID { get }
-}
-extension Geschaeft: SyncSnapshotIdentifizierbar {}
-extension GeschaeftTyp: SyncSnapshotIdentifizierbar {}
-extension ArtikelKategorie: SyncSnapshotIdentifizierbar {}
-extension Artikel: SyncSnapshotIdentifizierbar {}
-extension Einkaufsliste: SyncSnapshotIdentifizierbar {}
-extension Einkaufsvorgang: SyncSnapshotIdentifizierbar {}
-
 enum SyncSnapshotExportService {
     private static let dateiName = "export.json"
 
@@ -215,7 +202,7 @@ enum SyncSnapshotExportService {
     /// reines Identitäts-Metadatum und daher auch auf einer baumelnden
     /// Referenz sicher lesbar, während der Zugriff auf `id` (oder jede andere
     /// Eigenschaft) in diesem Fall mit einem SwiftData-Fatal-Error abstürzt.
-    private static func sichereID<T: SyncSnapshotIdentifizierbar>(_ objekt: T?, gueltigeIDs: Set<PersistentIdentifier>) -> UUID? {
+    private static func sichereID<T: IdentifizierbaresModell>(_ objekt: T?, gueltigeIDs: Set<PersistentIdentifier>) -> UUID? {
         guard let objekt else { return nil }
         guard gueltigeIDs.contains(objekt.persistentModelID) else {
             SyncDebugLogger.log(.baumelndeReferenzGefunden, details: "typ=\(T.self) referenz=\(objekt.persistentModelID)")
@@ -226,7 +213,7 @@ enum SyncSnapshotExportService {
 
     /// Wie ``sichereID(_:gueltigeIDs:)``, für Arrays — verwaiste Einträge
     /// werden stillschweigend herausgefiltert statt die App abstürzen zu lassen.
-    private static func sichereIDs<T: SyncSnapshotIdentifizierbar>(_ objekte: [T], gueltigeIDs: Set<PersistentIdentifier>) -> [UUID] {
+    private static func sichereIDs<T: IdentifizierbaresModell>(_ objekte: [T], gueltigeIDs: Set<PersistentIdentifier>) -> [UUID] {
         objekte.compactMap { sichereID($0, gueltigeIDs: gueltigeIDs) }
     }
 

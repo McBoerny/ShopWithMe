@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.8 (Build 135) — Absturz durch nebenläufige Löschung während eines Micro-Lease-Erwerbs
+
+- Behoben: Absturz `Artikel/p19` in `KaufEintrag.artikel.setter` — anders als
+  die vorherige Version keine fehlende `inverse`-Deklaration, sondern eine
+  neben­läufige Löschung (z.B. per Peer-Tombstone) genau während ein anderer
+  Bildschirm eine zuvor erfasste Artikel-/Geschäfts-Referenz nach einem
+  Micro-Lease-Erwerb noch schreiben wollte (siehe
+  `docs/DATABASE_CONCURRENCY.md` → „Nachtrag: nebenläufige Löschung während
+  eines Micro-Lease-Erwerbs").
+- Neu: `ModelReference<T>` (`Models/ModelReference.swift`) — generischer
+  Ersatz für das Halten lebendiger Objektreferenzen über eine `await`-Grenze
+  hinweg, löst erst unmittelbar vor der Verwendung frisch auf. Angewendet in
+  `KaufEintragZuordnenSheet`, `BelegScanView`, `PreisschildScanView`,
+  `EinkaufenView`, `GeschaeftListView`, `ArtikelListView`,
+  `ArtikelHinzufuegenView`, `MilkForUsImportService`,
+  `PreisHistorieBereinigungService`.
+
 ## v0.8 (Build 134) — Rückwirkende Reparatur baumelnder Referenzen (Absturz `Geschaeft/p9` u.ä.)
 
 - Neu: `DatenintegritaetsService.repariereFallsNoetig(context:)` läuft still bei

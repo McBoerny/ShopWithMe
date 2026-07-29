@@ -140,9 +140,15 @@ struct ArtikelListView: View {
     }
 
     private func artikelLoeschen(_ zuLoeschende: [Artikel]) {
+        // Nur Identitäten über die `await`-Grenze hinweg sichern (siehe
+        // ``ModelReference``) — während des Micro-Lease-Erwerbs kann ein
+        // nebenläufiger Sync-Zyklus einen dieser Artikel bereits gelöscht
+        // haben (dann einfach überspringen, er ist ja bereits weg).
+        let zuLoeschendeReferenzen = zuLoeschende.map { ModelReference($0) }
         Task {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
-                for eintrag in zuLoeschende {
+                for referenz in zuLoeschendeReferenzen {
+                    guard let eintrag = referenz.resolved(in: modelContext) else { continue }
                     // Tombstone verhindert, dass ein Peer, der den Artikel
                     // noch in seinem eigenen Snapshot führt, ihn beim
                     // nächsten Sync unwissentlich wiederbelebt (GitHub #52-Nachfolgefund).

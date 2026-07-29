@@ -1069,13 +1069,22 @@ private struct EinkaufslisteView: View {
     }
 
     private func umschalten(_ artikel: Artikel) {
+        // Nur die Identitäten über die `await`-Grenze hinweg sichern (siehe
+        // ``ModelReference``) — während des Micro-Lease-Erwerbs kann ein
+        // nebenläufiger Sync-Zyklus genau diesen Artikel oder Einkaufsvorgang
+        // (z.B. per Peer-Zusammenführung) gelöscht haben.
+        let artikelReferenz = ModelReference(artikel)
+        let einkaufsvorgangReferenz = ModelReference(einkaufsvorgang)
         Task {
             var abhakErgebnis: AbhakErgebnis?
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
-                if istAbgehakt(artikel) {
-                    einkaufsvorgang.artikelAbwaehlen(artikel, context: modelContext)
+                guard let artikelFrisch = artikelReferenz.resolved(in: modelContext),
+                      let einkaufsvorgangFrisch = einkaufsvorgangReferenz.resolved(in: modelContext)
+                else { return }
+                if istAbgehakt(artikelFrisch) {
+                    einkaufsvorgangFrisch.artikelAbwaehlen(artikelFrisch, context: modelContext)
                 } else {
-                    abhakErgebnis = einkaufsvorgang.artikelAbhaken(artikel, context: modelContext)
+                    abhakErgebnis = einkaufsvorgangFrisch.artikelAbhaken(artikelFrisch, context: modelContext)
                 }
             }
             if let abhakErgebnis {

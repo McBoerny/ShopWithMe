@@ -534,6 +534,52 @@ würde den Start verzögern und den Absturz nicht verhindern, falls der Anwender
 das Debug-Menü nie öffnet. Die Transparenz kommt stattdessen über den
 nachträglich einsehbaren/exportierbaren Bericht.
 
+## Nachtrag: nebenläufige Löschung während eines Micro-Lease-Erwerbs
+
+Ein weiterer Absturz (`Artikel/p19`, in `KaufEintrag.artikel.setter`) hatte
+eine völlig andere Ursache als die beiden Punkte oben: keine fehlende
+`inverse`-Deklaration, sondern ein **Nebenläufigkeits-Fenster**. Muster:
+
+```swift
+let artikel = ausgewaehlterArtikel   // lebendige Referenz, z.B. aus @State
+Task {
+    await DatabaseLeaseService.performMicroLease(context: modelContext) {
+        eintrag.artikel = artikel    // Absturz, falls artikel inzwischen weg ist
+    }
+}
+```
+
+`performMicroLease` awaitet zuerst den Lease-Erwerb — währenddessen läuft
+`SyncPollingService`s eigener Hintergrund-Timer unabhängig weiter (ebenfalls
+MainActor, eigener `Task`) und kann in genau diesem Zeitfenster das erfasste
+Objekt löschen (z.B. per Tombstone eines Peers, siehe „Behobener Absturz:
+fehlende `inverse`-Deklarationen" oben). Wird die vor dem `await` erfasste
+Referenz danach ungeprüft in eine Relationship geschrieben oder mit `delete()`
+gelöscht, stürzt das mit demselben SwiftData-Fatal-Error ab.
+
+**Fix, generisch statt Einzelfall-Patches** (mit dem Anwender abgestimmt):
+neuer Typ `ModelReference<T: IdentifizierbaresModell>`
+(`Models/ModelReference.swift`) hält nur die stabile `id: UUID` statt der
+lebendigen Referenz und löst erst unmittelbar vor der Verwendung — innerhalb
+des Lease-Blocks, der nicht mehr unterbrochen werden kann — über
+`resolved(in:)` frisch auf; ist das Objekt inzwischen weg, liefert er `nil`
+statt eine ungültige Referenz weiterzureichen. `IdentifizierbaresModell`
+(`Models/IdentifizierbaresModell.swift`) ist das dafür promotete, vormals
+private Protokoll aus `SyncSnapshotExportService` (`sichereID`/`sichereIDs`
+nutzen jetzt denselben gemeinsamen Typ statt einer eigenen Kopie).
+
+Angewendet an allen gefundenen Stellen, an denen eine vor einem
+`performMicroLease`-Aufruf erfasste Fremdreferenz (nicht nur ein gerade neu
+angelegtes eigenes Objekt) innerhalb des Lease-Blocks verwendet wird:
+`KaufEintragZuordnenSheet.speichern()`, `BelegScanView.uebernehmen()`,
+`PreisschildScanView.uebernehmen()`, `EinkaufenView.umschalten(_:)`,
+`GeschaeftListView.geschaeftLoeschen(_:at:)`,
+`ArtikelListView.artikelLoeschen(_:)`, `ArtikelHinzufuegenView.hinzufuegen(_:)`/
+`.entfernen(_:)`, `MilkForUsImportService.uebernehmen(...)`,
+`PreisHistorieBereinigungService.bereinigen(...)`. Stellen, die ausschließlich
+neu angelegte, noch nicht eingefügte Objekte einfügen (`context.insert(neuesObjekt)`),
+sind von diesem Risiko nicht betroffen und bleiben unverändert.
+
 ## Diagnose-Logging (DB-Debug-Modus)
 
 Für den geplanten Live-Test mit mehreren Geräten ist ein optionaler,

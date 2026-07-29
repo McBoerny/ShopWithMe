@@ -272,6 +272,19 @@ struct BelegScanView: View {
     }
 
     private func uebernehmen() {
+        // Nur Identitäten über die `await`-Grenzen hinweg sichern (siehe
+        // ``ModelReference``) — zwischen jetzt und der eigentlichen Zuweisung
+        // im Lease-Block (nach Geocoding-Warten UND Lease-Erwerb, zwei
+        // `await`-Punkte) kann ein nebenläufiger Sync-Zyklus jedes dieser
+        // Objekte (per Tombstone eines Peers) gelöscht haben.
+        let erkanntesGeschaeftReferenz = ModelReference(erkanntesGeschaeft)
+        let einkaufsvorgangReferenz: ModelReference<Einkaufsvorgang>? = {
+            guard case .einkaufsvorgang(let einkaufsvorgang) = kontext else { return nil }
+            return ModelReference(einkaufsvorgang)
+        }()
+        let positionen = bearbeitbarePositionen ?? []
+        let positionsArtikelReferenzen = positionen.map { ModelReference($0.effektivZugeordneterArtikel) }
+
         Task {
             // Geocoding braucht Netzwerk (async) und muss daher vor dem
             // (synchronen) Micro-Lease abgeschlossen sein — analog
@@ -286,26 +299,29 @@ struct BelegScanView: View {
             // fachlich eine einzige Aktion (siehe `docs/DATABASE_CONCURRENCY.md` →
             // „Vollständiger Schreibvorgang-Katalog“).
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                let erkanntesGeschaeftFrisch = erkanntesGeschaeftReferenz?.resolved(in: modelContext)
+                let einkaufsvorgangFrisch = einkaufsvorgangReferenz?.resolved(in: modelContext)
+
                 if !erkannterGeschaeftName.isEmpty {
-                    erkanntesGeschaeft?.alternativenNamenLernen(erkannterGeschaeftName)
+                    erkanntesGeschaeftFrisch?.alternativenNamenLernen(erkannterGeschaeftName)
                 }
                 // Hat das zugeordnete Geschäft noch keine Adresse, wird die auf dem
                 // Beleg erkannte übernommen (GitHub #19) — unabhängig davon, ob das
                 // Geschäft automatisch oder manuell über `GeschaeftWahlSheet`
                 // zugeordnet wurde.
-                if let erkanntesGeschaeft, erkanntesGeschaeft.adresse == nil, !getrimmteErkannteAdresse.isEmpty {
-                    erkanntesGeschaeft.adresse = getrimmteErkannteAdresse
+                if let erkanntesGeschaeftFrisch, erkanntesGeschaeftFrisch.adresse == nil, !getrimmteErkannteAdresse.isEmpty {
+                    erkanntesGeschaeftFrisch.adresse = getrimmteErkannteAdresse
                     if let gelernteKoordinaten {
-                        erkanntesGeschaeft.breitengrad = gelernteKoordinaten.breitengrad
-                        erkanntesGeschaeft.laengengrad = gelernteKoordinaten.laengengrad
+                        erkanntesGeschaeftFrisch.breitengrad = gelernteKoordinaten.breitengrad
+                        erkanntesGeschaeftFrisch.laengengrad = gelernteKoordinaten.laengengrad
                     }
                 }
 
-                if case .einkaufsvorgang(let einkaufsvorgang) = kontext, einkaufsvorgang.geschaeft == nil {
-                    einkaufsvorgang.geschaeft = erkanntesGeschaeft
+                if let einkaufsvorgangFrisch, einkaufsvorgangFrisch.geschaeft == nil {
+                    einkaufsvorgangFrisch.geschaeft = erkanntesGeschaeftFrisch
                 }
 
-                for position in bearbeitbarePositionen ?? [] {
+                for (index, position) in positionen.enumerated() {
                     let name = position.artikelName.trimmingCharacters(in: .whitespacesAndNewlines)
                     let erkannterName = position.erkannterName.trimmingCharacters(in: .whitespacesAndNewlines)
                     let produktName: String? = erkannterName.isEmpty ? nil : erkannterName
@@ -313,20 +329,25 @@ struct BelegScanView: View {
                     guard !name.isEmpty,
                           let preis = Decimal(string: position.preisText.replacingOccurrences(of: ",", with: "."))
                     else { continue }
+                    let artikel = positionsArtikelReferenzen[index]?.resolved(in: modelContext)
 
                     switch kontext {
-                    case .einkaufsvorgang(let einkaufsvorgang):
-                        if let vorhandenerEintrag = einkaufsvorgang.kaufEintraege.first(where: { passtZu(name: name, eintrag: $0) }) {
+                    case .einkaufsvorgang:
+                        // Der Einkaufsvorgang selbst kann inzwischen gelöscht worden
+                        // sein (siehe oben) — dann fehlt jeder Bezug für diese
+                        // Position, sie wird übersprungen statt einen losgelösten
+                        // Kaufeintrag anzulegen.
+                        guard let einkaufsvorgangFrisch else { continue }
+                        if let vorhandenerEintrag = einkaufsvorgangFrisch.kaufEintraege.first(where: { passtZu(name: name, eintrag: $0) }) {
                             vorhandenerEintrag.preis = preis
                             vorhandenerEintrag.datum = belegDatum
                             vorhandenerEintrag.produktName = produktName
                             vorhandenerEintrag.alternativerName = neuerAlternativerName
                         } else {
-                            let artikel = position.effektivZugeordneterArtikel
                             let neuerEintrag = KaufEintrag(
                                 artikel: artikel,
-                                geschaeft: einkaufsvorgang.geschaeft,
-                                kategorie: artikel?.fuehrendeKategorie(inGeschaeft: einkaufsvorgang.geschaeft, context: modelContext),
+                                geschaeft: einkaufsvorgangFrisch.geschaeft,
+                                kategorie: artikel?.fuehrendeKategorie(inGeschaeft: einkaufsvorgangFrisch.geschaeft, context: modelContext),
                                 preis: preis,
                                 datum: belegDatum
                             )
@@ -334,14 +355,13 @@ struct BelegScanView: View {
                             neuerEintrag.produktName = produktName
                             neuerEintrag.alternativerName = neuerAlternativerName
                             modelContext.insert(neuerEintrag)
-                            neuerEintrag.einkaufsvorgang = einkaufsvorgang
+                            neuerEintrag.einkaufsvorgang = einkaufsvorgangFrisch
                         }
                     case .geschaeft, .unbekannt:
-                        let artikel = position.effektivZugeordneterArtikel
                         let neuerEintrag = KaufEintrag(
                             artikel: artikel,
-                            geschaeft: erkanntesGeschaeft,
-                            kategorie: artikel?.fuehrendeKategorie(inGeschaeft: erkanntesGeschaeft, context: modelContext),
+                            geschaeft: erkanntesGeschaeftFrisch,
+                            kategorie: artikel?.fuehrendeKategorie(inGeschaeft: erkanntesGeschaeftFrisch, context: modelContext),
                             preis: preis,
                             datum: belegDatum
                         )

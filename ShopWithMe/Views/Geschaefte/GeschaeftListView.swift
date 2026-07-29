@@ -122,10 +122,15 @@ struct GeschaeftListView: View {
     }
 
     private func geschaeftLoeschen(_ geschaefte: [Geschaeft], at offsets: IndexSet) {
-        let zuLoeschende = offsets.map { geschaefte[$0] }
+        // Nur Identitäten über die `await`-Grenze hinweg sichern (siehe
+        // ``ModelReference``) — während des Micro-Lease-Erwerbs kann ein
+        // nebenläufiger Sync-Zyklus eines dieser Geschäfte bereits gelöscht
+        // haben (dann einfach überspringen, es ist ja bereits weg).
+        let zuLoeschendeReferenzen = offsets.map { ModelReference(geschaefte[$0]) }
         Task {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
-                for eintrag in zuLoeschende {
+                for referenz in zuLoeschendeReferenzen {
+                    guard let eintrag = referenz.resolved(in: modelContext) else { continue }
                     // Tombstone VOR dem Löschen, solange die ID noch bekannt
                     // ist — verhindert, dass ein Peer, der das Geschäft noch
                     // in seinem eigenen Snapshot führt, es beim nächsten Sync

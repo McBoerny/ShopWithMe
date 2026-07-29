@@ -134,9 +134,17 @@ struct ArtikelHinzufuegenView: View {
     }
 
     private func hinzufuegen(_ artikel: Artikel) {
+        // Nur die Identitäten über die `await`-Grenze hinweg sichern (siehe
+        // ``ModelReference``) — während des Micro-Lease-Erwerbs kann ein
+        // nebenläufiger Sync-Zyklus Artikel oder Einkaufsliste gelöscht haben.
+        let artikelReferenz = ModelReference(artikel)
+        let einkaufslisteReferenz = ModelReference(einkaufsliste)
         Task {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
-                einkaufsliste.artikelHinzufuegen(artikel, context: modelContext)
+                guard let artikelFrisch = artikelReferenz.resolved(in: modelContext),
+                      let einkaufslisteFrisch = einkaufslisteReferenz.resolved(in: modelContext)
+                else { return }
+                einkaufslisteFrisch.artikelHinzufuegen(artikelFrisch, context: modelContext)
             }
         }
     }
@@ -145,9 +153,14 @@ struct ArtikelHinzufuegenView: View {
     /// ``hinzufuegen(_:)``, macht die Zeile hier zu einem echten An-/Abwähl-
     /// Toggle statt eines einmaligen Hinzufügens (GitHub #45).
     private func entfernen(_ artikel: Artikel) {
+        let artikelReferenz = ModelReference(artikel)
+        let einkaufslisteReferenz = ModelReference(einkaufsliste)
         Task {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
-                einkaufsliste.artikelEntfernen(artikel, context: modelContext)
+                guard let artikelFrisch = artikelReferenz.resolved(in: modelContext),
+                      let einkaufslisteFrisch = einkaufslisteReferenz.resolved(in: modelContext)
+                else { return }
+                einkaufslisteFrisch.artikelEntfernen(artikelFrisch, context: modelContext)
             }
         }
     }

@@ -121,9 +121,15 @@ enum PreisHistorieBereinigungService {
         let kandidaten = (try? context.fetch(deskriptor)) ?? []
         let zuLoeschen = kandidaten.filter { $0.einkaufsvorgang?.istAbgeschlossen ?? true }
         guard !zuLoeschen.isEmpty else { return 0 }
+        // Nur Identitäten über die `await`-Grenze hinweg sichern (siehe
+        // ``ModelReference``) — während des Micro-Lease-Erwerbs kann ein
+        // nebenläufiger Sync-Zyklus einen dieser Einträge bereits gelöscht
+        // haben.
+        let zuLoeschendeReferenzen = zuLoeschen.map { ModelReference($0) }
 
         await DatabaseLeaseService.performMicroLease(context: context) {
-            for eintrag in zuLoeschen {
+            for referenz in zuLoeschendeReferenzen {
+                guard let eintrag = referenz.resolved(in: context) else { continue }
                 context.delete(eintrag)
             }
         }

@@ -133,6 +133,12 @@ struct PreisschildScanView: View {
 
     private func uebernehmen() {
         guard let bearbeitbarePosition else { return }
+        // Nur die Identitäten über die `await`-Grenze hinweg sichern (siehe
+        // ``ModelReference``) — zwischen jetzt und dem Micro-Lease-Erwerb kann
+        // ein nebenläufiger Sync-Zyklus Geschäft oder gelernten Artikel (per
+        // Tombstone eines Peers) gelöscht haben.
+        let geschaeftReferenz = ModelReference(geschaeft)
+        let gelernterArtikelReferenz = ModelReference(bearbeitbarePosition.gelernterArtikel)
         Task {
             let name = bearbeitbarePosition.artikelName.trimmingCharacters(in: .whitespacesAndNewlines)
             let erkannterName = bearbeitbarePosition.erkannterName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -143,11 +149,14 @@ struct PreisschildScanView: View {
             // Diskrete Einzelaktion → ein Micro-Lease (siehe
             // `docs/DATABASE_CONCURRENCY.md` → „Vollständiger Schreibvorgang-Katalog“).
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
-                let artikel = bearbeitbarePosition.gelernterArtikel ?? passendesArtikel(fuer: name)
+                // Ist das Geschäft inzwischen gelöscht, gibt es nichts mehr,
+                // dem sich diese Position sinnvoll zuordnen ließe.
+                guard let geschaeftFrisch = geschaeftReferenz.resolved(in: modelContext) else { return }
+                let artikel = gelernterArtikelReferenz?.resolved(in: modelContext) ?? passendesArtikel(fuer: name)
                 let neuerEintrag = KaufEintrag(
                     artikel: artikel,
-                    geschaeft: geschaeft,
-                    kategorie: artikel?.fuehrendeKategorie(inGeschaeft: geschaeft, context: modelContext),
+                    geschaeft: geschaeftFrisch,
+                    kategorie: artikel?.fuehrendeKategorie(inGeschaeft: geschaeftFrisch, context: modelContext),
                     preis: preis,
                     datum: .now
                 )
