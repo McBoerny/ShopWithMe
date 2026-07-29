@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.8 (Build 123) — Fix: neu beigetretenes Gerät synchronisiert keine Bestandsdaten (GitHub #52)
+
+- Behoben: Die Sync-Lesepfade (`SyncImportService`, `SyncSnapshotImportService`)
+  lasen Peer-Dateien ungeschützt per `Data(contentsOf:)`. Für ein Gerät, das
+  einem bereits genutzten Sync-Ordner neu beitritt, lagen diese Dateien (iCloud
+  Drive/Synology Drive) nur als noch nie heruntergeladener Cloud-Platzhalter
+  vor — der Lesezugriff schlug sofort fehl, ohne die Datei anzufordern, sodass
+  der erste Sync-Zyklus komplett leer blieb. Neuer, koordinierter Lesezugriff
+  (`SyncDateiZugriff.leseKoordiniert`, analog zum bereits bestehenden
+  koordinierten Schreibzugriff) löst bei Bedarf zuverlässig den Download aus,
+  in einem Hintergrund-Task, damit dabei nicht der Haupt-Thread blockiert wird.
+  Details in `docs/DATABASE_CONCURRENCY.md`.
+
 ## v0.7 (Build 121) — Fix: wiederkehrender Absturz beim App-Start durch baumelnde Fremdreferenzen
 
 - Behoben: Der erste Fix (siehe unten, "Absturz bei veralteter Geschäft-Referenz

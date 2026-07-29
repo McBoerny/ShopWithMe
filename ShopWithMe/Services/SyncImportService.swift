@@ -42,12 +42,8 @@ enum SyncImportService {
                 at: eventsOrdner, includingPropertiesForKeys: nil
             ) else { continue }
 
-            let empfangeneEvents = dateien
-                .filter { $0.pathExtension == "json" }
-                .compactMap { url -> SyncEventExportDarstellung? in
-                    guard let daten = try? Data(contentsOf: url) else { return nil }
-                    return try? JSONDecoder().decode(SyncEventExportDarstellung.self, from: daten)
-                }
+            let jsonDateien = dateien.filter { $0.pathExtension == "json" }
+            let empfangeneEvents = await ladeEvents(aus: jsonDateien)
                 .sorted { $0.lamportZaehler < $1.lamportZaehler }
 
             for empfangen in empfangeneEvents {
@@ -56,6 +52,18 @@ enum SyncImportService {
         }
 
         try? context.save()
+    }
+
+    /// Lädt und dekodiert Event-Dateien über einen koordinierten Lesezugriff
+    /// (``SyncDateiZugriff``, GitHub #52) — in einem `Task.detached`, damit ein
+    /// bei Bedarf ausgelöster Download nicht den `MainActor` blockiert.
+    nonisolated private static func ladeEvents(aus dateien: [URL]) async -> [SyncEventExportDarstellung] {
+        await Task.detached(priority: .utility) {
+            dateien.compactMap { url -> SyncEventExportDarstellung? in
+                guard let daten = SyncDateiZugriff.leseKoordiniert(url) else { return nil }
+                return try? JSONDecoder().decode(SyncEventExportDarstellung.self, from: daten)
+            }
+        }.value
     }
 
     @MainActor

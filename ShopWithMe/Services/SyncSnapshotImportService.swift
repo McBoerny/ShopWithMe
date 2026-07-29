@@ -46,14 +46,22 @@ enum SyncSnapshotImportService {
 
         for peerOrdner in peerVerzeichnisse where peerOrdner.lastPathComponent != eigeneGeraeteID {
             let exportURL = SyncSnapshotExportService.exportURL(fuerPeer: peerOrdner.lastPathComponent, in: syncOrdner)
-            guard let daten = try? Data(contentsOf: exportURL),
-                  let snapshot = try? JSONDecoder().decode(SyncSnapshot.self, from: daten)
-            else { continue }
+            guard let snapshot = await ladeSnapshot(von: exportURL) else { continue }
             SyncDebugLogger.protokolliereAlter(.snapshotEmpfangen, erzeugtAm: snapshot.erzeugtAm, zusatz: "peer=\(peerOrdner.lastPathComponent.prefix(8))")
             merge(snapshot, peerGeraeteID: peerOrdner.lastPathComponent, context: context)
         }
 
         try? context.save()
+    }
+
+    /// Lädt und dekodiert einen fremden Snapshot über einen koordinierten
+    /// Lesezugriff (``SyncDateiZugriff``, GitHub #52) — in einem `Task.detached`,
+    /// damit ein bei Bedarf ausgelöster Download nicht den `MainActor` blockiert.
+    nonisolated private static func ladeSnapshot(von url: URL) async -> SyncSnapshot? {
+        await Task.detached(priority: .utility) {
+            guard let daten = SyncDateiZugriff.leseKoordiniert(url) else { return nil }
+            return try? JSONDecoder().decode(SyncSnapshot.self, from: daten)
+        }.value
     }
 
     @MainActor

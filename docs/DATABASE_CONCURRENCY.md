@@ -368,6 +368,45 @@ Zukunft bleiben, kein Server/CloudKit jetzt):
 - Eigener Backend-Server (REST/GraphQL + z.B. PostgreSQL).
 - Backend-as-a-Service (z.B. Firebase/Supabase).
 
+## Behobener Bug: neu beigetretenes Gerät synchronisiert keine Bestandsdaten (GitHub #52)
+
+**Symptom:** Tritt ein Gerät einem bereits genutzten geteilten Sync-Ordner neu
+bei (`SyncOrdnerSettingsView.ordnerFestlegen`, löst sofort einen ersten
+Sync-Zyklus aus), werden trotz vorhandener Peer-Daten im Ordner keine Daten auf
+das neue Gerät übernommen. Bereits länger im Share aktive Geräte sind von dem
+Bug nicht betroffen.
+
+**Ursache:** Die Schreibpfade (`SyncExportService`, `SyncSnapshotExportService`)
+nutzen bereits `NSFileCoordinator`, um File-Provider-Erweiterungen (iCloud
+Drive, Synology Drive, …) korrekt einzubinden. Die Lesepfade
+(`SyncImportService.importiereNeueEvents`, `SyncSnapshotImportService.importiereSnapshots`)
+lasen dagegen ungeschützt per `Data(contentsOf:)`. Eine Datei, die von einer
+File-Provider-Erweiterung verwaltet wird, aber auf einem Gerät noch nie
+heruntergeladen wurde, liegt dort nur als Cloud-Platzhalter vor — ein direktes
+`Data(contentsOf:)` schlägt dafür sofort fehl (per `try?` still verschluckt),
+statt auf die Materialisierung zu warten. Bestehende Geräte hatten alle
+Peer-Dateien durch frühere Sync-Zyklen längst lokal zwischengespeichert, ein neu
+beitretendes Gerät sah sie zum allerersten Mal — daher trat der Bug
+ausschließlich beim ersten Sync auf.
+
+**Fix:** Neuer Helfer `SyncDateiZugriff.leseKoordiniert(_:)`, der die Datei
+über `NSFileCoordinator.coordinate(readingItemAt:...)` liest — das löst bei
+Bedarf zuverlässig den Download/die Materialisierung aus, bevor gelesen wird
+(providerunabhängig, im Gegensatz zum iCloud-spezifischen
+`startDownloadingUbiquitousItem`). Da dieser Aufruf für die Dauer eines
+Downloads blockieren kann, läuft er in beiden Importpfaden in einem
+`Task.detached`, damit dabei nicht der `MainActor` blockiert wird — betrifft
+auch die in `docs/LOGGING.md`/GitHub #55 diskutierte Startzeit-Problematik,
+löst sie aber nicht vollständig (der Sync-Zyklus selbst läuft weiterhin
+sequentiell pro Peer).
+
+**Testgrenze:** Die bestehenden Sync-Import-Tests laufen gegen echte temporäre
+lokale Dateien (kein File-Provider-Platzhalter simulierbar) — sie verifizieren,
+dass die Umstellung normale, bereits lokal vorhandene Dateien weiterhin korrekt
+liest, nicht aber das eigentliche Platzhalter-Szenario selbst. Eine
+abschließende Verifikation erfordert einen echten Test mit einem neu
+beitretenden Gerät gegen einen echten Cloud-Anbieter.
+
 ## Behobener Absturz: fehlende `inverse`-Deklarationen führen zu baumelnden Referenzen
 
 Wiederkehrender Absturz direkt beim App-Start: `SwiftData/BackingData.swift:1039:
