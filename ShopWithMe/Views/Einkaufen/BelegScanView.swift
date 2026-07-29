@@ -164,7 +164,7 @@ struct BelegScanView: View {
                     AufnahmeAnsicht(
                         laeuft: laeuft,
                         fehlermeldung: fehlermeldung,
-                        geschaeftName: kontext.geschaeft?.name ?? "",
+                        geschaeftName: kontext.geschaeft.flatMap { modelContext.existiertNochImStore($0) ? $0.name : nil } ?? "",
                         ausgewaehltesFoto: $ausgewaehltesFoto,
                         kameraOeffnen: { zeigeKamera = true }
                     )
@@ -236,7 +236,7 @@ struct BelegScanView: View {
                     )
                     neuePositionen.append(BearbeitbarePosition(
                         erkannterName: position.artikelName,
-                        artikelName: zuordnung.alias ?? zuordnung.artikel?.name ?? position.artikelName,
+                        artikelName: zuordnung.alias ?? zuordnung.artikel.flatMap { modelContext.existiertNochImStore($0) ? $0.name : nil } ?? position.artikelName,
                         preisText: "\(position.einzelpreis.aufCentGerundet)",
                         zugeordneterArtikel: zuordnung.artikel,
                         boundingBox: scanErgebnis.ocrZeilen.boundingBox(fuerArtikelName: position.artikelName)
@@ -404,7 +404,7 @@ struct BelegScanView: View {
     }
 
     private func passtZu(name: String, eintrag: KaufEintrag) -> Bool {
-        let artikelName = eintrag.artikel?.name ?? eintrag.artikelNameSnapshot
+        let artikelName = eintrag.artikelNameSicher
         guard !artikelName.isEmpty else { return false }
         return artikelName.localizedCaseInsensitiveContains(name) || name.localizedCaseInsensitiveContains(artikelName)
     }

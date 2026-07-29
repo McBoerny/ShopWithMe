@@ -53,7 +53,15 @@ enum GeschaeftHaeufigkeitService {
 
         var eintraege: [PersistentIdentifier: (geschaeft: Geschaeft, anzahl: Int)] = [:]
         for vorgang in relevante {
-            guard let geschaeft = vorgang.geschaeft else { continue }
+            // `vorgang.modelContext` ist sicher lesbar, da `vorgang` selbst immer
+            // ein gültiges, gerade abgefragtes Objekt ist — `geschaeft` dagegen
+            // kann eine baumelnde Referenz auf einen bereits gelöschten Datensatz
+            // sein (siehe `docs/DATABASE_CONCURRENCY.md`); ungeprüftes Lesen von
+            // `.name` weiter unten würde in diesem Fall abstürzen.
+            guard let geschaeft = vorgang.geschaeft,
+                  let context = vorgang.modelContext,
+                  context.existiertNochImStore(geschaeft)
+            else { continue }
             eintraege[geschaeft.persistentModelID, default: (geschaeft, 0)].anzahl += 1
         }
 

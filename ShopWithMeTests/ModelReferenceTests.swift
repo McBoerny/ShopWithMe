@@ -52,4 +52,31 @@ struct ModelReferenceTests {
         let referenz = ModelReference<Artikel>(nil)
         #expect(referenz == nil)
     }
+
+    @Test
+    func existiertNochImStoreLiefertWahrFuerVorhandenesObjekt() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let artikel = Artikel(name: "Milch", symbolName: "cart", farbeHex: "#000000")
+        context.insert(artikel)
+        try context.save()
+
+        #expect(context.existiertNochImStore(artikel))
+    }
+
+    @Test
+    func existiertNochImStoreLiefertFalschNachdemDasObjektGeloeschtWurde() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let artikel = Artikel(name: "Milch", symbolName: "cart", farbeHex: "#000000")
+        context.insert(artikel)
+        try context.save()
+
+        context.delete(artikel)
+        try context.save()
+
+        #expect(!context.existiertNochImStore(artikel))
+    }
 }

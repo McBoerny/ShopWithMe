@@ -1321,7 +1321,19 @@ private struct MengenNotizSheet: View {
         self.eintrag = eintrag
         _mengeText = State(initialValue: eintrag.menge.formatted())
         _notizText = State(initialValue: eintrag.notiz ?? "")
-        _einheitAuswahl = State(initialValue: eintrag.artikel?.einheit ?? .stueck)
+        _einheitAuswahl = State(initialValue: Self.gueltigerArtikel(eintrag)?.einheit ?? .stueck)
+    }
+
+    /// ``eintrag/artikel``, aber nur, falls er noch tatsächlich existiert
+    /// (nicht bereits eine baumelnde Referenz auf einen gelöschten Artikel
+    /// ist — siehe `docs/DATABASE_CONCURRENCY.md`). `eintrag.modelContext`
+    /// ist hier sicher lesbar, da `eintrag` selbst immer ein gültiges, gerade
+    /// abgefragtes Objekt ist.
+    private static func gueltigerArtikel(_ eintrag: EinkaufslistenEintrag) -> Artikel? {
+        guard let artikel = eintrag.artikel, let context = eintrag.modelContext, context.existiertNochImStore(artikel) else {
+            return nil
+        }
+        return artikel
     }
 
     var body: some View {
@@ -1331,7 +1343,7 @@ private struct MengenNotizSheet: View {
                     HStack {
                         TextField("Menge", text: $mengeText)
                             .keyboardType(.decimalPad)
-                        if eintrag.artikel != nil {
+                        if Self.gueltigerArtikel(eintrag) != nil {
                             Picker("Einheit", selection: $einheitAuswahl) {
                                 ForEach(Einheit.allCases) { einheit in
                                     Text(einheit.kurzform).tag(einheit)
@@ -1350,7 +1362,7 @@ private struct MengenNotizSheet: View {
                     )
                 }
             }
-            .navigationTitle(eintrag.artikel?.name ?? "")
+            .navigationTitle(Self.gueltigerArtikel(eintrag)?.name ?? "")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -1371,7 +1383,7 @@ private struct MengenNotizSheet: View {
                 if let neueMenge, neueMenge > 0 {
                     eintrag.menge = neueMenge
                 }
-                eintrag.artikel?.einheit = einheitAuswahl
+                Self.gueltigerArtikel(eintrag)?.einheit = einheitAuswahl
                 eintrag.notiz = getrimmteNotiz.isEmpty ? nil : getrimmteNotiz
             }
             dismiss()

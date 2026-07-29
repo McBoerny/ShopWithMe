@@ -76,15 +76,36 @@ final class KaufEintrag {
 }
 
 extension KaufEintrag {
+    /// Der Name von ``artikel``, sofern er noch tatsächlich existiert (nicht
+    /// bereits eine baumelnde Referenz auf einen gelöschten Artikel ist —
+    /// siehe `docs/DATABASE_CONCURRENCY.md`), sonst der dauerhafte
+    /// ``artikelNameSnapshot``. `modelContext` ist hier sicher lesbar, da
+    /// `self` (im Gegensatz zu einem möglicherweise baumelnden ``artikel``)
+    /// immer ein gültiges, gerade abgefragtes Objekt ist.
+    var artikelNameSicher: String {
+        guard let artikel, let context = modelContext, context.existiertNochImStore(artikel) else {
+            return artikelNameSnapshot
+        }
+        return artikel.name
+    }
+
+    /// Wie ``artikelNameSicher``, für ``geschaeft``/``geschaeftNameSnapshot``.
+    var geschaeftNameSicher: String {
+        guard let geschaeft, let context = modelContext, context.existiertNochImStore(geschaeft) else {
+            return geschaeftNameSnapshot
+        }
+        return geschaeft.name
+    }
+
     /// Der für Anzeigen (z.B. ``PreisHistorieZeile``) tatsächlich zu verwendende
     /// Artikelname, mit ``alternativerName`` an oberster Priorität, sonst wie bisher
-    /// ``produktName`` (Original vom Kassenbon), dann ``artikel``, dann
-    /// ``artikelNameSnapshot``. Siehe `docs/BELEGSCAN.md`.
+    /// ``produktName`` (Original vom Kassenbon), dann ``artikelNameSicher``.
+    /// Siehe `docs/BELEGSCAN.md`.
     var anzeigeName: String {
         if let alternativerName, !alternativerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return alternativerName
         }
-        let name = produktName ?? artikel?.name ?? artikelNameSnapshot
+        let name = produktName ?? artikelNameSicher
         return name.isEmpty ? "Unbekannter Artikel" : name
     }
 

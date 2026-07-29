@@ -593,6 +593,40 @@ angelegtes eigenes Objekt) innerhalb des Lease-Blocks verwendet wird:
 neu angelegte, noch nicht eingefügte Objekte einfügen (`context.insert(neuesObjekt)`),
 sind von diesem Risiko nicht betroffen und bleiben unverändert.
 
+## Nachtrag: verbleibende ungeschützte Lesepfade auf `Geschaeft`/`Artikel`
+
+Der `Geschaeft/p9`-Datensatz (siehe „Behobener Absturz" oben) stürzte trotz
+aller vorherigen Maßnahmen weiter ab — der eigentliche Datenbestand war nie
+repariert worden (siehe „Nachtrag: rückwirkende Reparatur", Korrektur-Abschnitt:
+eine automatische Reparatur ist über die normale SwiftData-API nicht sicher
+möglich), nur die Absturz-Ursache wechselte zwischen verschiedenen ungeschützten
+Lesepfaden. Bestätigt betroffen und jetzt abgesichert:
+`GeschaeftHaeufigkeitService.favoriten` (`lhs.geschaeft.name`),
+`KaufEintrag.anzeigeName` (`artikel?.name`), `PreisHistorieZeile.geschaeftName`
+(`eintrag.geschaeft?.name`), `BelegScanView` (Geschäftsname-Anzeige,
+KI-Zuordnungsvorschlag, `passtZu`-Namensabgleich) und
+`EinkaufenView.MengenNotizSheet` (Einheit/Name eines
+`EinkaufslistenEintrag.artikel`).
+
+**Fix, generisch statt Einzelfall-Patches**: neue
+`ModelContext.existiertNochImStore(_:)` (`Models/IdentifizierbaresModell.swift`)
+prüft wie `sichereID` nur `persistentModelID` gegen einen frischen Fetch, statt
+gegen ein vorab gebautes Set (bei den hier typischen kleinen Kollektionen
+unkritisch) — nutzbar direkt mit `self.modelContext` bzw. `eintrag.modelContext`
+(sicher lesbar, solange `self`/`eintrag` selbst kein baumelnder Verweis ist).
+Darauf aufbauend zwei neue, wiederverwendbare Eigenschaften auf `KaufEintrag`:
+`artikelNameSicher`/`geschaeftNameSicher` — liefern den Live-Namen, falls das
+Objekt noch existiert, sonst den bereits vorhandenen `...NameSnapshot`. Beide
+ersetzen jetzt jedes vormals ungeschützte `artikel?.name ??
+artikelNameSnapshot`-Muster zentral an einer Stelle.
+
+**Bleibt offen:** eine vollständige, systematische Garantie, dass *jeder*
+künftige Lesepfad automatisch geschützt ist, gibt es nicht — jede neue Stelle,
+die `.geschaeft?.name`/`.artikel?.name` o.ä. direkt liest, muss weiterhin bewusst
+`existiertNochImStore`/die `...Sicher`-Eigenschaften verwenden. Die
+zugrundeliegende Korruption selbst bleibt unrepariert im Store bestehen (siehe
+„Nachtrag: rückwirkende Reparatur"), bis eine SQLite-Ebenen-Lösung existiert.
+
 ## Diagnose-Logging (DB-Debug-Modus)
 
 Für den geplanten Live-Test mit mehreren Geräten ist ein optionaler,

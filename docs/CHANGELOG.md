@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.8 (Build 137) — Weitere Abstürze auf demselben baumelnden `Geschaeft` behoben
+
+Build 136 stoppte den Absturz-Loop, reparierte aber nicht den zugrundeliegenden
+Datensatz (nicht sicher möglich, siehe Build 136) — derselbe `Geschaeft/p9`
+stürzte deshalb an anderen, bisher ungeschützten Lesepfaden weiter ab.
+
+- Behoben: `GeschaeftHaeufigkeitService.favoriten`, `KaufEintrag.anzeigeName`,
+  `PreisHistorieZeile`, `BelegScanView` (3 Stellen),
+  `EinkaufenView.MengenNotizSheet` lasen `.geschaeft?.name`/`.artikel?.name`
+  bzw. schrieben `.artikel?.einheit` ungeschützt. Neue
+  `ModelContext.existiertNochImStore(_:)` sowie `KaufEintrag.artikelNameSicher`/
+  `geschaeftNameSicher` zentralisieren die Absicherung (siehe
+  `docs/DATABASE_CONCURRENCY.md` → „Nachtrag: verbleibende ungeschützte
+  Lesepfade").
+
 ## v0.8 (Build 136) — KRITISCH: Absturz-Loop durch den Reparaturlauf selbst behoben
 
 Build 134s neuer `DatenintegritaetsService.repariereFallsNoetig` (siehe unten)

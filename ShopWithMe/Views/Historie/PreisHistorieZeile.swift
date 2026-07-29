@@ -64,7 +64,7 @@ struct PreisHistorieZeile: View {
     }
 
     private var geschaeftName: String {
-        let name = eintrag.geschaeft?.name ?? eintrag.geschaeftNameSnapshot
+        let name = eintrag.geschaeftNameSicher
         return name.isEmpty ? "Unbekanntes Geschäft" : name
     }
 }
