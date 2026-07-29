@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.8 (Build 128) — Sync-Ordner-Beobachtung (schnellere Erkennung) + Einkaufslisten-Diagnose
+
+- Neuer `SyncOrdnerBeobachter` (`NSFilePresenter`) beobachtet den Sync-Ordner
+  auf Dateisystem-Änderungen und löst bei Erkennung sofort einen zusätzlichen
+  Sync-Zyklus aus, statt starr auf das nächste 5s/60s-Intervall zu warten —
+  providerunabhängig (funktioniert auch für Synology Drive, anders als das
+  iCloud-spezifische `NSMetadataQuery`), ergänzt das bestehende Zeit-Polling
+  nur als schnelleren Zusatz-Auslöser.
+- Neues Diagnose-Event `sync_einkaufslisten_stand` (Sync-Debug-Modus):
+  protokolliert nach jedem Snapshot-Merge den kompletten lokalen
+  Einkaufslisten-Bestand samt Eintragszahl — macht Dubletten mit gleichem
+  Namen, aber unterschiedlicher Eintragszahl direkt im Protokoll sichtbar.
+
 ## v0.8 (Build 127) — Fix: neu beigetretenes Gerät bekam eine unsichtbare Einkaufslisten-Dublette (GitHub #52-Nachfolgefund)
 
 - Behoben: `Einkaufsliste` wurde beim Bereich-B-Merge bislang per ID

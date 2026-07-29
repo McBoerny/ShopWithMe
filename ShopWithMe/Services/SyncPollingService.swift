@@ -19,6 +19,12 @@ import SwiftData
 /// Ruhe-Intervall (``intervallRuhend``) — plus ein sofortiger Sync-Zyklus
 /// beim ``starten(context:)`` selbst (App-Start bzw. Rückkehr in den
 /// Vordergrund), nicht erst nach dem ersten Intervall.
+///
+/// Zusätzlich beobachtet ein ``SyncOrdnerBeobachter`` den Sync-Ordner auf
+/// Dateisystem-Änderungen und löst bei Bedarf einen sofortigen Extra-Zyklus
+/// aus, statt starr auf das nächste Intervall zu warten (verkürzt die
+/// Erkennungszeit im Vordergrund-Regelfall) — reines Zeit-Polling bleibt aber
+/// das verlässliche Sicherheitsnetz, siehe Typ-Doku dort.
 @MainActor
 final class SyncPollingService: ObservableObject {
     /// `static var` statt `let`, damit Tests sie auf sehr kurze Werte setzen
@@ -32,12 +38,16 @@ final class SyncPollingService: ObservableObject {
 
     private var context: ModelContext?
     private var schleife: Task<Void, Never>?
+    private var beobachter: SyncOrdnerBeobachter?
+    private var beobachteterOrdner: URL?
+    private var letzterDurchDateisystemAusgeloesterZyklus: ContinuousClock.Instant?
 
     /// Startet den Polling-Loop (wirkungslos, falls bereits gestartet) — führt
     /// sofort einen ersten Sync-Zyklus aus, bevor das erste Intervall
     /// abgewartet wird.
     func starten(context: ModelContext) {
         self.context = context
+        aktualisiereBeobachter()
         guard schleife == nil else { return }
         // Niedrige Priorität (GitHub #55): der Loop startet direkt beim
         // App-Start bzw. bei jeder Rückkehr aus dem Hintergrund, exakt dann,
@@ -57,13 +67,51 @@ final class SyncPollingService: ObservableObject {
 
     /// Beendet den Polling-Loop — der laufende Sync-Zyklus (falls einer
     /// gerade läuft) wird noch zu Ende geführt, es startet nur kein weiterer.
+    /// Entfernt auch den ``SyncOrdnerBeobachter`` (App im Hintergrund muss
+    /// ohnehin nicht auf Dateisystem-Änderungen reagieren).
     func stoppen() {
         schleife?.cancel()
         schleife = nil
+        beobachter?.beenden()
+        beobachter = nil
+        beobachteterOrdner = nil
+    }
+
+    /// Richtet einen ``SyncOrdnerBeobachter`` auf den aktuell hinterlegten
+    /// Sync-Ordner ein bzw. entfernt ihn, falls sich der Ordner geändert hat
+    /// oder keiner mehr hinterlegt ist — bei jedem Zyklus geprüft, damit ein
+    /// nachträglich in den Einstellungen gewählter oder entfernter Ordner ohne
+    /// App-Neustart wirksam wird.
+    private func aktualisiereBeobachter() {
+        let aktuellerOrdner = SyncOrdnerService.gewaehlterOrdner()
+        guard aktuellerOrdner != beobachteterOrdner else { return }
+        beobachter?.beenden()
+        beobachter = nil
+        beobachteterOrdner = aktuellerOrdner
+        guard let aktuellerOrdner else { return }
+        let peersOrdner = aktuellerOrdner.appendingPathComponent("peers", isDirectory: true)
+        beobachter = SyncOrdnerBeobachter(peersOrdner: peersOrdner) { [weak self] in
+            Task { @MainActor in self?.dateisystemAenderungErkannt() }
+        }
+    }
+
+    /// Löst bei einer über ``SyncOrdnerBeobachter`` erkannten Dateisystem-
+    /// Änderung sofort einen zusätzlichen Sync-Zyklus aus, statt auf das
+    /// nächste Zeit-Intervall zu warten — entprellt (mindestens 2 Sekunden seit
+    /// dem letzten dadurch ausgelösten Zyklus), da ein Peer beim Schreiben
+    /// mehrerer Dateien (Events + Snapshot) mehrere Änderungsbenachrichtigungen
+    /// kurz hintereinander auslösen kann.
+    private func dateisystemAenderungErkannt() {
+        let jetzt = ContinuousClock.now
+        if let letzterDurchDateisystemAusgeloesterZyklus,
+           jetzt - letzterDurchDateisystemAusgeloesterZyklus < .seconds(2) { return }
+        letzterDurchDateisystemAusgeloesterZyklus = jetzt
+        Task { await syncZyklus() }
     }
 
     func syncZyklus() async {
         guard let context else { return }
+        aktualisiereBeobachter()
         SyncDebugLogger.log(.zyklusStart, details: einkaufAktiv ? "einkaufAktiv" : "ruhend")
         let start = ContinuousClock.now
 

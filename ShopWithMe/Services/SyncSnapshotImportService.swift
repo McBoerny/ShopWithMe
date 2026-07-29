@@ -51,7 +51,22 @@ enum SyncSnapshotImportService {
             merge(snapshot, peerGeraeteID: peerOrdner.lastPathComponent, context: context)
         }
 
+        protokolliereEinkaufslistenStand(context: context)
         try? context.save()
+    }
+
+    /// Diagnose für Fälle wie GitHub #52-Nachfolgefund (unsichtbare
+    /// Einkaufslisten-Dublette): protokolliert nach jedem Merge-Durchlauf den
+    /// kompletten lokalen Einkaufslisten-Bestand samt Eintrags-Anzahl, damit
+    /// sich Dubletten (zwei Listen mit demselben Namen, aber unterschiedlicher
+    /// Eintragszahl) direkt aus dem Protokoll erkennen lassen, ohne dass der
+    /// Nutzer manuell durch alle Listen wechseln muss.
+    @MainActor
+    private static func protokolliereEinkaufslistenStand(context: ModelContext) {
+        guard SyncDebugLogger.istAktiv else { return }
+        let alle = (try? context.fetch(FetchDescriptor<Einkaufsliste>())) ?? []
+        let beschreibung = alle.map { "\($0.name)=\($0.eintraege.count)" }.joined(separator: ", ")
+        SyncDebugLogger.log(.einkaufslistenStand, details: "anzahl=\(alle.count) [\(beschreibung)]")
     }
 
     /// Lädt und dekodiert einen fremden Snapshot über einen koordinierten
