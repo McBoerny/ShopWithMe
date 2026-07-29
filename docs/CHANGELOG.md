@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.8 (Build 133) — Kritischer Fix: App-Hänger beim Start (schwarzer Bildschirm, kein Absturzprotokoll)
+
+Der in der letzten Version eingeführte `SyncOrdnerBeobachter` (`NSFilePresenter`
+für schnellere Sync-Erkennung) verursachte auf echten Geräten einen Hänger
+direkt beim App-Start — vermutlich ein Deadlock zwischen dem
+`presentedItemOperationQueue = .main` des Presenters und den bereits
+bestehenden synchronen `NSFileCoordinator`-Schreibzugriffen (ebenfalls auf dem
+Main-Thread). Vollständig zurückgenommen — reines Zeit-Polling (5s/60s) bleibt
+der einzige Erkennungsmechanismus, wie vor dieser Version. Details in
+`SyncPollingService`s Typ-Dokumentation.
+
 ## v0.8 (Build 132) — Fix: Sicherheitsnetz holte bereits abgehakte Artikel zurück (+ vermutlicher Absturzauslöser)
 
 - Behoben: Ein bereits abgehakter Artikel erschien wieder in der "offenen"
