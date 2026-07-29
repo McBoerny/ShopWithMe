@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.8 (Build 131) — Fix: Einkaufsvorgang-Dublette beim gemeinsamen Einkaufen
+
+- Behoben: Abgehakte Artikel erschienen auf einem Gerät, aber nicht auf dem
+  anderen, und Kaufeinträge verdoppelten sich mit der Zeit. Ursache: Jedes
+  Gerät legte beim gemeinsamen Einkaufen unabhängig einen eigenen
+  Einkaufsvorgang an, sobald es selbst keinen offenen kannte — dieselbe
+  Bug-Klasse wie zuvor bei der Einkaufsliste, jetzt bei `Einkaufsvorgang`.
+  `mergeEinkaufsvorgaenge` erkennt jetzt einen lokal noch offenen
+  Einkaufsvorgang für dasselbe Geschäft/dieselbe Liste als denselben
+  realweltlichen Einkauf (Alias-Mechanismus wie bei Einkaufsliste/Artikel).
+  Bereits vor diesem Fix entstandene doppelte Kaufeinträge müssen einmalig
+  manuell bereinigt werden (Geschäfts-Preisübersicht). Details in
+  `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`, Abschnitt 11a.
+
 ## v0.8 (Build 130) — Architektur-Revision „Alternative A": Löschungen + vollständiger Einkaufslisten-Inhalt im Snapshot
 
 Nach einem Live-Test mit zwei echten Geräten (GitHub #52) zeigten sich zwei

@@ -438,14 +438,23 @@ enum SyncSnapshotImportService {
 
     // MARK: - Einkaufsvorgang (Bereich C)
 
-    /// ID-basiert wie ``mergeEinkaufslisten(_:context:)`` und aus demselben
-    /// Grund: Bereich-A-Events referenzieren einen ``Einkaufsvorgang`` über
-    /// seine ID, außerdem ist ein gemeinsamer Einkaufsvorgang (beide Geräte
-    /// kaufen gemeinsam im selben Laden ein) genau der Fall, in dem beide
-    /// Geräte über dieselbe Identität sprechen sollen. Ein bereits lokal
-    /// abgeschlossener Einkauf wird nie durch einen (älteren) Remote-Stand
-    /// wieder geöffnet — nur eine noch fehlende ``Einkaufsvorgang/endZeit``
-    /// wird nachgetragen.
+    /// Zusätzlich zum ID-/Alias-Abgleich: ein lokal noch **offener**
+    /// Einkaufsvorgang für dasselbe (`Geschaeft`, `Einkaufsliste`)-Paar gilt
+    /// als derselbe realweltliche Einkauf wie ein zeitgleich von einem Peer
+    /// begonnener — **Architektur-Revision, GitHub #52-Nachfolgefund:** Die
+    /// ursprüngliche Annahme, beide Geräte würden beim gemeinsamen Einkaufen
+    /// "automatisch über dieselbe Identität sprechen", war falsch. Jedes
+    /// Gerät legt lokal (``EinkaufenView/einkaufSicherstellen()``) einen
+    /// eigenen, zufällig-IDten Einkaufsvorgang an, sobald es selbst keinen
+    /// offenen für das gewählte Geschäft/Liste kennt — noch bevor ein Sync
+    /// stattfinden konnte. Ohne diesen Abgleich blieben zwei unabhängige
+    /// Einkaufsvorgänge für denselben Einkauf bestehen: Abhaken auf Gerät A
+    /// landete auf einem für Gerät B unsichtbaren Einkaufsvorgang, während
+    /// parallel auf B eigene ``KaufEintrag``e für dieselben Artikel entstanden
+    /// — die sich dann als Dubletten summierten. Alias analog
+    /// ``mergeEinkaufslisten(_:context:)``. Ein bereits lokal abgeschlossener
+    /// Einkauf wird nie durch einen (älteren) Remote-Stand wieder geöffnet —
+    /// nur eine noch fehlende ``Einkaufsvorgang/endZeit`` wird nachgetragen.
     @MainActor
     private static func mergeEinkaufsvorgaenge(
         _ remote: [EinkaufsvorgangSnapshot], geschaeftZuordnung: [UUID: Geschaeft], listeZuordnung: [UUID: Einkaufsliste],
@@ -454,26 +463,39 @@ enum SyncSnapshotImportService {
         var zuordnung: [UUID: Einkaufsvorgang] = [:]
         let alleLokalen = (try? context.fetch(FetchDescriptor<Einkaufsvorgang>())) ?? []
         for eintrag in remote {
-            if let vorhandener = alleLokalen.first(where: { $0.id == eintrag.id }) {
-                if vorhandener.endZeit == nil, let remoteEndZeit = eintrag.endZeit {
-                    vorhandener.endZeit = remoteEndZeit
-                }
-                zuordnung[eintrag.id] = vorhandener
-                continue
-            }
-            // Bewusst kein `abschliessen()` (würde zusätzlich
-            // `Geschaeft.anzahlEinkaufsvorgaenge` erhöhen — das übernimmt
-            // bereits die additive Zähler-Merge-Regel in ``mergeGeschaefte``,
-            // ein zweites Mal hier wäre Doppelzählung).
-            let neuer = Einkaufsvorgang(
-                geschaeft: eintrag.geschaeftID.flatMap { geschaeftZuordnung[$0] },
-                einkaufsliste: eintrag.einkaufslisteID.flatMap { listeZuordnung[$0] },
-                startZeit: eintrag.startZeit
+            let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(
+                fuer: eintrag.id, art: SyncEntitaetsArt.einkaufsvorgang, context: context
             )
-            neuer.id = eintrag.id
-            neuer.endZeit = eintrag.endZeit
-            context.insert(neuer)
-            zuordnung[eintrag.id] = neuer
+            let remoteGeschaeft = eintrag.geschaeftID.flatMap { geschaeftZuordnung[$0] }
+            let remoteListe = eintrag.einkaufslisteID.flatMap { listeZuordnung[$0] }
+
+            let vorhandener: Einkaufsvorgang
+            if let bekannter = alleLokalen.first(where: { $0.id == aufgeloesteID }) {
+                vorhandener = bekannter
+            } else if let offenerTreffer = alleLokalen.first(where: {
+                $0.endZeit == nil && $0.geschaeft == remoteGeschaeft && $0.einkaufsliste == remoteListe
+            }) {
+                if offenerTreffer.id != eintrag.id {
+                    SyncEntitaetsAliasService.registriere(
+                        entitaetsArt: SyncEntitaetsArt.einkaufsvorgang, fremdeID: eintrag.id, lokaleID: offenerTreffer.id, context: context
+                    )
+                }
+                vorhandener = offenerTreffer
+            } else {
+                // Bewusst kein `abschliessen()` (würde zusätzlich
+                // `Geschaeft.anzahlEinkaufsvorgaenge` erhöhen — das übernimmt
+                // bereits die additive Zähler-Merge-Regel in
+                // ``mergeGeschaefte``, ein zweites Mal hier wäre Doppelzählung).
+                let neuer = Einkaufsvorgang(geschaeft: remoteGeschaeft, einkaufsliste: remoteListe, startZeit: eintrag.startZeit)
+                neuer.id = eintrag.id
+                context.insert(neuer)
+                vorhandener = neuer
+            }
+
+            if vorhandener.endZeit == nil, let remoteEndZeit = eintrag.endZeit {
+                vorhandener.endZeit = remoteEndZeit
+            }
+            zuordnung[eintrag.id] = vorhandener
         }
         return zuordnung
     }

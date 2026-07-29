@@ -392,6 +392,68 @@ struct SyncSnapshotImportServiceTests {
     }
 
     @Test
+    func zweiUnabhaengigOffeneEinkaufsvorgaengeFuerDenselbenLadenWerdenZusammengefuehrt() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let typ = GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")
+        context.insert(typ)
+        let geschaeft = Geschaeft(name: "Rewe", typen: [typ])
+        context.insert(geschaeft)
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
+        // Gerät legt selbst einen offenen Einkaufsvorgang an, bevor je
+        // synchronisiert wurde — analog zur Einkaufsliste-Dublette, jetzt für
+        // Einkaufsvorgang (GitHub #52-Nachfolgefund).
+        let eigenerVorgang = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste)
+        context.insert(eigenerVorgang)
+        let lokalerApfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759")
+        context.insert(lokalerApfel)
+        try context.save()
+
+        // Peer hat für DASSELBE Geschäft/DIESELBE Liste unabhängig einen
+        // eigenen, ebenfalls noch offenen Einkaufsvorgang mit ANDERER ID.
+        let remoteVorgangID = UUID()
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.geschaefte = [
+            GeschaeftSnapshot(
+                id: geschaeft.id, name: "Rewe", typIDs: [], adresse: nil, breitengrad: nil, laengengrad: nil,
+                erkennungsradius: nil, kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
+                ignorierteArtikelNamen: [], anzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
+            ),
+        ]
+        snapshot.einkaufslisten = [EinkaufslisteSnapshot(id: liste.id, name: "Einkaufsliste", erstelltAm: liste.erstelltAm)]
+        snapshot.einkaufsvorgaenge = [
+            EinkaufsvorgangSnapshot(id: remoteVorgangID, geschaeftID: geschaeft.id, einkaufslisteID: liste.id, startZeit: Date(), endZeit: nil),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        // Keine zweite Dublette — beide gelten als derselbe Einkauf.
+        #expect(try context.fetch(FetchDescriptor<Einkaufsvorgang>()).count == 1)
+
+        // Ein später eintreffendes Bereich-A-Event des Peers ("Artikel
+        // abgehakt"), das die FREMDE Einkaufsvorgang-ID referenziert, muss
+        // über den Alias auf den lokalen Einkaufsvorgang aufgelöst werden.
+        let eventOrdner = SyncExportService.eventsOrdner(fuerPeer: "fremdes-geraet", in: syncOrdner)
+        try FileManager.default.createDirectory(at: eventOrdner, withIntermediateDirectories: true)
+        let event = SyncEventExportDarstellung(
+            id: UUID(), art: SyncEventArt.artikelAbgehakt.rawValue,
+            nutzlast: try JSONEncoder().encode(SyncEventNutzlast(bezugsID: remoteVorgangID, artikelID: lokalerApfel.id)),
+            lamportZaehler: 1, lamportGeraeteID: "fremdes-geraet", autorGeraeteID: "fremdes-geraet", wallClock: Date()
+        )
+        try JSONEncoder().encode(event).write(to: eventOrdner.appendingPathComponent("0000000001_\(event.id.uuidString).json"))
+
+        await SyncImportService.importiereNeueEvents(context: context)
+
+        #expect(eigenerVorgang.kaufEintraege.contains { $0.artikel == lokalerApfel })
+    }
+
+    @Test
     func neuerEinkaufsvorgangVomPeerErhoehtNichtZusaetzlichDenZaehler() async throws {
         let (container, context) = try machtLeerenContainer()
         _ = container

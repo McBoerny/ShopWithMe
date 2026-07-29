@@ -176,8 +176,13 @@ enum SyncImportService {
         return try? context.fetch(deskriptor).first
     }
 
+    /// Löst zuerst einen bekannten Alias auf (siehe ``SyncEntitaetsAlias`` —
+    /// Bereich-B-Matching kann einen fremden Einkaufsvorgang mit einem anderen
+    /// lokalen zusammengeführt haben, GitHub #52-Nachfolgefund), bevor direkt
+    /// per `id` gesucht wird — analog ``einkaufsliste(mitID:context:)``.
     private static func einkaufsvorgang(mitID id: UUID, context: ModelContext) -> Einkaufsvorgang? {
-        var deskriptor = FetchDescriptor<Einkaufsvorgang>(predicate: #Predicate { $0.id == id })
+        let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(fuer: id, art: SyncEntitaetsArt.einkaufsvorgang, context: context)
+        var deskriptor = FetchDescriptor<Einkaufsvorgang>(predicate: #Predicate { $0.id == aufgeloesteID })
         deskriptor.fetchLimit = 1
         return try? context.fetch(deskriptor).first
     }

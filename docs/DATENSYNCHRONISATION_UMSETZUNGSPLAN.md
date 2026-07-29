@@ -635,6 +635,37 @@ nächsten Testlauf neu aufgesetzt.
   Artikel existiert nicht mehr"-Signal; ein Tombstone dafür würde die Liste
   bei jeder automatischen Bereinigung unnötig wachsen lassen.
 
+### 11a. Nachtrag: dieselbe Lücke bei `Einkaufsvorgang`
+
+Der erste Live-Test nach Umsetzung von Abschnitt 11 zeigte dieselbe Bug-Klasse
+ein drittes Mal, jetzt bei `Einkaufsvorgang`: Abgehakte Artikel erschienen auf
+Gerät A, aber nicht auf Gerät B, und Kaufeinträge verdoppelten sich mit der
+Zeit. Ursache: `mergeEinkaufsvorgaenge` matchte bislang **ausschließlich** per
+ID, mit der (falschen) Doku-Annahme, "beide Geräte sprächen beim gemeinsamen
+Einkauf automatisch über dieselbe Identität". Tatsächlich legt
+`EinkaufenView.einkaufSicherstellen()` auf jedem Gerät unabhängig einen
+eigenen, zufällig-IDten Einkaufsvorgang an, sobald es selbst keinen offenen für
+das gewählte Geschäft/Liste kennt — noch bevor ein Sync stattfinden konnte.
+Zwei Geräte, die "gemeinsam" im selben Laden einkaufen, hatten dadurch de
+facto **zwei unabhängige** Einkaufsvorgänge; Abhaken auf A landete auf einem
+für B unsichtbaren Objekt, während parallel auf B eigene `KaufEintrag`e für
+dieselben Artikel entstanden — die sich beim Sync als Dubletten summierten.
+
+**Fix:** `mergeEinkaufsvorgaenge` erkennt jetzt zusätzlich einen lokal noch
+**offenen** Einkaufsvorgang für dasselbe (`Geschaeft`, `Einkaufsliste`)-Paar
+als denselben realweltlichen Einkauf und registriert einen Alias (identisches
+Muster wie `Einkaufsliste`/`Artikel`) — die vorhandene Dedupe-Prüfung in
+`Einkaufsvorgang.artikelAbhakenOhneEventAufzeichnung` (siehe
+`docs/DATABASE_CONCURRENCY.md`) greift danach korrekt, da beide Geräte nach
+dem Merge über dasselbe lokale Objekt sprechen. `SyncImportService.einkaufsvorgang(mitID:)`
+löst jetzt ebenfalls über den Alias auf.
+
+**Nicht rückwirkend behoben:** Bereits vor diesem Fix entstandene doppelte
+Kaufeinträge (aus zwei zuvor unabhängigen Einkaufsvorgängen) bleiben bestehen
+— dieselbe Einschränkung wie bei der Einkaufsliste-Dublette; überzählige
+Preishistorie-Einträge lassen sich über die Geschäfts-Preisübersicht manuell
+entfernen (jetzt korrekt tombstoned, kommen also nicht zurück).
+
 ## 12. Restrisiko: unerreichbare Vorgeschichte vor Einführung dieses Features
 
 Einkaufslisten-Einträge, die entstanden, **bevor** Bereich-A-Events (Phase 0)

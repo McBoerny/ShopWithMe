@@ -38,6 +38,7 @@ enum SyncEntitaetsArt {
     static let artikel = "Artikel"
     static let einkaufsliste = "Einkaufsliste"
     static let geschaeft = "Geschaeft"
+    static let einkaufsvorgang = "Einkaufsvorgang"
     static let artikelKategorie = "ArtikelKategorie"
     static let geschaeftTyp = "GeschaeftTyp"
     static let kaufEintrag = "KaufEintrag"
