@@ -217,7 +217,7 @@ werden ausgetauscht.
   der automatische Abgleich — er läuft beim nächsten Öffnen sofort weiter.
 - **„Synchronisierung deaktivieren“** trennt die Verbindung zum Ordner wieder,
   ohne bereits ausgetauschte Daten zu löschen.
-- **Sync-Debug-Modus** (eigener Einstellungen-Eintrag) — zeichnet zur
+- **Sync-Debug-Modus** (Einstellungen → „Debugging“) — zeichnet zur
   Fehlersuche/Optimierung lokal auf, wie lange ein Abgleich dauert und wie
   aktuell empfangene Änderungen waren; im Normalbetrieb nicht nötig.
 
@@ -244,7 +244,8 @@ werden ausgetauscht.
   Mehrgeräte-Sync (kein iCloud-Sync) — bei einem Cloud-Ordner die App bewusst nur
   auf einem Gerät gleichzeitig aktiv nutzen, um Konflikte zu vermeiden. Wirkt erst
   nach einem Neustart der App.
-- **DB-Debug-Modus** — Diagnose-Protokollierung für den Mehrgeräte-Zugriff, im
-  Normalbetrieb nicht nötig.
-- **Datensynchronisation / Sync-Debug-Modus** — siehe eigener Abschnitt
-  „Datensynchronisation (gemeinsam einkaufen)“ oben.
+- **Debugging** — bündelt alle Diagnose-Einstellungen (DB-Debug-Modus,
+  Sync-Debug-Modus, sowie in Debug-Builds den Standort-Suchradius) in einer
+  Ansicht; im Normalbetrieb nicht nötig.
+- **Datensynchronisation** — siehe eigener Abschnitt „Datensynchronisation
+  (gemeinsam einkaufen)“ oben.

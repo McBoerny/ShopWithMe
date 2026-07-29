@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.8 (Build 126) — Nachbesserung #53: Debug-Einstellungen in einer Ansicht statt nur einem Abschnitt
+
+Die vorherige Umsetzung von #53 bündelte die drei Diagnose-Einträge nur
+optisch unter einer gemeinsamen Section-Überschrift, führte aber weiterhin zu
+drei getrennten Bildschirmen. Jetzt eine einzige neue `DebuggingView` mit allen
+drei Bereichen (Sync-Debug-Modus, DB-Debug-Modus, in Debug-Builds zusätzlich
+der Standort-Suchradius) als Sections in einem Formular — `SyncDebugSettingsView`,
+`DatabaseDebugSettingsView` und `DebugEinstellungenView` entfernt, ihr Inhalt
+vollständig übernommen (inkl. gemeinsam genutzter Share-Sheet-Brücke statt
+zweier identischer Kopien).
+
 ## v0.8 (Build 125) — Drei kleine Fixes (GitHub #51, #53, #57)
 
 - **#51:** Die Geschäftsauswahl beim Einkaufen wird nach Abschluss eines

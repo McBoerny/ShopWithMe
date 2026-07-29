@@ -29,9 +29,7 @@ private enum SettingsNavigationsziel: Hashable {
     case preishistorie
     case datenbankSpeicherort
     case syncOrdner
-    case syncDebugModus
-    case dbDebugModus
-    case debugEinstellungen
+    case debugging
 }
 
 struct SettingsView: View {
@@ -68,20 +66,12 @@ struct SettingsView: View {
                     }
                 }
 
-                // Bündelt die zuvor über mehrere Zeilen verstreuten Diagnose-
-                // Einstiegspunkte (GitHub #53).
-                Section("Debugging") {
-                    NavigationLink(value: SettingsNavigationsziel.syncDebugModus) {
-                        Label("Sync-Debug-Modus", systemImage: "ladybug")
+                // Bündelt die zuvor über mehrere Zeilen/Bildschirme verstreuten
+                // Diagnose-Einstiegspunkte in einer einzigen Ansicht (GitHub #53).
+                Section {
+                    NavigationLink(value: SettingsNavigationsziel.debugging) {
+                        Label("Debugging", systemImage: "ladybug")
                     }
-                    NavigationLink(value: SettingsNavigationsziel.dbDebugModus) {
-                        Label("DB-Debug-Modus", systemImage: "ladybug")
-                    }
-                    #if DEBUG
-                    NavigationLink(value: SettingsNavigationsziel.debugEinstellungen) {
-                        Label("Debug-Einstellungen", systemImage: "hammer")
-                    }
-                    #endif
                 }
 
                 Section("Über") {
@@ -109,12 +99,8 @@ struct SettingsView: View {
                     DatabaseLocationSettingsView()
                 case .syncOrdner:
                     SyncOrdnerSettingsView()
-                case .syncDebugModus:
-                    SyncDebugSettingsView()
-                case .dbDebugModus:
-                    DatabaseDebugSettingsView()
-                case .debugEinstellungen:
-                    DebugEinstellungenView()
+                case .debugging:
+                    DebuggingView()
                 }
             }
         }
