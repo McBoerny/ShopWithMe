@@ -161,7 +161,13 @@ ignorierte Fremdreferenz beim Snapshot-Export), `sync_einkaufslisten_stand`
 (Details: `anzahl=N [Name=Eintragszahl, …]` — kompletter lokaler
 Einkaufslisten-Bestand nach jedem Snapshot-Merge-Durchlauf; macht Dubletten
 mit gleichem Namen, aber unterschiedlicher Eintragszahl direkt im Protokoll
-sichtbar, siehe GitHub #52-Nachfolgefund), `debug_mode_{enabled,disabled}`.
+sichtbar, siehe GitHub #52-Nachfolgefund), `sync_event_nicht_anwendbar`
+(Details: `art=… bezugsID=… artikelID=…` — ein empfangenes Bereich-A-Event
+verweist auf eine lokal noch nicht auflösbare Einkaufsliste/einen
+Einkaufsvorgang/Artikel, siehe `SyncImportService`s Retry-Semantik; wird bei
+jedem weiteren Zyklus erneut protokolliert, bis die Referenz auflösbar wird —
+hält sie sich dauerhaft, ist das ein Hinweis auf einen fehlenden/fehlerhaften
+``SyncEntitaetsAlias``), `debug_mode_{enabled,disabled}`.
 
 **Bewusste Wiederverwendung von `wallClock`/`erzeugtAm` für die
 Latenzmessung:** Diese Felder sind in `SyncEvent`/`SyncSnapshot` als „nur

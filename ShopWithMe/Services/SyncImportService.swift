@@ -89,7 +89,14 @@ enum SyncImportService {
 
         guard materialisiere(art, nutzlast: nutzlast, context: context) else {
             // Referenzierte Liste/Einkauf/Artikel noch nicht lokal bekannt.
-            // Bewusst NICHT als bekannt markieren, siehe Typ-Dokumentation.
+            // Bewusst NICHT als bekannt markieren, siehe Typ-Dokumentation —
+            // wird also bei jedem weiteren Zyklus erneut protokolliert, bis
+            // die Referenz auflösbar wird (z.B. durch einen künftigen
+            // Bereich-B-Namens-Alias, siehe GitHub #52-Nachfolgefund).
+            SyncDebugLogger.log(
+                .eventNichtAnwendbar,
+                details: "art=\(art.rawValue) bezugsID=\(nutzlast.bezugsID) artikelID=\(nutzlast.artikelID)"
+            )
             return
         }
 
