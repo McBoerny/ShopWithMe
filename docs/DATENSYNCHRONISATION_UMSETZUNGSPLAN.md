@@ -106,12 +106,19 @@ ergänzt) schlägt hier zuerst nach, bevor sie direkt per ID sucht — ohne dies
 Fallback wären künftige Events dieses Peers für den betroffenen Artikel
 dauerhaft ins Leere gelaufen.
 
-`Einkaufsliste` wird bewusst NICHT namensbasiert gematcht (anders als in der
-ursprünglichen Bootstrap-Merge-Tabelle empfohlen), sondern wie
-`Einkaufsvorgang` per ID — sonst hätte ein Namens-Match zwei tatsächlich
-unterschiedliche Listen (z.B. je Gerät automatisch angelegte Standardliste)
-fälschlich zusammenführen können. Zwei gleichnamige Listen nach dem Sync sind
-eine bewusst in Kauf genommene, unkritische Konsequenz.
+**Revidiert (GitHub #52-Nachfolgefund):** `Einkaufsliste` wurde zunächst
+bewusst NICHT namensbasiert gematcht (anders als in der ursprünglichen
+Bootstrap-Merge-Tabelle empfohlen), sondern wie `Einkaufsvorgang` per ID — mit
+der Befürchtung, ein Namens-Match könnte zwei tatsächlich unterschiedliche
+Listen fälschlich zusammenführen. In der Praxis war das Gegenteil der
+Regelfall: JEDES Gerät legt beim allerersten Start automatisch eine eigene
+Standardliste namens „Einkaufsliste" an (`Einkaufsliste.standard(context:)`),
+bereits bevor je synchronisiert wurde — bei ID-basiertem Matching entstand
+dadurch bei jedem Beitritt zu einem bestehenden Sync-Ordner eine zweite, für
+den Nutzer unsichtbare Dublette, auf der die tatsächlich synchronisierten
+Artikel landeten, während die UI weiterhin die eigene (fast leere) Liste
+zeigte. `Einkaufsliste` wird jetzt wie `Artikel` namensbasiert gematcht, mit
+demselben `SyncEntitaetsAlias`-Mechanismus für spätere Bereich-A-Events.
 
 **Status: Phase 3b umgesetzt** (Historie/Lernen) — `SyncSnapshotImportService`
 merged jetzt auch `Einkaufsvorgang` (ID-basiert wie `Einkaufsliste`, damit

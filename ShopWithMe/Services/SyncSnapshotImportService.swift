@@ -245,22 +245,35 @@ enum SyncSnapshotImportService {
 
     // MARK: - Einkaufsliste
 
-    /// Anders als `GeschaeftTyp`/`ArtikelKategorie`/`Geschaeft`/`Artikel` bewusst
-    /// **ID-basiert** statt namensbasiert gematcht: Bereich-A-``SyncEvent``s
-    /// referenzieren eine ``Einkaufsliste`` über ihre ID, ein Namensmatching
-    /// könnte zwei tatsächlich unterschiedliche Listen (z.B. je Gerät
-    /// automatisch angelegte Standardliste, siehe ``Einkaufsliste/standard(context:)``)
-    /// fälschlich zusammenführen. Zwei gleichnamige Listen nach dem Sync sind
-    /// eine bewusst in Kauf genommene, unkritische Konsequenz (Nutzer benennt
-    /// bei Bedarf um) — identisch zur ursprünglichen Bootstrap-Merge-Bewertung
-    /// in `docs/DATENBANK_BACKUP_RESTORE_BEWERTUNG.md` §5.1.
+    /// Namensbasiert gematcht wie ``mergeGeschaefte``/``mergeArtikel`` (Alias
+    /// via ``SyncEntitaetsAliasService`` für spätere Bereich-A-``SyncEvent``s,
+    /// die weiterhin die fremde ID referenzieren) — **revidiert** gegenüber der
+    /// ursprünglichen ID-basierten Entscheidung (siehe `docs/DATENBANK_BACKUP_RESTORE_BEWERTUNG.md`
+    /// §5.1): Jedes Gerät legt beim allerersten Start automatisch eine eigene
+    /// Standardliste namens „Einkaufsliste" an (``Einkaufsliste/standard(context:)``),
+    /// bereits bevor je synchronisiert wurde. Bei ID-basiertem Matching entstand
+    /// dadurch beim ersten Beitritt zu einem bestehenden Sync-Ordner IMMER eine
+    /// zweite, für den Nutzer unsichtbare Dublette „Einkaufsliste" — die
+    /// tatsächlich synchronisierten Artikel landeten darauf, während die UI
+    /// weiterhin die eigene (fast leere) Liste zeigte (GitHub #52-Nachfolgefund).
+    /// Das war kein Rand-, sondern der Standardfall bei jedem Gerätebeitritt.
     @MainActor
     private static func mergeEinkaufslisten(_ remote: [EinkaufslisteSnapshot], context: ModelContext) -> [UUID: Einkaufsliste] {
         var zuordnung: [UUID: Einkaufsliste] = [:]
         let alleLokalen = (try? context.fetch(FetchDescriptor<Einkaufsliste>())) ?? []
         for eintrag in remote {
-            if let vorhandene = alleLokalen.first(where: { $0.id == eintrag.id }) {
-                zuordnung[eintrag.id] = vorhandene
+            let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(
+                fuer: eintrag.id, art: SyncEntitaetsArt.einkaufsliste, context: context
+            )
+            if let bekannte = alleLokalen.first(where: { $0.id == aufgeloesteID }) {
+                zuordnung[eintrag.id] = bekannte
+                continue
+            }
+            if let namensTreffer = alleLokalen.first(where: { $0.name.localizedCaseInsensitiveCompare(eintrag.name) == .orderedSame }) {
+                SyncEntitaetsAliasService.registriere(
+                    entitaetsArt: SyncEntitaetsArt.einkaufsliste, fremdeID: eintrag.id, lokaleID: namensTreffer.id, context: context
+                )
+                zuordnung[eintrag.id] = namensTreffer
                 continue
             }
             let neue = Einkaufsliste(name: eintrag.name)

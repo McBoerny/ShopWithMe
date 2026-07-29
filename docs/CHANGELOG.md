@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.8 (Build 127) — Fix: neu beigetretenes Gerät bekam eine unsichtbare Einkaufslisten-Dublette (GitHub #52-Nachfolgefund)
+
+- Behoben: `Einkaufsliste` wurde beim Bereich-B-Merge bislang per ID
+  gematcht (bewusste, aber fehlerhafte Entscheidung, siehe
+  `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`). Da jedes Gerät beim
+  allerersten Start automatisch eine eigene Standardliste namens
+  „Einkaufsliste" anlegt, bevor je synchronisiert wurde, entstand bei jedem
+  Beitritt zu einem bestehenden Sync-Ordner eine zweite, für den Nutzer
+  unsichtbare Dublette — die tatsächlich synchronisierten Artikel landeten
+  darauf, während die UI weiterhin die eigene (fast leere) Liste zeigte.
+  `Einkaufsliste` wird jetzt wie `Artikel` namensbasiert gematcht
+  (`SyncEntitaetsAlias` sorgt dafür, dass spätere Bereich-A-Events des Peers
+  weiterhin auflösen). Betroffene, bereits bestehende Dubletten müssen einmalig
+  manuell zusammengeführt werden (siehe Einstellungen → Einkaufslisten).
+
 ## v0.8 (Build 126) — Nachbesserung #53: Debug-Einstellungen in einer Ansicht statt nur einem Abschnitt
 
 Die vorherige Umsetzung von #53 bündelte die drei Diagnose-Einträge nur

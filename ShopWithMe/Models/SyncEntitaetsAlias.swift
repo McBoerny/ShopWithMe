@@ -36,6 +36,7 @@ final class SyncEntitaetsAlias {
 
 enum SyncEntitaetsArt {
     static let artikel = "Artikel"
+    static let einkaufsliste = "Einkaufsliste"
 }
 
 enum SyncEntitaetsAliasService {

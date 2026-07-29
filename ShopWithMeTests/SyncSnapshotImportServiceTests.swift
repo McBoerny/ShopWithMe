@@ -195,27 +195,51 @@ struct SyncSnapshotImportServiceTests {
     }
 
     @Test
-    func einkaufslisteWirdPerIDGematchtNichtPerName() async throws {
+    func einkaufslisteWirdPerNameGematchtUndAliasErlaubtSpaetereBereichAEreignisse() async throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
         let syncOrdner = macheTempSyncOrdner()
         try SyncOrdnerService.ordnerFestlegen(syncOrdner)
         defer { SyncOrdnerService.ordnerEntfernen() }
 
+        // Jedes Gerät legt beim allerersten Start automatisch eine eigene
+        // Standardliste "Einkaufsliste" an, bevor je synchronisiert wurde
+        // (siehe Einkaufsliste.standard(context:)) — genau dieser Fall.
         let eigeneListe = Einkaufsliste(name: "Einkaufsliste")
         context.insert(eigeneListe)
         try context.save()
 
+        let remoteListenID = UUID()
         var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
         snapshot.einkaufslisten = [
-            EinkaufslisteSnapshot(id: UUID(), name: "Einkaufsliste", erstelltAm: Date()),
+            EinkaufslisteSnapshot(id: remoteListenID, name: "Einkaufsliste", erstelltAm: Date()),
         ]
         try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
 
         await SyncSnapshotImportService.importiereSnapshots(context: context)
 
-        // Zwei verschiedene IDs -> bewusst zwei Listen, auch bei gleichem Namen.
-        #expect(try context.fetch(FetchDescriptor<Einkaufsliste>()).count == 2)
+        // Keine zweite, für den Nutzer unsichtbare Dublette (GitHub #52-Nachfolgefund).
+        #expect(try context.fetch(FetchDescriptor<Einkaufsliste>()).count == 1)
+
+        // Ein später eintreffendes Bereich-A-Event des Peers, das die FREMDE
+        // Listen-ID referenziert, muss über den Alias auf die lokale Liste
+        // aufgelöst werden.
+        let lokalerApfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759")
+        context.insert(lokalerApfel)
+        try context.save()
+
+        let eventOrdner = SyncExportService.eventsOrdner(fuerPeer: "fremdes-geraet", in: syncOrdner)
+        try FileManager.default.createDirectory(at: eventOrdner, withIntermediateDirectories: true)
+        let event = SyncEventExportDarstellung(
+            id: UUID(), art: SyncEventArt.artikelHinzugefuegt.rawValue,
+            nutzlast: try JSONEncoder().encode(SyncEventNutzlast(bezugsID: remoteListenID, artikelID: lokalerApfel.id)),
+            lamportZaehler: 1, lamportGeraeteID: "fremdes-geraet", autorGeraeteID: "fremdes-geraet", wallClock: Date()
+        )
+        try JSONEncoder().encode(event).write(to: eventOrdner.appendingPathComponent("0000000001_\(event.id.uuidString).json"))
+
+        await SyncImportService.importiereNeueEvents(context: context)
+
+        #expect(eigeneListe.enthaelt(lokalerApfel))
     }
 
     @Test
