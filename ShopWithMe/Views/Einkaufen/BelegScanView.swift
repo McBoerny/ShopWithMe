@@ -671,6 +671,8 @@ private struct PositionsZeile: View {
                             artikelZuweisen(artikel)
                         } label: {
                             Text(artikel.name)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                     }
@@ -679,6 +681,8 @@ private struct PositionsZeile: View {
                             neuenArtikelAnlegen()
                         } label: {
                             Label("„\(getrimmterName)“ neu anlegen", systemImage: "plus.circle.fill")
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
                         }
                     }
                 }

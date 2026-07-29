@@ -66,6 +66,11 @@ struct SettingsView: View {
                     NavigationLink(value: SettingsNavigationsziel.syncOrdner) {
                         Label("Datensynchronisation", systemImage: "arrow.triangle.2.circlepath")
                     }
+                }
+
+                // Bündelt die zuvor über mehrere Zeilen verstreuten Diagnose-
+                // Einstiegspunkte (GitHub #53).
+                Section("Debugging") {
                     NavigationLink(value: SettingsNavigationsziel.syncDebugModus) {
                         Label("Sync-Debug-Modus", systemImage: "ladybug")
                     }

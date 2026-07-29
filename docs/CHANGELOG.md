@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.8 (Build 125) — Drei kleine Fixes (GitHub #51, #53, #57)
+
+- **#51:** Die Geschäftsauswahl beim Einkaufen wird nach Abschluss eines
+  Einkaufs jetzt zurückgesetzt, statt am zuletzt genutzten Geschäft
+  weiterzulaufen.
+- **#53:** Die bisher über mehrere Zeilen verstreuten Diagnose-Einstellungen
+  (Sync-Debug-Modus, DB-Debug-Modus, Debug-Einstellungen) sind jetzt in einem
+  eigenen „Debugging"-Abschnitt gebündelt.
+- **#57:** Tippen auf einen Artikel-Namensvorschlag beim Belegscan
+  funktionierte nicht zuverlässig — den Vorschlags-Buttons in `PositionsZeile`
+  fehlte `.contentShape(Rectangle())`/volle Zeilenbreite, das tappable Areal
+  war nur der eng anliegende Text. Dasselbe Bug-Muster wurde bereits einmal
+  zuvor in diesem Projekt behoben (Typ-/Kategorie-Toggle-Zeilen).
+
 ## v0.8 (Build 124) — Teilfix: langsamer App-Start durch Sync-Zyklus (GitHub #55)
 
 - `SyncPollingService`s Polling-Loop läuft jetzt mit `.utility`-Priorität statt

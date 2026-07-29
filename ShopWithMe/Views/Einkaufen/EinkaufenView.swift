@@ -149,7 +149,10 @@ struct EinkaufenView: View {
     @ViewBuilder
     private var hauptinhalt: some View {
         if let ausgewaehlteListe, let einkauf = aktuellerEinkauf {
-            EinkaufslisteView(geschaeft: ausgewaehltesGeschaeft, einkaufsliste: ausgewaehlteListe, einkaufsvorgang: einkauf)
+            EinkaufslisteView(
+                geschaeft: ausgewaehltesGeschaeft, einkaufsliste: ausgewaehlteListe, einkaufsvorgang: einkauf,
+                geschaeftZuruecksetzen: { ausgewaehltesGeschaeft = nil }
+            )
         } else {
             ProgressView()
         }
@@ -712,6 +715,10 @@ private struct EinkaufslisteView: View {
     let geschaeft: Geschaeft?
     let einkaufsliste: Einkaufsliste
     let einkaufsvorgang: Einkaufsvorgang
+    /// Setzt nach Abschluss die Geschäftsauswahl in ``EinkaufenView`` zurück
+    /// (GitHub #51) — der nächste Einkauf soll nicht automatisch am zuletzt
+    /// genutzten Geschäft weiterlaufen.
+    let geschaeftZuruecksetzen: () -> Void
 
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var syncPollingService: SyncPollingService
@@ -801,6 +808,7 @@ private struct EinkaufslisteView: View {
             // bei jedem dieser Einkäufe erneut erscheinen.
             zeigeUmbauHinweis = umbauNeuErkannt
             zeigeBelegScanAngebot = true
+            geschaeftZuruecksetzen()
         }
     }
 
