@@ -57,7 +57,12 @@ struct EinkaufslistenVerwaltungView: View {
 
     private func listeLoeschen(at offsets: IndexSet) {
         for index in offsets {
-            modelContext.delete(listen[index])
+            let liste = listen[index]
+            // Tombstone verhindert, dass ein Peer, der die Liste noch in
+            // seinem eigenen Snapshot führt, sie beim nächsten Sync
+            // unwissentlich wiederbelebt (GitHub #52-Nachfolgefund).
+            SyncTombstoneService.markiereGeloescht(art: SyncEntitaetsArt.einkaufsliste, id: liste.id, context: modelContext)
+            modelContext.delete(liste)
         }
     }
 }

@@ -167,7 +167,10 @@ verweist auf eine lokal noch nicht auflösbare Einkaufsliste/einen
 Einkaufsvorgang/Artikel, siehe `SyncImportService`s Retry-Semantik; wird bei
 jedem weiteren Zyklus erneut protokolliert, bis die Referenz auflösbar wird —
 hält sie sich dauerhaft, ist das ein Hinweis auf einen fehlenden/fehlerhaften
-``SyncEntitaetsAlias``), `debug_mode_{enabled,disabled}`.
+``SyncEntitaetsAlias``), `sync_peer_verworfen_altersgrenze` (Details: welcher
+Peer — dessen Snapshot ist älter als
+`SyncSnapshotImportService.maximalesSnapshotAlter` und wird komplett
+ignoriert, siehe Architektur-Revision „Alternative A"), `debug_mode_{enabled,disabled}`.
 
 **Bewusste Wiederverwendung von `wallClock`/`erzeugtAm` für die
 Latenzmessung:** Diese Felder sind in `SyncEvent`/`SyncSnapshot` als „nur

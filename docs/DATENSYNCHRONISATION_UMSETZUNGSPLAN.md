@@ -555,6 +555,99 @@ spiegeln, statt auf den nächsten Polling-Zyklus zu warten).
    Multipeer als zusätzlicher Beschleunigungs-Kanal, falls nach Phase 0–6 im
    echten Gebrauch tatsächlich benötigt.
 
+## 11. Architektur-Revision „Alternative A" (nach Live-Test mit zwei echten Geräten)
+
+Ein realer Zwei-Geräte-Test nach Abschluss von Phase 0–6 (GitHub #52,
+zusammen mit dessen ursprünglicher Fassung "Erst-Sync funktioniert nicht")
+deckte zwei strukturelle Lücken auf, die kein reiner Bugfix, sondern eine
+bewusste Architekturentscheidung nötig machten:
+
+1. **Gelöschte Bereich-B-Entitäten kamen zurück.** Der additive Bereich-B-Merge
+   ("nie destruktiv", Abschnitt 5.1) kannte keine Löschsemantik — löschte ein
+   Gerät ein `Geschaeft`/`Artikel`/`ArtikelKategorie`/`Einkaufsliste`, brachte
+   jeder Peer, der es noch in seinem eigenen Snapshot führte, es beim
+   nächsten Sync unwissentlich zurück.
+2. **Bereich A (Events) hatte kein Sicherheitsnetz.** Anders als Bereich B
+   (jederzeit aus dem vollständigen Snapshot wiederherstellbar) trug der
+   `EinkaufslisteSnapshot` nur `id`/`name`, nie die tatsächliche
+   Mitgliedschaft. Ein Peer, der ein `artikelHinzugefuegt`-Event verpasste
+   (oder dessen Liste erst nachträglich per Namensmatching aliasiert wurde,
+   siehe #52-Nachfolgefund), hatte **keine** Möglichkeit, den fehlenden Stand
+   je nachzuholen — die ursprünglich für Bereich A geplante
+   Event-Konsolidierung (Abschnitt 5.5, nie umgesetzt) hätte dieselbe Lücke
+   sogar aktiv verschärft, da geprunte Events ohne Snapshot-Fallback
+   unwiederbringlich verloren wären.
+
+**Entscheidung (zwei Alternativen abgewogen, siehe Session-Verlauf):**
+„Alternative A" gewählt — Bereich A bekommt strukturell dasselbe
+Sicherheitsnetz wie Bereich B, statt die Lücken einzeln zu patchen.
+Keine Rückwärtskompatibilität zu bereits im Feld befindlichen
+`export.json`-Dateien nötig (Projekt ohne feste Nutzerbasis) —
+`SyncSnapshot.aktuelleFormatVersion` auf 2 erhöht, Sync-Ordner für den
+nächsten Testlauf neu aufgesetzt.
+
+**Umgesetzt:**
+
+- **`SyncSnapshot.einkaufslistenEintraege`** — vollständiger
+  Einkaufslisten-Inhalt (Artikel + Menge + Notiz) additiv im Snapshot
+  mitgeführt. Events bleiben der schnelle Kanal fürs aktive gemeinsame
+  Einkaufen; der Snapshot fängt nur nach, was ein Peer verpasst hat
+  (`SyncSnapshotImportService.mergeEinkaufslistenEintraege`). Entfernen bleibt
+  Aufgabe der `artikelEntfernt`-Events — dieser Teil ist bewusst nie
+  destruktiv.
+- **`SyncTombstone`** (neues Modell) — merkt absichtliche Löschungen von
+  `Geschaeft`/`Artikel`/`ArtikelKategorie`/`Einkaufsliste`/`KaufEintrag` vor,
+  wird im Snapshot mitgeführt (`SyncSnapshot.tombstones`) und beim Import
+  zuerst verarbeitet (`mergeTombstones`): löscht ein dadurch als entfernt
+  markiertes, lokal noch vorhandenes Objekt, und verhindert (über
+  `SyncTombstoneService.geloeschteIDs`), dass die nachfolgenden
+  Merge-Schritte es aus einem veralteten Peer-Snapshot neu anlegen. Alle
+  UI-Löschstellen (`GeschaeftListView`, `ArtikelListView`,
+  `KategorienVerwaltungView`, `EinkaufslistenVerwaltungView`,
+  `GeschaeftPreisUebersichtView`) rufen `SyncTombstoneService.markiereGeloescht(...)`
+  vor dem eigentlichen `context.delete(...)` auf.
+- **`SyncEntitaetsAlias`-Erweiterung auf `Geschaeft`/`ArtikelKategorie`** —
+  Voraussetzung dafür, dass ein Tombstone für ein per Namens-/
+  Koordinatenmatching zusammengeführtes Objekt überhaupt auf die richtige
+  lokale ID aufgelöst werden kann (vorher nur für `Artikel`/`Einkaufsliste`
+  registriert). `Geschaeft`/`ArtikelKategorie` übernehmen jetzt außerdem
+  konsequent die Remote-ID beim Neuanlegen (vorher bekam ein neu erzeugtes
+  `Geschaeft` immer eine zufällige, vom Original abweichende ID).
+- **`SyncPeerInfo.zuletztGesehen` + `SyncSnapshotImportService.maximalesSnapshotAlter`**
+  (Standard: 30 Tage) — ein Snapshot, der älter als die Altersgrenze ist,
+  wird komplett ignoriert, der Peer also wie nicht vorhanden behandelt.
+  Verhindert, dass verwaiste Peer-Ordner aus früheren Testinstallationen
+  (jede Neuinstallation erzeugt eine neue Geräte-ID) dauerhaft alte Daten
+  zurückspielen. Ergänzend: manuelle Peer-Entfernung in
+  `DebuggingView` (löscht `SyncPeerInfo`-Eintrag + Peer-Ordner im
+  Sync-Ordner).
+
+**Bewusst nicht in diesem Umbau enthalten:**
+
+- Keine Tombstones für `GeschaeftTyp` (aktuell keine Lösch-UI dafür) — bei
+  Bedarf trivial ergänzbar (dieselbe generische `SyncEntitaetsArt`/
+  `SyncTombstone`-Infrastruktur).
+- Kein Verfallsdatum/keine Bereinigung für Tombstones selbst — die Liste
+  wächst unbegrenzt, aber langsam (nur tatsächliche Löschungen).
+- Automatische Retention-Löschung alter `KaufEintrag`e
+  (`PreisHistorieBereinigungService`) bekommt **keinen** Tombstone — das ist
+  eine bewusste, wiederkehrende Aufräum-Policy, kein "dieses Geschäft/dieser
+  Artikel existiert nicht mehr"-Signal; ein Tombstone dafür würde die Liste
+  bei jeder automatischen Bereinigung unnötig wachsen lassen.
+
+## 12. Restrisiko: unerreichbare Vorgeschichte vor Einführung dieses Features
+
+Einkaufslisten-Einträge, die entstanden, **bevor** Bereich-A-Events (Phase 0)
+bzw. der volle Snapshot-Inhalt (Abschnitt 11) existierten, wurden nie als
+Event aufgezeichnet und stecken auch in keinem historischen Snapshot — sie
+lassen sich nicht rückwirkend zwischen Geräten abgleichen. Beobachtet beim
+Live-Test: zwei Geräte mit jeweils eigener, seit Monaten gewachsener
+Einkaufslisten-Historie zeigten nach dem ersten Sync weiterhin
+unterschiedliche Eintragszahlen auf gleichnamigen Listen. Kein Bug, keine mit
+dieser Architektur behebbare Lücke — betroffene Nutzer müssen abweichende
+Altbestände einmalig manuell abgleichen (siehe Einstellungen →
+Einkaufslisten).
+
 Empfehlung für den Einstieg: Phase 0 zuerst, in sich abgeschlossen und ohne
 Auswirkung auf bestehendes Verhalten (reines Mitschreiben, noch kein Sync) — gute
 Gelegenheit, das Event-Modell und die Mutations-Integration zu verproben, bevor

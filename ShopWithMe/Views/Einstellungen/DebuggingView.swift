@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 /// Bündelt alle Diagnose-/Debug-Einstellungen der App in einer einzigen
 /// Ansicht (GitHub #53) — zuvor auf drei getrennte Bildschirme verteilt
@@ -55,6 +56,8 @@ struct DebuggingView: View {
             } footer: {
                 Text("Protokolliert Probleme rund um den Mehrbenutzerzugriff auf die Datenbank (Sync, Sperren, Öffnen, Speichern) lokal und zusätzlich im gemeinsamen Datenbank-Ordner, falls einer gewählt ist. Nur für gezielte Testphasen aktivieren.")
             }
+
+            BekannteSyncPeersSection()
 
             #if DEBUG
             SuchradiusUeberschreibungSection()
@@ -114,6 +117,53 @@ private struct SuchradiusUeberschreibungSection: View {
     }
 }
 #endif
+
+/// Listet alle jemals per Sync gesehenen Peer-Geräte (``SyncPeerInfo``) mit
+/// Zuletzt-gesehen-Zeitpunkt — Gegenstück zur automatischen Altersgrenze in
+/// ``SyncSnapshotImportService/maximalesSnapshotAlter`` (GitHub #52-Nachfolgefund):
+/// Geräte, die die App nicht mehr nutzen (z.B. nach einer Neuinstallation mit
+/// neuer Geräte-ID), lassen sich hier manuell entfernen — löscht sowohl den
+/// lokalen Merkposten als auch den Peer-Ordner im Sync-Ordner selbst, damit
+/// sein letzter bekannter Stand nicht mehr zurückgespielt wird.
+private struct BekannteSyncPeersSection: View {
+    @Environment(\.modelContext) private var modelContext
+    @Query(sort: \SyncPeerInfo.geraeteName) private var peers: [SyncPeerInfo]
+
+    var body: some View {
+        if !peers.isEmpty {
+            Section {
+                ForEach(peers) { peer in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(peer.geraeteName)
+                        Text("Zuletzt gesehen: \(peer.zuletztGesehen.formatted(date: .abbreviated, time: .shortened))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .onDelete(perform: peerEntfernen)
+            } header: {
+                Text("Bekannte Geräte")
+            } footer: {
+                Text("Wischen zum Entfernen — für Geräte, die die App nicht mehr nutzen. Verhindert, dass ihr letzter bekannter Stand weiterhin zurückgespielt wird.")
+            }
+        }
+    }
+
+    private func peerEntfernen(at offsets: IndexSet) {
+        let syncOrdner = SyncOrdnerService.gewaehlterOrdner()
+        for index in offsets {
+            let peer = peers[index]
+            if let syncOrdner, syncOrdner.startAccessingSecurityScopedResource() {
+                let peerOrdner = syncOrdner
+                    .appendingPathComponent("peers", isDirectory: true)
+                    .appendingPathComponent(peer.peerGeraeteID, isDirectory: true)
+                try? FileManager.default.removeItem(at: peerOrdner)
+                syncOrdner.stopAccessingSecurityScopedResource()
+            }
+            modelContext.delete(peer)
+        }
+    }
+}
 
 /// UIKit-Brücke für das Teilen der Debug-Log-Dateien per Share Sheet — von
 /// beiden Debug-Modi in dieser Ansicht gemeinsam genutzt.

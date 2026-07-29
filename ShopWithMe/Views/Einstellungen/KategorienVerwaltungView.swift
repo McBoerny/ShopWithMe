@@ -57,6 +57,10 @@ struct KategorienVerwaltungView: View {
         for index in offsets {
             let kategorie = kategorien[index]
             guard kategorie.name != ArtikelKategorie.sonstigesName else { continue }
+            // Tombstone verhindert, dass ein Peer, der die Kategorie noch in
+            // seinem eigenen Snapshot führt, sie beim nächsten Sync
+            // unwissentlich wiederbelebt (GitHub #52-Nachfolgefund).
+            SyncTombstoneService.markiereGeloescht(art: SyncEntitaetsArt.artikelKategorie, id: kategorie.id, context: modelContext)
             modelContext.delete(kategorie)
         }
     }

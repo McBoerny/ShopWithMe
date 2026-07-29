@@ -130,6 +130,19 @@ enum SyncSnapshotExportService {
         }
         let gueltigeEinkaufslistenIDs = Set((try? context.fetch(FetchDescriptor<Einkaufsliste>()))?.map(\.persistentModelID) ?? [])
 
+        // Vollständiger Einkaufslisten-Inhalt (Architektur-Revision „Alternative
+        // A") — additives Sicherheitsnetz neben den Bereich-A-Events, siehe
+        // Typ-Doku von ``SyncSnapshot/einkaufslistenEintraege``.
+        let einkaufslistenEintraege = ((try? context.fetch(FetchDescriptor<EinkaufslistenEintrag>())) ?? [])
+            .compactMap { eintrag -> EinkaufslistenEintragSnapshot? in
+                guard let einkaufslisteID = sichereID(eintrag.einkaufsliste, gueltigeIDs: gueltigeEinkaufslistenIDs),
+                      let artikelID = sichereID(eintrag.artikel, gueltigeIDs: gueltigeArtikelIDs)
+                else { return nil }
+                return EinkaufslistenEintragSnapshot(
+                    einkaufslisteID: einkaufslisteID, artikelID: artikelID, menge: eintrag.menge, notiz: eintrag.notiz
+                )
+            }
+
         let einkaufsvorgaenge = ((try? context.fetch(FetchDescriptor<Einkaufsvorgang>())) ?? []).map {
             EinkaufsvorgangSnapshot(
                 id: $0.id,
@@ -173,6 +186,10 @@ enum SyncSnapshotExportService {
                 )
             }
 
+        let tombstones = SyncTombstoneService.alle(context: context).map {
+            SyncTombstoneSnapshot(entitaetsArt: $0.entitaetsArt, geloeschteID: $0.geloeschteID, geloeschtAm: $0.geloeschtAm)
+        }
+
         return SyncSnapshot(
             formatVersion: SyncSnapshot.aktuelleFormatVersion,
             erzeugtAm: Date(),
@@ -183,9 +200,11 @@ enum SyncSnapshotExportService {
             geschaefte: geschaefte,
             artikel: artikel,
             einkaufslisten: einkaufslisten,
+            einkaufslistenEintraege: einkaufslistenEintraege,
             einkaufsvorgaenge: einkaufsvorgaenge,
             kaufEintraege: kaufEintraege,
-            warengruppenDistanzen: warengruppenDistanzen
+            warengruppenDistanzen: warengruppenDistanzen,
+            tombstones: tombstones
         )
     }
 

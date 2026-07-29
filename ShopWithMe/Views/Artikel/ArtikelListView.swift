@@ -143,6 +143,10 @@ struct ArtikelListView: View {
         Task {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
                 for eintrag in zuLoeschende {
+                    // Tombstone verhindert, dass ein Peer, der den Artikel
+                    // noch in seinem eigenen Snapshot führt, ihn beim
+                    // nächsten Sync unwissentlich wiederbelebt (GitHub #52-Nachfolgefund).
+                    SyncTombstoneService.markiereGeloescht(art: SyncEntitaetsArt.artikel, id: eintrag.id, context: modelContext)
                     modelContext.delete(eintrag)
                 }
             }

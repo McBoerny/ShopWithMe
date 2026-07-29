@@ -187,6 +187,10 @@ private struct ArtikelPreisVerlaufView: View {
     private func eintragLoeschen(_ eintrag: KaufEintrag) {
         Task {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                // Tombstone verhindert, dass ein Peer, der den Kaufeintrag
+                // noch in seinem eigenen Snapshot führt, ihn beim nächsten
+                // Sync unwissentlich wiederbelebt (GitHub #52-Nachfolgefund).
+                SyncTombstoneService.markiereGeloescht(art: SyncEntitaetsArt.kaufEintrag, id: eintrag.id, context: modelContext)
                 modelContext.delete(eintrag)
             }
         }

@@ -126,6 +126,11 @@ struct GeschaeftListView: View {
         Task {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
                 for eintrag in zuLoeschende {
+                    // Tombstone VOR dem Löschen, solange die ID noch bekannt
+                    // ist — verhindert, dass ein Peer, der das Geschäft noch
+                    // in seinem eigenen Snapshot führt, es beim nächsten Sync
+                    // unwissentlich wiederbelebt (GitHub #52-Nachfolgefund).
+                    SyncTombstoneService.markiereGeloescht(art: SyncEntitaetsArt.geschaeft, id: eintrag.id, context: modelContext)
                     modelContext.delete(eintrag)
                 }
             }

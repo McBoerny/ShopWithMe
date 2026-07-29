@@ -1,5 +1,36 @@
 # Changelog
 
+## v0.8 (Build 130) — Architektur-Revision „Alternative A": Löschungen + vollständiger Einkaufslisten-Inhalt im Snapshot
+
+Nach einem Live-Test mit zwei echten Geräten (GitHub #52) zeigten sich zwei
+strukturelle Lücken, die kein Bugfix, sondern eine Architekturentscheidung
+brauchten:
+
+- **Gelöschte Geschäfte/Artikel/Kategorien/Einkaufslisten kamen zurück** —
+  der additive Bereich-B-Merge kannte keine Löschsemantik. Neu: `SyncTombstone`
+  merkt absichtliche Löschungen vor und verhindert, dass ein Peer sie aus
+  seinem eigenen (veralteten) Snapshot heraus wiederbelebt.
+- **Einkaufslisten-Mitgliedschaft hatte kein Sicherheitsnetz** — anders als
+  Stammdaten (jederzeit aus dem vollständigen Snapshot wiederherstellbar) gab
+  es für „welcher Artikel steht auf welcher Liste" keinen Vollzustands-Fallback,
+  nur die Bereich-A-Events selbst. Neu: `SyncSnapshot.einkaufslistenEintraege`
+  überträgt den vollständigen Listeninhalt additiv mit — ein Peer, der ein
+  Event verpasst hat, holt sich den fehlenden Stand beim nächsten
+  Snapshot-Import nach.
+- Alias-Tracking (bislang nur `Artikel`/`Einkaufsliste`) auf `Geschaeft`/
+  `ArtikelKategorie` erweitert (nötig, damit Tombstones für per Namens-/
+  Koordinatenmatching zusammengeführte Objekte korrekt auflösen).
+- `SyncPeerInfo` merkt sich jetzt den Zeitpunkt des letzten Snapshots;
+  Snapshots älter als 30 Tage werden komplett ignoriert (verwaiste
+  Test-Installationen spielen so nicht mehr für immer alte Daten zurück).
+  Peers lassen sich zusätzlich manuell entfernen (Einstellungen → Debugging).
+- Format-Version des Snapshots auf 2 erhöht — keine Rückwärtskompatibilität
+  zu alten `export.json`-Dateien (Projekt ohne feste Nutzerbasis).
+
+Details und Restrisiken (unerreichbare Vorgeschichte aus der Zeit vor
+Bereich-A-Events) in `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`, Abschnitt
+11/12.
+
 ## v0.8 (Build 128) — Sync-Ordner-Beobachtung (schnellere Erkennung) + Einkaufslisten-Diagnose
 
 - Neuer `SyncOrdnerBeobachter` (`NSFilePresenter`) beobachtet den Sync-Ordner

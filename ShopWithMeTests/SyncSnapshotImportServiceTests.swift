@@ -11,6 +11,7 @@ struct SyncSnapshotImportServiceTests {
             Einkaufsvorgang.self, KaufEintrag.self, WarengruppenDistanz.self,
             Einkaufsliste.self, EinkaufslistenEintrag.self, IgnorierterArtikel.self,
             SyncEvent.self, SyncEntitaetsAlias.self, SyncPeerZaehlerStand.self, SyncPeerInfo.self,
+            SyncTombstone.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
@@ -27,7 +28,8 @@ struct SyncSnapshotImportServiceTests {
         SyncSnapshot(
             formatVersion: SyncSnapshot.aktuelleFormatVersion, erzeugtAm: Date(), geraeteID: geraeteID, geraeteName: geraeteName,
             geschaeftsTypen: [], artikelKategorien: [], geschaefte: [], artikel: [],
-            einkaufslisten: [], einkaufsvorgaenge: [], kaufEintraege: [], warengruppenDistanzen: []
+            einkaufslisten: [], einkaufslistenEintraege: [], einkaufsvorgaenge: [], kaufEintraege: [],
+            warengruppenDistanzen: [], tombstones: []
         )
     }
 
@@ -240,6 +242,111 @@ struct SyncSnapshotImportServiceTests {
         await SyncImportService.importiereNeueEvents(context: context)
 
         #expect(eigeneListe.enthaelt(lokalerApfel))
+    }
+
+    @Test
+    func tombstoneVerhindertWiederbelebungEinesGeloeschtenGeschaefts() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        // Lokal existiert das Geschäft bereits (z.B. aus einem früheren Sync).
+        let geschaeftID = UUID()
+        let lokalesGeschaeft = Geschaeft(name: "Netto", typen: [], adresse: nil)
+        lokalesGeschaeft.id = geschaeftID
+        context.insert(lokalesGeschaeft)
+        try context.save()
+
+        // Ein Peer meldet per Tombstone, dass er dieses Geschäft gelöscht hat.
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.tombstones = [
+            SyncTombstoneSnapshot(entitaetsArt: SyncEntitaetsArt.geschaeft, geloeschteID: geschaeftID, geloeschtAm: Date()),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        #expect(try context.fetch(FetchDescriptor<Geschaeft>()).isEmpty)
+
+        // Ein zweiter, veralteter Peer listet das Geschäft weiterhin (z.B. weil
+        // er die Löschung noch nicht mitbekommen hat) — darf es nicht
+        // wiederbeleben (GitHub #52-Nachfolgefund: Tombstones).
+        var veralteterSnapshot = leererSnapshot(geraeteID: "veralteter-peer")
+        veralteterSnapshot.geschaefte = [
+            GeschaeftSnapshot(
+                id: geschaeftID, name: "Netto", typIDs: [], adresse: nil, breitengrad: nil, laengengrad: nil,
+                erkennungsradius: nil, kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
+                ignorierteArtikelNamen: [], anzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
+            ),
+        ]
+        try schreibeFremdenSnapshot(veralteterSnapshot, fremdeGeraeteID: "veralteter-peer", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        #expect(try context.fetch(FetchDescriptor<Geschaeft>()).isEmpty)
+    }
+
+    @Test
+    func einkaufslistenEintragWirdAusSnapshotNachgeholt() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let lokaleListe = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(lokaleListe)
+        let lokalerArtikel = Artikel(name: "Milch", symbolName: "drop.fill", farbeHex: "#34C759")
+        context.insert(lokalerArtikel)
+        try context.save()
+
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.einkaufslisten = [EinkaufslisteSnapshot(id: lokaleListe.id, name: "Einkaufsliste", erstelltAm: Date())]
+        snapshot.artikel = [
+            ArtikelSnapshot(
+                id: lokalerArtikel.id, name: "Milch", symbolName: "drop.fill", farbeHex: "#34C759",
+                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+            ),
+        ]
+        snapshot.einkaufslistenEintraege = [
+            EinkaufslistenEintragSnapshot(einkaufslisteID: lokaleListe.id, artikelID: lokalerArtikel.id, menge: 2, notiz: "Bio"),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        #expect(lokaleListe.enthaelt(lokalerArtikel))
+        #expect(lokaleListe.eintrag(fuer: lokalerArtikel)?.menge == 2)
+    }
+
+    @Test
+    func zuAlterSnapshotWirdIgnoriert() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let vorherigeAltersgrenze = SyncSnapshotImportService.maximalesSnapshotAlter
+        SyncSnapshotImportService.maximalesSnapshotAlter = 60
+        defer { SyncSnapshotImportService.maximalesSnapshotAlter = vorherigeAltersgrenze }
+
+        var snapshot = leererSnapshot(geraeteID: "verwaister-peer")
+        snapshot.erzeugtAm = Date().addingTimeInterval(-120)
+        snapshot.geschaefte = [
+            GeschaeftSnapshot(
+                id: UUID(), name: "Sollte ignoriert werden", typIDs: [], adresse: nil, breitengrad: nil, laengengrad: nil,
+                erkennungsradius: nil, kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
+                ignorierteArtikelNamen: [], anzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
+            ),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "verwaister-peer", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        #expect(try context.fetch(FetchDescriptor<Geschaeft>()).isEmpty)
     }
 
     @Test

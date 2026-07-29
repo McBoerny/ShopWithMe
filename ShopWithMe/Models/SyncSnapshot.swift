@@ -25,7 +25,17 @@ struct SyncSnapshot: Codable {
     /// Erhöht sich, wenn sich die Struktur dieses Typs (oder eines enthaltenen
     /// DTOs) inkompatibel ändert — Grundlage für künftige Migrationslogik beim
     /// Import, falls ein Peer eine ältere/neuere App-Version nutzt.
-    static let aktuelleFormatVersion = 1
+    ///
+    /// **Version 2 (Architektur-Revision „Alternative A"):** ergänzt
+    /// ``einkaufslistenEintraege`` (vollständiger Einkaufslisten-Inhalt statt
+    /// nur Identität — Bereich A bekommt dasselbe Sicherheitsnetz wie Bereich
+    /// B: ein Peer, der Events verpasst hat oder neu beitritt, holt sich den
+    /// fehlenden Stand beim nächsten Snapshot-Import nach) und ``tombstones``
+    /// (Löschungen von Bereich-B-Entitäten, damit sie von anderen Peers nicht
+    /// unwissentlich wiederbelebt werden). Keine Rückwärtskompatibilität zu
+    /// Version 1 nötig (Projekt ohne feste Nutzerbasis, siehe
+    /// `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`).
+    static let aktuelleFormatVersion = 2
 
     var formatVersion: Int
     var erzeugtAm: Date
@@ -41,9 +51,21 @@ struct SyncSnapshot: Codable {
     var geschaefte: [GeschaeftSnapshot]
     var artikel: [ArtikelSnapshot]
     var einkaufslisten: [EinkaufslisteSnapshot]
+    /// Vollständiger Einkaufslisten-Inhalt (welcher ``Artikel`` mit welcher
+    /// Menge/Notiz auf welcher ``Einkaufsliste`` steht) — additives
+    /// Sicherheitsnetz neben den weiterhin bestehenden, schnelleren
+    /// Bereich-A-`SyncEvent`s (`artikelHinzugefuegt`/`artikelEntfernt`).
+    /// **Nur additiv beim Import** (fehlende Einträge werden ergänzt, nie
+    /// vorhandene entfernt) — Entfernen bleibt Aufgabe der Events, dieser
+    /// Snapshot-Teil fängt nur verpasste/zu spät kommende Hinzufügungen auf.
+    var einkaufslistenEintraege: [EinkaufslistenEintragSnapshot]
     var einkaufsvorgaenge: [EinkaufsvorgangSnapshot]
     var kaufEintraege: [KaufEintragSnapshot]
     var warengruppenDistanzen: [WarengruppenDistanzSnapshot]
+    /// Absichtliche Löschungen von Bereich-B-Entitäten (``Geschaeft``,
+    /// ``Artikel``, ``ArtikelKategorie``, ``Einkaufsliste``, ``KaufEintrag``),
+    /// siehe ``SyncTombstone``.
+    var tombstones: [SyncTombstoneSnapshot]
 }
 
 struct GeschaeftTypSnapshot: Codable {
@@ -119,6 +141,19 @@ struct EinkaufslisteSnapshot: Codable {
     var id: UUID
     var name: String
     var erstelltAm: Date
+}
+
+struct EinkaufslistenEintragSnapshot: Codable {
+    var einkaufslisteID: UUID
+    var artikelID: UUID
+    var menge: Double
+    var notiz: String?
+}
+
+struct SyncTombstoneSnapshot: Codable {
+    var entitaetsArt: String
+    var geloeschteID: UUID
+    var geloeschtAm: Date
 }
 
 struct EinkaufsvorgangSnapshot: Codable {
