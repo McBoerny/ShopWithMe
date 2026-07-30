@@ -848,12 +848,21 @@ identische Zeitstempel-Einträge in `export.json`).
    `maximalesSnapshotAlter`-Check bleibt unberührt: eine über Tage
    unveränderte, aber weiterhin gültige `export.json` ist kein „verwaister
    Peer-Ordner", die 30-Tage-Schwelle bleibt dafür grob genug.
-4. **Event-Datei-Pruning** (`SyncExportService.raeumeAlteEventDateienAuf`):
-   eigene, bereits hochgeladene Event-Dateien werden nach 7 Tagen
-   (`eventDateiAufbewahrung`) gelöscht — vorher unbegrenztes Wachstum (siehe
-   „Offene Alt-Datei-Frage" oben). Läuft höchstens stündlich, unabhängig vom
-   5s/60s-Takt. Löscht bewusst nur die Dateien im Sync-Ordner, nicht die
-   lokalen `SyncEvent`-Datensätze (bleiben Grundlage der Konfliktauflösung).
+4. ~~**Event-Datei-Pruning**~~ — **wieder zurückgenommen** (Live-Test mit zwei
+   Geräten direkt nach Einführung): eigene, bereits hochgeladene Event-Dateien
+   wurden nach 7 Tagen gelöscht, unabhängig davon, ob ein Peer sie überhaupt
+   schon gelesen hatte — „hochgeladen" beschreibt nur, dass DIESES Gerät die
+   Datei geschrieben hat, nicht, dass sie bei allen Peers angekommen ist. Da
+   zwischen den beiden Testgeräten bereits ein länger als die Frist
+   bestehender Sync-Rückstand vorlag, löschte der erste Aufräumlauf genau
+   diesen noch nicht abgeholten Rückstand — abgehakte Artikel synchronisierten
+   danach zwischen den Geräten gar nicht mehr, weil die zugehörigen
+   `artikelAbgehakt`-Event-Dateien bereits weg waren. Die „Offene
+   Alt-Datei-Frage" (unten) bleibt damit bewusst wieder offen: ein sicheres
+   Aufräumen bräuchte eine echte Bestätigung, dass alle Peers eine Datei
+   bereits konsumiert haben (z.B. ein Zuletzt-gelesen-Cursor pro Peer), die es
+   aktuell nicht gibt — ein reiner Zeit-Heuristik-Ersatz dafür ist nicht
+   sicher genug, wie dieser Vorfall zeigt.
 5. **Reentrancy-Guard in `EinkaufenView.einkaufSicherstellen()`:** mehrere
    unabhängige `.onChange`-Handler (`ausgewaehltesGeschaeft`,
    `ausgewaehlteListe`, `offeneEinkaufsvorgaenge.count`) konnten nebenläufig
@@ -906,8 +915,12 @@ Architektur-Eingriff stehen.
 **Verifikationsstand:** `xcodebuild build`/`build-for-testing` grün, neue
 Unit-Tests für die Tombstone-Lücken (`SyncSnapshotImportServiceTests`) und die
 Einkaufsvorgang-Retention (`PreisHistorieBereinigungServiceTests`) ergänzt.
-Kein Live-Test mit echten Geräten für die Sync-Effizienz-Änderungen (Punkte
-1–4) durchgeführt — insbesondere der Fingerabdruck-Vergleich in Punkt 3
-verdient eine Beobachtung über mehrere reale Zyklen, ob die
+Ein Live-Test mit zwei echten Geräten direkt nach dieser Optimierungsrunde
+deckte den unter Punkt 4 beschriebenen Regressions-Fund auf (Event-Pruning
+zurückgenommen, s.o.) — noch nicht erneut mit echten Geräten nachverifiziert,
+dass der Revert die gemeldete Sync-Störung tatsächlich behebt. Die
+Fingerabdruck-basierte `export.json`-Skip-Logik (Punkt 3) verdient ebenfalls
+weiterhin eine Beobachtung über mehrere reale Zyklen, ob die
 Fetch-Reihenfolge-Normalisierung in der Praxis tatsächlich stabil genug ist,
-um unnötige Schreibvorgänge zuverlässig zu vermeiden.
+um unnötige Schreibvorgänge zuverlässig zu vermeiden, ohne echte Änderungen
+fälschlich zu unterdrücken.

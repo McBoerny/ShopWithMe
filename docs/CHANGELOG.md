@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.9 (Build 155) — Fix: Endlos-Retry-Log für Events auf gelöschte Referenzen
+
+- `SyncImportService`: Ein empfangenes Event, dessen referenzierte
+  `Einkaufsliste`/`Einkaufsvorgang`/`Artikel` per Tombstone als absichtlich
+  gelöscht markiert ist, wird jetzt sofort als bekannt markiert statt bei
+  jedem Sync-Zyklus erneut als `sync_event_nicht_anwendbar` protokolliert zu
+  werden — vorher lief der Retry für so eine Referenz endlos, weil sie (im
+  Unterschied zu einer nur noch nicht angekommenen Referenz) nie entstehen
+  konnte.
+
+## v0.9 — Fix: Event-Datei-Pruning löschte nicht abgeholten Sync-Rückstand
+
+- Revert des in der vorherigen DB-Optimierungsrunde eingeführten
+  Event-Datei-Pruning (`SyncExportService`): „hochgeladen" bedeutete nur, dass
+  das eigene Gerät die Datei geschrieben hatte, nicht, dass ein Peer sie schon
+  gelesen hat. Bei einem echten Zwei-Geräte-Test löschte der erste Aufräumlauf
+  einen bereits bestehenden, noch nicht abgeholten Sync-Rückstand —
+  `artikelAbgehakt`-Events kamen danach auf dem zweiten Gerät gar nicht mehr
+  an. Ein sicheres Aufräumen bräuchte eine echte Peer-Lese-Bestätigung, die es
+  aktuell nicht gibt; bis dahin bleibt „Offene Alt-Datei-Frage" (siehe
+  `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`) bewusst wieder offen.
+- Die übrigen Änderungen der DB-Optimierungsrunde (gedrosselte
+  Peer-Metadaten, `hasChanges`-Gate, `export.json`-Fingerabdruck-Skip,
+  Reentrancy-Guard, Auto-Close, Einkaufsvorgang-Retention) bleiben unverändert
+  bestehen.
+
 ## v0.9 (Build 152) — DB-Optimierung: weniger unnötige Sync-Schreibvorgänge, Einkaufsvorgang-Aufräumung (GitHub #60/#70/#71)
 
 - Sync-Zyklus schreibt nicht mehr unbedingt bei jedem Tick (5s/60s): lokale
