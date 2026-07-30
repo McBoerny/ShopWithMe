@@ -134,7 +134,13 @@ dem Abschließen ein kurzer Hinweis, dass sich die App automatisch anpasst.
 - Die Geschäftsauswahl wird automatisch auf „Kein Geschäft“ zurückgesetzt —
   sowohl nach dem Abschließen eines Einkaufs als auch nach 3 Stunden ohne
   Interaktion mit der Einkaufsliste, damit ein neuer Einkauf nicht versehentlich
-  am zuletzt genutzten Geschäft weiterläuft.
+  am zuletzt genutzten Geschäft weiterläuft. Der Einkauf selbst wird dabei
+  automatisch mit abgeschlossen (kein manuelles Antippen von
+  „Einkauf abschließen“ nötig), damit er später von der Preishistorie-Bereinigung
+  erreicht werden kann (siehe Einstellungen → „Preishistorie“ unten). Ohne
+  gewähltes Geschäft — etwa wenn du über mehrere Tage verteilt nach Bedarf
+  abhakst, ohne je aktiv abzuschließen — gilt eine deutlich großzügigere Frist
+  von 24 Stunden, damit dieser Anwendungsfall nicht unterbrochen wird.
 - **Gemeinsam einkaufen (Datensynchronisation aktiv, siehe unten):** Hakt ein
   anderes Gerät einen Artikel ab, bevor du selbst dazu kommst, zeigt ein kurzer,
   sich von selbst wieder ausblendender Hinweis („Bereits von {Gerätename}
@@ -245,7 +251,9 @@ werden ausgetauscht.
   „KI-Vorschlag“ markiert. Reicht die vorinstallierte Auswahl an Geschäftstypen
   nicht aus, lässt sich hier oder direkt beim Anlegen eines Geschäfts (Abschnitt
   „Typ“) ein neuer, eigener Geschäftstyp (inkl. Symbol/Farbe) anlegen.
-- **Preishistorie** — Aufbewahrungsdauer/Bereinigung alter Preiseinträge.
+- **Preishistorie** — Aufbewahrungsdauer/Bereinigung alter Preiseinträge; räumt ab
+  derselben Frist zusätzlich alte, abgeschlossene Einkäufe ohne verbleibende
+  Preiseinträge mit auf.
 - **Datenbank & Speicherort** — verlegt deine Daten in einen selbst gewählten
   Ordner, z.B. einen lokal gespiegelten Cloud-Ordner. Kein automatischer
   Mehrgeräte-Sync (kein iCloud-Sync) — bei einem Cloud-Ordner die App bewusst nur

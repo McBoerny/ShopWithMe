@@ -103,9 +103,23 @@ enum PreisHistorieBereinigungService {
 
     /// Löscht alle ``KaufEintrag``e, deren ``KaufEintrag/datum`` mehr als
     /// `aufbewahrung.tage` Tage vor `jetzt` liegt — außer solchen, die zu einem noch
-    /// nicht abgeschlossenen ``Einkaufsvorgang`` gehören. Liefert `nil` für
-    /// ``PreisHistorieAufbewahrung/nie`` sofort ohne Fetch zurück. Liefert die Anzahl
-    /// gelöschter Einträge.
+    /// nicht abgeschlossenen ``Einkaufsvorgang`` gehören. Räumt zusätzlich
+    /// abgeschlossene ``Einkaufsvorgang``e auf, deren ``Einkaufsvorgang/endZeit``
+    /// ebenfalls vor `stichtag` liegt und die (nach der KaufEintrag-Bereinigung
+    /// oben) keine verbleibenden ``KaufEintrag``e mehr haben — ein alter,
+    /// leerer Vorgang wäre sonst für immer im Bestand geblieben (siehe GitHub
+    /// #71: `Einkaufsvorgang` hatte bislang gar keine Aufräumlogik). Beide
+    /// Löschungen hinterlassen einen ``SyncTombstone``, damit sie im
+    /// Mehrgeräte-Fall nicht von einem Peer, der die Einträge noch führt,
+    /// unwissentlich wiederbelebt werden — vorher bewusst unterlassen (siehe
+    /// `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`, Abschnitt 11 „Bewusst
+    /// nicht enthalten"), was die Bereinigung im Mehrgeräte-Fall faktisch
+    /// wirkungslos machte, sobald mindestens ein Peer die Einträge noch hatte.
+    ///
+    /// Liefert `0` für ``PreisHistorieAufbewahrung/nie`` sofort ohne Fetch
+    /// zurück. Liefert die Anzahl gelöschter ``KaufEintrag``e (unverändertes
+    /// Rückgabewert-Verhalten — die Anzahl mitgelöschter Einkaufsvorgänge wird
+    /// nicht mitgezählt).
     @MainActor
     @discardableResult
     static func bereinigen(
@@ -117,23 +131,44 @@ enum PreisHistorieBereinigungService {
               let stichtag = Calendar.current.date(byAdding: .day, value: -tage, to: jetzt)
         else { return 0 }
 
-        let deskriptor = FetchDescriptor<KaufEintrag>(predicate: #Predicate { $0.datum < stichtag })
-        let kandidaten = (try? context.fetch(deskriptor)) ?? []
-        let zuLoeschen = kandidaten.filter { $0.einkaufsvorgang?.istAbgeschlossen ?? true }
-        guard !zuLoeschen.isEmpty else { return 0 }
+        let kaufEintragDeskriptor = FetchDescriptor<KaufEintrag>(predicate: #Predicate { $0.datum < stichtag })
+        let kaufEintragKandidaten = (try? context.fetch(kaufEintragDeskriptor)) ?? []
+        let zuLoeschendeKaufEintraege = kaufEintragKandidaten.filter { $0.einkaufsvorgang?.istAbgeschlossen ?? true }
+
+        let vorgangDeskriptor = FetchDescriptor<Einkaufsvorgang>(
+            predicate: #Predicate { $0.endZeit != nil && $0.endZeit! < stichtag }
+        )
+        let vorgangKandidaten = (try? context.fetch(vorgangDeskriptor)) ?? []
+
+        guard !zuLoeschendeKaufEintraege.isEmpty || !vorgangKandidaten.isEmpty else { return 0 }
+
         // Nur Identitäten über die `await`-Grenze hinweg sichern (siehe
         // ``ModelReference``) — während des Micro-Lease-Erwerbs kann ein
         // nebenläufiger Sync-Zyklus einen dieser Einträge bereits gelöscht
         // haben.
-        let zuLoeschendeReferenzen = zuLoeschen.map { ModelReference($0) }
+        let kaufEintragReferenzen = zuLoeschendeKaufEintraege.map { ModelReference($0) }
+        let vorgangReferenzen = vorgangKandidaten.map { ModelReference($0) }
 
+        var geloeschteKaufEintraegeAnzahl = 0
         await DatabaseLeaseService.performMicroLease(context: context) {
-            for referenz in zuLoeschendeReferenzen {
+            for referenz in kaufEintragReferenzen {
                 guard let eintrag = referenz.resolved(in: context) else { continue }
+                SyncTombstoneService.markiereGeloescht(art: SyncEntitaetsArt.kaufEintrag, id: eintrag.id, context: context)
                 context.delete(eintrag)
             }
+            geloeschteKaufEintraegeAnzahl = kaufEintragReferenzen.count
+
+            // Erst NACH den obigen Löschungen prüfen, ob ein Vorgang jetzt
+            // leer ist — ein Vorgang, dessen letzte KaufEintraege gerade eben
+            // durch diesen Aufruf entfernt wurden, soll im selben Durchlauf
+            // mit aufgeräumt werden, nicht erst beim nächsten.
+            for referenz in vorgangReferenzen {
+                guard let vorgang = referenz.resolved(in: context), vorgang.kaufEintraege.isEmpty else { continue }
+                SyncTombstoneService.markiereGeloescht(art: SyncEntitaetsArt.einkaufsvorgang, id: vorgang.id, context: context)
+                context.delete(vorgang)
+            }
         }
-        return zuLoeschen.count
+        return geloeschteKaufEintraegeAnzahl
     }
 
     /// Bereinigt jetzt anhand von ``aktuelleAufbewahrung`` und aktualisiert

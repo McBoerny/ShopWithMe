@@ -32,10 +32,22 @@ struct EinkaufenView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     /// Ab dieser Dauer ohne Interaktion mit der Einkaufsliste (Abhaken, Mengen
-    /// ändern, Entfernen, Abschließen) setzt ``inaktivitaetPruefen()`` die
-    /// Geschäftsauswahl zurück (GitHub #51) — unabhängig davon, ob die App
-    /// dabei im Vorder- oder Hintergrund war.
-    private static let inaktivitaetsSchwelle: TimeInterval = 3 * 60 * 60
+    /// ändern, Entfernen, Abschließen) schließt ``inaktivitaetPruefen()`` den
+    /// aktuellen Einkaufsvorgang automatisch ab und setzt bei gewähltem
+    /// Geschäft zusätzlich die Geschäftsauswahl zurück (GitHub #51) —
+    /// unabhängig davon, ob die App dabei im Vorder- oder Hintergrund war. Ein
+    /// Ladenbesuch ist naturgemäß zeitlich begrenzt (typischerweise 1–3h).
+    private static let inaktivitaetsSchwelleMitGeschaeft: TimeInterval = 3 * 60 * 60
+    /// Dieselbe Schwelle für den Fall OHNE gewähltes Geschäft (GitHub
+    /// #71-Diskussion): ohne Ladenbezug wird oft über mehrere Tage verteilt
+    /// nach Bedarf abgehakt, ohne dass der Einkauf je aktiv "abgeschlossen"
+    /// wird — eine kurze Schwelle wie im Laden würde genau diesen
+    /// Anwendungsfall unterbrechen. Ein deutlich längeres Fenster schließt den
+    /// Vorgang trotzdem irgendwann automatisch ab, sobald wirklich keine
+    /// Aktivität mehr stattfindet — Voraussetzung dafür, dass
+    /// ``PreisHistorieBereinigungService`` (die nur abgeschlossene Vorgänge
+    /// anfasst) ihn je erreichen kann.
+    private static let inaktivitaetsSchwelleOhneGeschaeft: TimeInterval = 24 * 60 * 60
 
     @State private var ausgewaehltesGeschaeft: Geschaeft?
     @State private var ausgewaehlteListe: Einkaufsliste?
@@ -51,6 +63,17 @@ struct EinkaufenView: View {
     /// Zeitpunkt der letzten Interaktion mit der Einkaufsliste, Grundlage für
     /// ``inaktivitaetPruefen()`` (GitHub #51).
     @State private var letzteInteraktion = Date.now
+    /// Reentrancy-Schutz für ``einkaufSicherstellen()`` (GitHub #71-Verdacht):
+    /// mehrere `.onChange`-Handler (``ausgewaehltesGeschaeft``,
+    /// ``ausgewaehlteListe``, `offeneEinkaufsvorgaenge.count`) können
+    /// nebenläufig je einen eigenen `Task { await einkaufSicherstellen() }`
+    /// auslösen. Ohne diesen Schutz können zwei solcher Tasks den
+    /// `aktuellerEinkauf == nil`-Guard beide (noch vor dem jeweils anderen
+    /// Insert) als wahr lesen und dadurch mehrfache, echte Duplikat-Vorgänge
+    /// für dieselbe Kombination anlegen. Wird als allererste, synchrone
+    /// Anweisung gesetzt (vor dem ersten `await`) — auf dem `MainActor`, auf
+    /// dem alle Aufrufer laufen, ist das race-frei.
+    @State private var einkaufSicherstellenLaeuft = false
 
     private var aktuellerEinkauf: Einkaufsvorgang? {
         guard let ausgewaehlteListe else { return nil }
@@ -177,13 +200,43 @@ struct EinkaufenView: View {
         }
     }
 
-    /// Setzt ``ausgewaehltesGeschaeft`` zurück, wenn seit ``letzteInteraktion``
-    /// mindestens ``inaktivitaetsSchwelle`` vergangen ist (GitHub #51) — geprüft
-    /// per Timer (Vordergrund) und beim Zurückkehren aus dem Hintergrund.
+    /// Schließt den aktuellen Einkaufsvorgang automatisch ab, wenn seit
+    /// ``letzteInteraktion`` mindestens die passende Schwelle vergangen ist —
+    /// ``inaktivitaetsSchwelleMitGeschaeft`` mit gewähltem Geschäft, sonst
+    /// ``inaktivitaetsSchwelleOhneGeschaeft`` (GitHub #51/#71-Diskussion).
+    /// Läuft dabei denselben Lernschritt wie der manuelle
+    /// "Einkauf abschließen"-Button (``EinkaufslisteView/einkaufAbschliessen()``),
+    /// aber bewusst OHNE Umbau-Hinweis — beim automatischen Schließen ist
+    /// niemand aktiv am Bildschirm, der einen nachträglichen Dialog sinnvoll
+    /// einordnen könnte; der Lernschritt selbst bleibt trotzdem wertvoll, ein
+    /// später erkannter Umbau wird beim nächsten *manuellen* Abschließen in
+    /// diesem Geschäft ganz normal gemeldet. Setzt bei gewähltem Geschäft
+    /// zusätzlich ``ausgewaehltesGeschaeft`` zurück (bestehendes Verhalten) —
+    /// ein neuer, offener Nachfolge-Vorgang entsteht danach automatisch über
+    /// den bestehenden `.onChange(of: offeneEinkaufsvorgaenge.count)`-Handler.
+    /// Geprüft per Timer (Vordergrund) und beim Zurückkehren aus dem
+    /// Hintergrund.
     private func inaktivitaetPruefen() {
-        guard ausgewaehltesGeschaeft != nil else { return }
-        guard Date.now.timeIntervalSince(letzteInteraktion) >= Self.inaktivitaetsSchwelle else { return }
-        ausgewaehltesGeschaeft = nil
+        guard let einkauf = aktuellerEinkauf else { return }
+        let schwelle = ausgewaehltesGeschaeft != nil ? Self.inaktivitaetsSchwelleMitGeschaeft : Self.inaktivitaetsSchwelleOhneGeschaeft
+        guard Date.now.timeIntervalSince(letzteInteraktion) >= schwelle else { return }
+
+        let hatteGeschaeft = ausgewaehltesGeschaeft != nil
+        // Nur die Identität über die `await`-Grenze hinweg sichern (siehe
+        // ``ModelReference``) — während des Micro-Lease-Erwerbs kann ein
+        // nebenläufiger Sync-Zyklus diesen Vorgang bereits geschlossen oder
+        // gelöscht haben.
+        let referenz = ModelReference(einkauf)
+        Task {
+            await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                guard let einkauf = referenz.resolved(in: modelContext), !einkauf.istAbgeschlossen else { return }
+                einkauf.abschliessen()
+                WarengruppenDistanzService.verarbeiteEinkauf(einkauf, context: modelContext)
+            }
+        }
+        if hatteGeschaeft {
+            ausgewaehltesGeschaeft = nil
+        }
     }
 
     /// Reaktion auf einen Tipp auf „Hinzufügen“ im ``GeschaeftVorschlagBanner`` für
@@ -424,6 +477,9 @@ struct EinkaufenView: View {
     /// `docs/DATABASE_CONCURRENCY.md` → „Vollständiger Schreibvorgang-Katalog“).
     private func einkaufSicherstellen() async {
         guard let ausgewaehlteListe, aktuellerEinkauf == nil else { return }
+        guard !einkaufSicherstellenLaeuft else { return }
+        einkaufSicherstellenLaeuft = true
+        defer { einkaufSicherstellenLaeuft = false }
         await DatabaseLeaseService.performMicroLease(context: modelContext) {
             let vorgang = Einkaufsvorgang(geschaeft: ausgewaehltesGeschaeft, einkaufsliste: ausgewaehlteListe)
             modelContext.insert(vorgang)

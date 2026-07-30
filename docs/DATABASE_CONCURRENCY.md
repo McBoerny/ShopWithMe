@@ -447,6 +447,14 @@ Priority-Maßnahme allein nicht ausreichen. Die bereits vorhandene
 Zyklusdauer-Protokollierung (`SyncDebugLogger`, `sync_zyklus_start`/`-ende`)
 liefert dafür bei Bedarf echte Messdaten statt Vermutungen.
 
+**Nachtrag (DB-Optimierungsrunde, GitHub #60/#70/#71):** Bevor dieser größere
+Eingriff erwogen wird, sollte mit `SyncDebugLogger` neu gemessen werden — eine
+separate Optimierungsrunde hat mehrere unbedingte Schreibvorgänge pro
+Sync-Zyklus (auch ohne inhaltliche Änderung) beseitigt, siehe
+`docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` → Abschnitt 14. Das dürfte die
+tatsächlich gemessene Zyklusdauer bereits spürbar senken, unabhängig vom hier
+beschriebenen, weiterhin zurückgestellten Architektur-Eingriff.
+
 ## Behobener Absturz: fehlende `inverse`-Deklarationen führen zu baumelnden Referenzen
 
 Wiederkehrender Absturz direkt beim App-Start: `SwiftData/BackingData.swift:1039:

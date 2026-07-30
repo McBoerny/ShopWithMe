@@ -36,6 +36,7 @@ enum SyncDebugLogger {
         case einkaufslistenStand = "sync_einkaufslisten_stand"
         case eventNichtAnwendbar = "sync_event_nicht_anwendbar"
         case peerVerworfenAltersgrenze = "sync_peer_verworfen_altersgrenze"
+        case snapshotUnveraendertUebersprungen = "sync_snapshot_unveraendert_uebersprungen"
         case debugModeEnabled = "debug_mode_enabled"
         case debugModeDisabled = "debug_mode_disabled"
     }

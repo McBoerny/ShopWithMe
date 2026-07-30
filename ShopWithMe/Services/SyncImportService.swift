@@ -51,6 +51,11 @@ enum SyncImportService {
             }
         }
 
+        // Nur speichern, wenn tatsächlich etwas übernommen wurde — ein reiner
+        // Poll-Zyklus ohne neue fremde Events (der Normalfall) soll keine
+        // Store-Änderung erzwingen (GitHub #60/#70, siehe Typ-Doku
+        // ``SyncSnapshotImportService``).
+        guard context.hasChanges else { return }
         try? context.save()
     }
 

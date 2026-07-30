@@ -79,6 +79,14 @@ enum SyncSnapshotImportService {
         }
 
         protokolliereEinkaufslistenStand(context: context)
+        // Nur speichern, wenn ein Merge tatsächlich etwas verändert hat — ohne
+        // diese Prüfung erzwang jeder Poll-Zyklus (5s/60s) eine echte
+        // Store-Änderung, selbst wenn kein Peer neue Daten hatte (GitHub
+        // #60/#70). ``context.hasChanges`` erfasst sowohl echte
+        // Bereich-B/C/D-Änderungen als auch die (jetzt gedrosselte, siehe
+        // ``SyncPeerInfo/aktualisiere(peerGeraeteID:geraeteName:zuletztGesehen:context:)``)
+        // Peer-Metadaten-Pflege.
+        guard context.hasChanges else { return }
         try? context.save()
     }
 
@@ -93,6 +101,7 @@ enum SyncSnapshotImportService {
     @MainActor
     static func importiereEinzelnenSnapshot(_ snapshot: SyncSnapshot, peerGeraeteID: String, context: ModelContext) {
         merge(snapshot, peerGeraeteID: peerGeraeteID, context: context)
+        guard context.hasChanges else { return }
         try? context.save()
     }
 
@@ -193,6 +202,10 @@ enum SyncSnapshotImportService {
             if let objekt = try? context.fetch(deskriptor).first { context.delete(objekt) }
         case SyncEntitaetsArt.kaufEintrag:
             var deskriptor = FetchDescriptor<KaufEintrag>(predicate: #Predicate { $0.id == id })
+            deskriptor.fetchLimit = 1
+            if let objekt = try? context.fetch(deskriptor).first { context.delete(objekt) }
+        case SyncEntitaetsArt.einkaufsvorgang:
+            var deskriptor = FetchDescriptor<Einkaufsvorgang>(predicate: #Predicate { $0.id == id })
             deskriptor.fetchLimit = 1
             if let objekt = try? context.fetch(deskriptor).first { context.delete(objekt) }
         default:
@@ -530,6 +543,7 @@ enum SyncSnapshotImportService {
     ) -> [UUID: Einkaufsvorgang] {
         var zuordnung: [UUID: Einkaufsvorgang] = [:]
         let alleLokalen = (try? context.fetch(FetchDescriptor<Einkaufsvorgang>())) ?? []
+        let geloeschteIDs = SyncTombstoneService.geloeschteIDs(art: SyncEntitaetsArt.einkaufsvorgang, context: context)
         for eintrag in remote {
             let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(
                 fuer: eintrag.id, art: SyncEntitaetsArt.einkaufsvorgang, context: context
@@ -563,6 +577,12 @@ enum SyncSnapshotImportService {
                 }
                 vorhandener = offenerTreffer
                 umgeleitetAufNachfolger = false
+            } else if geloeschteIDs.contains(aufgeloesteID) {
+                // Retention-gelöschter (oder anderweitig entfernter) Vorgang
+                // eines Peers, der ihn selbst noch führt — Tombstone
+                // verhindert die sonst destruktionslose Wiederbelebung
+                // (analog ``mergeGeschaefte``/``mergeArtikel``).
+                continue
             } else {
                 // Bewusst kein `abschliessen()` (würde zusätzlich
                 // `Geschaeft.anzahlEinkaufsvorgaenge` erhöhen — das übernimmt
@@ -610,8 +630,13 @@ enum SyncSnapshotImportService {
         geschaeftZuordnung: [UUID: Geschaeft], kategorieZuordnung: [UUID: ArtikelKategorie], context: ModelContext
     ) {
         let alleLokalen = (try? context.fetch(FetchDescriptor<KaufEintrag>())) ?? []
+        let geloeschteIDs = SyncTombstoneService.geloeschteIDs(art: SyncEntitaetsArt.kaufEintrag, context: context)
         for eintrag in remote {
             guard alleLokalen.first(where: { $0.id == eintrag.id }) == nil else { continue }
+            // Retention- oder manuell gelöschter Eintrag eines Peers, der ihn
+            // selbst noch führt — Tombstone verhindert die Wiederbelebung
+            // (analog Bereich-B-Merges).
+            guard !geloeschteIDs.contains(eintrag.id) else { continue }
             let neuer = KaufEintrag(
                 artikel: eintrag.artikelID.flatMap { artikelZuordnung[$0] },
                 geschaeft: eintrag.geschaeftID.flatMap { geschaeftZuordnung[$0] },

@@ -810,3 +810,104 @@ wird — im echten Prozess-Neustart-Fall kann es diese Restaktivität aus dem
 alten Prozess dagegen gar nicht geben. Der volle Ablauf (Neustart-Hinweis →
 tatsächlicher Neustart → korrekt befüllter Store) muss daher manuell auf
 einem echten Gerät verifiziert werden.
+
+## 14. DB-Optimierung — Datenminimierung im Sync-Zyklus (GitHub #60/#70/#71)
+
+**Ausgangsbefund:** Eine Analyse der offenen DB-/Sync-Issues zeigte, dass der
+größte Effizienzverlust nicht am JSON-Format lag, sondern daran, dass
+`SyncPollingService.syncZyklus()` bei **jedem** Tick (5s aktiv einkaufend /
+60s ruhend) unbedingt schrieb — lokal *und* in den Sync-Ordner — selbst wenn
+sich am eigentlichen Datenbestand seit dem letzten Zyklus nichts geändert
+hatte. Das erklärte mehrere Symptome gleichzeitig: #60 (Flackern der
+Einkaufsliste alle 5s — jeder Zyklus löste eine echte, für die Liste
+irrelevante Store-Änderung aus, die `@Query`-Beobachter trotzdem
+benachrichtigte), #70 (häufige Schreibzugriffe) und #71 (viele fast
+identische Zeitstempel-Einträge in `export.json`).
+
+**Umgesetzt:**
+
+1. **`SyncPeerInfo.zuletztGesehen` gedrosselt** (`Models/SyncPeerInfo.swift`):
+   wurde bisher bei jedem Import eines Peer-Snapshots unbedingt auf dessen
+   (bei jedem Zyklus neuem) `erzeugtAm` gesetzt — eine echte SwiftData-Änderung
+   pro Zyklus, unabhängig vom eigentlichen Inhalt. Wird jetzt nur noch bei
+   einem Delta ≥ 1h geschrieben; die einzige Konsumentin
+   (`SyncSnapshotImportService.maximalesSnapshotAlter`, 30-Tage-Schwelle)
+   braucht keine feinere Auflösung.
+2. **`context.save()` nur bei `context.hasChanges`**
+   (`SyncImportService.importiereNeueEvents`,
+   `SyncSnapshotImportService.importiereSnapshots`/`importiereEinzelnenSnapshot`):
+   ein reiner Poll-Zyklus ohne neue fremde Daten erzwingt jetzt keine
+   Store-Mutation mehr.
+3. **`export.json` nur bei geändertem Inhalt schreiben**
+   (`SyncSnapshotExportService`): ein SHA256-Fingerabdruck über den
+   normalisierten Snapshot-Inhalt (Meta-Felder `erzeugtAm`/`geraeteID`/
+   `geraeteName` ausgenommen, alle Teil-Arrays vor dem Hashen nach `UUID`
+   sortiert, damit reine Fetch-Reihenfolge-Unterschiede nicht als Änderung
+   zählen) wird mit dem zuletzt tatsächlich geschriebenen verglichen —
+   identisch → weder Encoding noch Datei-Schreiben. Der
+   `maximalesSnapshotAlter`-Check bleibt unberührt: eine über Tage
+   unveränderte, aber weiterhin gültige `export.json` ist kein „verwaister
+   Peer-Ordner", die 30-Tage-Schwelle bleibt dafür grob genug.
+4. **Event-Datei-Pruning** (`SyncExportService.raeumeAlteEventDateienAuf`):
+   eigene, bereits hochgeladene Event-Dateien werden nach 7 Tagen
+   (`eventDateiAufbewahrung`) gelöscht — vorher unbegrenztes Wachstum (siehe
+   „Offene Alt-Datei-Frage" oben). Läuft höchstens stündlich, unabhängig vom
+   5s/60s-Takt. Löscht bewusst nur die Dateien im Sync-Ordner, nicht die
+   lokalen `SyncEvent`-Datensätze (bleiben Grundlage der Konfliktauflösung).
+5. **Reentrancy-Guard in `EinkaufenView.einkaufSicherstellen()`:** mehrere
+   unabhängige `.onChange`-Handler (`ausgewaehltesGeschaeft`,
+   `ausgewaehlteListe`, `offeneEinkaufsvorgaenge.count`) konnten nebenläufig
+   je einen eigenen `Task` auslösen, die den `aktuellerEinkauf ==
+   nil`-Guard beide vor dem jeweils anderen Insert als wahr lasen — Verdacht
+   auf (Mit-)Ursache für die in #71 beobachteten, im Abstand von
+   Millisekunden angelegten `Einkaufsvorgang`-Duplikate. Ein
+   `@State`-Reentrancy-Flag (gesetzt als erste synchrone Anweisung vor dem
+   ersten `await`, auf dem `MainActor` dadurch race-frei) verhindert das.
+6. **Auto-Close bei Inaktivität generalisiert** (`EinkaufenView.inaktivitaetPruefen()`,
+   vorher nur Geschäftsauswahl-Reset, GitHub #51): ein Ladenbesuch ist
+   naturgemäß zeitlich begrenzt (1–3h) und wird nach
+   `inaktivitaetsSchwelleMitGeschaeft` (3h) automatisch abgeschlossen —
+   inklusive Lernschritt (`WarengruppenDistanzService.verarbeiteEinkauf`),
+   aber bewusst OHNE Umbau-Hinweis-Dialog (niemand ist beim automatischen
+   Schließen aktiv am Bildschirm, um ihn sinnvoll einzuordnen; ein später
+   erkannter Umbau wird beim nächsten *manuellen* Abschließen ganz normal
+   gemeldet). Ohne gewähltes Geschäft — reines bedarfsweises Abhaken über
+   mehrere Tage verteilt, ohne je „Einkauf abschließen" zu tippen — gilt
+   `inaktivitaetsSchwelleOhneGeschaeft` (24h), damit dieser Anwendungsfall
+   nicht gestört wird. **Wichtige Voraussetzung für Punkt 7:** Vorher gab es
+   für diesen Fall überhaupt keinen Abschluss-Mechanismus — ein
+   `Einkaufsvorgang` blieb für immer `offen`, wodurch ihn
+   `PreisHistorieBereinigungService` (die nur abgeschlossene Vorgänge
+   anfasst) strukturell nie erreichen konnte.
+7. **Retention-Bereinigung auf `Einkaufsvorgang` ausgeweitet + Tombstones für
+   Retention-Löschungen** — siehe `docs/PREISHISTORIE_BEREINIGUNG.md` für
+   Details. Kurzfassung: dieselbe Aufbewahrungsfrist wie für `KaufEintrag`
+   räumt jetzt auch alte, abgeschlossene, leere `Einkaufsvorgang`e auf; beide
+   Löschungen hinterlassen jetzt einen `SyncTombstone` (vorher bewusst
+   unterlassen, siehe Abschnitt 11 oben — das machte die Bereinigung im
+   Mehrgeräte-Fall aber faktisch wirkungslos, da der additive Bereich-C-Merge
+   den gelöschten Eintrag vom nächsten Peer zurückbekam). Dabei zwei
+   vorbestehende Lücken im Tombstone-Mechanismus selbst geschlossen:
+   `mergeEinkaufsvorgaenge`/`mergeKaufEintraege` prüften ihren
+   "neu anlegen"-Zweig bislang nicht gegen `SyncTombstoneService.geloeschteIDs`
+   (anders als die Bereich-B-Merges) und `loescheFallsVorhanden` kannte noch
+   keinen `Einkaufsvorgang`-Fall — ohne beides hätte ein neuer
+   Einkaufsvorgang-Tombstone gar nicht gewirkt.
+
+**Bewusst zurückgestellt:** Der ursprünglich mit angedachte zweite,
+hintergrundgebundene `ModelContext` für die Merge-Berechnung (Punkt 5 der
+Priorisierung, siehe `docs/DATABASE_CONCURRENCY.md` → „Teilbehobenes Problem:
+langsamer App-Start durch Sync-Zyklus") bleibt an eine Messung gebunden, wie
+dort selbst vorgesehen — Punkte 1–3 oben dürften die tatsächlich gemessene
+Zyklusdauer bereits spürbar senken (weniger/kleinere Saves), eine
+Neubewertung mit echten `SyncDebugLogger`-Zahlen sollte vor diesem größeren
+Architektur-Eingriff stehen.
+
+**Verifikationsstand:** `xcodebuild build`/`build-for-testing` grün, neue
+Unit-Tests für die Tombstone-Lücken (`SyncSnapshotImportServiceTests`) und die
+Einkaufsvorgang-Retention (`PreisHistorieBereinigungServiceTests`) ergänzt.
+Kein Live-Test mit echten Geräten für die Sync-Effizienz-Änderungen (Punkte
+1–4) durchgeführt — insbesondere der Fingerabdruck-Vergleich in Punkt 3
+verdient eine Beobachtung über mehrere reale Zyklen, ob die
+Fetch-Reihenfolge-Normalisierung in der Praxis tatsächlich stabil genug ist,
+um unnötige Schreibvorgänge zuverlässig zu vermeiden.

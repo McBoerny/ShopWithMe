@@ -39,16 +39,35 @@ extension SyncPeerInfo {
         zuletztGesehenRaw ?? .distantPast
     }
 
+    /// Grobe Auflösung für das Nachführen von ``zuletztGesehenRaw`` — der Wert
+    /// dient einzig der 30-Tage-Alters-Schwelle
+    /// (``SyncSnapshotImportService/maximalesSnapshotAlter``), die keine
+    /// Sekundengenauigkeit braucht. Ohne diese Schwelle würde
+    /// ``aktualisiere(peerGeraeteID:geraeteName:zuletztGesehen:context:)`` bei
+    /// **jedem** Sync-Zyklus (5s/60s) eine echte SwiftData-Änderung erzwingen,
+    /// weil der übergebene `zuletztGesehen`-Wert (``SyncSnapshot/erzeugtAm``
+    /// des Peers) bei unbedingtem Export bislang bei jedem Zyklus neu war —
+    /// unabhängig davon, ob sich am eigentlichen Datenbestand etwas geändert
+    /// hat. Diese unnötige, wiederkehrende Store-Mutation war eine der
+    /// Ursachen für GitHub #60 (Flackern) und #70 (häufige Schreibzugriffe).
+    private static let zuletztGesehenAufloesung: TimeInterval = 60 * 60
+
     /// Merkt sich (oder aktualisiert) Anzeigenamen und Zuletzt-gesehen-Zeitpunkt
-    /// von `peerGeraeteID`.
+    /// von `peerGeraeteID` — schreibt beide Felder nur bei tatsächlicher
+    /// Änderung (Name) bzw. bei Überschreiten der groben Auflösung
+    /// (Zuletzt-gesehen), siehe ``zuletztGesehenAufloesung``.
     static func aktualisiere(peerGeraeteID: String, geraeteName: String, zuletztGesehen: Date, context: ModelContext) {
         var deskriptor = FetchDescriptor<SyncPeerInfo>(
             predicate: #Predicate { $0.peerGeraeteID == peerGeraeteID }
         )
         deskriptor.fetchLimit = 1
         if let bestehende = try? context.fetch(deskriptor).first {
-            bestehende.geraeteName = geraeteName
-            bestehende.zuletztGesehenRaw = zuletztGesehen
+            if bestehende.geraeteName != geraeteName {
+                bestehende.geraeteName = geraeteName
+            }
+            if abs(zuletztGesehen.timeIntervalSince(bestehende.zuletztGesehen)) >= zuletztGesehenAufloesung {
+                bestehende.zuletztGesehenRaw = zuletztGesehen
+            }
         } else {
             context.insert(SyncPeerInfo(peerGeraeteID: peerGeraeteID, geraeteName: geraeteName, zuletztGesehen: zuletztGesehen))
         }

@@ -288,6 +288,79 @@ struct SyncSnapshotImportServiceTests {
         #expect(try context.fetch(FetchDescriptor<Geschaeft>()).isEmpty)
     }
 
+    /// Deckt die beim Einführen der Retention-Tombstones (`PreisHistorieBereinigungService`)
+    /// gefundene Lücke ab: ``SyncSnapshotImportService`` prüfte beim Neuanlegen
+    /// eines ``Einkaufsvorgang`` bislang nicht gegen Tombstones — anders als
+    /// ``Geschaeft``/``Artikel``/``Einkaufsliste``.
+    @Test
+    func tombstoneVerhindertWiederbelebungEinesGeloeschtenEinkaufsvorgangs() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let vorgangID = UUID()
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.tombstones = [
+            SyncTombstoneSnapshot(entitaetsArt: SyncEntitaetsArt.einkaufsvorgang, geloeschteID: vorgangID, geloeschtAm: Date()),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        #expect(try context.fetch(FetchDescriptor<Einkaufsvorgang>()).isEmpty)
+
+        // Ein veralteter Peer listet den (retention-)gelöschten Einkaufsvorgang
+        // weiterhin — darf ihn nicht wiederbeleben.
+        var veralteterEinkaufsvorgangSnapshot = leererSnapshot(geraeteID: "veralteter-peer")
+        veralteterEinkaufsvorgangSnapshot.einkaufsvorgaenge = [
+            EinkaufsvorgangSnapshot(id: vorgangID, geschaeftID: nil, einkaufslisteID: nil, startZeit: .distantPast, endZeit: .distantPast),
+        ]
+        try schreibeFremdenSnapshot(veralteterEinkaufsvorgangSnapshot, fremdeGeraeteID: "veralteter-peer", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        #expect(try context.fetch(FetchDescriptor<Einkaufsvorgang>()).isEmpty)
+    }
+
+    /// Analog ``tombstoneVerhindertWiederbelebungEinesGeloeschtenEinkaufsvorgangs()``,
+    /// für ``KaufEintrag`` (Union-nach-`id`-Merge kannte bislang ebenfalls
+    /// keine Tombstone-Prüfung).
+    @Test
+    func tombstoneVerhindertWiederbelebungEinesGeloeschtenKaufEintrags() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let kaufEintragID = UUID()
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.tombstones = [
+            SyncTombstoneSnapshot(entitaetsArt: SyncEntitaetsArt.kaufEintrag, geloeschteID: kaufEintragID, geloeschtAm: Date()),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        #expect(try context.fetch(FetchDescriptor<KaufEintrag>()).isEmpty)
+
+        var veralteterKaufEintragSnapshot = leererSnapshot(geraeteID: "veralteter-peer")
+        veralteterKaufEintragSnapshot.kaufEintraege = [
+            KaufEintragSnapshot(
+                id: kaufEintragID, artikelID: nil, einkaufsvorgangID: nil, geschaeftID: nil, kategorieID: nil,
+                artikelNameSnapshot: "Milch", geschaeftNameSnapshot: "Netto", produktName: nil, alternativerName: nil,
+                datum: .distantPast, preis: nil, menge: 1, kategorieBesuchsIndex: nil
+            ),
+        ]
+        try schreibeFremdenSnapshot(veralteterKaufEintragSnapshot, fremdeGeraeteID: "veralteter-peer", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        #expect(try context.fetch(FetchDescriptor<KaufEintrag>()).isEmpty)
+    }
+
     @Test
     func einkaufslistenEintragWirdAusSnapshotNachgeholt() async throws {
         let (container, context) = try machtLeerenContainer()

@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.9 (Build 152) — DB-Optimierung: weniger unnötige Sync-Schreibvorgänge, Einkaufsvorgang-Aufräumung (GitHub #60/#70/#71)
+
+- Sync-Zyklus schreibt nicht mehr unbedingt bei jedem Tick (5s/60s): lokale
+  Peer-Metadaten (`SyncPeerInfo.zuletztGesehen`) werden gedrosselt statt bei
+  jedem Import aktualisiert, `context.save()` läuft nur noch bei tatsächlichen
+  Änderungen (`context.hasChanges`), und `export.json` wird nur noch bei
+  inhaltlich geändertem Snapshot neu geschrieben (SHA256-Fingerabdruck-Vergleich).
+  Zusammen die Hauptursache für das Flackern der Einkaufsliste alle 5s
+  (GitHub #60) sowie unnötig häufige Schreibzugriffe (GitHub #70).
+- `SyncExportService` löscht eigene, bereits hochgeladene Event-Dateien jetzt
+  nach 7 Tagen automatisch — vorher unbegrenztes Wachstum im Sync-Ordner.
+- Reentrancy-Guard in `EinkaufenView.einkaufSicherstellen()` gegen mehrere
+  nebenläufig ausgelöste `.onChange`-Handler — Verdacht auf (Mit-)Ursache der
+  in GitHub #71 beobachteten, im Millisekundenabstand angelegten
+  `Einkaufsvorgang`-Duplikate.
+- `EinkaufenView` schließt den aktuellen Einkaufsvorgang jetzt automatisch bei
+  Inaktivität ab (3h mit Geschäft, 24h ohne) statt nur die Geschäftsauswahl
+  zurückzusetzen — Voraussetzung dafür, dass die folgende Bereinigung ihn je
+  erreichen kann.
+- `PreisHistorieBereinigungService` räumt jetzt zusätzlich alte, abgeschlossene
+  und leere `Einkaufsvorgang`e auf (dieselbe Aufbewahrungsfrist wie für
+  `KaufEintrag` — vorher gar keine Aufräumlogik für `Einkaufsvorgang`).
+  Beide Löschungen hinterlassen jetzt einen `SyncTombstone`, damit sie im
+  Mehrgeräte-Fall nicht von einem Peer, der sie noch führt, wiederbelebt
+  werden — dabei zwei vorbestehende Lücken im Tombstone-Mechanismus selbst
+  geschlossen (`mergeEinkaufsvorgaenge`/`mergeKaufEintraege` prüften ihren
+  „neu anlegen"-Zweig bislang nicht gegen Tombstones).
+- Details: `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` Abschnitt 14,
+  `docs/PREISHISTORIE_BEREINIGUNG.md`.
+
 ## v0.9 (Build 151) — Suchfeld bleibt nach Artikel-Auswahl gefiltert (GitHub #64)
 
 - `ArtikelHinzufuegenView`: Nach Tap auf einen Artikel (Hinzufügen, Entfernen oder

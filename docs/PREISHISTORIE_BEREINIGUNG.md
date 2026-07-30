@@ -17,6 +17,29 @@ Einträge an.
   1 Jahr / Nie / eigene Anzahl Tage. Wird über `UserDefaults` persistiert
   (`PreisHistorieBereinigungService.aktuelleAufbewahrung`), einstellbar in
   `PreisHistorieSettingsView` (Einstellungen → „Preishistorie“).
+- **Seit der DB-Optimierungsrunde (GitHub #71) zusätzlich: Bereinigung alter
+  `Einkaufsvorgang`e.** `Einkaufsvorgang` hatte bis dahin überhaupt keine
+  Aufräumlogik — jeder jemals angelegte Vorgang blieb für immer im Bestand und
+  wurde bei jedem Sync-Zyklus vollständig mitexportiert. `bereinigen(context:
+  aufbewahrung:jetzt:)` löscht jetzt zusätzlich abgeschlossene Vorgänge, deren
+  `endZeit` ebenfalls vor dem Stichtag liegt UND die (nach der
+  KaufEintrag-Bereinigung im selben Durchlauf) keine verbleibenden
+  `KaufEintrag`e mehr haben — dieselbe Frist, kein eigener Regler
+  (Nutzerentscheidung: ein zweiter Regler hätte keinen erkennbaren Zusatznutzen
+  gegenüber mehr UI-Fläche). Voraussetzung dafür, dass ein Vorgang je diesen
+  Zustand erreicht: siehe „Auto-Close bei Inaktivität" in
+  `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` — ohne das würde praktisch kein
+  `Einkaufsvorgang` je als abgeschlossen gelten, da bislang nur der manuelle
+  „Einkauf abschließen"-Button `endZeit` setzte.
+- **Beide Löschungen (KaufEintrag und Einkaufsvorgang) hinterlassen jetzt einen
+  `SyncTombstone`.** Ursprünglich bewusst unterlassen (siehe
+  `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`, Abschnitt 11 „Bewusst nicht
+  enthalten") — das machte die Bereinigung im Mehrgeräte-Fall aber faktisch
+  wirkungslos: der additive Bereich-C-Merge (Union nach `id`, nie destruktiv)
+  brachte einen lokal gelöschten Eintrag beim nächsten Sync von jedem Peer
+  zurück, der ihn noch führte. Mit Tombstone bleibt eine Löschung dauerhaft
+  über alle Geräte hinweg wirksam, analog zu Bereich-B-Löschungen
+  (Geschäft/Artikel/…).
 - **Standard: „Nie“** — bewusste Entscheidung, damit ein App-Update bei bestehenden
   Nutzern nicht ungefragt Preishistorie löscht. Der Nutzer muss die automatische
   Bereinigung aktiv einschalten.

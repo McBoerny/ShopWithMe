@@ -21,10 +21,35 @@ enum SyncExportService {
         eventsOrdner(fuerPeer: DatabaseLeaseService.geraeteID, in: syncOrdner)
     }
 
+    /// Wie lange eine eigene, bereits hochgeladene Event-Datei im Sync-Ordner
+    /// verbleibt, bevor ``raeumeAlteEventDateienAuf(eventsOrdner:context:)``
+    /// sie löscht (`docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`, Abschnitt
+    /// „Offene Alt-Datei-Frage": bislang wurde nie aufgeräumt, der Ordner
+    /// wuchs unbegrenzt). Bewusst grosszügig statt weniger Stunden: ein Peer,
+    /// der länger offline war, braucht die Datei noch, um Löschungen
+    /// (`artikelAbgewaehlt`/`artikelDauerhaftEntfernt`) nachzuvollziehen —
+    /// dafür gibt es (anders als für Listen-Mitgliedschaft, siehe
+    /// ``SyncSnapshot/einkaufslistenEintraege``) kein Snapshot-Sicherheitsnetz.
+    /// `static var` statt Konstante, damit Tests sie verkürzen können.
+    @MainActor static var eventDateiAufbewahrung: TimeInterval = 7 * 24 * 60 * 60
+    private static let letzteBereinigungSchluessel = "syncEventsLetzteBereinigung"
+    /// Mindestabstand zwischen zwei Aufräumdurchläufen — die Bereinigung ist
+    /// nicht zeitkritisch und muss nicht bei jedem 5s/60s-Export-Zyklus erneut
+    /// den Ordnerinhalt auflisten.
+    private static let bereinigungsIntervall: TimeInterval = 60 * 60
+
+    private static var letzteBereinigung: Date? {
+        get { UserDefaults.standard.object(forKey: letzteBereinigungSchluessel) as? Date }
+        set { UserDefaults.standard.set(newValue, forKey: letzteBereinigungSchluessel) }
+    }
+
     /// Schreibt alle noch nicht hochgeladenen `SyncEvent`s in den eigenen
     /// Peer-Ordner und markiert sie danach als hochgeladen. Ohne hinterlegten
     /// Sync-Ordner (``SyncOrdnerService/gewaehlterOrdner()`` liefert `nil`) ohne
-    /// Wirkung — Synchronisation ist optional.
+    /// Wirkung — Synchronisation ist optional. Räumt anschließend (höchstens
+    /// einmal pro Stunde, siehe ``bereinigungsIntervall``) eigene, alte
+    /// Event-Dateien auf — unabhängig davon, ob in diesem Zyklus überhaupt
+    /// neue Events zu exportieren waren.
     @MainActor
     static func exportiereNeueEvents(context: ModelContext) async {
         guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return }
@@ -33,7 +58,7 @@ enum SyncExportService {
             predicate: #Predicate { $0.hochgeladen == false }
         )
         beschreibung.sortBy = [SortDescriptor(\.lamportZaehler)]
-        guard let ausstehende = try? context.fetch(beschreibung), !ausstehende.isEmpty else { return }
+        let ausstehende = (try? context.fetch(beschreibung)) ?? []
 
         guard syncOrdner.startAccessingSecurityScopedResource() else {
             SyncDebugLogger.log(.ordnerZugriffFehlgeschlagen, details: "exportiereNeueEvents")
@@ -46,14 +71,41 @@ enum SyncExportService {
             at: eventsOrdner, withIntermediateDirectories: true
         )) != nil else { return }
 
-        for event in ausstehende {
-            guard let daten = try? JSONEncoder().encode(event.exportDarstellung) else { continue }
-            let zielURL = eventsOrdner.appendingPathComponent(dateiname(fuer: event))
-            guard schreibeBlocking(daten, nach: zielURL) else { continue }
-            event.hochgeladen = true
+        if !ausstehende.isEmpty {
+            for event in ausstehende {
+                guard let daten = try? JSONEncoder().encode(event.exportDarstellung) else { continue }
+                let zielURL = eventsOrdner.appendingPathComponent(dateiname(fuer: event))
+                guard schreibeBlocking(daten, nach: zielURL) else { continue }
+                event.hochgeladen = true
+            }
+            if context.hasChanges { try? context.save() }
         }
 
-        try? context.save()
+        raeumeAlteEventDateienAuf(eventsOrdner: eventsOrdner, context: context)
+    }
+
+    /// Löscht eigene, bereits hochgeladene Event-Dateien, deren zugehöriges
+    /// ``SyncEvent/wallClock`` länger als ``eventDateiAufbewahrung`` zurückliegt.
+    /// Löscht bewusst NUR die Dateien im Sync-Ordner, nicht die lokalen
+    /// ``SyncEvent``-Datensätze selbst — die bleiben Grundlage der lokalen
+    /// Konfliktauflösung (``SyncEventService/aktuellerGewinner(bezugsID:artikelID:context:)``),
+    /// deren Löschung ein spät eintreffendes, konkurrierendes Event fälschlich
+    /// gewinnen lassen könnte.
+    @MainActor
+    private static func raeumeAlteEventDateienAuf(eventsOrdner: URL, context: ModelContext) {
+        if let letzte = letzteBereinigung, Date().timeIntervalSince(letzte) < bereinigungsIntervall { return }
+        letzteBereinigung = Date()
+
+        let stichtag = Date().addingTimeInterval(-eventDateiAufbewahrung)
+        let deskriptor = FetchDescriptor<SyncEvent>(
+            predicate: #Predicate { $0.hochgeladen == true && $0.wallClock < stichtag }
+        )
+        guard let alte = try? context.fetch(deskriptor), !alte.isEmpty else { return }
+
+        for event in alte {
+            let url = eventsOrdner.appendingPathComponent(dateiname(fuer: event))
+            try? FileManager.default.removeItem(at: url)
+        }
     }
 
     /// Zehnstellig nullgepolsterter Lamport-Zähler sorgt für lexikografisch

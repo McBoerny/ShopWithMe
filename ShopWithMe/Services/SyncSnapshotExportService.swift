@@ -1,16 +1,41 @@
 import Foundation
 import SwiftData
+import CryptoKit
 
 /// Bereich-B/C/D-Export (`docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`
 /// Abschnitt 5.2, Phase 1b): leitet einen vollständigen ``SyncSnapshot`` aus dem
 /// aktuellen lokalen Modellzustand ab und schreibt ihn als `export.json` in den
 /// eigenen Peer-Ordner. Anders als ``SyncExportService`` (Bereich A) kein
 /// inkrementelles Mitschreiben, sondern bei jedem Aufruf ein vollständiger
-/// Neuaufbau — welcher Zeitpunkt dafür sinnvoll ist (Konsolidierung/adaptives
-/// Polling), entscheidet erst Phase 4; hier wird bei jedem Aufruf unbedingt
-/// geschrieben. Reines Schreiben — Lesen fremder Snapshots ist Phase 3.
+/// Neuaufbau. Reines Schreiben — Lesen fremder Snapshots ist Phase 3.
+///
+/// **Schreibt nur bei tatsächlich geändertem Inhalt** (GitHub #70/#71): jeder
+/// Sync-Zyklus (5s/60s) rief bisher unbedingt einen vollständigen Neuaufbau
+/// samt Datei-Schreiben auf, selbst wenn sich am lokalen Bestand seit dem
+/// letzten Zyklus nichts geändert hatte — jedes Gerät schrieb dadurch
+/// dauerhaft alle paar Sekunden ein neues `export.json` mit frischem
+/// ``SyncSnapshot/erzeugtAm``, was auf Peer-Seite wiederum jeden Zyklus eine
+/// echte Store-Änderung erzwang (siehe ``SyncPeerInfo``). ``exportiereSnapshot(context:)``
+/// vergleicht deshalb einen Inhalts-Fingerabdruck (``inhaltsFingerabdruck(of:)``,
+/// ohne die reinen Metafelder `erzeugtAm`/`geraeteID`/`geraeteName`) mit dem
+/// zuletzt tatsächlich geschriebenen und überspringt Encoding *und*
+/// Datei-Schreiben, wenn identisch. Der Peer-Alters-Check
+/// (``SyncSnapshotImportService/maximalesSnapshotAlter``) bleibt davon
+/// unberührt: eine über Tage unveränderte, aber weiterhin gültige `export.json`
+/// ist kein „verwaister Peer-Ordner" — genau die 30-Tage-Schwelle dafür bleibt
+/// grob genug, dass ein nicht mehr aktualisiertes `erzeugtAm` bei echter
+/// Inaktivität kein Problem ist.
 enum SyncSnapshotExportService {
     private static let dateiName = "export.json"
+    private static let letzterFingerabdruckSchluessel = "syncSnapshotLetzterFingerabdruck"
+
+    /// Fingerabdruck des zuletzt tatsächlich geschriebenen Snapshot-Inhalts,
+    /// `static var` statt Konstante, damit Tests den Zustand zurücksetzen
+    /// können.
+    private static var letzterGeschriebenerFingerabdruck: String? {
+        get { UserDefaults.standard.string(forKey: letzterFingerabdruckSchluessel) }
+        set { UserDefaults.standard.set(newValue, forKey: letzterFingerabdruckSchluessel) }
+    }
 
     /// Die `export.json`-URL eines beliebigen Geräts (eigenes oder fremdes)
     /// innerhalb des Sync-Ordners — siehe ``SyncSnapshotImportService`` für das
@@ -35,6 +60,11 @@ enum SyncSnapshotExportService {
         guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return }
 
         let snapshot = erstelleSnapshot(context: context)
+        guard let fingerabdruck = inhaltsFingerabdruck(of: snapshot) else { return }
+        guard fingerabdruck != letzterGeschriebenerFingerabdruck else {
+            SyncDebugLogger.log(.snapshotUnveraendertUebersprungen, details: "")
+            return
+        }
         guard let daten = try? JSONEncoder().encode(snapshot) else { return }
 
         guard syncOrdner.startAccessingSecurityScopedResource() else {
@@ -48,7 +78,40 @@ enum SyncSnapshotExportService {
             at: zielURL.deletingLastPathComponent(), withIntermediateDirectories: true
         )) != nil else { return }
 
-        _ = schreibeBlocking(daten, nach: zielURL)
+        guard schreibeBlocking(daten, nach: zielURL) else { return }
+        letzterGeschriebenerFingerabdruck = fingerabdruck
+    }
+
+    /// SHA256-Fingerabdruck des inhaltlichen Teils von `snapshot` — ohne die
+    /// reinen Metafelder `erzeugtAm`/`geraeteID`/`geraeteName`, die sich
+    /// unabhängig vom eigentlichen Datenbestand jeden Zyklus ändern (würden)
+    /// und damit jeden Vergleich wertlos machen würden. Alle Teil-Arrays
+    /// werden vor dem Encoding nach ihrer `UUID` sortiert, damit eine bloß
+    /// andere Fetch-Reihenfolge zwischen zwei Zyklen (SwiftData garantiert
+    /// keine stabile Reihenfolge für einen unsortierten `FetchDescriptor`)
+    /// nicht fälschlich als inhaltliche Änderung erkannt wird. `nil` nur bei
+    /// einem (praktisch nie auftretenden) Encoding-Fehler.
+    private static func inhaltsFingerabdruck(of snapshot: SyncSnapshot) -> String? {
+        var normalisiert = snapshot
+        normalisiert.erzeugtAm = .distantPast
+        normalisiert.geraeteID = ""
+        normalisiert.geraeteName = ""
+        normalisiert.geschaeftsTypen.sort { $0.id.uuidString < $1.id.uuidString }
+        normalisiert.artikelKategorien.sort { $0.id.uuidString < $1.id.uuidString }
+        normalisiert.geschaefte.sort { $0.id.uuidString < $1.id.uuidString }
+        normalisiert.artikel.sort { $0.id.uuidString < $1.id.uuidString }
+        normalisiert.einkaufslisten.sort { $0.id.uuidString < $1.id.uuidString }
+        normalisiert.einkaufslistenEintraege.sort {
+            "\($0.einkaufslisteID)_\($0.artikelID)" < "\($1.einkaufslisteID)_\($1.artikelID)"
+        }
+        normalisiert.einkaufsvorgaenge.sort { $0.id.uuidString < $1.id.uuidString }
+        normalisiert.kaufEintraege.sort { $0.id.uuidString < $1.id.uuidString }
+        normalisiert.warengruppenDistanzen.sort { $0.id.uuidString < $1.id.uuidString }
+        normalisiert.tombstones.sort { "\($0.entitaetsArt)_\($0.geloeschteID)" < "\($1.entitaetsArt)_\($1.geloeschteID)" }
+
+        guard let daten = try? JSONEncoder().encode(normalisiert) else { return nil }
+        let digest = SHA256.hash(data: daten)
+        return digest.map { String(format: "%02x", $0) }.joined()
     }
 
     @MainActor
