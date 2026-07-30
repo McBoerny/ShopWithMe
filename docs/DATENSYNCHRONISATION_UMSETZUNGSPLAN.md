@@ -924,3 +924,38 @@ weiterhin eine Beobachtung über mehrere reale Zyklen, ob die
 Fetch-Reihenfolge-Normalisierung in der Praxis tatsächlich stabil genug ist,
 um unnötige Schreibvorgänge zuverlässig zu vermeiden, ohne echte Änderungen
 fälschlich zu unterdrücken.
+
+### 15. Nachtrag: Endlos-Retry für dauerhaft unauflösbare Bereich-A-Referenzen
+
+Derselbe Zwei-Geräte-Live-Test (Abschnitt 14) deckte über die Event-Pruning-
+Regression hinaus einen zweiten, unabhängigen Befund auf: `SyncDebugLogger`
+zeigte auf einem Gerät durchgehend über mehrere Minuten (jeder Zyklus erneut)
+denselben `sync_event_nicht_anwendbar`-Eintrag für dieselben drei
+`artikelAbgehakt`-Events — ohne je zu konvergieren. Abgleich der `export.json`
+beider Geräte bestätigte: der referenzierte `Einkaufsvorgang` existierte auf
+**keinem** der beiden Geräte mehr, hatte aber auch **keinen** `SyncTombstone`
+— eine bislang nicht vorgesehene dritte Möglichkeit neben „noch nicht
+angekommen" (retrywürdig) und „absichtlich gelöscht" (Tombstone, sofort
+aufgeben). Vermuteter Auslöser: dieselbe „dangling Einkaufsvorgang"-Ursachen-
+Familie wie in Abschnitt 11a — der Vorgang wurde auf dem Ursprungsgerät durch
+eine Nachfolger-Umleitung ersetzt, bevor seine ursprüngliche ID je Teil eines
+Bereich-C-Snapshots wurde, wodurch sie spurlos aus jedem künftigen Snapshot
+verschwand, ohne dass irgendein Gerät sie je als „gelöscht" vermerkt hätte.
+
+**Zwei Ergänzungen in `SyncImportService`:**
+1. Tombstone-Prüfung (`referenzDauerhaftGeloescht`) — Events, deren Referenz
+   per Tombstone als absichtlich gelöscht markiert ist, werden sofort als
+   bekannt markiert statt endlos erneut versucht.
+2. **Alters-Schwelle** (`maximalesEventAlterFuerRetry`, 48h): deckt den oben
+   beschriebenen dritten Fall ab, bei dem gar kein Tombstone existiert — ein
+   Event, dessen Referenz auch nach dieser (bewusst großzügigen, analog
+   ``SyncSnapshotImportService/maximalesSnapshotAlter``) Frist nicht auflösbar
+   ist, wird aufgegeben (distinkt protokolliert als `sync_event_aufgegeben`,
+   dann als bekannt markiert) statt für immer erneut versucht.
+
+Löst nicht die zugrunde liegende Ursache (warum die alte ID nie Teil eines
+Snapshots wurde) — das bleibt Teil der größeren, bereits mehrfach
+dokumentierten „dangling Einkaufsvorgang"-Bugfamilie —, begrenzt aber
+zuverlässig den Schaden eines einzelnen betroffenen Vorgangs auf einen
+einmaligen, für den Anwender sichtbaren Sync-Ausfall dieses einen Kaufs statt
+auf dauerhaftes Log-Rauschen und wiederholte nutzlose Zyklusarbeit.

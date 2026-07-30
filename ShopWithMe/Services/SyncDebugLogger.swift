@@ -37,6 +37,7 @@ enum SyncDebugLogger {
         case eventNichtAnwendbar = "sync_event_nicht_anwendbar"
         case peerVerworfenAltersgrenze = "sync_peer_verworfen_altersgrenze"
         case snapshotUnveraendertUebersprungen = "sync_snapshot_unveraendert_uebersprungen"
+        case eventAufgegeben = "sync_event_aufgegeben"
         case debugModeEnabled = "debug_mode_enabled"
         case debugModeDisabled = "debug_mode_disabled"
     }

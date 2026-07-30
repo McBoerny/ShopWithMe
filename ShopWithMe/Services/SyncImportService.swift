@@ -28,7 +28,30 @@ import SwiftData
 /// konvergieren. Dieser Fall wird daher wie ein bereits entschiedener
 /// Konflikt behandelt und sofort als bekannt markiert (siehe
 /// ``referenzDauerhaftGeloescht(art:bezugsID:artikelID:context:)``).
+///
+/// **Zweite Ausnahme, aus einem echten Zwei-Geräte-Live-Test (2026-07-30):**
+/// Ein referenzierter ``Einkaufsvorgang`` kann dauerhaft unauflösbar werden,
+/// OHNE je einen Tombstone zu bekommen — beobachtet z.B., wenn er auf dem
+/// Ursprungsgerät durch eine Nachfolger-Umleitung ersetzt wurde, bevor seine
+/// ID je Teil eines Bereich-C-Snapshots wurde (die ursprüngliche ID
+/// verschwindet dadurch spurlos aus jedem künftigen Snapshot, ohne dass
+/// irgendein Gerät sie je als "gelöscht" vermerkt hätte). Ohne Gegenmaßnahme
+/// würde ein solches Event für immer bei jedem Sync-Zyklus erneut versucht
+/// und protokolliert, ohne je zu konvergieren — beobachtet über mehr als
+/// sieben Minuten durchgehender Zyklen ohne Fortschritt. Events, deren
+/// ``SyncEvent/wallClock`` älter als ``maximalesEventAlterFuerRetry`` ist,
+/// werden deshalb aufgegeben (als bekannt markiert, distinkt protokolliert)
+/// statt endlos weiterversucht.
 enum SyncImportService {
+    /// Ab diesem Alter (gemessen an ``SyncEventExportDarstellung/wallClock``)
+    /// wird ein Event, dessen Referenz sich nicht auflösen lässt, aufgegeben
+    /// statt weiter versucht — siehe Typ-Doku, zweite Ausnahme. Bewusst
+    /// großzügig (statt Stunden): ein Peer, der länger offline war, oder eine
+    /// langsame Cloud-Sync-Latenz sollen nicht fälschlich als "nie auflösbar"
+    /// gewertet werden. `static var` statt Konstante, damit Tests sie
+    /// verkürzen können.
+    @MainActor static var maximalesEventAlterFuerRetry: TimeInterval = 48 * 60 * 60
+
     /// Rückgabewert meldet ausschließlich, ob der Ordnerzugriff (Berechtigung)
     /// geklappt hat, analog ``SyncSnapshotImportService/importiereSnapshots(context:)``.
     @discardableResult
@@ -110,6 +133,18 @@ enum SyncImportService {
                 // wird deshalb NIE mehr lokal entstehen — anders als bei einer
                 // bloß noch nicht eingetroffenen Referenz ist ein Retry hier
                 // sinnlos und würde das Event jeden Zyklus erneut protokollieren.
+                SyncEventService.uebernehmen(empfangen, context: context)
+                return
+            }
+            guard Date().timeIntervalSince(empfangen.wallClock) <= maximalesEventAlterFuerRetry else {
+                // Seit ``maximalesEventAlterFuerRetry`` unauflösbar, ohne dass
+                // ein Tombstone existiert (siehe Typ-Doku, zweite Ausnahme) —
+                // weiteres Retrying würde nur noch endlos denselben Fehlschlag
+                // protokollieren, ohne je zu konvergieren.
+                SyncDebugLogger.log(
+                    .eventAufgegeben,
+                    details: "art=\(art.rawValue) bezugsID=\(nutzlast.bezugsID) artikelID=\(nutzlast.artikelID)"
+                )
                 SyncEventService.uebernehmen(empfangen, context: context)
                 return
             }

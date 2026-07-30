@@ -222,6 +222,50 @@ struct SyncImportServiceTests {
         #expect(SyncEventService.istBereitsBekannt(fremdesEvent.id, context: context) == false)
     }
 
+    /// Regressionstest für einen echten Zwei-Geräte-Live-Test-Fund
+    /// (2026-07-30): ein referenzierter ``Einkaufsvorgang`` kann dauerhaft
+    /// unauflösbar werden, OHNE je einen Tombstone zu bekommen (z.B. durch
+    /// eine Nachfolger-Umleitung auf dem Ursprungsgerät, bevor die alte ID je
+    /// Teil eines Snapshots wurde) — beobachtet als endloses,
+    /// nie konvergierendes `sync_event_nicht_anwendbar`-Retrying über mehrere
+    /// Minuten. Ein ausreichend altes Event wird deshalb aufgegeben (als
+    /// bekannt markiert) statt für immer erneut versucht.
+    @Test
+    func dauerhaftUnaufloesbareReferenzOhneTombstoneWirdNachMaximalemAlterAufgegeben() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let vorherigeSchwelle = SyncImportService.maximalesEventAlterFuerRetry
+        SyncImportService.maximalesEventAlterFuerRetry = 60
+        defer { SyncImportService.maximalesEventAlterFuerRetry = vorherigeSchwelle }
+
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759")
+        context.insert(apfel)
+        try context.save()
+
+        // bezugsID verweist auf einen Einkaufsvorgang, den dieses Gerät nie
+        // kennenlernen wird (kein Tombstone, aber auch nie Teil eines
+        // Snapshots) — Event ist bereits älter als die (hier verkürzte) Schwelle.
+        let verschwundeneVorgangsID = UUID()
+        let altesEvent = SyncEventExportDarstellung(
+            id: UUID(), art: SyncEventArt.artikelAbgehakt.rawValue,
+            nutzlast: try JSONEncoder().encode(SyncEventNutzlast(bezugsID: verschwundeneVorgangsID, artikelID: apfel.id)),
+            lamportZaehler: 1, lamportGeraeteID: "fremdes-geraet", autorGeraeteID: "fremdes-geraet",
+            wallClock: Date().addingTimeInterval(-120)
+        )
+        try schreibeFremdesEvent(altesEvent, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncImportService.importiereNeueEvents(context: context)
+
+        // Als bekannt markiert -> kein weiterer Retry-Versuch mehr, obwohl nie
+        // materialisiert.
+        #expect(SyncEventService.istBereitsBekannt(altesEvent.id, context: context) == true)
+        #expect(try context.fetch(FetchDescriptor<KaufEintrag>()).isEmpty)
+    }
+
     /// Regressionstest für den Absturz-Loop-Serie zugrundeliegenden „dangling
     /// Einkaufsvorgang"-Fall: Gerät A beendet den Einkauf (der Vorgang wird
     /// dadurch lokal abgeschlossen und ein neuer, offener Nachfolge-Vorgang für

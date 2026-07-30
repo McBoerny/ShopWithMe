@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.9 (Build 158) — Fix: Endlos-Retry für Bereich-A-Referenzen ohne Tombstone
+
+- Ergänzt den bestehenden Tombstone-basierten Endlos-Retry-Fix um eine
+  Alters-Schwelle (`SyncImportService.maximalesEventAlterFuerRetry`, 48h):
+  ein echter Zwei-Geräte-Live-Test zeigte, dass ein referenzierter
+  `Einkaufsvorgang` auch OHNE Tombstone dauerhaft unauflösbar werden kann
+  (verschwindet spurlos aus jedem künftigen Snapshot, z.B. durch eine
+  Nachfolger-Umleitung auf dem Ursprungsgerät). Ohne diese Schwelle wurde ein
+  solches Event für immer bei jedem Sync-Zyklus erneut versucht und
+  protokolliert (`sync_event_nicht_anwendbar`), ohne je zu konvergieren —
+  beobachtet über mehr als sieben Minuten durchgehend. Wird jetzt nach der
+  Frist aufgegeben (`sync_event_aufgegeben`) statt endlos weiterversucht.
+- Details: `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` Abschnitt 15.
+
 ## v0.9 (Build 155) — Fix: Endlos-Retry-Log für Events auf gelöschte Referenzen
 
 - `SyncImportService`: Ein empfangenes Event, dessen referenzierte
