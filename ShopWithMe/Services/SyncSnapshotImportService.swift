@@ -545,6 +545,21 @@ enum SyncSnapshotImportService {
     /// historisches Ereignis, ein bereits lokal bekannter wird nie verändert,
     /// ein fehlender einfach übernommen (Referenzen auf die per Bereich-B
     /// gemergten lokalen Gegenstücke umgebogen).
+    ///
+    /// **`kategorieBesuchsIndex` wird bewusst NICHT aus dem Snapshot
+    /// übernommen** (analog ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:indexFuerDistanzlernen:)``
+    /// für den entsprechenden Bereich-A-Fall): jeder hier neu hinzukommende
+    /// Eintrag stammt per Konstruktion von einem ANDEREN Gerät. Referenziert er
+    /// (über ``mergeEinkaufsvorgaenge(_:geschaeftZuordnung:listeZuordnung:context:)``,
+    /// z.B. weil zwei Geräte gleichzeitig im selben Geschäft an derselben Liste
+    /// einkaufen) einen auch lokal offenen/geteilten ``Einkaufsvorgang``, und
+    /// schließt DIESES Gerät ihn später ab, würde der aus dem Snapshot
+    /// übernommene, vom anderen Gerät vergebene Index dessen Laufreihenfolge
+    /// mit der eigenen vermischen und so die ladenspezifische Distanzmatrix
+    /// verfälschen. Der Kauf zählt trotzdem korrekt zur Historie/Preisübersicht
+    /// — nur die Reihenfolge-Analyse ignoriert ihn (siehe
+    /// ``WarengruppenDistanzService/besuchsreihenfolge(fuer:)``, überspringt
+    /// `nil`-Indizes bereits bewusst).
     @MainActor
     private static func mergeKaufEintraege(
         _ remote: [KaufEintragSnapshot], artikelZuordnung: [UUID: Artikel], einkaufsvorgangZuordnung: [UUID: Einkaufsvorgang],
@@ -560,7 +575,7 @@ enum SyncSnapshotImportService {
                 preis: eintrag.preis,
                 menge: eintrag.menge,
                 datum: eintrag.datum,
-                kategorieBesuchsIndex: eintrag.kategorieBesuchsIndex
+                kategorieBesuchsIndex: nil
             )
             neuer.id = eintrag.id
             neuer.einkaufsvorgang = eintrag.einkaufsvorgangID.flatMap { einkaufsvorgangZuordnung[$0] }

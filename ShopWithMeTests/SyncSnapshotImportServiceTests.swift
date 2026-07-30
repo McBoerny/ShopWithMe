@@ -577,6 +577,47 @@ struct SyncSnapshotImportServiceTests {
         #expect(alleEintraege.first?.preis == 1.49)
     }
 
+    /// Ein per Snapshot gemergter (also per Konstruktion von einem ANDEREN
+    /// Gerät stammender) ``KaufEintrag`` darf seinen `kategorieBesuchsIndex`
+    /// NICHT aus dem Snapshot übernehmen — sonst würde ein später auf diesem
+    /// Gerät abgeschlossener, mit dem fremden Vorgang zusammengeführter
+    /// Einkauf (``mergeEinkaufsvorgaenge``) die Laufreihenfolge des anderen
+    /// Geräts in die eigene ``WarengruppenDistanzService``-Analyse mischen
+    /// (siehe Typ-Doku ``mergeKaufEintraege``).
+    @Test
+    func gemergterKaufEintragBekommtKeinenBesuchsindexAusDemSnapshot() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759")
+        context.insert(apfel)
+        try context.save()
+
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.artikel = [
+            ArtikelSnapshot(
+                id: apfel.id, name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759",
+                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+            ),
+        ]
+        snapshot.kaufEintraege = [
+            KaufEintragSnapshot(
+                id: UUID(), artikelID: apfel.id, einkaufsvorgangID: nil, geschaeftID: nil, kategorieID: nil,
+                artikelNameSnapshot: "Apfel", geschaeftNameSnapshot: "", produktName: nil, alternativerName: nil,
+                datum: Date(), preis: nil, menge: 1, kategorieBesuchsIndex: 3
+            ),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        let eintrag = try #require(try context.fetch(FetchDescriptor<KaufEintrag>()).first)
+        #expect(eintrag.kategorieBesuchsIndex == nil)
+    }
+
     @Test
     func warengruppenDistanzWirdGemitteltBeiVorhandenemEintragSonstUebernommen() async throws {
         let (container, context) = try machtLeerenContainer()
