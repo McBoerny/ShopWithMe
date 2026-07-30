@@ -128,6 +128,10 @@ dem Abschließen ein kurzer Hinweis, dass sich die App automatisch anpasst.
   bleiben einfach auf der globalen Liste. Der „Einkauf abschließen“-Button zeigt
   dabei die Anzahl bereits abgehakter Artikel und färbt sich in der Akzentfarbe,
   sobald mindestens einer abgehakt wurde.
+- Die Geschäftsauswahl wird automatisch auf „Kein Geschäft“ zurückgesetzt —
+  sowohl nach dem Abschließen eines Einkaufs als auch nach 3 Stunden ohne
+  Interaktion mit der Einkaufsliste, damit ein neuer Einkauf nicht versehentlich
+  am zuletzt genutzten Geschäft weiterläuft.
 - **Gemeinsam einkaufen (Datensynchronisation aktiv, siehe unten):** Hakt ein
   anderes Gerät einen Artikel ab, bevor du selbst dazu kommst, zeigt ein kurzer,
   sich von selbst wieder ausblendender Hinweis („Bereits von {Gerätename}

@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.8 (Build 142) — Inaktivitäts-Reset der Geschäftsauswahl
+
+- Neu (GitHub #51): die aktive Geschäftsauswahl beim Einkaufen wird jetzt
+  zusätzlich zum bisherigen Reset nach „Einkauf abschließen" auch nach 3
+  Stunden ohne Interaktion mit der Einkaufsliste (Abhaken, Menge ändern,
+  Entfernen) automatisch zurückgesetzt — egal ob die App dabei im Vorder-
+  oder Hintergrund war (`EinkaufenView.inaktivitaetPruefen()`).
+
 ## v0.8 (Build 141) — Belegscan-S&W-Standard, Speicherort-Cleanup, Peer-Namen, Warengruppen bei Neuanlage
 
 - Neu (GitHub #61): Belegscan konvertiert aufgenommene/importierte Bilder vor

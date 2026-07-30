@@ -29,6 +29,13 @@ struct EinkaufenView: View {
     @Query(sort: \IgnorierterGeschaeftsVorschlag.ignoriertAm, order: .reverse)
     private var ignorierteVorschlaege: [IgnorierterGeschaeftsVorschlag]
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
+
+    /// Ab dieser Dauer ohne Interaktion mit der Einkaufsliste (Abhaken, Mengen
+    /// ändern, Entfernen, Abschließen) setzt ``inaktivitaetPruefen()`` die
+    /// Geschäftsauswahl zurück (GitHub #51) — unabhängig davon, ob die App
+    /// dabei im Vorder- oder Hintergrund war.
+    private static let inaktivitaetsSchwelle: TimeInterval = 3 * 60 * 60
 
     @State private var ausgewaehltesGeschaeft: Geschaeft?
     @State private var ausgewaehlteListe: Einkaufsliste?
@@ -41,6 +48,9 @@ struct EinkaufenView: View {
     @State private var geschaeftFuerStandortErgaenzung: Geschaeft?
     @State private var geschaeftFuerAdresseEingabe: Geschaeft?
     @State private var zeigeStandortErgaenzenFehler = false
+    /// Zeitpunkt der letzten Interaktion mit der Einkaufsliste, Grundlage für
+    /// ``inaktivitaetPruefen()`` (GitHub #51).
+    @State private var letzteInteraktion = Date.now
 
     private var aktuellerEinkauf: Einkaufsvorgang? {
         guard let ausgewaehlteListe else { return nil }
@@ -81,8 +91,16 @@ struct EinkaufenView: View {
         .onChange(of: ausgewaehltesGeschaeft) { _, neu in
             Task { await einkaufSicherstellen() }
             pruefeStandortErgaenzung(fuer: neu)
+            if neu != nil { letzteInteraktion = .now }
         }
         .onChange(of: ausgewaehlteListe) { _, _ in Task { await einkaufSicherstellen() } }
+        .onChange(of: scenePhase) { _, neu in
+            guard neu == .active else { return }
+            inaktivitaetPruefen()
+        }
+        .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { _ in
+            inaktivitaetPruefen()
+        }
         // Reagiert darauf, dass ein Einkaufsvorgang abgeschlossen wurde (verschwindet
         // dadurch aus `offeneEinkaufsvorgaenge`): legt sofort den nächsten an, damit die
         // gerade abgehakten Artikel des beendeten Einkaufs aus der Ansicht verschwinden,
@@ -151,11 +169,21 @@ struct EinkaufenView: View {
         if let ausgewaehlteListe, let einkauf = aktuellerEinkauf {
             EinkaufslisteView(
                 geschaeft: ausgewaehltesGeschaeft, einkaufsliste: ausgewaehlteListe, einkaufsvorgang: einkauf,
-                geschaeftZuruecksetzen: { ausgewaehltesGeschaeft = nil }
+                geschaeftZuruecksetzen: { ausgewaehltesGeschaeft = nil },
+                interaktionRegistrieren: { letzteInteraktion = .now }
             )
         } else {
             ProgressView()
         }
+    }
+
+    /// Setzt ``ausgewaehltesGeschaeft`` zurück, wenn seit ``letzteInteraktion``
+    /// mindestens ``inaktivitaetsSchwelle`` vergangen ist (GitHub #51) — geprüft
+    /// per Timer (Vordergrund) und beim Zurückkehren aus dem Hintergrund.
+    private func inaktivitaetPruefen() {
+        guard ausgewaehltesGeschaeft != nil else { return }
+        guard Date.now.timeIntervalSince(letzteInteraktion) >= Self.inaktivitaetsSchwelle else { return }
+        ausgewaehltesGeschaeft = nil
     }
 
     /// Reaktion auf einen Tipp auf „Hinzufügen“ im ``GeschaeftVorschlagBanner`` für
@@ -719,6 +747,9 @@ private struct EinkaufslisteView: View {
     /// (GitHub #51) — der nächste Einkauf soll nicht automatisch am zuletzt
     /// genutzten Geschäft weiterlaufen.
     let geschaeftZuruecksetzen: () -> Void
+    /// Meldet eine Interaktion mit der Einkaufsliste an ``EinkaufenView`` zurück
+    /// (GitHub #51) — Grundlage für den Inaktivitäts-Reset der Geschäftsauswahl.
+    let interaktionRegistrieren: () -> Void
 
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var syncPollingService: SyncPollingService
@@ -1069,6 +1100,7 @@ private struct EinkaufslisteView: View {
     }
 
     private func umschalten(_ artikel: Artikel) {
+        interaktionRegistrieren()
         // Nur die Identitäten über die `await`-Grenze hinweg sichern (siehe
         // ``ModelReference``) — während des Micro-Lease-Erwerbs kann ein
         // nebenläufiger Sync-Zyklus genau diesen Artikel oder Einkaufsvorgang
@@ -1113,6 +1145,7 @@ private struct EinkaufslisteView: View {
     }
 
     private func entferneDauerhaft(_ artikel: Artikel) {
+        interaktionRegistrieren()
         Task {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
                 einkaufsvorgang.artikelDauerhaftEntfernen(artikel, context: modelContext)
@@ -1127,6 +1160,7 @@ private struct EinkaufslisteView: View {
     /// steht, wirkt sich das auf dessen ``EinkaufslistenEintrag/menge`` aus, danach
     /// (bereits abgehakt) auf die im ``KaufEintrag`` festgehaltene Menge.
     private func mengeErhoehen(_ artikel: Artikel) {
+        interaktionRegistrieren()
         Task {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
                 if let eintrag = einkaufsliste.eintrag(fuer: artikel) {
@@ -1139,6 +1173,7 @@ private struct EinkaufslisteView: View {
     }
 
     private func mengeVerringern(_ artikel: Artikel) {
+        interaktionRegistrieren()
         Task {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
                 if let eintrag = einkaufsliste.eintrag(fuer: artikel) {
