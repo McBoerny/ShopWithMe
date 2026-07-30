@@ -86,9 +86,10 @@ enum SyncSnapshotImportService {
     /// lokalen Backup, ``SyncErsetzenService``) — dieselbe Merge-Pipeline wie
     /// ``importiereSnapshots(context:)``, nur ohne den Peer-Ordner-Scan. Da der
     /// Kontext nach einem vorangegangenen
-    /// ``ModelContainerController/ersetzeDurchLeerenContainer()`` leer ist, IST
-    /// dieser einzelne Merge-Durchlauf bereits der vollständige Neuaufbau —
-    /// jede `mergeX`-Funktion legt bei fehlendem lokalem Treffer frisch an.
+    /// ``SyncErsetzenService/loescheStoreDateiFallsAusstehend(url:)`` leer
+    /// ist, IST dieser einzelne Merge-Durchlauf bereits der vollständige
+    /// Neuaufbau — jede `mergeX`-Funktion legt bei fehlendem lokalem Treffer
+    /// frisch an.
     @MainActor
     static func importiereEinzelnenSnapshot(_ snapshot: SyncSnapshot, peerGeraeteID: String, context: ModelContext) {
         merge(snapshot, peerGeraeteID: peerGeraeteID, context: context)

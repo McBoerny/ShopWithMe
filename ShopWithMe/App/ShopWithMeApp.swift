@@ -9,17 +9,38 @@ import SwiftData
 /// Standardpfad — und sät beim ersten Start die Standardkategorien via ``SeedData``.
 @main
 struct ShopWithMeApp: App {
-    @StateObject private var containerController: ModelContainerController
+    let modelContainer: ModelContainer
     @StateObject private var syncPollingService = SyncPollingService()
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
-        let (konfiguration, geteilterOrdner) = ModelContainerController.baueStandardKonfiguration()
+        let schema = SchemaDefinition.schema
+        let konfiguration: ModelConfiguration
+        var geteilterOrdner: URL?
+        if let ordner = DatabaseLocationService.gewaehlterOrdner(), ordner.startAccessingSecurityScopedResource() {
+            konfiguration = ModelConfiguration(schema: schema, url: DatabaseLocationService.storeURL(inOrdner: ordner))
+            geteilterOrdner = ordner
+        } else {
+            konfiguration = ModelConfiguration(schema: schema)
+        }
+
+        // Muss VOR dem Öffnen des Containers passieren (siehe
+        // ``SyncErsetzenService``): ein bereits laufender ModelContainer für
+        // dieselbe Datei lässt sich nicht sicher zur Laufzeit physisch
+        // ersetzen — ein erster Versuch dazu führte auf einem echten Gerät zu
+        // einem SQLite-I/O-Fehler und Absturz, weil `SyncPollingService`s
+        // Hintergrund-Timer trotz `stoppen()` noch nebenläufig lief (siehe
+        // `docs/DATABASE_CONCURRENCY.md`). Deshalb erst hier, ganz am Anfang
+        // eines frischen Prozesses, an dem garantiert noch nichts geöffnet ist.
+        SyncErsetzenService.loescheStoreDateiFallsAusstehend(url: konfiguration.url)
 
         DatabaseDebugLogger.log(.storeOpenStart, details: konfiguration.url.path)
-        let container: ModelContainer
         do {
-            container = try ModelContainerController.baueContainer(konfiguration: konfiguration)
+            modelContainer = try ModelContainer(
+                for: schema,
+                migrationPlan: SchemaDefinition.migrationPlan,
+                configurations: [konfiguration]
+            )
         } catch {
             // Log ist Best-Effort: `fatalError` beendet den Prozess sofort danach,
             // das asynchrone Schreiben des Log-Eintrags kann daher vereinzelt nicht
@@ -29,7 +50,7 @@ struct ShopWithMeApp: App {
         }
         DatabaseDebugLogger.log(.storeOpenSuccess, details: konfiguration.url.path)
 
-        let context = container.mainContext
+        let context = modelContainer.mainContext
         // Autosave aus: alle Schreibzugriffe laufen ab jetzt über explizite,
         // Lease-geschützte `save()`-Aufrufe (siehe `docs/DATABASE_CONCURRENCY.md` →
         // „Voraussetzung: explizite Speicherpunkte statt implizitem Autosave“).
@@ -42,26 +63,27 @@ struct ShopWithMeApp: App {
         ArtikelKategorie.geschaeftsTypenMigrierenFallsNoetig(context: context)
         DatenintegritaetsService.pruefe(context: context)
         try? context.save()
-
-        _containerController = StateObject(wrappedValue: ModelContainerController(modelContainer: container))
     }
 
     var body: some Scene {
         WindowGroup {
             RootView()
-                // Erzwingt einen kompletten View-Baum-Neuaufbau nach einem
-                // ``SyncErsetzenService``-Austausch — siehe
-                // ``ModelContainerController/generation``.
-                .id(containerController.generation)
                 .environmentObject(syncPollingService)
-                .environmentObject(containerController)
-                .task { syncPollingService.starten(context: containerController.modelContainer.mainContext) }
+                .task {
+                    // Nach einem Neustart wegen ``SyncErsetzenService`` steht
+                    // hier ein frisch geöffneter, gerade eben (siehe `init()`)
+                    // physisch geleerter Store — jetzt aus Peer-Snapshot oder
+                    // lokalem Backup befüllen, bevor das normale Polling
+                    // beginnt. Ohne Wirkung, falls nichts aussteht.
+                    await SyncErsetzenService.fuehreAusstehendeAktionAus(context: modelContainer.mainContext)
+                    syncPollingService.starten(context: modelContainer.mainContext)
+                }
         }
-        .modelContainer(containerController.modelContainer)
+        .modelContainer(modelContainer)
         .onChange(of: scenePhase) { _, neuePhase in
             switch neuePhase {
             case .active:
-                syncPollingService.starten(context: containerController.modelContainer.mainContext)
+                syncPollingService.starten(context: modelContainer.mainContext)
             default:
                 syncPollingService.stoppen()
             }

@@ -3,20 +3,38 @@ import SwiftData
 import Testing
 @testable import ShopWithMe
 
-/// Tests für ``SyncErsetzenService``/``ModelContainerController`` (GitHub #63
-/// + Korruptions-Recovery, siehe `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`).
+/// Tests für ``SyncErsetzenService`` (GitHub #63 + Korruptions-Recovery, siehe
+/// `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`).
 ///
-/// Anders als die übrigen Tests dieses Projekts braucht
-/// ``ModelContainerController/ersetzeDurchLeerenContainer()`` einen
-/// dateibasierten statt In-Memory-Container — eine In-Memory-Datenbank hat
-/// keine Datei zum Löschen.
+/// **Bewusst kein Test, der den vollen Ablauf „Store-Datei löschen, dann neu
+/// öffnen" innerhalb eines einzigen Testlaufs nachstellt:** ein erster
+/// Versuch dazu ließ den Testprozess selbst mit genau demselben
+/// `BUG IN CLIENT OF libsqlite3.dylib`-Muster abstürzen, das auf einem echten
+/// Gerät beim ursprünglichen (verworfenen) Laufzeit-Austausch auftrat — selbst
+/// nachdem der erste `ModelContainer` sauber aus dem Scope gegangen war.
+/// SwiftData/CoreData scheint intern noch etwas asynchron gegen die Datei
+/// laufen zu haben, das durch simples ARC-Deallozieren nicht sofort beendet
+/// wird. Der reale Mechanismus verlässt sich stattdessen darauf, dass die
+/// Löschung in einem komplett NEUEN Prozess passiert (App-Neustart) — dort
+/// kann es diese Art von Restaktivität aus dem alten Prozess gar nicht geben.
+/// Ein Unit-Test innerhalb eines einzigen Prozesses kann diese
+/// Prozessgrenze nicht nachstellen; das ist daher Gegenstand der manuellen
+/// Verifikation auf einem echten Gerät, nicht dieser Tests.
+///
+/// Getestet wird deshalb an den tatsächlichen Nahtstellen getrennt:
+/// - Das reine Löschen einer Store-Datei (``SyncErsetzenService/loescheStoreDateiFallsAusstehend(url:)``)
+///   gegen einfache, per `Data.write` erzeugte Dateien — ganz ohne
+///   `ModelContainer`, um jede Lebenszyklus-Unschärfe zu vermeiden.
+/// - Das Befüllen eines (bereits leeren) Contexts gemäß ausstehender Aktion
+///   (``SyncErsetzenService/fuehreAusstehendeAktionAus(context:)``) — der
+///   Context ist hier einfach ein zweiter, unabhängiger In-Memory-Container,
+///   nicht derselbe, aus dem zuvor "gelöscht" wurde.
 @MainActor
 struct SyncErsetzenServiceTests {
-    private func machtDateiBasiertenContainer() throws -> (url: URL, container: ModelContainer, context: ModelContext) {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("syncersetzen-test-\(UUID().uuidString).sqlite")
-        let konfiguration = ModelConfiguration(schema: SchemaDefinition.schema, url: url)
+    private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {
+        let konfiguration = ModelConfiguration(schema: SchemaDefinition.schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: SchemaDefinition.schema, configurations: [konfiguration])
-        return (url, container, container.mainContext)
+        return (container, container.mainContext)
     }
 
     private func macheTempSyncOrdner() -> URL {
@@ -48,82 +66,22 @@ struct SyncErsetzenServiceTests {
         )
     }
 
-    /// Fügt genau einen Datensatz jedes der 16 Schema-Modelltypen ein, damit
-    /// ``ModelContainerController/ersetzeDurchLeerenContainer()`` gegen einen
-    /// vollständig befüllten Store getestet werden kann.
-    private func befuelleAllesEinmal(context: ModelContext) throws {
-        let typ = GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")
-        let geschaeft = Geschaeft(name: "Rewe", typen: [typ])
-        let kategorie = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
-        let artikel = Artikel(name: "Milch", symbolName: "cart", farbeHex: "#000000")
-        let liste = Einkaufsliste(name: "Einkaufsliste")
-        let listenEintrag = EinkaufslistenEintrag(einkaufsliste: liste, artikel: artikel, menge: 1)
-        let vorgang = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste)
-        let kaufEintrag = KaufEintrag(artikel: artikel, geschaeft: geschaeft)
-        let distanz = WarengruppenDistanz(geschaeft: geschaeft, kategorieA: kategorie, kategorieB: kategorie, distanz: 1)
-        let ignArtikel = IgnorierterArtikel(erkannterName: "Test", geschaeft: geschaeft)
-        let ignVorschlag = IgnorierterGeschaeftsVorschlag(name: "Test", breitengrad: nil, laengengrad: nil)
-        let syncEvent = SyncEvent(
-            art: .artikelHinzugefuegt, nutzlast: SyncEventNutzlast(bezugsID: UUID(), artikelID: UUID()),
-            lamportZaehler: 1, lamportGeraeteID: "geraet", autorGeraeteID: "geraet"
-        )
-        let alias = SyncEntitaetsAlias(entitaetsArt: SyncEntitaetsArt.artikel, fremdeID: UUID(), lokaleID: UUID())
-        let zaehlerStand = SyncPeerZaehlerStand(peerGeraeteID: "peer", geschaeftID: UUID(), zuletztGesehenerWert: 1)
-        let peerInfo = SyncPeerInfo(peerGeraeteID: "peer", geraeteName: "Testgerät")
-        let tombstone = SyncTombstone(entitaetsArt: SyncEntitaetsArt.artikel, geloeschteID: UUID())
-
-        context.insert(typ)
-        context.insert(geschaeft)
-        context.insert(kategorie)
-        context.insert(artikel)
-        context.insert(liste)
-        context.insert(listenEintrag)
-        context.insert(vorgang)
-        context.insert(kaufEintrag)
-        context.insert(distanz)
-        context.insert(ignArtikel)
-        context.insert(ignVorschlag)
-        context.insert(syncEvent)
-        context.insert(alias)
-        context.insert(zaehlerStand)
-        context.insert(peerInfo)
-        context.insert(tombstone)
-        try context.save()
+    /// Testisolation: ``SyncErsetzenService/ausstehendeAktion`` liegt in
+    /// `UserDefaults` und übersteht damit einzelne Testläufe.
+    private func raeumeAusstehendeAktionAuf() {
+        UserDefaults.standard.removeObject(forKey: "syncErsetzenAusstehendeAktion")
     }
 
-    @Test
-    func ersetzeDurchLeerenContainerLeertAlleModelltypen() throws {
-        let (url, container, context) = try machtDateiBasiertenContainer()
-        defer { try? FileManager.default.removeItem(at: url) }
-        try befuelleAllesEinmal(context: context)
-
-        let controller = ModelContainerController(modelContainer: container)
-        let neuerContext = try controller.ersetzeDurchLeerenContainer()
-
-        #expect(try neuerContext.fetchCount(FetchDescriptor<Geschaeft>()) == 0)
-        #expect(try neuerContext.fetchCount(FetchDescriptor<GeschaeftTyp>()) == 0)
-        #expect(try neuerContext.fetchCount(FetchDescriptor<ArtikelKategorie>()) == 0)
-        #expect(try neuerContext.fetchCount(FetchDescriptor<Artikel>()) == 0)
-        #expect(try neuerContext.fetchCount(FetchDescriptor<Einkaufsliste>()) == 0)
-        #expect(try neuerContext.fetchCount(FetchDescriptor<EinkaufslistenEintrag>()) == 0)
-        #expect(try neuerContext.fetchCount(FetchDescriptor<Einkaufsvorgang>()) == 0)
-        #expect(try neuerContext.fetchCount(FetchDescriptor<KaufEintrag>()) == 0)
-        #expect(try neuerContext.fetchCount(FetchDescriptor<WarengruppenDistanz>()) == 0)
-        #expect(try neuerContext.fetchCount(FetchDescriptor<IgnorierterArtikel>()) == 0)
-        #expect(try neuerContext.fetchCount(FetchDescriptor<IgnorierterGeschaeftsVorschlag>()) == 0)
-        #expect(try neuerContext.fetchCount(FetchDescriptor<SyncEvent>()) == 0)
-        #expect(try neuerContext.fetchCount(FetchDescriptor<SyncEntitaetsAlias>()) == 0)
-        #expect(try neuerContext.fetchCount(FetchDescriptor<SyncPeerZaehlerStand>()) == 0)
-        #expect(try neuerContext.fetchCount(FetchDescriptor<SyncPeerInfo>()) == 0)
-        #expect(try neuerContext.fetchCount(FetchDescriptor<SyncTombstone>()) == 0)
-        #expect(controller.modelContainer.configurations.first?.url == url)
+    private func setzeAusstehendeAktion(_ aktion: SyncErsetzenService.AusstehendeAktion) {
+        UserDefaults.standard.set(aktion.rawValue, forKey: "syncErsetzenAusstehendeAktion")
     }
+
+    // MARK: - Backup
 
     @Test
     func backupRundlaufEnthaeltSnapshotUndIgnorierteVorschlaege() throws {
-        let (url, container, context) = try machtDateiBasiertenContainer()
+        let (container, context) = try machtLeerenContainer()
         _ = container
-        defer { try? FileManager.default.removeItem(at: url) }
         defer { SyncErsetzenService.loescheBackup() }
 
         context.insert(Geschaeft(name: "Rewe", typen: []))
@@ -141,9 +99,8 @@ struct SyncErsetzenServiceTests {
 
     @Test
     func erneutesBackupUeberschreibtDasVorherige() throws {
-        let (url, container, context) = try machtDateiBasiertenContainer()
+        let (container, context) = try machtLeerenContainer()
         _ = container
-        defer { try? FileManager.default.removeItem(at: url) }
         defer { SyncErsetzenService.loescheBackup() }
 
         context.insert(Geschaeft(name: "Rewe", typen: []))
@@ -160,45 +117,111 @@ struct SyncErsetzenServiceTests {
         #expect(Set(backup.snapshot.geschaefte.map(\.name)) == Set(["Rewe", "Edeka"]))
     }
 
-    @Test
-    func ersetzenDurchPeerVerwirftLokaleDatenStattZuMergen() async throws {
-        let (url, container, context) = try machtDateiBasiertenContainer()
-        defer { try? FileManager.default.removeItem(at: url) }
-        defer { SyncErsetzenService.loescheBackup() }
+    // MARK: - Planen
 
+    @Test
+    func planeWiederherstellenAusBackupWirftOhneBackup() {
+        SyncErsetzenService.loescheBackup()
+        #expect(throws: SyncErsetzenFehler.self) {
+            try SyncErsetzenService.planeWiederherstellenAusBackup()
+        }
+    }
+
+    @Test
+    func planeErsetzenDurchPeerSetztAktionUndErstelltBackupOhneDenStoreZuVeraendern() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        defer { SyncErsetzenService.loescheBackup() }
+        defer { raeumeAusstehendeAktionAuf() }
+
+        context.insert(Geschaeft(name: "Rewe", typen: []))
+        try context.save()
+
+        try SyncErsetzenService.planeErsetzenDurchPeer(context: context)
+
+        #expect(SyncErsetzenService.ausstehendeAktion == .ersetzenDurchPeer)
+        #expect(SyncErsetzenService.vorhandenesBackup() != nil)
+        // Noch nichts am aktuellen Datenbestand verändert - das passiert erst
+        // beim nächsten Start.
+        #expect(try context.fetchCount(FetchDescriptor<Geschaeft>()) == 1)
+    }
+
+    // MARK: - Store-Datei löschen (ohne ModelContainer, siehe Typ-Doku)
+
+    @Test
+    func loescheStoreDateiFallsAusstehendTutNichtsOhneAusstehendeAktion() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("test-\(UUID().uuidString).sqlite")
+        try Data("test".utf8).write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        SyncErsetzenService.loescheStoreDateiFallsAusstehend(url: url)
+
+        #expect(FileManager.default.fileExists(atPath: url.path))
+    }
+
+    @Test
+    func loescheStoreDateiFallsAusstehendLoeschtDateiUndNebendateienBeiAusstehenderAktion() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("test-\(UUID().uuidString).sqlite")
+        try Data("test".utf8).write(to: url)
+        try Data("wal".utf8).write(to: URL(fileURLWithPath: url.path + "-wal"))
+        try Data("shm".utf8).write(to: URL(fileURLWithPath: url.path + "-shm"))
+        defer {
+            for suffix in ["", "-wal", "-shm"] {
+                try? FileManager.default.removeItem(at: URL(fileURLWithPath: url.path + suffix))
+            }
+        }
+        setzeAusstehendeAktion(.ersetzenDurchPeer)
+        defer { raeumeAusstehendeAktionAuf() }
+
+        SyncErsetzenService.loescheStoreDateiFallsAusstehend(url: url)
+
+        #expect(!FileManager.default.fileExists(atPath: url.path))
+        #expect(!FileManager.default.fileExists(atPath: url.path + "-wal"))
+        #expect(!FileManager.default.fileExists(atPath: url.path + "-shm"))
+    }
+
+    // MARK: - Ausstehende Aktion ausführen (auf bereits leerem Context)
+
+    @Test
+    func fuehreAusstehendeAktionAusImportiertVonPeer() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
         let syncOrdner = macheTempSyncOrdner()
         try SyncOrdnerService.ordnerFestlegen(syncOrdner)
         defer { SyncOrdnerService.ordnerEntfernen() }
-
-        // Lokale, "private" Daten, die NICHT übernommen werden sollen.
-        context.insert(Geschaeft(name: "Privater Laden", typen: []))
-        try context.save()
+        defer { raeumeAusstehendeAktionAuf() }
 
         var snapshot = leererSnapshot(geraeteID: "peer-a")
         snapshot.geschaefte = [leerenGeschaeftSnapshot(name: "Rewe")]
         try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "peer-a", in: syncOrdner)
+        setzeAusstehendeAktion(.ersetzenDurchPeer)
 
-        let controller = ModelContainerController(modelContainer: container)
-        let neuerContext = try await SyncErsetzenService.ersetzenDurchPeer(containerController: controller)
+        await SyncErsetzenService.fuehreAusstehendeAktionAus(context: context)
 
-        let geschaefte = try neuerContext.fetch(FetchDescriptor<Geschaeft>())
+        let geschaefte = try context.fetch(FetchDescriptor<Geschaeft>())
         #expect(geschaefte.map(\.name) == ["Rewe"])
+        #expect(SyncErsetzenService.ausstehendeAktion == nil)
     }
 
     @Test
-    func wiederherstellenAusBackupStelltGesichertenStandWiederHer() throws {
-        let (url, container, context) = try machtDateiBasiertenContainer()
-        defer { try? FileManager.default.removeItem(at: url) }
+    func fuehreAusstehendeAktionAusStelltGesichertenStandWiederHer() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
         defer { SyncErsetzenService.loescheBackup() }
+        defer { raeumeAusstehendeAktionAuf() }
 
-        context.insert(Geschaeft(name: "Rewe", typen: []))
-        try context.save()
-        try SyncErsetzenService.erstelleBackup(context: context)
+        // Backup mit einem eigenen, unabhängigen Datenbestand erzeugen.
+        let (backupContainer, backupContext) = try machtLeerenContainer()
+        _ = backupContainer
+        backupContext.insert(Geschaeft(name: "Rewe", typen: []))
+        try backupContext.save()
+        try SyncErsetzenService.erstelleBackup(context: backupContext)
+        setzeAusstehendeAktion(.wiederherstellenAusBackup)
 
-        let controller = ModelContainerController(modelContainer: container)
-        let neuerContext = try SyncErsetzenService.wiederherstellenAusBackup(containerController: controller)
+        await SyncErsetzenService.fuehreAusstehendeAktionAus(context: context)
 
-        let geschaefte = try neuerContext.fetch(FetchDescriptor<Geschaeft>())
+        let geschaefte = try context.fetch(FetchDescriptor<Geschaeft>())
         #expect(geschaefte.map(\.name) == ["Rewe"])
+        #expect(SyncErsetzenService.ausstehendeAktion == nil)
     }
 }

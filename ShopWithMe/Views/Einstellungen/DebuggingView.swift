@@ -175,13 +175,11 @@ private struct BekannteSyncPeersSection: View {
 /// Referenzen über die normale SwiftData-API selbst zum Absturz führen kann.
 private struct DatenintegritaetSection: View {
     @Environment(\.modelContext) private var modelContext
-    @EnvironmentObject private var syncPollingService: SyncPollingService
-    @EnvironmentObject private var containerController: ModelContainerController
     @State private var bericht = DatenintegritaetsService.letzterBericht
     @State private var logGroesse = DatenintegritaetsLogger.gesamtGroesse()
     @State private var zeigeTeilen = false
     @State private var zeigeResetBestaetigung = false
-    @State private var wirdZurueckgesetzt = false
+    @State private var zeigeNeustartHinweis = false
     @State private var resetFehlermeldung: String?
 
     var body: some View {
@@ -212,7 +210,7 @@ private struct DatenintegritaetSection: View {
             Button("Gerät zurücksetzen und von Sync-Gerät neu aufbauen…", role: .destructive) {
                 zeigeResetBestaetigung = true
             }
-            .disabled(SyncOrdnerService.gewaehlterOrdner() == nil || wirdZurueckgesetzt)
+            .disabled(SyncOrdnerService.gewaehlterOrdner() == nil)
 
             if let resetFehlermeldung {
                 Label(resetFehlermeldung, systemImage: "exclamationmark.triangle.fill")
@@ -235,24 +233,26 @@ private struct DatenintegritaetSection: View {
             }
             Button("Abbrechen", role: .cancel) {}
         } message: {
-            Text("Löscht die lokale Datenbank vollständig (vorher gesichert) und baut sie ausschließlich aus dem Stand eines erreichbaren Sync-Geräts neu auf. Nicht rückgängig zu machen, außer über die Wiederherstellung bei „Synchronisierung deaktivieren“.")
+            Text("Sichert den aktuellen Bestand lokal und merkt den Neuaufbau aus einem erreichbaren Sync-Gerät für den nächsten App-Start vor — dafür muss die App danach einmal neu gestartet werden. Nicht rückgängig zu machen, außer über die Wiederherstellung bei „Synchronisierung deaktivieren“.")
+        }
+        .alert("Neustart nötig", isPresented: $zeigeNeustartHinweis) {
+            Button("OK") {}
+        } message: {
+            Text("Bitte schließe die App jetzt vollständig (nicht nur in den Hintergrund legen) und öffne sie erneut, um den Vorgang abzuschließen.")
         }
     }
 
+    /// Merkt den Neuaufbau nur für den nächsten App-Start vor (siehe Typ-Doku
+    /// von ``SyncErsetzenService``, warum ein sofortiger Austausch zur
+    /// Laufzeit auf einem echten Gerät abstürzte) — verändert selbst noch
+    /// nichts am Datenbestand.
     private func zuruecksetzen() {
-        wirdZurueckgesetzt = true
         resetFehlermeldung = nil
-        syncPollingService.stoppen()
-        Task {
-            do {
-                let neuerContext = try await SyncErsetzenService.ersetzenDurchPeer(containerController: containerController)
-                syncPollingService.starten(context: neuerContext)
-                bericht = DatenintegritaetsService.pruefe(context: neuerContext).map(\.beschreibung)
-            } catch {
-                resetFehlermeldung = error.localizedDescription
-                syncPollingService.starten(context: containerController.modelContainer.mainContext)
-            }
-            wirdZurueckgesetzt = false
+        do {
+            try SyncErsetzenService.planeErsetzenDurchPeer(context: modelContext)
+            zeigeNeustartHinweis = true
+        } catch {
+            resetFehlermeldung = error.localizedDescription
         }
     }
 }
@@ -270,11 +270,9 @@ private struct DebugLogTeilenView: UIViewControllerRepresentable {
 }
 
 #Preview {
-    let container = try! ModelContainer(for: SchemaDefinition.schema, configurations: .init(isStoredInMemoryOnly: true))
     NavigationStack {
         DebuggingView()
     }
     .environmentObject(SyncPollingService())
-    .environmentObject(ModelContainerController(modelContainer: container))
-    .modelContainer(container)
+    .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self], inMemory: true)
 }

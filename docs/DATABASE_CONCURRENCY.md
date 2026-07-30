@@ -627,6 +627,58 @@ die `.geschaeft?.name`/`.artikel?.name` o.ä. direkt liest, muss weiterhin bewus
 zugrundeliegende Korruption selbst bleibt unrepariert im Store bestehen (siehe
 „Nachtrag: rückwirkende Reparatur"), bis eine SQLite-Ebenen-Lösung existiert.
 
+## Nachtrag: gescheiterter Versuch, den Store zur Laufzeit physisch zu ersetzen
+
+Als „SQLite-Ebenen-Lösung" (siehe oben) wurde versucht, den lokalen Store zur
+Laufzeit komplett zu löschen und durch einen frischen, leeren `ModelContainer`
+an derselben URL zu ersetzen (`ModelContainerController`, `RootView().id(generation)`
+für einen erzwungenen View-Baum-Neuaufbau — Details siehe
+`docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` Abschnitt 13). Auf einem echten
+Gerät führte das zu:
+
+```
+BUG IN CLIENT OF libsqlite3.dylib: database integrity compromised by API
+violation: vnode unlinked while in use: .../default.store
+CoreData: error: (6922) I/O error for database ... SQLite error code:6922,
+'disk I/O error'
+data store (...) did not return a snapshot for: PersistentIdentifier(...
+EinkaufslistenEintrag/p60...)
+Fatal error: This model instance was invalidated because its backing data
+could no longer be found the store.
+```
+
+**Ursache:** `SyncPollingService.stoppen()` (`schleife?.cancel()`) fordert
+Cancellation nur kooperativ an — der Loop-Body prüft `Task.isCancelled` nur
+zwischen zwei Zyklen, nicht während eines bereits laufenden `syncZyklus()`.
+War beim Tippen auf „Ersetzen"/„Gerät zurücksetzen" gerade ein Zyklus aktiv,
+lief er nach `stoppen()` einfach weiter und griff auf die Store-Datei zu,
+während sie physisch gelöscht wurde — daher der SQLite-I/O-Fehler und
+anschließend der Absturz auf einer jetzt ungültigen Referenz. Ein zusätzlicher
+Fund beim Nachbau eines entsprechenden Unit-Tests: selbst innerhalb eines
+einzigen Testprozesses ließ sich „Store-Datei löschen, dann an derselben URL
+neu öffnen" nicht sicher nachstellen, obwohl der erste `ModelContainer` sauber
+per ARC dealloziert war — derselbe `BUG IN CLIENT OF libsqlite3.dylib`-Fehler
+trat weiterhin auf und brachte teils den Testprozess selbst zum Absturz.
+SwiftData/CoreData scheint intern noch etwas asynchron gegen die Datei laufen
+zu haben (vermutlich WAL-Checkpointing oder Coordinator-Aufräumarbeiten), das
+durch bloßes Dealloziieren der sichtbaren Swift-Referenz nicht sofort beendet
+wird.
+
+**Korrektur (mit dem Anwender abgestimmt):** kein Laufzeit-Austausch mehr,
+sondern eine Neustart-Aufforderung — die eigentliche Löschung passiert erst
+am Anfang eines komplett neuen Prozesses (`ShopWithMeApp.init()`, bevor
+überhaupt ein `ModelContainer` existiert), wo garantiert keine Restaktivität
+aus einem vorherigen Prozess mehr existieren kann, weil dieser vollständig
+beendet wurde. `ModelContainerController` wurde wieder entfernt. Siehe
+``SyncErsetzenService`` für die aktuelle Umsetzung.
+
+**Lehre für künftige Fälle dieser Art:** „ich pausiere den Hintergrund-Timer,
+bevor ich etwas Destruktives tue" reicht nicht, wenn die Pause nur über
+kooperative Task-Cancellation läuft — ein bereits laufender Durchlauf ist
+davon unberührt. Wo eine destruktive Operation wirklich exklusiven Zugriff
+braucht, ist eine Prozessgrenze (Neustart) einer laufzeitinternen
+Koordination vorzuziehen, sofern die UX das zulässt.
+
 ## Diagnose-Logging (DB-Debug-Modus)
 
 Für den geplanten Live-Test mit mehreren Geräten ist ein optionaler,

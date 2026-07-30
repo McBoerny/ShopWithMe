@@ -19,7 +19,6 @@ import UniformTypeIdentifiers
 struct SyncOrdnerSettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var syncPollingService: SyncPollingService
-    @EnvironmentObject private var containerController: ModelContainerController
 
     @State private var zeigeOrdnerauswahl = false
     @State private var fehlermeldung: String?
@@ -29,6 +28,7 @@ struct SyncOrdnerSettingsView: View {
 
     @State private var zeigeBeitrittsWahl = false
     @State private var zeigeAustrittsWahl = false
+    @State private var zeigeNeustartHinweis = false
 
     var body: some View {
         Form {
@@ -110,7 +110,7 @@ struct SyncOrdnerSettingsView: View {
                 ausgewaehlterOrdner = nil
             }
         } message: {
-            Text("In diesem Ordner sind bereits Daten anderer Geräte vorhanden. „Zusammenführen“ übernimmt sie zusätzlich zu deinen eigenen. „Ersetzen“ sichert deine lokalen Daten (wiederherstellbar bei Austritt) und übernimmt danach ausschließlich den Stand der anderen Geräte.")
+            Text("In diesem Ordner sind bereits Daten anderer Geräte vorhanden. „Zusammenführen“ übernimmt sie zusätzlich zu deinen eigenen. „Ersetzen“ sichert deine lokalen Daten (wiederherstellbar bei Austritt) und übernimmt danach ausschließlich den Stand der anderen Geräte — dafür muss die App danach einmal neu gestartet werden.")
         }
         .confirmationDialog("Synchronisierung deaktivieren", isPresented: $zeigeAustrittsWahl) {
             Button("Vorherigen Stand wiederherstellen") {
@@ -122,7 +122,12 @@ struct SyncOrdnerSettingsView: View {
             }
             Button("Abbrechen", role: .cancel) {}
         } message: {
-            Text("Es ist ein lokales Backup von vor dem letzten Beitritt/Ersetzen vorhanden. Möchtest du deinen damaligen Stand wiederherstellen?")
+            Text("Es ist ein lokales Backup von vor dem letzten Beitritt/Ersetzen vorhanden. Möchtest du deinen damaligen Stand wiederherstellen? Dafür muss die App danach einmal neu gestartet werden.")
+        }
+        .alert("Neustart nötig", isPresented: $zeigeNeustartHinweis) {
+            Button("OK") {}
+        } message: {
+            Text("Bitte schließe die App jetzt vollständig (nicht nur in den Hintergrund legen) und öffne sie erneut, um den Vorgang abzuschließen.")
         }
     }
 
@@ -159,24 +164,16 @@ struct SyncOrdnerSettingsView: View {
         }
     }
 
-    /// Pausiert den Hintergrund-Timer für die Dauer des Austauschs (sonst
-    /// könnte er mitten in den Container-Wechsel schreiben, siehe
-    /// `docs/DATABASE_CONCURRENCY.md`) und startet ihn danach mit dem neuen
-    /// Context neu.
+    /// Sichert den aktuellen Stand und merkt „Ersetzen" nur für den nächsten
+    /// App-Start vor (siehe Typ-Doku von ``SyncErsetzenService``, warum ein
+    /// sofortiger Austausch zur Laufzeit auf einem echten Gerät abstürzte) —
+    /// verändert selbst noch nichts am Datenbestand.
     private func ersetzenGetappt() {
-        letzterSyncErfolgreich = false
-        wirdSynchronisiert = true
-        syncPollingService.stoppen()
-        Task {
-            do {
-                let neuerContext = try await SyncErsetzenService.ersetzenDurchPeer(containerController: containerController)
-                syncPollingService.starten(context: neuerContext)
-                letzterSyncErfolgreich = true
-            } catch {
-                fehlermeldung = error.localizedDescription
-                syncPollingService.starten(context: containerController.modelContainer.mainContext)
-            }
-            wirdSynchronisiert = false
+        do {
+            try SyncErsetzenService.planeErsetzenDurchPeer(context: modelContext)
+            zeigeNeustartHinweis = true
+        } catch {
+            fehlermeldung = error.localizedDescription
         }
     }
 
@@ -190,25 +187,21 @@ struct SyncOrdnerSettingsView: View {
     }
 
     private func wiederherstellenUndDeaktivieren() {
-        syncPollingService.stoppen()
         do {
-            let neuerContext = try SyncErsetzenService.wiederherstellenAusBackup(containerController: containerController)
+            try SyncErsetzenService.planeWiederherstellenAusBackup()
             SyncOrdnerService.ordnerEntfernen()
             ausgewaehlterOrdner = nil
-            syncPollingService.starten(context: neuerContext)
+            zeigeNeustartHinweis = true
         } catch {
             fehlermeldung = error.localizedDescription
-            syncPollingService.starten(context: containerController.modelContainer.mainContext)
         }
     }
 }
 
 #Preview {
-    let container = try! ModelContainer(for: SchemaDefinition.schema, configurations: .init(isStoredInMemoryOnly: true))
     NavigationStack {
         SyncOrdnerSettingsView()
     }
     .environmentObject(SyncPollingService())
-    .environmentObject(ModelContainerController(modelContainer: container))
-    .modelContainer(container)
+    .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self], inMemory: true)
 }

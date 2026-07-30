@@ -726,23 +726,27 @@ Zwei Beweggründe, ein Mechanismus:
    vollständiges Zurücksetzen umgeht das strukturell, da die korrumpierten
    Zeilen nie wieder geöffnet werden.
 
-**Physisches Löschen statt zeilenweisem Wipe:** `ModelContainerController`
-(neu, `App/ModelContainerController.swift`) hält den `ModelContainer`
-austauschbar. `ersetzeDurchLeerenContainer()` löscht die Store-Datei (samt
-`-wal`/`-shm`) physisch und baut einen frischen, leeren Container an derselben
-URL — SwiftData öffnet dadurch nie wieder korrumpierte Zeilen, anders als bei
-einem zeilenweisen Wipe (auch über Batch-Delete), der dasselbe
-Inverse-Auffalten-Risiko wie ein normales Löschen trüge. Da SwiftData den
-Store einer laufenden `ModelContainer`-Instanz nicht austauschen kann, ändert
-sich bei jedem Ersetzen `ModelContainerController.generation` (`UUID`) —
-`ShopWithMeApp` bindet `RootView().id(containerController.generation)`, was
-SwiftUI zu einem kompletten View-Baum-Neuaufbau zwingt. Notwendig, weil jede
-Ansicht tiefer in einem NavigationStack/Sheet, die noch ein Modellobjekt aus
-dem alten (jetzt gelöschten) Store in `@State` hält, sonst beim nächsten
-Zugriff genau den Absturz auslösen würde, den dieses Feature vermeiden soll.
+**Physisches Löschen statt zeilenweisem Wipe — Korrektur nach echtem
+Geräte-Absturz:** Ein erster Entwurf machte den `ModelContainer` zur Laufzeit
+austauschbar (`ModelContainerController`, `RootView().id(generation)` für
+einen erzwungenen View-Baum-Neuaufbau) und löschte die Store-Datei, während
+die App weiterlief. Auf einem echten Gerät führte das zu
+`BUG IN CLIENT OF libsqlite3.dylib` / `SQLite error 6922, disk I/O error` und
+einem Absturz: `SyncPollingService.stoppen()` fordert Cancellation nur
+kooperativ an, wartet aber nicht, bis ein bereits laufender Sync-Zyklus
+tatsächlich beendet ist — lief einer noch, griff er weiter auf die Datei zu,
+während sie physisch gelöscht wurde. **Deshalb jetzt: Neustart-Aufforderung
+statt nahtlosem Austausch.** Der Anwender wird gebeten, die App zu schließen
+und neu zu öffnen; die eigentliche Ersetzung passiert erst danach, ganz am
+Anfang des neuen Prozesses (`ShopWithMeApp.init()`), **bevor** überhaupt ein
+`ModelContainer` für die Datei existiert — an diesem Punkt kann garantiert
+nichts anderes (kein Hintergrund-Timer, keine offene Ansicht) noch auf den
+Store zugreifen, weil der komplette vorherige Prozess beendet wurde. `App/ModelContainerController.swift`
+wurde wieder entfernt, `ShopWithMeApp` ist wieder ein einfacher `let
+modelContainer`.
 
-**`SyncErsetzenService`** (neu, `Services/SyncErsetzenService.swift`) baut
-darauf auf:
+**`SyncErsetzenService`** (neu, `Services/SyncErsetzenService.swift`) —
+zweigeteilt in „planen" (aktuelle Sitzung) und „ausführen" (nächster Start):
 - `erstelleBackup(context:)` — lokales, nicht geteiltes Backup unter
   `Application Support/Backups/ersetzen-backup.json`, wiederverwendet
   `SyncSnapshotExportService.erstelleSnapshot(context:)`, ergänzt um
@@ -752,42 +756,55 @@ darauf auf:
   unangetastet. **Genau ein Backup, wird bei jedem Ersetzen/Beitritt
   überschrieben** (mit dem Anwender abgestimmt) — löst die in #63 offene
   „welches Backup beim Austritt"-Frage automatisch, da es nur eins gibt.
-- `ersetzenDurchPeer(containerController:)` — Backup, dann
-  `ersetzeDurchLeerenContainer()`, dann
-  `SyncSnapshotImportService.importiereSnapshots(context:)` gegen den neuen,
-  leeren Context (bereits vorhanden, keine Änderung nötig — jede
-  `mergeX`-Funktion legt bei fehlendem lokalem Treffer frisch an, ein leerer
-  Kontext wird dadurch automatisch korrekt neu aufgebaut).
-- `wiederherstellenAusBackup(containerController:)` — wie oben, aber
-  Neuaufbau aus dem eigenen Backup statt aus Peer-Snapshots, über den neuen,
-  schmalen Wrapper `SyncSnapshotImportService.importiereEinzelnenSnapshot(_:peerGeraeteID:context:)`
-  (ruft dieselbe private `merge`-Pipeline mit einer Sentinel-Geräte-ID auf,
-  damit kein Phantom-`SyncPeerInfo`-Eintrag entsteht).
+- `planeErsetzenDurchPeer(context:)` / `planeWiederherstellenAusBackup()` —
+  sichern (ersteres) und merken nur eine `AusstehendeAktion` in `UserDefaults`
+  vor. Verändern den aktuellen Datenbestand **nicht** — die UI zeigt danach
+  sofort den Neustart-Hinweis.
+- `loescheStoreDateiFallsAusstehend(url:)` — von `ShopWithMeApp.init()` als
+  allererstes aufgerufen, noch vor dem Öffnen des `ModelContainer`s. Löscht
+  die Store-Datei (samt `-wal`/`-shm`) nur, falls eine Aktion aussteht —
+  sonst (jeder normale Start) ohne Wirkung.
+- `fuehreAusstehendeAktionAus(context:)` — aus `ShopWithMeApp`s `.task` (nach
+  dem synchronen `init()`, sobald ein `async`-Kontext verfügbar ist), füllt
+  den jetzt frischen, leeren Context: entweder via
+  `SyncSnapshotImportService.importiereSnapshots(context:)` (bereits
+  vorhanden — jede `mergeX`-Funktion legt bei fehlendem lokalem Treffer frisch
+  an, ein leerer Kontext wird dadurch automatisch korrekt neu aufgebaut) oder,
+  bei Wiederherstellung, über den neuen, schmalen Wrapper
+  `SyncSnapshotImportService.importiereEinzelnenSnapshot(_:peerGeraeteID:context:)`
+  mit einer Sentinel-Geräte-ID (kein Phantom-`SyncPeerInfo`-Eintrag). Löscht
+  die ausstehende Aktion danach.
 
-**UI, drei Einstiegspunkte, alle mit `.confirmationDialog`/`role: .destructive`,
-kein stilles Ausführen** (#63s eigene Anforderung):
+**UI, drei Einstiegspunkte, alle mit `.confirmationDialog`/`role: .destructive`
++ abschließendem „Neustart nötig"-Hinweis, kein stilles Ausführen** (#63s
+eigene Anforderung):
 1. Erster Sync-Ordner-Beitritt (`SyncOrdnerSettingsView.ordnerFestlegen(_:)`) —
    `SyncOrdnerService.hatVorhandenePeers(in:)` erkennt bereits vorhandene
-   Peer-Daten, bietet dann „Zusammenführen" (Standard, unverändert) vs.
-   „Ersetzen".
+   Peer-Daten, bietet dann „Zusammenführen" (Standard, unverändert, läuft
+   sofort) vs. „Ersetzen" (plant nur vor, Neustart-Hinweis).
 2. Manuelles Zurücksetzen jederzeit (Korruptions-Recovery) —
    `DebuggingView.DatenintegritaetSection`, direkt unter der Erklärung, warum
    keine automatische Reparatur stattfindet; deaktiviert ohne konfigurierten
    Sync-Ordner (ohne Peer kein Wiederaufbau möglich).
 3. Wiederherstellung bei Austritt — „Synchronisierung deaktivieren" bietet,
-   falls ein Backup existiert, dessen Wiederherstellung an.
+   falls ein Backup existiert, dessen Wiederherstellung an (ebenfalls nur
+   vorgemerkt, Neustart-Hinweis).
 
-**Nebenläufigkeit:** `SyncPollingService` wird für die Dauer jeder der drei
-Operationen pausiert (`stoppen()`/`starten(context:)` mit dem neuen Context) —
-sonst könnte der Hintergrund-Timer mitten in den Container-Austausch
-schreiben (dieselbe Fehlerklasse wie in `docs/DATABASE_CONCURRENCY.md` →
-„Nachtrag: nebenläufige Löschung während eines Micro-Lease-Erwerbs").
+Da die eigentliche Ersetzung erst nach einem echten Prozess-Neustart passiert,
+entfällt die ursprüngliche Nebenläufigkeits-Sorge um `SyncPollingService`
+vollständig — es gibt nichts mehr, das während der Operation pausiert werden
+müsste.
 
 **Verifikationsstand:** Automatisierte Tests (`SyncErsetzenServiceTests.swift`)
-decken Wipe-Vollständigkeit, Backup-Rundlauf, Überschreib-Semantik,
-Ersetzen-statt-Merge und Wiederherstellung ab. **Nicht automatisiert
-verifizierbar** (siehe dortige Typ-Doku): dass `.id(generation)` in der
-echten App wirklich jede Ansicht mit einer Referenz auf den gelöschten Store
-verwirft — das muss manuell auf einem tatsächlich betroffenen Gerät geprüft
-werden, bevor das Feature als Korruptions-Recovery beworben wird; Ergebnis in
-`docs/DATABASE_CONCURRENCY.md` nachzutragen.
+decken Backup-Rundlauf, Überschreib-Semantik, Planen-ohne-Seiteneffekt, reines
+Datei-Löschen sowie das Befüllen eines bereits leeren Contexts ab. **Bewusst
+nicht in einem einzigen Testlauf nachgestellt:** „Datei löschen, dann an
+derselben URL neu öffnen" — ein solcher Versuch ließ selbst nach sauberem
+ARC-Deallozieren des ersten `ModelContainer` den Testprozess mit demselben
+`BUG IN CLIENT OF libsqlite3.dylib`-Muster abstürzen (siehe Kommentar in der
+Testdatei). SwiftData/CoreData scheint intern noch etwas asynchron gegen die
+Datei laufen zu haben, das durch bloßes Dealloziieren nicht sofort beendet
+wird — im echten Prozess-Neustart-Fall kann es diese Restaktivität aus dem
+alten Prozess dagegen gar nicht geben. Der volle Ablauf (Neustart-Hinweis →
+tatsächlicher Neustart → korrekt befüllter Store) muss daher manuell auf
+einem echten Gerät verifiziert werden.

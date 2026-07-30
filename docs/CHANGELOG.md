@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.8 (Build 139) — KRITISCH: Ersetzen-Absturz auf echtem Gerät behoben
+
+Build 138s „Ersetzen"/„Gerät zurücksetzen" ersetzte den Store zur Laufzeit —
+auf einem echten Gerät führte das zu einem SQLite-I/O-Fehler und Absturz
+(`SyncPollingService.stoppen()` wartet nicht auf einen bereits laufenden
+Sync-Zyklus, siehe `docs/DATABASE_CONCURRENCY.md` → „Nachtrag: gescheiterter
+Versuch...").
+
+- Behoben: „Ersetzen"/„Gerät zurücksetzen"/„Wiederherstellen" merken die
+  Aktion jetzt nur noch vor und bitten um einen App-Neustart — die
+  eigentliche Store-Löschung passiert erst ganz am Anfang des neuen
+  Prozesses, bevor irgendein `ModelContainer` existiert. Strukturell
+  ausgeschlossen statt einzeln gejagt.
+- `ModelContainerController`/der Laufzeit-Container-Austausch wieder entfernt.
+
 ## v0.8 (Build 138) — Neu: Ersetzen/Backup/Wiederherstellen für Sync-Beitritt (GitHub #63)
 
 - Neu: `SyncErsetzenService` — beim erstmaligen Verknüpfen eines
