@@ -148,7 +148,12 @@ enum SyncImportService {
             guard let vorgang = einkaufsvorgang(mitID: nutzlast.bezugsID, context: context),
                   let artikel = artikel(mitID: nutzlast.artikelID, context: context)
             else { return false }
-            vorgang.artikelAbhakenOhneEventAufzeichnung(artikel, context: context)
+            // indexFuerDistanzlernen: false — dieses Abhaken beschreibt die
+            // Laufreihenfolge des SENDENDEN Geräts durchs Geschäft, nicht die
+            // dieses Geräts (siehe Einkaufsvorgang-Typ-Doku). Ein hier vergebener
+            // Index würde WarengruppenDistanzService mit einer erfundenen
+            // Position für diesen Nutzer füttern.
+            vorgang.artikelAbhakenOhneEventAufzeichnung(artikel, context: context, indexFuerDistanzlernen: false)
             return true
         case .artikelAbgewaehlt:
             guard let vorgang = einkaufsvorgang(mitID: nutzlast.bezugsID, context: context),

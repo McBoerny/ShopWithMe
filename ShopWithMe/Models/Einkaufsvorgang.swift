@@ -69,8 +69,24 @@ final class Einkaufsvorgang {
     /// entstanden ist (Grundlage dafür, ob die aufzeichnende Variante ein Event
     /// erzeugt) — sonst ``AbhakErgebnis/bereitsAbgehaktVon(geraeteID:)`` (GitHub
     /// #48, Überkauf-Hinweis).
+    ///
+    /// `indexFuerDistanzlernen: false` (siehe ``SyncImportService``) unterdrückt
+    /// die Vergabe eines ``KaufEintrag/kategorieBesuchsIndex`` bewusst: Ein von
+    /// einem Peer per Bereich-A-Event empfangenes Abhaken beschreibt, wo/wann
+    /// **dessen** Nutzer durchs Geschäft gelaufen ist, nicht wo dieses Gerät
+    /// gerade steht — würde es trotzdem einen Index aus der lokalen
+    /// Besuchsreihenfolge bekommen (`naechsterKategorieBesuchsIndex(fuer:)`),
+    /// erschiene es fälschlich als "als Nächstes von diesem Nutzer besucht" und
+    /// würde die ladenspezifische Distanzmatrix
+    /// (``WarengruppenDistanzService/besuchsreihenfolge(fuer:)`` überspringt
+    /// `nil`-Indizes bewusst) mit einer erfundenen Position verfälschen. Der
+    /// Artikel gilt dadurch weiterhin korrekt als abgehakt (KaufEintrag
+    /// existiert, verschwindet von der offenen Liste), fließt aber nicht in die
+    /// Reihenfolge-Analyse ein.
     @discardableResult
-    func artikelAbhakenOhneEventAufzeichnung(_ artikel: Artikel, context: ModelContext) -> AbhakErgebnis {
+    func artikelAbhakenOhneEventAufzeichnung(
+        _ artikel: Artikel, context: ModelContext, indexFuerDistanzlernen: Bool = true
+    ) -> AbhakErgebnis {
         // Dedupe-Schutz gegen das in `docs/DATABASE_CONCURRENCY.md` dokumentierte
         // Restrisiko (Sync-Latenz-Kollisionsfenster bei zeitgleichem Abhaken auf zwei
         // Geräten): pro (Einkaufsvorgang, Artikel) darf nur ein `KaufEintrag`
@@ -92,7 +108,7 @@ final class Einkaufsvorgang {
         }
 
         let kategorie = artikel.fuehrendeKategorie(inGeschaeft: geschaeft, context: context)
-        let index = naechsterKategorieBesuchsIndex(fuer: kategorie)
+        let index = indexFuerDistanzlernen ? naechsterKategorieBesuchsIndex(fuer: kategorie) : nil
         let eintrag = KaufEintrag(
             artikel: artikel,
             geschaeft: geschaeft,

@@ -204,6 +204,41 @@ struct EinkaufsvorgangTests {
         #expect(geraeteID == DatabaseLeaseService.geraeteID)
     }
 
+    /// Ein per Sync-Import materialisiertes Abhaken (siehe
+    /// `SyncImportService.materialisiere`) beschreibt die Laufreihenfolge des
+    /// SENDENDEN Geräts, nicht die dieses Geräts — es darf deshalb keinen
+    /// ``KaufEintrag/kategorieBesuchsIndex`` bekommen, sonst würde
+    /// ``WarengruppenDistanzService`` mit einer erfundenen Besuchsposition für
+    /// diesen Nutzer gefüttert (siehe Typ-Doku
+    /// ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:indexFuerDistanzlernen:)``).
+    @Test
+    func syncMaterialisiertesAbhakenBekommtKeinenBesuchsindex() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        context.insert(obst)
+        let geschaeft = Geschaeft(name: "Testladen", typen: [lebensmittelTyp()])
+        context.insert(geschaeft)
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst])
+        context.insert(apfel)
+        liste.artikelHinzufuegen(apfel, context: context)
+
+        let einkauf = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste)
+        context.insert(einkauf)
+
+        einkauf.artikelAbhakenOhneEventAufzeichnung(apfel, context: context, indexFuerDistanzlernen: false)
+        // Siehe `abhakenErstelltKaufEintragUndEntferntVonEinkaufsliste`: ein
+        // `context.delete()` spiegelt sich in `liste.eintraege` erst nach `save()`.
+        try context.save()
+
+        #expect(einkauf.kaufEintraege.first?.kategorieBesuchsIndex == nil)
+        #expect(einkauf.kaufEintraege.first?.kategorie == obst)
+        #expect(liste.enthaelt(apfel) == false)
+    }
+
     /// GitHub #48: Ein von einem Peer per Bereich-A-Import empfangenes
     /// "abgehakt"-Event (siehe `SyncImportServiceTests`) muss beim eigenen
     /// `artikelAbhaken`-Aufruf als `.bereitsAbgehaktVon` mit der Geräte-ID des
