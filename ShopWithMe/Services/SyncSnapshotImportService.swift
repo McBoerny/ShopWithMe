@@ -545,13 +545,43 @@ enum SyncSnapshotImportService {
     /// Regel unten gilt in diesem Fall bewusst NICHT (das wäre die `endZeit`
     /// des ALTEN Vorgangs, fälschlich auf den neuen, offenen Nachfolger
     /// übertragen).
+    ///
+    /// **Bug (Live-Test-Fund, 2026-07-31): mehrfach eigenständig offene
+    /// Vorgänge für dieselbe Liste innerhalb eines einzigen Merge-Durchlaufs.**
+    /// `alleLokalen` wurde einmalig zu Beginn gefetcht — enthielt ein
+    /// einzelner Peer-Snapshot mehrere `remote`-Einträge, die eigentlich
+    /// alle denselben (bereits während dieses Durchlaufs frisch angelegten)
+    /// offenen Vorgang meinen, "sah" der `offenerTreffer`-Zweig den gerade
+    /// erst eingefügten Vorgang aus einem früheren Schleifendurchlauf nicht
+    /// — jeder weitere Eintrag legte dadurch einen zusätzlichen,
+    /// eigenständig offenen Vorgang für dieselbe Liste an, statt ihn
+    /// wiederzuverwenden. Beobachtete Folge: mehrere lokale Vorgänge mit
+    /// identischer `endZeit`, obwohl ihr `startZeit` klar danach lag — ein
+    /// später verarbeiteter Eintrag traf per `offenerTreffer` auf einen
+    /// dieser überzähligen offenen Duplikate und übertrug ihm die `endZeit`
+    /// eines völlig anderen, längst abgeschlossenen Vorgangs. Für den
+    /// Anwender sichtbar als: ein Artikel erscheint kurz als korrekt
+    /// abgehakt/synchronisiert, verschwindet dann aber wieder von der
+    /// abgehakten Liste (das Sicherheitsnetz in
+    /// ``mergeEinkaufslistenEintraege(_:listeZuordnung:artikelZuordnung:context:)``
+    /// verlangt für einen bereits geschlossenen Vorgang einen aktuell
+    /// offenen Nachfolger — ein Vorgang mit fälschlich übernommener, längst
+    /// vergangener `endZeit` erfüllt diese Bedingung nicht mehr). Fix: neu
+    /// angelegte Vorgänge werden jetzt sofort in `alleLokalen` nachgetragen,
+    /// zusätzlich verwirft eine neue Plausibilitätsprüfung jede `endZeit`,
+    /// die vor dem eigenen `startZeit` läge.
     @MainActor
     private static func mergeEinkaufsvorgaenge(
         _ remote: [EinkaufsvorgangSnapshot], geschaeftZuordnung: [UUID: Geschaeft], listeZuordnung: [UUID: Einkaufsliste],
         context: ModelContext
     ) -> [UUID: Einkaufsvorgang] {
         var zuordnung: [UUID: Einkaufsvorgang] = [:]
-        let alleLokalen = (try? context.fetch(FetchDescriptor<Einkaufsvorgang>())) ?? []
+        // `var` statt `let`: neu angelegte Vorgänge werden unten sofort
+        // angehängt (siehe Bugfund unten) — bei den bereits enthaltenen
+        // Referenzen (Klassentyp) liest jede Prädikat-Auswertung ohnehin den
+        // aktuellen Live-Zustand, nur neu eingefügte Objekte fehlen der
+        // beim Funktionsstart einmalig gefetchten Liste sonst.
+        var alleLokalen = (try? context.fetch(FetchDescriptor<Einkaufsvorgang>())) ?? []
         let geloeschteIDs = SyncTombstoneService.geloeschteIDs(art: SyncEntitaetsArt.einkaufsvorgang, context: context)
         for eintrag in remote {
             let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(
@@ -600,11 +630,25 @@ enum SyncSnapshotImportService {
                 let neuer = Einkaufsvorgang(geschaeft: remoteGeschaeft, einkaufsliste: remoteListe, startZeit: eintrag.startZeit)
                 neuer.id = eintrag.id
                 context.insert(neuer)
+                // Sofort anhängen (siehe Kommentar an ``alleLokalen``) — sonst
+                // "sieht" ein späterer `eintrag` derselben Schleife diesen
+                // gerade erst angelegten Vorgang nicht über den
+                // `offenerTreffer`-Zweig und legt für dieselbe Liste
+                // fälschlich einen weiteren, eigenständig offenen Vorgang an.
+                alleLokalen.append(neuer)
                 vorhandener = neuer
                 umgeleitetAufNachfolger = false
             }
 
-            if !umgeleitetAufNachfolger, vorhandener.endZeit == nil, let remoteEndZeit = eintrag.endZeit {
+            // `remoteEndZeit >= vorhandener.startZeit`: defensive Plausibilitätsprüfung
+            // (Live-Test-Fund, siehe Typ-Doku) — verwirft eine `endZeit`, die vor dem
+            // eigenen `startZeit` läge. Ohne den Fix an ``alleLokalen`` oben konnte ein
+            // per `offenerTreffer` fälschlich getroffener, in Wahrheit fremder Vorgang
+            // die `endZeit` eines völlig anderen, bereits abgeschlossenen Vorgangs
+            // übernehmen — beobachtet als mehrere lokale Vorgänge mit identischer
+            // `endZeit`, obwohl ihr `startZeit` klar danach lag.
+            if !umgeleitetAufNachfolger, vorhandener.endZeit == nil, let remoteEndZeit = eintrag.endZeit,
+               remoteEndZeit >= vorhandener.startZeit {
                 vorhandener.endZeit = remoteEndZeit
             }
             zuordnung[eintrag.id] = vorhandener

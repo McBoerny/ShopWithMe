@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.9 (Build 159) — Fix: Mehrfach offene Einkaufsvorgänge derselben Liste durch stale Merge-Liste
+
+- Wurzelursachen-Fund für einen Teil der „dangling Einkaufsvorgang"-Bugfamilie:
+  `SyncSnapshotImportService.mergeEinkaufsvorgaenge` gefetchte lokale
+  Vorgangsliste einmalig zu Beginn — enthielt ein einzelner Peer-Snapshot
+  mehrere Einträge für denselben, noch unbekannten offenen Vorgang derselben
+  Liste, wurde jeder weitere Eintrag fälschlich als zusätzlicher,
+  eigenständig offener Vorgang angelegt statt wiederverwendet. Ein späterer
+  Merge-Durchlauf konnte einem dieser Duplikate dadurch die `endZeit` eines
+  völlig anderen, längst abgeschlossenen Vorgangs zuweisen (belegt: zwei
+  Vorgänge mit `startZeit` NACH der übernommenen `endZeit`, chronologisch
+  unmöglich). Sichtbar für den Anwender als: Artikel erscheint kurz als
+  abgehakt/synchronisiert, verschwindet dann wieder von der Liste.
+- Fix: neu angelegte Vorgänge werden jetzt sofort in die lokale Vergleichsliste
+  nachgetragen; zusätzlich verwirft eine neue Plausibilitätsprüfung jede
+  `endZeit`, die vor dem eigenen `startZeit` läge.
+- Details: `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` Abschnitt 16.
+
 ## v0.9 (Build 158) — Fix: Endlos-Retry für Bereich-A-Referenzen ohne Tombstone
 
 - Ergänzt den bestehenden Tombstone-basierten Endlos-Retry-Fix um eine

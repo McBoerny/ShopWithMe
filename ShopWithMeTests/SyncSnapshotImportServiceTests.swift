@@ -624,6 +624,82 @@ struct SyncSnapshotImportServiceTests {
         #expect(eigenerVorgang.kaufEintraege.contains { $0.artikel == lokalerApfel })
     }
 
+    /// Regressionstest für einen echten Zwei-Geräte-Live-Test-Fund
+    /// (2026-07-31): Enthält ein einzelner Peer-Snapshot MEHRERE Einträge, die
+    /// alle denselben, für dieses Gerät noch unbekannten offenen Vorgang für
+    /// dieselbe Liste meinen (kein lokaler Treffer per ID/Alias), erzeugte
+    /// `mergeEinkaufsvorgaenge` bislang für jeden weiteren Eintrag einen
+    /// zusätzlichen, eigenständig offenen Vorgang — der `offenerTreffer`-Zweig
+    /// "sah" den im selben Durchlauf gerade erst angelegten Vorgang nicht, da
+    /// `alleLokalen` nur einmalig zu Beginn gefetcht wurde. Beobachtete Folge:
+    /// mehrere lokale Vorgänge für dieselbe Liste gleichzeitig offen,
+    /// nachfolgend abweichende `endZeit`-Zuordnungen.
+    @Test
+    func mehrereNeueVorgaengeFuerDieselbeListeInEinemSnapshotWerdenZusammengefuehrt() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let liste = Einkaufsliste(name: "Urlaub")
+        context.insert(liste)
+        try context.save()
+
+        // Ein Peer-Snapshot listet zwei verschiedene, beide noch offene
+        // Einkaufsvorgänge für dieselbe (store-lose) Liste — z.B. weil auf dem
+        // Peer nacheinander mehrere Einkäufe ohne Geschäft liefen.
+        let ersteVorgangsID = UUID()
+        let zweiteVorgangsID = UUID()
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.einkaufslisten = [EinkaufslisteSnapshot(id: liste.id, name: "Urlaub", erstelltAm: liste.erstelltAm)]
+        snapshot.einkaufsvorgaenge = [
+            EinkaufsvorgangSnapshot(id: ersteVorgangsID, geschaeftID: nil, einkaufslisteID: liste.id, startZeit: Date(), endZeit: nil),
+            EinkaufsvorgangSnapshot(id: zweiteVorgangsID, geschaeftID: nil, einkaufslisteID: liste.id, startZeit: Date(), endZeit: nil),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        // Nur EIN lokaler offener Vorgang für diese Liste, nicht zwei.
+        let vorgaenge = try context.fetch(FetchDescriptor<Einkaufsvorgang>())
+        #expect(vorgaenge.count == 1)
+        #expect(vorgaenge.first?.endZeit == nil)
+    }
+
+    /// Regressionstest für dieselbe Live-Test-Session: die neu eingeführte
+    /// Plausibilitätsprüfung verwirft eine `endZeit`, die vor dem eigenen
+    /// `startZeit` läge — genau das durch den obigen Bug beobachtete Muster
+    /// (ein neu angelegter Vorgang übernahm die `endZeit` eines völlig
+    /// anderen, längst abgeschlossenen Vorgangs).
+    @Test
+    func unplausibleEndZeitVorDemStartZeitWirdVerworfen() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let liste = Einkaufsliste(name: "Urlaub")
+        context.insert(liste)
+        try context.save()
+
+        let start = Date()
+        let unplausibleEndZeit = start.addingTimeInterval(-3600)
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.einkaufslisten = [EinkaufslisteSnapshot(id: liste.id, name: "Urlaub", erstelltAm: liste.erstelltAm)]
+        snapshot.einkaufsvorgaenge = [
+            EinkaufsvorgangSnapshot(id: UUID(), geschaeftID: nil, einkaufslisteID: liste.id, startZeit: start, endZeit: unplausibleEndZeit),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        let vorgaenge = try context.fetch(FetchDescriptor<Einkaufsvorgang>())
+        #expect(vorgaenge.count == 1)
+        #expect(vorgaenge.first?.endZeit == nil)
+    }
+
     /// Regressionstest (Code-Review-Fund): dieselbe „dangling Einkaufsvorgang"-
     /// Ursachen-Familie wie die Bereich-A-Umleitung in `SyncImportService`,
     /// hier für den Bereich-C-Snapshot-Merge. Ein Snapshot referenziert per ID

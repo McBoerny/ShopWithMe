@@ -959,3 +959,69 @@ dokumentierten „dangling Einkaufsvorgang"-Bugfamilie —, begrenzt aber
 zuverlässig den Schaden eines einzelnen betroffenen Vorgangs auf einen
 einmaligen, für den Anwender sichtbaren Sync-Ausfall dieses einen Kaufs statt
 auf dauerhaftes Log-Rauschen und wiederholte nutzlose Zyklusarbeit.
+
+### 16. Nachtrag: Wurzelursache eines Teils der „dangling Einkaufsvorgang"-Bugfamilie gefunden
+
+Ein weiterer Zwei-Geräte-Live-Test (2026-07-31, Symptom: „Artikel erscheint
+kurz als abgehakt/synchronisiert, verschwindet dann wieder") lieferte über den
+direkten Abgleich der `export.json` beider Geräte den ersten harten Beweis für
+eine tatsächliche Wurzelursache aus dieser Bugfamilie (bisher nur an
+Symptomen — Abschnitt 11, 11a, 11b, 15 — behandelt, nie an der Quelle):
+
+**Befund:** Drei unterschiedliche `Einkaufsvorgang`-IDs (`E4A62D76`, `845641FB`,
+`01387E15`) trugen auf **beiden** Geräten identisch dieselbe `endZeit`
+(`807141471.238757`, übereinstimmend bis auf die Mikrosekunde) — obwohl zwei
+davon (`845641FB`, `01387E15`) einen `startZeit` **nach** dieser `endZeit`
+hatten. Chronologisch unmöglich für eine echte `abschliessen()`-Aktion (die
+immer `Date()` zum tatsächlichen Zeitpunkt verwendet) — ein sicheres Indiz für
+eine fälschlich übernommene, fremde `endZeit`.
+
+**Ursache, in `mergeEinkaufsvorgaenge` gefunden:** `alleLokalen` wurde beim
+Funktionsstart einmalig gefetcht. Enthielt ein einzelner Peer-Snapshot mehrere
+`remote`-Einträge, die eigentlich alle denselben, für dieses Gerät noch
+unbekannten offenen Vorgang für dieselbe Liste meinten (z.B. mehrere
+store-lose Einkäufe desselben Peers), „sah" der `offenerTreffer`-Zweig einen
+im selben Durchlauf gerade erst per `context.insert` angelegten Vorgang
+nicht — jeder weitere solche Eintrag legte dadurch einen **zusätzlichen,
+eigenständig offenen** Vorgang für dieselbe Liste an, statt den bereits
+angelegten wiederzuverwenden. Bei einem späteren Merge-Durchlauf traf dann ein
+weiterer Eintrag per `offenerTreffer` auf eines dieser überzähligen
+Duplikate und übertrug ihm die `endZeit` eines völlig anderen, längst
+abgeschlossenen Vorgangs — die eigentliche Merge-Regel
+(„`endZeit` nur nachtragen, wenn lokal noch `nil`") schützt hier nicht, weil
+der Duplikat-Vorgang ja tatsächlich noch kein `endZeit` hatte.
+
+**Verbindung zu Abschnitt 15:** Genau diese Art von Vorgang — mit
+fälschlich zugewiesener, chronologisch unmöglicher `endZeit` — erfüllt die
+Bedingung von
+``SyncSnapshotImportService/istBereitsAbgehakt(_:aufListe:context:)``
+(„geschlossener Vorgang zählt nur, solange ein aktuell offener Nachfolger
+existiert") nicht mehr zuverlässig, sobald kein Nachfolger mehr gefunden wird
+— exakt der Mechanismus, der das „kurz synchronisiert, dann wieder
+verschwunden"-Symptom erklärt. Vermutlich auch (Teil-)Ursache für den in
+Abschnitt 15 dokumentierten `60EE808A`-Fund (spurlos aus jedem Snapshot
+verschwundene ID ohne Tombstone) — mehrere unabhängig entstandene Duplikat-
+Vorgänge für dieselbe Liste würden erklären, warum eine einzelne ID nie in
+den „gewinnenden" Bestand übernommen wurde.
+
+**Fix (`SyncSnapshotImportService.mergeEinkaufsvorgaenge`):**
+1. `alleLokalen` ist jetzt `var` — ein neu angelegter Vorgang wird sofort
+   angehängt, damit ein späterer Eintrag derselben Schleife ihn über
+   `offenerTreffer` korrekt findet, statt einen weiteren Duplikat-Vorgang
+   anzulegen.
+2. Zusätzliche, unabhängig wirksame Plausibilitätsprüfung: eine `endZeit`,
+   die vor dem eigenen `startZeit` läge, wird verworfen statt übernommen —
+   ein genereller Schutz gegen dieselbe Fehlerklasse, auch falls sie über
+   einen bisher unentdeckten anderen Pfad nochmal auftritt.
+
+**Bewusst nicht rückwirkend repariert:** Bereits bestehende, auf diese Weise
+korrumpierte `Einkaufsvorgang`-Datensätze (wie die drei oben gefundenen)
+bleiben mit ihrer falschen `endZeit` im Bestand — eine rückwirkende Korrektur
+bräuchte eine Heuristik, um „echte" von „übernommene" `endZeit`-Werte zu
+unterscheiden, die es nicht sicher geben kann.
+
+**Verifikationsstand:** `xcodebuild build`/`build-for-testing` grün, zwei neue
+Regressionstests (`SyncSnapshotImportServiceTests`) — mehrere neue Vorgänge
+derselben Liste in einem Snapshot werden zusammengeführt statt dupliziert;
+eine unplausible `endZeit` vor dem eigenen `startZeit` wird verworfen. Noch
+nicht erneut mit echten Geräten nachverifiziert.
