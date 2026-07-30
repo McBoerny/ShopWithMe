@@ -99,17 +99,6 @@ private struct HilfeThema: Identifiable {
             ändern oder einzelne Artikel ausschließen.
             """
         ),
-        HilfeThema(
-            titel: "Datenbank-Speicherort ändern",
-            text: """
-            In den Einstellungen unter „Datenbank & Speicherort“ kannst du einen \
-            eigenen Ordner für deine Daten wählen, z.B. einen lokal gespiegelten \
-            Cloud-Ordner. Das ist kein automatischer iCloud-Sync über mehrere Geräte \
-            — wenn du einen Cloud-Sync-Ordner wählst, solltest du die App nur auf \
-            einem Gerät gleichzeitig aktiv benutzen, um Konflikte zu vermeiden. Die \
-            Änderung wird erst nach einem Neustart der App wirksam.
-            """
-        ),
     ]
 }
 

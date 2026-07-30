@@ -66,9 +66,22 @@ enum DatabaseLeaseService {
         return neue
     }()
 
-    /// Anzeigename dieses Geräts für Lock-Meldungen/Logs.
+    /// Vom Anwender in den Sync-Einstellungen vergebener Gerätename (GitHub #65) —
+    /// überschreibt den sonst identischen `UIDevice.current.name` aller Geräte
+    /// (meist schlicht "iPhone"), damit sich Peers beim Sync unterscheiden lassen.
+    /// `nil`/leer, solange kein eigener Name gesetzt wurde.
+    static var eigenerGeraeteNameOverride: String? {
+        get { UserDefaults.standard.string(forKey: "eigenerGeraeteName") }
+        set { UserDefaults.standard.set(newValue, forKey: "eigenerGeraeteName") }
+    }
+
+    /// Anzeigename dieses Geräts für Lock-Meldungen/Logs/Sync-Snapshots — der
+    /// eigene Override, sofern gesetzt, sonst `UIDevice.current.name`.
     @MainActor
-    static var geraeteName: String { UIDevice.current.name }
+    static var geraeteName: String {
+        let override = eigenerGeraeteNameOverride?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (override?.isEmpty == false ? override : nil) ?? UIDevice.current.name
+    }
 
     private static func lockURL(fuerStore storeURL: URL) -> URL {
         storeURL.deletingLastPathComponent().appendingPathComponent(storeURL.lastPathComponent + ".lock.json")

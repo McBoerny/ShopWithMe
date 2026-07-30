@@ -14,12 +14,9 @@ enum SyncOrdnerError: LocalizedError {
 
 /// Verwaltet den vom Anwender gewählten geteilten Ordner für die
 /// Datensynchronisation (`docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`,
-/// GitHub #39) — bewusst getrennt von ``DatabaseLocationService``: Dort wird die
-/// aktive Store-Datei selbst an einen neuen Ort verlagert (Einzelnutzer-Fall,
-/// keine Sync-Logik). Hier wird nur ein zusätzlicher Ordner referenziert, in den
+/// GitHub #39). Hier wird nur ein zusätzlicher Ordner referenziert, in den
 /// ``SyncExportService`` Peer-Exportdateien schreibt — die lokale Datenbank
-/// bleibt für den Mehrbenutzer-Fall immer am Standardpfad (siehe Plan-Dokument
-/// Abschnitt 2).
+/// bleibt immer am Standardpfad (siehe Plan-Dokument Abschnitt 2, GitHub #54).
 enum SyncOrdnerService {
     private static let bookmarkSchluessel = "syncOrdnerBookmark"
 
@@ -38,9 +35,8 @@ enum SyncOrdnerService {
     }
 
     /// Legt den Sync-Ordner fest und merkt ihn sich per Security-Scoped-Bookmark.
-    /// Anders als `DatabaseLocationService.ordnerFestlegen` wird hier nichts
-    /// kopiert oder verschoben — der Ordner dient ausschließlich als Ziel für
-    /// Peer-Exportdateien.
+    /// Es wird nichts kopiert oder verschoben — der Ordner dient ausschließlich
+    /// als Ziel für Peer-Exportdateien.
     static func ordnerFestlegen(_ ordner: URL) throws {
         guard ordner.startAccessingSecurityScopedResource() else {
             throw SyncOrdnerError.zugriffVerweigert

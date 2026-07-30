@@ -7,14 +7,25 @@ Checkpoint. Ein echter Live-Test mit mehreren Geräten gegen einen realen Cloud-
 (Box Drive/OneDrive/Synology Drive/iCloud Drive) steht noch aus, siehe
 „Bekannte Grenzen“ und `docs/LOGGING.md` für das dafür vorgesehene Diagnose-Logging.
 
-## Ausgangslage
+**Nachtrag (GitHub #54):** `DatabaseLocationService` (siehe „Ausgangslage" unten)
+wurde entfernt — die Store-Datei liegt seitdem immer am SwiftData-Standardpfad im
+App-Container, nie mehr in einem geteilten Cloud-Ordner. Das hier beschriebene
+Szenario „mehrere Geräte greifen direkt auf dieselbe Store-Datei zu" ist damit
+nicht mehr herstellbar; **gemeinsames Einkaufen läuft ausschließlich über die
+event-basierte Synchronisation** (`docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`,
+`SyncOrdnerService`). `DatabaseLeaseService` selbst bleibt aktiv und relevant —
+es dient inzwischen als allgemeiner Schreibkoordinations-Mechanismus für explizite
+Speicherpunkte (statt implizitem Autosave) innerhalb eines einzelnen Geräts, siehe
+`ShopWithMeApp.swift`.
 
-Der Nutzer kann den SwiftData-Store bereits heute in einen beliebigen, per
-`.fileImporter` gewählten Ordner verlegen (`DatabaseLocationService`, siehe
-`docs/ARCHITECTURE.md` → „Datenbank-Speicherort"). In der Praxis ist dieser Ordner
-oft ein **Fileshare, das über einen Cloud-Dienst gehostet wird** (Box Drive,
-Synology Drive, iCloud Drive, OneDrive, o.ä.) und von mehreren Geräten/Nutzern
-gleichzeitig eingebunden ist.
+## Ausgangslage (historisch)
+
+Der Nutzer konnte den SwiftData-Store per `.fileImporter` in einen beliebigen
+Ordner verlegen (`DatabaseLocationService`, inzwischen entfernt, siehe Nachtrag
+oben). In der Praxis war dieser Ordner oft ein **Fileshare, das über einen
+Cloud-Dienst gehostet wird** (Box Drive, Synology Drive, iCloud Drive, OneDrive,
+o.ä.) und von mehreren Geräten/Nutzern gleichzeitig eingebunden war — daraus
+entstand der unten beschriebene Koordinationsbedarf.
 
 **Bewusste Entscheidung (Nutzervorgabe):** Kein CloudKit/eigener Server — die
 Cloud-Anbindung (echter Sync-Dienst) bleibt eine mögliche Zukunftsoption, ist aber
@@ -292,8 +303,8 @@ aber nur, wenn der WAL-Checkpoint bewusst NICHT bei jedem Schreibvorgang erzwung
 wird** (siehe Korrektur in Schritt 3 oben).
 
 **Grundmechanik:** SwiftData/SQLite nutzt bereits WAL-Modus (erkennbar an den
-existierenden `-wal`/`-shm`-Sidecar-Dateien, die `DatabaseLocationService`
-mitkopiert). Im WAL-Modus werden neue Schreibvorgänge zunächst nur an die
+existierenden `-wal`/`-shm`-Sidecar-Dateien, die das frühere `DatabaseLocationService`
+mitkopierte). Im WAL-Modus werden neue Schreibvorgänge zunächst nur an die
 `-wal`-Datei angehängt; die (große, mit der Zeit wachsende) Haupt-`.sqlite`-Datei
 bleibt unverändert, bis ein Checkpoint sie zurückschreibt. SQLite checkpointed
 automatisch von selbst, sobald die WAL-Datei einen Schwellwert überschreitet
@@ -345,8 +356,8 @@ verifizieren.
   Lease-Verfahren verhindert diesen Fall im Normalbetrieb, ist aber kein Ersatz
   für eine Anbieter-eigene Versionsverwaltung.
 - Sidecar-Dateien (`-wal`, `-shm`) müssen denselben Koordinations-Scope wie die
-  Hauptdatei durchlaufen; `DatabaseLocationService.kopiereStoreDateien` kopiert
-  diese bereits mit, das Lease-Verfahren muss beim Checkpoint/Schließen
+  Hauptdatei durchlaufen; das frühere `DatabaseLocationService.kopiereStoreDateien`
+  kopierte diese bereits mit, das Lease-Verfahren muss beim Checkpoint/Schließen
   sicherstellen, dass sie in konsistentem Zustand sind, bevor der Lease
   freigegeben wird.
 - **Kein echter „Refresh-before-write"**: SwiftData bietet keine API, einen

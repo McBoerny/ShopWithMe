@@ -210,9 +210,11 @@ struct BelegScanView: View {
         }
     }
 
-    private func verarbeite(bild: UIImage) {
+    private func verarbeite(bild rohesBild: UIImage) {
         laeuft = true
         fehlermeldung = nil
+        // S&W als Standard (GitHub #61) — genauere Texterkennung als am rohen Farbfoto.
+        let bild = rohesBild.schwarzWeissGefiltert()
         Task {
             defer { laeuft = false }
             do {

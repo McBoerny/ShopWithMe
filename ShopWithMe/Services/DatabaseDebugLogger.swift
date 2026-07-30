@@ -48,46 +48,24 @@ enum DatabaseDebugLogger {
             .appendingPathComponent("db-debug.log")
     )
 
-    /// Zusätzlicher Writer im gemeinsamen DB-Ordner, sofern einer konfiguriert ist —
-    /// siehe `docs/LOGGING.md` → „Speicherort“. `nil`, solange kein gemeinsamer Ordner
-    /// gewählt wurde oder ``konfiguriere(geteilterOrdner:)`` noch nicht aufgerufen
-    /// wurde. Wird einmalig beim App-Start gesetzt, danach nur noch lesend
-    /// zugegriffen — daher bewusst `nonisolated(unsafe)`, siehe ``istAktivCache``.
-    nonisolated(unsafe) private static var geteilterWriter: DebugLogWriter?
-
-    /// Muss beim App-Start aufgerufen werden, sobald der aktive Datenbank-Ordner
-    /// bekannt ist, damit Debug-Logs zusätzlich dorthin gespiegelt werden (für die
-    /// geräteübergreifende Auswertung nach einem Live-Test).
-    static func konfiguriere(geteilterOrdner: URL?) {
-        guard let geteilterOrdner else {
-            geteilterWriter = nil
-            return
-        }
-        let kurzeGeraeteID = DatabaseLeaseService.geraeteID.prefix(8)
-        let dateiname = "\(kurzeGeraeteID)-debug.log"
-        geteilterWriter = DebugLogWriter(kategorie: "DatabaseConcurrency", dateiURL: geteilterOrdner.appendingPathComponent(dateiname))
-    }
-
     static func log(_ ereignis: Ereignis, details: String) {
         guard istAktiv else { return }
         Task.detached(priority: .background) {
             let geraeteName = await DatabaseLeaseService.geraeteName
             await lokalerWriter.protokolliere(ereignis: ereignis.rawValue, details: details, geraeteName: geraeteName)
-            await geteilterWriter?.protokolliere(ereignis: ereignis.rawValue, details: details, geraeteName: geraeteName)
         }
     }
 
-    /// Aktuelle Gesamtgröße aller Log-Dateien (lokal + geteilt) in Byte.
+    /// Aktuelle Gesamtgröße aller Log-Dateien in Byte.
     static func gesamtGroesse() -> Int {
-        lokalerWriter.aktuelleGroesse() + (geteilterWriter?.aktuelleGroesse() ?? 0)
+        lokalerWriter.aktuelleGroesse()
     }
 
     static func leeren() {
         lokalerWriter.leere()
-        geteilterWriter?.leere()
     }
 
     static var exportURLs: [URL] {
-        lokalerWriter.exportURLs + (geteilterWriter?.exportURLs ?? [])
+        lokalerWriter.exportURLs
     }
 }

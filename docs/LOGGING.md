@@ -246,3 +246,16 @@ Alle Punkte umgesetzt und per `xcodebuild build`/`test` verifiziert:
 tatsächlich installierten Cloud-Provider, um die geräteübergreifende Auswertung
 der gespiegelten Log-Dateien im gemeinsamen DB-Ordner zu verifizieren (siehe
 `docs/DATABASE_CONCURRENCY.md` → „Umsetzungsstand").
+
+## Nachtrag (GitHub #54): Spiegelung in den gemeinsamen DB-Ordner entfernt
+
+`DatabaseLocationService` (das oben referenzierte "Datenbank an einen anderen
+Speicherort verlagern"-Feature) wurde entfernt — es gibt seit der neuen,
+event-basierten Datensynchronisation (`docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`)
+keinen Anwendungsfall mehr, bei dem die Store-Datei selbst in einem geteilten
+Ordner liegt. Die oben beschriebene Log-Spiegelung "zusätzlich im gemeinsamen
+DB-Ordner" (`DatabaseDebugLogger.geteilterWriter`/`konfiguriere(geteilterOrdner:)`)
+ergab nur in diesem Szenario Sinn und wurde mitentfernt. `DatabaseDebugLogger`
+protokolliert seitdem ausschließlich lokal je Gerät (`db-debug.log`) — die
+geräteübergreifende Auswertung aus dem "Noch offen"-Punkt oben ist damit
+hinfällig.

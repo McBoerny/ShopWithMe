@@ -244,12 +244,14 @@ wird das angepasst:
   Duplizierung zwischen „lokaler Pfad" und „Event-Anwendungs-Pfad" — siehe
   Abschnitt 4.3).
 - **Konsequenz für `DatabaseLocationService`/`DatabaseLeaseService`:** Für den
-  Mehrbenutzer-Fall werden diese durch dieses neue Verfahren **abgelöst** — die
-  lokale Datenbank bleibt immer am Standardpfad, der bisherige „aktiven
-  Speicherort auf einen geteilten Ordner verschieben"-Weg entfällt für „gemeinsam
-  einkaufen". Er bleibt nur noch für den unveränderten Einzelnutzer-Fall relevant
-  (persönlicher Ordner-Umzug ohne Teilen, z.B. eigener Cloud-Backup-Ordner) — dann
-  weiterhin ohne Sync-Zusatzlogik.
+  Mehrbenutzer-Fall wird `DatabaseLocationService` durch dieses neue Verfahren
+  **abgelöst** — die lokale Datenbank bleibt immer am Standardpfad, der bisherige
+  „aktiven Speicherort auf einen geteilten Ordner verschieben"-Weg entfällt für
+  „gemeinsam einkaufen". Der verbliebene Einzelnutzer-Fall (persönlicher
+  Ordner-Umzug ohne Teilen) wurde mangels eigenständigem Bedarf ebenfalls entfernt
+  (GitHub #54) — `DatabaseLocationService` existiert nicht mehr.
+  `DatabaseLeaseService` bleibt unverändert bestehen, dient aber nur noch der
+  Schreibkoordination innerhalb eines einzelnen Geräts.
 
 ## 3. Geräte-Identität und Lamport-Clock
 
@@ -454,7 +456,7 @@ andere Geräte sie vorher lesen konnten) löschen — identisch zum #39-Vorschla
 
 1. Person A wählt/erstellt einen geteilten Ordner (iCloud-/Synology-Freigabe).
 2. Person B verknüpft in ihren Einstellungen denselben Ordner (`.fileImporter`,
-   wie heute schon für `DatabaseLocationService`).
+   analog zum bisherigen `SyncOrdnerService`-Muster).
 3. **Bootstrap:** Beim ersten Verknüpfen eines Ordners mit bereits vorhandenen
    Peer-Daten wird der komplette fremde Bestand gelesen und mit dem eigenen
    lokalen Bestand gemergt (identischer Algorithmus wie in

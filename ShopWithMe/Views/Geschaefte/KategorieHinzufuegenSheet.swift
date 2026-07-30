@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 
 /// Sheet zum Hinzufügen einer ``ArtikelKategorie`` zu einem ``Geschaeft``, aufrufbar
-/// aus dem „Kategorien“-Abschnitt von ``GeschaeftDetailView``.
+/// aus ``GeschaeftKategorienSektion``.
 ///
 /// Eine Kategorie wird beim Antippen direkt diesem Geschäft zugeordnet
 /// (``Geschaeft/kategorien``) und damit sofort verfügbar.

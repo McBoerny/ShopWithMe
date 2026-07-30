@@ -52,9 +52,9 @@ enum ShopWithMeMigrationPlan: SchemaMigrationPlan {
     static var stages: [MigrationStage] { [] }
 }
 
-/// Zentrale Definition des SwiftData-Schemas, damit App-Start und
-/// ``DatabaseLocationService`` dieselbe Modell-Liste sowie denselben Migrationsplan
-/// verwenden.
+/// Zentrale Definition des SwiftData-Schemas, damit an allen Stellen, die einen
+/// `ModelContainer`/`ModelConfiguration` aufbauen, dieselbe Modell-Liste sowie
+/// derselbe Migrationsplan verwendet werden.
 enum SchemaDefinition {
     static let schema = Schema(versionedSchema: SchemaV1.self)
     static let migrationPlan = ShopWithMeMigrationPlan.self

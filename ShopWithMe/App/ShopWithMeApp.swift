@@ -4,9 +4,8 @@ import SwiftData
 /// Einstiegspunkt der App.
 ///
 /// Baut den ``ModelContainer`` mit dem vollständigen Datenmodell-Schema und dem
-/// ``ShopWithMeMigrationPlan`` auf — am vom Anwender gewählten Speicherort (siehe
-/// ``DatabaseLocationService``), falls einer hinterlegt ist, sonst am SwiftData-
-/// Standardpfad — und sät beim ersten Start die Standardkategorien via ``SeedData``.
+/// ``ShopWithMeMigrationPlan`` auf — immer am SwiftData-Standardpfad (GitHub #54)
+/// — und sät beim ersten Start die Standardkategorien via ``SeedData``.
 @main
 struct ShopWithMeApp: App {
     let modelContainer: ModelContainer
@@ -15,14 +14,7 @@ struct ShopWithMeApp: App {
 
     init() {
         let schema = SchemaDefinition.schema
-        let konfiguration: ModelConfiguration
-        var geteilterOrdner: URL?
-        if let ordner = DatabaseLocationService.gewaehlterOrdner(), ordner.startAccessingSecurityScopedResource() {
-            konfiguration = ModelConfiguration(schema: schema, url: DatabaseLocationService.storeURL(inOrdner: ordner))
-            geteilterOrdner = ordner
-        } else {
-            konfiguration = ModelConfiguration(schema: schema)
-        }
+        let konfiguration = ModelConfiguration(schema: schema)
 
         // Muss VOR dem Öffnen des Containers passieren (siehe
         // ``SyncErsetzenService``): ein bereits laufender ModelContainer für
@@ -56,7 +48,6 @@ struct ShopWithMeApp: App {
         // „Voraussetzung: explizite Speicherpunkte statt implizitem Autosave“).
         context.autosaveEnabled = false
         DatabaseLeaseService.storeURL = konfiguration.url
-        DatabaseDebugLogger.konfiguriere(geteilterOrdner: geteilterOrdner)
         SeedData.seedeStandarddatenFallsLeer(context: context)
         SeedData.seedeGeschaeftsTypenFallsLeer(context: context)
         Geschaeft.typenMigrierenFallsNoetig(context: context)

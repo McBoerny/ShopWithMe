@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.8 (Build 141) — Belegscan-S&W-Standard, Speicherort-Cleanup, Peer-Namen, Warengruppen bei Neuanlage
+
+- Neu (GitHub #61): Belegscan konvertiert aufgenommene/importierte Bilder vor
+  Texterkennung und Anzeige automatisch zu Schwarz/Weiß (Graustufen mit
+  angehobenem Kontrast) — `VNDocumentCameraViewController` bietet dafür keine
+  eigene Filter-Option, daher als Nachbearbeitung umgesetzt.
+- Entfernt (GitHub #54): `DatabaseLocationService`/„Datenbank & Speicherort"
+  — überflüssig seit die event-basierte Datensynchronisation die lokale DB
+  immer am Standardpfad belässt. `DatabaseDebugLogger`s Log-Spiegelung in
+  einen gemeinsamen DB-Ordner (nur für dieses Feature relevant) mitentfernt.
+- Neu (GitHub #65): eigener Gerätename in den Sync-Einstellungen statt des
+  generischen `UIDevice.current.name` — wirkt sich automatisch auf
+  Lease-Meldungen, Sync-Snapshots und die Peer-Liste aus.
+- Neu (GitHub #56): der Warengruppen-Abschnitt (`GeschaeftKategorienSektion`,
+  aus `GeschaeftDetailView` extrahiert) steht jetzt auch beim Anlegen eines
+  per Geolocation neu erkannten Geschäfts zur Verfügung, bevor es gespeichert
+  wird.
+
 ## v0.8 (Build 139) — KRITISCH: Ersetzen-Absturz auf echtem Gerät behoben
 
 Build 138s „Ersetzen"/„Gerät zurücksetzen" ersetzte den Store zur Laufzeit —

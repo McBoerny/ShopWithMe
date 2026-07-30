@@ -22,7 +22,7 @@ ShopWithMe/
     Models/                   # SwiftData @Model Typen + Seed-Daten
     Services/                 # AISuggestionService, ReceiptScanService,
                                # PriceTagScanService, WarengruppenDistanzService,
-                               # DatabaseLocationService, MilkForUsImportService
+                               # SyncOrdnerService, MilkForUsImportService
     DesignSystem/              # Liquid-Glass-Wrapper, Symbol/Farb-Picker
     Views/                    # nach Feature gruppiert: Artikel, Geschaefte,
                                # Einkaufen, Historie, Einstellungen
@@ -167,16 +167,13 @@ Kategorie-Paar und Geschäft, siehe
   Ladens befindet — schlägt ihn dafür in `EinkaufenView` vor (bereits angelegtes
   `Geschaeft` oder neuer, von Apple Maps bekannter Laden zum Hinzufügen). Details in
   `docs/GESCHAEFTSERKENNUNG.md`.
-- **DatabaseLocationService**: verwaltet Security-Scoped-Bookmarks für einen vom Nutzer
-  gewählten Speicherort außerhalb des App-Containers und das Verschieben der
-  SwiftData-Store-Dateien dorthin.
 - **DatabaseLeaseService**: koordiniert Mehrbenutzerzugriff auf einen geteilten
   Fileshare-Ordner über eine `NSFileCoordinator`-basierte Lock-Datei (Micro-Lease für
   diskrete Aktionen, Session-Lease für Bearbeitungs-Bildschirme) — siehe
   `docs/DATABASE_CONCURRENCY.md`.
 - **DebugLogWriter**/**DatabaseDebugLogger**: optionaler, standardmäßig deaktivierter
-  Diagnose-Logging-Mechanismus für den Mehrbenutzerzugriff (Rotation, `os.Logger`,
-  Spiegelung in den geteilten DB-Ordner) — siehe `docs/LOGGING.md`.
+  Diagnose-Logging-Mechanismus für den Mehrbenutzerzugriff (Rotation, `os.Logger`) —
+  siehe `docs/LOGGING.md`.
 - **PreisHistorieBereinigungService**: löscht alte `KaufEintrag`e (Preishistorie)
   anhand einer vom Nutzer gewählten, standardmäßig deaktivierten Aufbewahrungsfrist,
   automatisch bei App-Start/Vordergrund-Wechsel oder manuell — lässt Einträge eines
@@ -192,28 +189,32 @@ angewendet zu werden.
 
 ## Datenbank-Speicherort
 
-Standard: SwiftData-Standardpfad im App-Container, für den Einzelnutzer-Fall auch
-weiterhin auf einen vom Nutzer per `.fileImporter` gewählten Ordner verlegbar
-(reine Dateiverlagerung, kein Sync-Zusatzcode). Koordinierter Mehrbenutzerzugriff
-auf einen solchen Fileshare-Ordner (Micro-/Session-Lease über
-`NSFileCoordinator`/`NSFilePresenter`, seit Build 30) ist dokumentiert in
-`docs/DATABASE_CONCURRENCY.md` — bleibt für den Einzelnutzer-Fall relevant, wird
-aber für **gemeinsames Einkaufen mit mehreren Personen** durch die
-event-basierte Synchronisation unten abgelöst.
+Immer der SwiftData-Standardpfad im App-Container — es gibt keine Möglichkeit
+mehr, die Store-Datei selbst an einen anderen Ort zu verlegen (das frühere
+`DatabaseLocationService`, reine Dateiverlagerung ohne Sync-Zusatzcode für den
+Einzelnutzer-Fall, wurde entfernt, GitHub #54). Der ältere, koordinierte
+Mehrbenutzerzugriff direkt auf eine geteilte Store-Datei (Micro-/Session-Lease
+über `NSFileCoordinator`/`NSFilePresenter`, dokumentiert in
+`docs/DATABASE_CONCURRENCY.md`) ist für **gemeinsames Einkaufen mit mehreren
+Personen** durch die event-basierte Synchronisation unten abgelöst; die
+Lease-Mechanik selbst (`DatabaseLeaseService`) bleibt bestehen und schützt
+weiterhin einzelne Schreibzugriffe innerhalb eines Geräts (siehe
+`docs/DATABASE_CONCURRENCY.md`).
 
-**Für gemeinsames Einkaufen (Mehrbenutzer):** geplante, event-basierte
-Synchronisation über einen geteilten Ordner (GitHub #39/#50) — jedes Gerät führt
-seine eigene, lokale, live genutzte SwiftData-Datenbank; ein zusätzliches,
-additives `SyncEvent`-Modell samt Lamport-Uhr wird periodisch mit dem geteilten
-Ordner abgeglichen (kein Wechsel der Persistenzschicht, kein aktiv aus mehreren
-Geräten gleichzeitig beschriebener Store mehr). Bewusst ohne den
+**Für gemeinsames Einkaufen (Mehrbenutzer):** event-basierte Synchronisation
+über einen separat wählbaren, geteilten Sync-Ordner (`SyncOrdnerService`,
+GitHub #39/#50/#52/#63) — jedes Gerät führt seine eigene, lokale, live genutzte
+SwiftData-Datenbank am Standardpfad; ein zusätzliches, additives
+`SyncEvent`-Modell samt Lamport-Uhr wird periodisch mit dem geteilten Ordner
+abgeglichen (kein Wechsel der Persistenzschicht, kein aktiv aus mehreren
+Geräten gleichzeitig beschriebener Store). Bewusst ohne den
 MultipeerConnectivity-Kanal (WiFi/Bluetooth-Echtzeitaustausch im Laden, dafür
 weiterhin Issue #49, an Bedingungen geknüpft). Maßgeblicher Plan:
 `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`. Die ursprüngliche, inzwischen
 überholte Abwägung (weshalb dieser Ansatz zunächst nicht verfolgt wurde) steht in
 `docs/DATENSYNCHRONISATION_BEWERTUNG.md`; die Ersetzen-/Merge-Logik für den
 einmaligen Beitritts-/Bootstrap-Moment eines neuen Geräts in
-`docs/DATENBANK_BACKUP_RESTORE_BEWERTUNG.md`. Noch nicht umgesetzt.
+`docs/DATENBANK_BACKUP_RESTORE_BEWERTUNG.md`.
 
 ## Builds, Versionierung & Migrationen
 

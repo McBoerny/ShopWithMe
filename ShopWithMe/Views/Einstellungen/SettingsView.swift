@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Einstiegspunkt für Einstellungen: Hilfe/Anleitungen, Artikel-, Geschäfte-,
-/// Kategorien-, Geschäftstypen- und Einkaufslisten-Verwaltung, Datenbank-Speicherort
+/// Kategorien-, Geschäftstypen- und Einkaufslisten-Verwaltung, Datensynchronisation
 /// und App-Informationen.
 ///
 /// „Artikel“ und „Geschäfte“ sind seit GitHub #1 keine eigenen Tabs mehr (die App
@@ -27,7 +27,6 @@ private enum SettingsNavigationsziel: Hashable {
     case geschaeftsTypen
     case einkaufslisten
     case preishistorie
-    case datenbankSpeicherort
     case syncOrdner
     case debugging
 }
@@ -57,9 +56,6 @@ struct SettingsView: View {
                     }
                     NavigationLink(value: SettingsNavigationsziel.preishistorie) {
                         Label("Preishistorie", systemImage: "clock.arrow.circlepath")
-                    }
-                    NavigationLink(value: SettingsNavigationsziel.datenbankSpeicherort) {
-                        Label("Datenbank & Speicherort", systemImage: "externaldrive")
                     }
                     NavigationLink(value: SettingsNavigationsziel.syncOrdner) {
                         Label("Datensynchronisation", systemImage: "arrow.triangle.2.circlepath")
@@ -95,8 +91,6 @@ struct SettingsView: View {
                     EinkaufslistenVerwaltungView()
                 case .preishistorie:
                     PreisHistorieSettingsView()
-                case .datenbankSpeicherort:
-                    DatabaseLocationSettingsView()
                 case .syncOrdner:
                     SyncOrdnerSettingsView()
                 case .debugging:

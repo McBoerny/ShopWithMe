@@ -4,11 +4,9 @@ import UniformTypeIdentifiers
 
 /// Einstellung für den geteilten Sync-Ordner (Datensynchronisation, GitHub #39).
 ///
-/// Bewusst getrennt von ``DatabaseLocationSettingsView``: Dort wird die aktive
-/// Datenbankdatei selbst verlagert (Einzelnutzer-Fall). Hier wird nur ein
-/// zusätzlicher Ordner referenziert, in den eigene Änderungen als Events
-/// exportiert werden (``SyncExportService``) — die lokale Datenbank bleibt
-/// unangetastet am Standardpfad. Siehe
+/// Hier wird nur ein zusätzlicher Ordner referenziert, in den eigene Änderungen
+/// als Events exportiert werden (``SyncExportService``) — die lokale Datenbank
+/// bleibt unangetastet am Standardpfad. Siehe
 /// `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`.
 ///
 /// Ein erster Sync-Zyklus läuft automatisch direkt beim Verknüpfen eines
@@ -32,6 +30,8 @@ struct SyncOrdnerSettingsView: View {
 
     var body: some View {
         Form {
+            EigenerGeraeteNameSection()
+
             Section {
                 LabeledContent("Sync-Ordner") {
                     Text(ausgewaehlterOrdner != nil ? "Festgelegt" : "Nicht festgelegt")
@@ -194,6 +194,33 @@ struct SyncOrdnerSettingsView: View {
             zeigeNeustartHinweis = true
         } catch {
             fehlermeldung = error.localizedDescription
+        }
+    }
+}
+
+/// Eigener Gerätename für die Peer-Anzeige beim Sync (GitHub #65) — ohne diesen
+/// erscheinen alle Geräte schlicht als `UIDevice.current.name` (meist "iPhone"),
+/// was sie beim gemeinsamen Einkaufen ununterscheidbar macht. Wirkt sich über
+/// ``DatabaseLeaseService/geraeteName`` automatisch überall aus (Lease-Meldungen,
+/// Sync-Snapshot-Export, Peer-Liste), ohne jede Verwendungsstelle einzeln
+/// anzupassen.
+private struct EigenerGeraeteNameSection: View {
+    @State private var name: String
+
+    init() {
+        _name = State(initialValue: DatabaseLeaseService.eigenerGeraeteNameOverride ?? "")
+    }
+
+    var body: some View {
+        Section {
+            TextField(UIDevice.current.name, text: $name)
+                .onChange(of: name) { _, neuerName in
+                    DatabaseLeaseService.eigenerGeraeteNameOverride = neuerName
+                }
+        } header: {
+            Text("Gerätename")
+        } footer: {
+            Text("Damit dieses Gerät bei anderen Peers nicht einfach als „\(UIDevice.current.name)“ erscheint. Leer lassen, um den Gerätenamen zu verwenden.")
         }
     }
 }

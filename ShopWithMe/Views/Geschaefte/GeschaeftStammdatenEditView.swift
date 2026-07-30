@@ -7,7 +7,11 @@ import CoreLocation
 /// ``Geschaeft``s.
 ///
 /// Bei einem neuen Geschäft (`istNeu == true`) wird es erst beim Sichern in den
-/// Model-Context eingefügt (Abbrechen verwirft es folgenlos).
+/// Model-Context eingefügt (Abbrechen verwirft es folgenlos) — bis dahin lassen
+/// sich auch die Warengruppen bereits verfeinern (``GeschaeftKategorienSektion``,
+/// GitHub #56), z.B. beim Akzeptieren eines per Geolocation neu erkannten
+/// Geschäfts. Bei einem bestehenden Geschäft bleibt das ``GeschaeftDetailView``
+/// vorbehalten.
 ///
 /// Der Standort-Abschnitt (GitHub #24) zeigt eine Karte mit dem aktuellen Pin,
 /// sobald ``Geschaeft/koordinate`` gesetzt ist. Drei Wege dorthin: „Aktuellen
@@ -78,6 +82,13 @@ struct GeschaeftStammdatenEditView: View {
                     Text("Typ")
                 } footer: {
                     Text("Mehrfachauswahl möglich, z.B. Drogerie + Lebensmittel. Mindestens ein Typ muss gewählt sein. Ist ein Geschäftstyp noch nicht aufgeführt, kannst du hier auch einen neuen anlegen.")
+                }
+
+                // Nur beim erstmaligen Anlegen (GitHub #56) — bei einem bestehenden
+                // Geschäft bleibt die Kategorien-Verwaltung ausschließlich in
+                // ``GeschaeftDetailView``, um sie nicht doppelt anzuzeigen.
+                if istNeu {
+                    GeschaeftKategorienSektion(geschaeft: geschaeft)
                 }
 
                 Section("Adresse (optional)") {
