@@ -94,6 +94,19 @@ manuell gepflegte Struktur (früher: `Regal`), sondern wird von
 Kategorie-Paar und Geschäft, siehe
 `docs/ARCHITEKTURVORSCHLAG_ADAPTIVE_SORTIERUNG.md`).
 
+Ein Artikel mit mehreren Kategorien erscheint beim Einkaufen gleichzeitig in
+JEDEM zugehörigen Abschnitt (`EinkaufenView.kategorieGruppen(fuer:)`, v0.9,
+GitHub-Nachfolgefund zu #36) — keine Duplizierung mehr vermeidende
+Einzelauswahl. Abgehakt wird überall zugleich (ein `KaufEintrag`); die
+Kategorie des tatsächlich getappten Abschnitts wird explizit an
+`Einkaufsvorgang.artikelAbhaken(_:context:kategorie:)` übergeben und im
+`KaufEintrag` gespeichert — Grundlage dafür, dass `WarengruppenDistanzService`
+pro Geschäft lernt, in welcher der mehreren Kategorien ein Artikel dort
+tatsächlich steht (z.B. Sojasauce bei Edeka unter „Soßen", bei Aldi unter
+„Asia"). `Artikel.fuehrendeKategorie(inGeschaeft:context:)` bleibt als
+deterministisch sortierter Fallback für Kontexte ohne konkret getappten
+Abschnitt (Belegscan, Preisschild-Scan, Sync-Import).
+
 ## Services
 
 - **AISuggestionService**: prüft `SystemLanguageModel.default.availability`; nutzt bei
@@ -215,6 +228,21 @@ weiterhin Issue #49, an Bedingungen geknüpft). Maßgeblicher Plan:
 `docs/DATENSYNCHRONISATION_BEWERTUNG.md`; die Ersetzen-/Merge-Logik für den
 einmaligen Beitritts-/Bootstrap-Moment eines neuen Geräts in
 `docs/DATENBANK_BACKUP_RESTORE_BEWERTUNG.md`.
+
+**v0.9-Robustheits-Fixes (dieselbe Ursachen-Familie wie GitHub #52):** Ein per
+Bereich-A-Event empfangenes Abhaken, das noch einen von diesem Gerät bereits
+per „Einkauf abschließen" geschlossenen `Einkaufsvorgang` referenziert (der
+sendende Peer kannte dessen `endZeit` beim Senden noch nicht), wird von
+`SyncImportService.einkaufsvorgang(mitID:)` jetzt auf den aktuell offenen
+Nachfolger für dieselbe `Einkaufsliste` umgeleitet (bevorzugt mit gleichem
+`Geschaeft`, sonst irgendeinen offenen) — vorher landete der `KaufEintrag`
+unsichtbar auf dem geschlossenen Vorgang und wurde vom nächsten
+Snapshot-Merge fälschlich wieder auf die offene Liste zurückgeholt. Zusätzlich
+bekommt ein so oder per Snapshot-Merge (`mergeKaufEintraege`) fremd
+materialisierter `KaufEintrag` bewusst **keinen** `kategorieBesuchsIndex` —
+er beschreibt die Laufreihenfolge des SENDENDEN Geräts, nicht die dieses
+Geräts, und würde sonst `WarengruppenDistanzService` mit einer erfundenen
+Besuchsposition füttern.
 
 ## Builds, Versionierung & Migrationen
 

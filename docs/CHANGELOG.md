@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.9 (Build 148) — Minor-Version-Bump: Sync-Robustheit & Mehrfachkategorien-Anzeige
+
+Reine Versionsanhebung, kein neuer Funktionsumfang gegenüber dem letzten v0.8-Stand
+— schließt den seit v0.8 gewachsenen Block an Sync-Robustheit-Fixes (dangling
+Einkaufsvorgang nach „Einkauf abschließen", Distanzlern-Isolation gegen fremd
+abgehakte Artikel) und die neue Mehrfachkategorien-Anzeige als abgeschlossenen
+Minor-Release ab. Zusätzlich behobene Inkonsistenz: `VERSION`-Datei war seit
+längerem bei „0.7" stehengeblieben, während `project.yml` bereits „0.8" führte —
+jetzt wieder synchron.
+
 ## v0.8 (Build 147) — Artikel mit mehreren Kategorien: gleichzeitig in allen Abschnitten, geschäftsspezifisches Lernen
 
 - Fix/Neu (GitHub-Nachfolgefund zu #36): ein Artikel mit mehreren Kategorien

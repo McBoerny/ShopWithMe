@@ -72,6 +72,16 @@ die übrige Doku aktualisiert wird): `docs/BUILD_WORKFLOW.md`.
   (`DebugEinstellungen`, `#if DEBUG`, kein Teil des Release-Binaries). Siehe
   `docs/GESCHAEFTSERKENNUNG.md`.
 
+- [x] **v0.9** — Mehrfachkategorien-Anzeige: ein Artikel mit mehreren Kategorien
+  erscheint beim Einkaufen jetzt gleichzeitig in allen zugehörigen Abschnitten
+  statt nur in einer „führenden“ (GitHub-Nachfolgefund zu #36); die getappte
+  Kategorie fließt explizit in den `KaufEintrag` ein, sodass
+  `WarengruppenDistanzService` pro Geschäft lernen kann, in welcher der
+  mehreren Kategorien ein Artikel dort tatsächlich steht. Dazu mehrere
+  Sync-Robustheits-Fixes (dangling `Einkaufsvorgang` nach „Einkauf
+  abschließen“, Distanzlern-Isolation gegen fremd abgehakte Artikel) — siehe
+  `docs/ARCHITECTURE.md` → „v0.9-Robustheits-Fixes“.
+
 Damit ist die in der Kickoff-Unterhaltung beschriebene Kernfunktionalität
 vollständig umgesetzt; weitere Ideen siehe „Zukünftig“ unten.
 

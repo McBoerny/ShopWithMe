@@ -250,8 +250,15 @@ struct ModelTests {
     func fuehrendeKategorieFaelltOhneJedenTrefferAufErsteKategorieZurueck() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
-        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
-        let drogerie = ArtikelKategorie(name: "Drogerie", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
+        // Explizit unterschiedliche sortIndex-Werte statt beide beim Default (0) zu
+        // belassen: `fuehrendeKategorie` sortiert Kandidaten seit v0.9 deterministisch
+        // nach sortIndex (dann `id` als Tiebreaker) statt sich auf die nicht
+        // ordnungsgarantierte `kategorien`-Relationship-Reihenfolge zu verlassen —
+        // bei gleichem sortIndex wäre der "erste" Kandidat sonst von der (zufälligen)
+        // UUID-Reihenfolge abhängig, nicht von der hier absichtlich getesteten
+        // "erste zugeordnete Kategorie gewinnt"-Fallback-Regel.
+        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759", sortIndex: 0)
+        let drogerie = ArtikelKategorie(name: "Drogerie", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE", sortIndex: 1)
         context.insert(obst)
         context.insert(drogerie)
 
