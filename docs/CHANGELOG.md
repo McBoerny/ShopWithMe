@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.9 (Build 160) — Sync-Debug-Modus: sichtbar machen, welcher Bereich export.json neu schreibt
+
+- Neues Protokoll-Ereignis `sync_snapshot_geschrieben` (bisher gab es nur
+  `sync_snapshot_unveraendert_uebersprungen` für den Fall, dass NICHT
+  geschrieben wurde) — beide Ereignisse protokollieren jetzt Anzahl + einen
+  kurzen Inhalts-Fingerabdruck je Teil-Bereich (`geschaeftsTypen`,
+  `geschaefte`, `artikel`, `einkaufsvorgaenge`, `kaufEintraege`, …). Zwei
+  aufeinanderfolgende Protokollzeilen im Sync-Debug-Modus lassen sich damit
+  direkt vergleichen: ändert sich nur eine Anzahl, kam dort etwas hinzu/weg;
+  ändert sich nur der Fingerabdruck bei gleicher Anzahl, hat sich ein Feld
+  eines bestehenden Eintrags geändert (z.B. eine `endZeit`, ein additiver
+  Zähler).
+- Details: `docs/LOGGING.md` → „Mechanismus: Datensynchronisation".
+
 ## v0.9 (Build 159) — Fix: Mehrfach offene Einkaufsvorgänge derselben Liste durch stale Merge-Liste
 
 - Wurzelursachen-Fund für einen Teil der „dangling Einkaufsvorgang"-Bugfamilie:

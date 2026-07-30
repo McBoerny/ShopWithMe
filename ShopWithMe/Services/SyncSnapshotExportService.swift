@@ -63,9 +63,12 @@ enum SyncSnapshotExportService {
         guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return true }
 
         let snapshot = erstelleSnapshot(context: context)
-        guard let fingerabdruck = inhaltsFingerabdruck(of: snapshot) else { return true }
+        let normalisiert = normalisiertFuerVergleich(snapshot)
+        guard let fingerabdruck = inhaltsFingerabdruck(of: normalisiert) else { return true }
         guard fingerabdruck != letzterGeschriebenerFingerabdruck else {
-            SyncDebugLogger.log(.snapshotUnveraendertUebersprungen, details: "")
+            if SyncDebugLogger.istAktiv {
+                SyncDebugLogger.log(.snapshotUnveraendertUebersprungen, details: diagnoseText(of: normalisiert))
+            }
             return true
         }
         guard let daten = try? JSONEncoder().encode(snapshot) else { return true }
@@ -82,20 +85,29 @@ enum SyncSnapshotExportService {
         )) != nil else { return true }
 
         guard schreibeBlocking(daten, nach: zielURL) else { return true }
+        let vorherigerFingerabdruck = letzterGeschriebenerFingerabdruck
         letzterGeschriebenerFingerabdruck = fingerabdruck
+        if SyncDebugLogger.istAktiv {
+            // vorher=nil beim allerersten Schreiben dieses Geräts — sonst die
+            // ersten 8 Zeichen des vorherigen Fingerabdrucks, damit sich ein
+            // Schreiben im Protokoll eindeutig einem vorherigen Übersprungen-
+            // Eintrag zuordnen lässt.
+            let vorherKurz = vorherigerFingerabdruck.map { String($0.prefix(8)) } ?? "nil"
+            SyncDebugLogger.log(.snapshotGeschrieben, details: "vorher=\(vorherKurz) \(diagnoseText(of: normalisiert))")
+        }
         return true
     }
 
-    /// SHA256-Fingerabdruck des inhaltlichen Teils von `snapshot` — ohne die
-    /// reinen Metafelder `erzeugtAm`/`geraeteID`/`geraeteName`, die sich
-    /// unabhängig vom eigentlichen Datenbestand jeden Zyklus ändern (würden)
-    /// und damit jeden Vergleich wertlos machen würden. Alle Teil-Arrays
-    /// werden vor dem Encoding nach ihrer `UUID` sortiert, damit eine bloß
-    /// andere Fetch-Reihenfolge zwischen zwei Zyklen (SwiftData garantiert
-    /// keine stabile Reihenfolge für einen unsortierten `FetchDescriptor`)
-    /// nicht fälschlich als inhaltliche Änderung erkannt wird. `nil` nur bei
-    /// einem (praktisch nie auftretenden) Encoding-Fehler.
-    private static func inhaltsFingerabdruck(of snapshot: SyncSnapshot) -> String? {
+    /// Normalisiert `snapshot` für den Inhalts-Vergleich (Fingerabdruck +
+    /// Diagnose-Text): entfernt die reinen Metafelder `erzeugtAm`/`geraeteID`/
+    /// `geraeteName`, die sich unabhängig vom eigentlichen Datenbestand jeden
+    /// Zyklus ändern (würden) und damit jeden Vergleich wertlos machen
+    /// würden, und sortiert alle Teil-Arrays nach ihrer `UUID`, damit eine
+    /// bloß andere Fetch-Reihenfolge zwischen zwei Zyklen (SwiftData
+    /// garantiert keine stabile Reihenfolge für einen unsortierten
+    /// `FetchDescriptor`) nicht fälschlich als inhaltliche Änderung erkannt
+    /// wird.
+    private static func normalisiertFuerVergleich(_ snapshot: SyncSnapshot) -> SyncSnapshot {
         var normalisiert = snapshot
         normalisiert.erzeugtAm = .distantPast
         normalisiert.geraeteID = ""
@@ -112,10 +124,46 @@ enum SyncSnapshotExportService {
         normalisiert.kaufEintraege.sort { $0.id.uuidString < $1.id.uuidString }
         normalisiert.warengruppenDistanzen.sort { $0.id.uuidString < $1.id.uuidString }
         normalisiert.tombstones.sort { "\($0.entitaetsArt)_\($0.geloeschteID)" < "\($1.entitaetsArt)_\($1.geloeschteID)" }
+        return normalisiert
+    }
 
+    /// SHA256-Fingerabdruck eines bereits ``normalisiertFuerVergleich(_:)``-ten
+    /// Snapshots. `nil` nur bei einem (praktisch nie auftretenden)
+    /// Encoding-Fehler.
+    private static func inhaltsFingerabdruck(of normalisiert: SyncSnapshot) -> String? {
         guard let daten = try? JSONEncoder().encode(normalisiert) else { return nil }
         let digest = SHA256.hash(data: daten)
         return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Diagnose-Hilfsmittel für GitHub #70-Nachfolgefragen („welches Bereich
+    /// löst tatsächlich einen Schreibvorgang aus, wie oft"): Anzahl UND ein
+    /// kurzer Inhalts-Fingerabdruck je Teil-Bereich, damit sich zwei
+    /// aufeinanderfolgende Protokollzeilen im Sync-Debug-Modus direkt
+    /// vergleichen lassen — ändert sich nur die Anzahl, wuchs/schrumpfte der
+    /// Bereich; ändert sich nur der Fingerabdruck bei gleicher Anzahl, hat
+    /// sich ein Feld eines bestehenden Eintrags geändert (z.B. `endZeit`
+    /// gesetzt, ein additiver Zähler erhöht). Nur aufrufen, wenn
+    /// ``SyncDebugLogger/istAktiv`` ist — Encoding+Hashing pro Teil-Bereich
+    /// ist bewusst nicht Teil des normalen (nicht-debuggenden) Pfads.
+    private static func diagnoseText(of normalisiert: SyncSnapshot) -> String {
+        func teil<T: Encodable>(_ name: String, _ werte: [T]) -> String {
+            guard let daten = try? JSONEncoder().encode(werte) else { return "\(name)=\(werte.count)/?" }
+            let kurz = SHA256.hash(data: daten).prefix(4).map { String(format: "%02x", $0) }.joined()
+            return "\(name)=\(werte.count)/\(kurz)"
+        }
+        return [
+            teil("geschaeftsTypen", normalisiert.geschaeftsTypen),
+            teil("artikelKategorien", normalisiert.artikelKategorien),
+            teil("geschaefte", normalisiert.geschaefte),
+            teil("artikel", normalisiert.artikel),
+            teil("einkaufslisten", normalisiert.einkaufslisten),
+            teil("einkaufslistenEintraege", normalisiert.einkaufslistenEintraege),
+            teil("einkaufsvorgaenge", normalisiert.einkaufsvorgaenge),
+            teil("kaufEintraege", normalisiert.kaufEintraege),
+            teil("warengruppenDistanzen", normalisiert.warengruppenDistanzen),
+            teil("tombstones", normalisiert.tombstones),
+        ].joined(separator: " ")
     }
 
     @MainActor

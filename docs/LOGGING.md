@@ -170,7 +170,23 @@ hält sie sich dauerhaft, ist das ein Hinweis auf einen fehlenden/fehlerhaften
 ``SyncEntitaetsAlias``), `sync_peer_verworfen_altersgrenze` (Details: welcher
 Peer — dessen Snapshot ist älter als
 `SyncSnapshotImportService.maximalesSnapshotAlter` und wird komplett
-ignoriert, siehe Architektur-Revision „Alternative A"), `debug_mode_{enabled,disabled}`.
+ignoriert, siehe Architektur-Revision „Alternative A"), `sync_event_aufgegeben`
+(Details wie `sync_event_nicht_anwendbar` — Event ist auch nach
+`SyncImportService.maximalesEventAlterFuerRetry` nicht anwendbar und wird
+aufgegeben statt weiter versucht, siehe `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`
+Abschnitt 15), `sync_snapshot_unveraendert_uebersprungen`/`sync_snapshot_geschrieben`
+(GitHub #70-Nachfolgefrage „welche Änderung löst tatsächlich ein Schreiben
+von `export.json` aus": Details bei beiden ein Diagnose-Text `bereich=Anzahl/KurzHash`
+je Teil-Bereich — `geschaeftsTypen`, `artikelKategorien`, `geschaefte`,
+`artikel`, `einkaufslisten`, `einkaufslistenEintraege`, `einkaufsvorgaenge`,
+`kaufEintraege`, `warengruppenDistanzen`, `tombstones`; zusätzlich bei
+`sync_snapshot_geschrieben` `vorher=…` mit den ersten 8 Zeichen des zuvor
+geschriebenen Gesamt-Fingerabdrucks. Zwei aufeinanderfolgende Protokollzeilen
+direkt vergleichbar: ändert sich nur die Anzahl eines Bereichs, ist dort ein
+Eintrag hinzugekommen/verschwunden; ändert sich nur der Kurzhash bei
+gleicher Anzahl, hat sich ein Feld eines bestehenden Eintrags geändert (z.B.
+`endZeit` gesetzt, ein additiver Zähler erhöht) — siehe
+`SyncSnapshotExportService.diagnoseText(of:)`), `debug_mode_{enabled,disabled}`.
 
 **Bewusste Wiederverwendung von `wallClock`/`erzeugtAm` für die
 Latenzmessung:** Diese Felder sind in `SyncEvent`/`SyncSnapshot` als „nur
