@@ -22,3 +22,6 @@ xcuserdata/
 
 # Simulator / test artifacts
 *.xcresult
+
+# Obsidian vault (personal notes, not part of the project)
+.obsidian/
