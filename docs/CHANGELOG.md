@@ -1,5 +1,37 @@
 # Changelog
 
+## v0.9 (Build 149) — Code-Review-Fixes: fälschliche Vorgangs-Umleitung, doppelter Kategorie-Index
+
+- Fix: Die in v0.9 (Build 148) eingeführte Vorgangs-Umleitung
+  (`SyncImportService.aufOffenenNachfolgerUmgeleitet`) wurde fälschlich auch
+  auf `artikelAbgewaehlt`/`artikelDauerhaftEntfernt` angewendet — diese
+  müssen einen bereits bestehenden `KaufEintrag` FINDEN (auf dem
+  ursprünglichen, ggf. geschlossenen Vorgang), nicht auf dessen offenem
+  Nachfolger. Die Umleitung führte dort zu einem stillen No-op, das Event
+  galt aber trotzdem als erledigt — ein Abwählen/dauerhaftes Entfernen eines
+  Peers ging so dauerhaft verloren.
+- Fix: Dieselbe „dangling Einkaufsvorgang"-Lücke bestand auch im
+  Bereich-C-Snapshot-Merge (`mergeEinkaufsvorgaenge`) — jetzt über einen
+  gemeinsamen `Einkaufsvorgang.offenerNachfolger(...)`-Helfer behoben (statt
+  zweier unabhängiger Kopien der Such-/Bevorzugungslogik).
+- Fix: `naechsterKategorieBesuchsIndex` konnte für eine Kategorie, die
+  bereits einen echten Besuchsindex hatte, fälschlich einen zweiten
+  (Duplikat-)Index vergeben, wenn die ungeordnete `kaufEintraege`-Relationship
+  zuerst auf einen remote materialisierten, indexlosen Eintrag traf — verfälschte
+  die von `WarengruppenDistanzService` gelernte Distanzmatrix.
+- Fix: `EinkaufenView.umschalten` prüfte beim Abwählen über die veraltete,
+  vor dem Micro-Lease-`await` erfasste `einkaufsvorgang`-Property statt der
+  frisch aufgelösten Referenz — Absturzrisiko bei einer nebenläufigen
+  Sync-Löschung.
+- Aufgeräumt: Zeilen-Closure in `EinkaufenView` hielt unnötig die komplette
+  Kategorie-Gruppe (inkl. aller Artikel der Sektion) statt nur der Kategorie.
+
+Gefunden durch `/code-review --fix` (8 Finder-Agents + Verifikation) über den
+Diff seit v0.8. Vier weitere, tiefergehende Architektur-Befunde bewusst
+zurückgestellt und als GitHub-Issues dokumentiert (Geschäfts-Zuordnung bei
+Umleitung, Alias-Semantik, fehlendes Ursprungsgerät-Feld auf `KaufEintrag`,
+store-loser Umleitungs-Fallback).
+
 ## v0.9 (Build 148) — Minor-Version-Bump: Sync-Robustheit & Mehrfachkategorien-Anzeige
 
 Reine Versionsanhebung, kein neuer Funktionsumfang gegenüber dem letzten v0.8-Stand

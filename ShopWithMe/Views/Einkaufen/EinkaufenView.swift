@@ -970,6 +970,7 @@ private struct EinkaufslisteView: View {
         let gruppen = kategorieGruppen(fuer: artikelListe)
         List {
             ForEach(gruppen) { gruppe in
+                let kategorie = gruppe.kategorie
                 Section {
                     ForEach(gruppe.artikel) { artikel in
                         ArtikelAbhakZeile(
@@ -977,7 +978,7 @@ private struct EinkaufslisteView: View {
                             eintrag: einkaufsliste.eintrag(fuer: artikel),
                             mengeAnzeige: menge(fuer: artikel),
                             istAbgehakt: istAbgehakt(artikel),
-                            abhaken: { umschalten(artikel, kategorie: gruppe.kategorie) },
+                            abhaken: { umschalten(artikel, kategorie: kategorie) },
                             mengeErhoehen: { mengeErhoehen(artikel) },
                             mengeVerringern: { mengeVerringern(artikel) },
                             dauerhaftEntfernen: istAbgehakt(artikel) ? { entferneDauerhaft(artikel) } : nil
@@ -1122,7 +1123,12 @@ private struct EinkaufslisteView: View {
                 guard let artikelFrisch = artikelReferenz.resolved(in: modelContext),
                       let einkaufsvorgangFrisch = einkaufsvorgangReferenz.resolved(in: modelContext)
                 else { return }
-                if istAbgehakt(artikelFrisch) {
+                // Bewusst `einkaufsvorgangFrisch.kaufEintraege` statt
+                // `istAbgehakt(artikelFrisch)` (liest `self.einkaufsvorgang`, die
+                // View-Property von VOR dem `await` oben) — dieselbe
+                // baumelnde-Referenz-Gefahr, vor der `einkaufsvorgangReferenz`
+                // gerade erst geschützt hat.
+                if einkaufsvorgangFrisch.kaufEintraege.contains(where: { $0.artikel == artikelFrisch }) {
                     einkaufsvorgangFrisch.artikelAbwaehlen(artikelFrisch, context: modelContext)
                 } else {
                     // `nil`, falls die Kategorie inzwischen gelöscht wurde — fällt

@@ -361,4 +361,46 @@ struct EinkaufsvorgangTests {
         #expect(ohropaxA.fuehrendeKategorie(inGeschaeft: nil, context: context) == drogerie)
         #expect(ohropaxB.fuehrendeKategorie(inGeschaeft: nil, context: context) == drogerie)
     }
+
+    /// Regressionstest (Code-Review-Fund): eine remote materialisierte
+    /// `KaufEintrag` ohne Index (`indexFuerDistanzlernen: false`, siehe
+    /// `SyncImportService`) darf `naechsterKategorieBesuchsIndex` nicht dazu
+    /// verleiten, für eine Kategorie, die bereits einen echten Index hat,
+    /// einen zweiten (Duplikat-)Index zu vergeben — sonst zerfällt eine
+    /// Warengruppe in der ``WarengruppenDistanzService``-Distanzmatrix in zwei
+    /// Besuchs-Slots. Der ohne-Index-Eintrag wird bewusst ZUERST angelegt,
+    /// damit ein naives `kaufEintraege.first(where:)` (ungeordnete
+    /// SwiftData-Relationship, folgt vor jedem Save/Fetch typischerweise der
+    /// Einfüge-Reihenfolge) ihn zuerst träfe, wäre der Nil-Filter nicht da.
+    @Test
+    func naechsterKategorieBesuchsIndexIgnoriertEintraegeOhneIndex() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        context.insert(obst)
+        let geschaeft = Geschaeft(name: "Testladen", typen: [lebensmittelTyp()])
+        context.insert(geschaeft)
+        let birne = Artikel(name: "Birne", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst])
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst])
+        let kirsche = Artikel(name: "Kirsche", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst])
+        context.insert(birne)
+        context.insert(apfel)
+        context.insert(kirsche)
+
+        let einkauf = Einkaufsvorgang(geschaeft: geschaeft)
+        context.insert(einkauf)
+
+        // Reihenfolge ist Teil der Regression: Birne zuerst (kein Index), dann
+        // Apfel (bekommt den ersten echten Index, 0), dann Kirsche — muss
+        // ebenfalls 0 bekommen (dieselbe Kategorie), nicht fälschlich 1.
+        einkauf.artikelAbhakenOhneEventAufzeichnung(birne, context: context, indexFuerDistanzlernen: false)
+        einkauf.artikelAbhaken(apfel, context: context)
+        einkauf.artikelAbhaken(kirsche, context: context)
+
+        let apfelEintrag = einkauf.kaufEintraege.first { $0.artikel == apfel }
+        let kirscheEintrag = einkauf.kaufEintraege.first { $0.artikel == kirsche }
+        #expect(apfelEintrag?.kategorieBesuchsIndex == 0)
+        #expect(kirscheEintrag?.kategorieBesuchsIndex == 0)
+    }
 }

@@ -494,6 +494,18 @@ enum SyncSnapshotImportService {
     /// ``mergeEinkaufslisten(_:context:)``. Ein bereits lokal abgeschlossener
     /// Einkauf wird nie durch einen (älteren) Remote-Stand wieder geöffnet —
     /// nur eine noch fehlende ``Einkaufsvorgang/endZeit`` wird nachgetragen.
+    ///
+    /// **Dieselbe „dangling Einkaufsvorgang"-Ursachen-Familie wie die
+    /// Bereich-A-Umleitung in `SyncImportService`:** Ist der per ID/Alias
+    /// gefundene `bekannter`-Vorgang selbst inzwischen abgeschlossen (dieses
+    /// Gerät hat zwischenzeitlich "Einkauf abschließen" getippt), würde ein
+    /// per Snapshot nachgereichter `KaufEintrag` sonst auf diesem
+    /// geschlossenen, für die Einkaufsansicht unsichtbaren Vorgang landen —
+    /// wird stattdessen per ``Einkaufsvorgang/offenerNachfolger(fuerListe:bevorzugtesGeschaeft:context:)``
+    /// auf den aktuell offenen Nachfolger umgeleitet. Die `endZeit`-Nachtrag-
+    /// Regel unten gilt in diesem Fall bewusst NICHT (das wäre die `endZeit`
+    /// des ALTEN Vorgangs, fälschlich auf den neuen, offenen Nachfolger
+    /// übertragen).
     @MainActor
     private static func mergeEinkaufsvorgaenge(
         _ remote: [EinkaufsvorgangSnapshot], geschaeftZuordnung: [UUID: Geschaeft], listeZuordnung: [UUID: Einkaufsliste],
@@ -509,8 +521,21 @@ enum SyncSnapshotImportService {
             let remoteListe = eintrag.einkaufslisteID.flatMap { listeZuordnung[$0] }
 
             let vorhandener: Einkaufsvorgang
+            let umgeleitetAufNachfolger: Bool
             if let bekannter = alleLokalen.first(where: { $0.id == aufgeloesteID }) {
-                vorhandener = bekannter
+                if bekannter.istAbgeschlossen, let liste = bekannter.einkaufsliste,
+                   let offenerNachfolger = Einkaufsvorgang.offenerNachfolger(
+                       fuerListe: liste, bevorzugtesGeschaeft: bekannter.geschaeft, context: context
+                   ) {
+                    SyncEntitaetsAliasService.registriere(
+                        entitaetsArt: SyncEntitaetsArt.einkaufsvorgang, fremdeID: eintrag.id, lokaleID: offenerNachfolger.id, context: context
+                    )
+                    vorhandener = offenerNachfolger
+                    umgeleitetAufNachfolger = true
+                } else {
+                    vorhandener = bekannter
+                    umgeleitetAufNachfolger = false
+                }
             } else if let offenerTreffer = alleLokalen.first(where: {
                 $0.endZeit == nil && $0.geschaeft == remoteGeschaeft && $0.einkaufsliste == remoteListe
             }) {
@@ -520,6 +545,7 @@ enum SyncSnapshotImportService {
                     )
                 }
                 vorhandener = offenerTreffer
+                umgeleitetAufNachfolger = false
             } else {
                 // Bewusst kein `abschliessen()` (würde zusätzlich
                 // `Geschaeft.anzahlEinkaufsvorgaenge` erhöhen — das übernimmt
@@ -529,9 +555,10 @@ enum SyncSnapshotImportService {
                 neuer.id = eintrag.id
                 context.insert(neuer)
                 vorhandener = neuer
+                umgeleitetAufNachfolger = false
             }
 
-            if vorhandener.endZeit == nil, let remoteEndZeit = eintrag.endZeit {
+            if !umgeleitetAufNachfolger, vorhandener.endZeit == nil, let remoteEndZeit = eintrag.endZeit {
                 vorhandener.endZeit = remoteEndZeit
             }
             zuordnung[eintrag.id] = vorhandener

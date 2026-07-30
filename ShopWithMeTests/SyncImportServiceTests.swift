@@ -380,4 +380,89 @@ struct SyncImportServiceTests {
         #expect(birnenEintrag?.kategorie == obst)
         #expect(!liste.enthaelt(birne))
     }
+
+    /// Regressionstest (Code-Review-Fund): anders als `.artikelAbgehakt` darf
+    /// `.artikelAbgewaehlt` NICHT auf den offenen Nachfolger umgeleitet werden
+    /// — der abzuwählende `KaufEintrag` liegt auf dem ursprünglich
+    /// referenzierten, mittlerweile geschlossenen Vorgang. Eine Umleitung würde
+    /// dort ins Leere laufen (kein Treffer), das Event aber trotzdem als
+    /// materialisiert gelten, wodurch der Abwähl-Wunsch des Peers dauerhaft
+    /// verworfen würde.
+    @Test
+    func artikelAbgewaehltFuerBereitsAbgeschlossenenVorgangFindetEintragOhneUmleitung() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let geschaeft = Geschaeft(name: "Testladen", typen: [GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")])
+        context.insert(geschaeft)
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759")
+        context.insert(apfel)
+
+        // Artikel wurde im alten Vorgang abgehakt, bevor "Einkauf abschließen"
+        // ihn schloss und den offenen Nachfolger anlegte.
+        let alterVorgang = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste)
+        context.insert(alterVorgang)
+        alterVorgang.artikelAbhakenOhneEventAufzeichnung(apfel, context: context)
+        alterVorgang.abschliessen()
+        let neuerVorgang = Einkaufsvorgang(geschaeft: nil, einkaufsliste: liste)
+        context.insert(neuerVorgang)
+        try context.save()
+
+        // Peer wählt den (auf den alten Vorgang bezogenen) Artikel wieder ab.
+        let fremdesEvent = SyncEventExportDarstellung(
+            id: UUID(), art: SyncEventArt.artikelAbgewaehlt.rawValue,
+            nutzlast: try JSONEncoder().encode(SyncEventNutzlast(bezugsID: alterVorgang.id, artikelID: apfel.id)),
+            lamportZaehler: 1, lamportGeraeteID: "fremdes-geraet", autorGeraeteID: "fremdes-geraet", wallClock: Date()
+        )
+        try schreibeFremdesEvent(fremdesEvent, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncImportService.importiereNeueEvents(context: context)
+
+        #expect(alterVorgang.kaufEintraege.isEmpty)
+        #expect(neuerVorgang.kaufEintraege.isEmpty)
+        #expect(liste.enthaelt(apfel))
+    }
+
+    /// Wie oben, für `.artikelDauerhaftEntfernt` — ebenfalls keine Umleitung.
+    @Test
+    func artikelDauerhaftEntferntFuerBereitsAbgeschlossenenVorgangFindetEintragOhneUmleitung() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let geschaeft = Geschaeft(name: "Testladen", typen: [GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")])
+        context.insert(geschaeft)
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759")
+        context.insert(apfel)
+
+        let alterVorgang = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste)
+        context.insert(alterVorgang)
+        alterVorgang.artikelAbhakenOhneEventAufzeichnung(apfel, context: context)
+        alterVorgang.abschliessen()
+        let neuerVorgang = Einkaufsvorgang(geschaeft: nil, einkaufsliste: liste)
+        context.insert(neuerVorgang)
+        try context.save()
+
+        let fremdesEvent = SyncEventExportDarstellung(
+            id: UUID(), art: SyncEventArt.artikelDauerhaftEntfernt.rawValue,
+            nutzlast: try JSONEncoder().encode(SyncEventNutzlast(bezugsID: alterVorgang.id, artikelID: apfel.id)),
+            lamportZaehler: 1, lamportGeraeteID: "fremdes-geraet", autorGeraeteID: "fremdes-geraet", wallClock: Date()
+        )
+        try schreibeFremdesEvent(fremdesEvent, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncImportService.importiereNeueEvents(context: context)
+
+        #expect(alterVorgang.kaufEintraege.isEmpty)
+        #expect(neuerVorgang.kaufEintraege.isEmpty)
+        #expect(!liste.enthaelt(apfel))
+    }
 }

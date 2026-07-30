@@ -498,6 +498,68 @@ struct SyncSnapshotImportServiceTests {
         #expect(eigenerVorgang.kaufEintraege.contains { $0.artikel == lokalerApfel })
     }
 
+    /// Regressionstest (Code-Review-Fund): dieselbe „dangling Einkaufsvorgang"-
+    /// Ursachen-Familie wie die Bereich-A-Umleitung in `SyncImportService`,
+    /// hier für den Bereich-C-Snapshot-Merge. Ein Snapshot referenziert per ID
+    /// exakt den Vorgang, den dieses Gerät zwischenzeitlich per „Einkauf
+    /// abschließen" geschlossen hat (der Peer kennt dessen `endZeit` beim
+    /// Export noch nicht) — der zugehörige `KaufEintrag` muss auf den offenen
+    /// Nachfolger für dieselbe Liste umgeleitet werden, nicht auf dem
+    /// geschlossenen (für die Einkaufsansicht unsichtbaren) landen.
+    @Test
+    func bereitsAbgeschlossenerBekannterVorgangWirdBeiSnapshotMergeAufOffenenNachfolgerUmgeleitet() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let typ = GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")
+        context.insert(typ)
+        let geschaeft = Geschaeft(name: "Rewe", typen: [typ])
+        context.insert(geschaeft)
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759")
+        context.insert(apfel)
+
+        let alterVorgang = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste)
+        context.insert(alterVorgang)
+        alterVorgang.abschliessen()
+        let neuerVorgang = Einkaufsvorgang(geschaeft: nil, einkaufsliste: liste)
+        context.insert(neuerVorgang)
+        try context.save()
+
+        // Peer kennt denselben (per ID identischen) Vorgang noch als offen
+        // und berichtet einen KaufEintrag dafür.
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.artikel = [
+            ArtikelSnapshot(
+                id: apfel.id, name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759",
+                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+            ),
+        ]
+        snapshot.einkaufsvorgaenge = [
+            EinkaufsvorgangSnapshot(id: alterVorgang.id, geschaeftID: nil, einkaufslisteID: nil, startZeit: alterVorgang.startZeit, endZeit: nil),
+        ]
+        snapshot.kaufEintraege = [
+            KaufEintragSnapshot(
+                id: UUID(), artikelID: apfel.id, einkaufsvorgangID: alterVorgang.id, geschaeftID: nil, kategorieID: nil,
+                artikelNameSnapshot: "Apfel", geschaeftNameSnapshot: "Rewe", produktName: nil, alternativerName: nil,
+                datum: Date(), preis: nil, menge: 1, kategorieBesuchsIndex: nil
+            ),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        #expect(alterVorgang.kaufEintraege.isEmpty)
+        #expect(neuerVorgang.kaufEintraege.contains { $0.artikel == apfel })
+        // Der bereits gesetzte Abschluss darf durch den (aus Sicht des Peers
+        // noch offenen) Remote-Stand NICHT verlorengehen.
+        #expect(alterVorgang.endZeit != nil)
+    }
+
     @Test
     func neuerEinkaufsvorgangVomPeerErhoehtNichtZusaetzlichDenZaehler() async throws {
         let (container, context) = try machtLeerenContainer()

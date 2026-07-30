@@ -233,16 +233,34 @@ einmaligen Beitritts-/Bootstrap-Moment eines neuen Geräts in
 Bereich-A-Event empfangenes Abhaken, das noch einen von diesem Gerät bereits
 per „Einkauf abschließen" geschlossenen `Einkaufsvorgang` referenziert (der
 sendende Peer kannte dessen `endZeit` beim Senden noch nicht), wird von
-`SyncImportService.einkaufsvorgang(mitID:)` jetzt auf den aktuell offenen
-Nachfolger für dieselbe `Einkaufsliste` umgeleitet (bevorzugt mit gleichem
-`Geschaeft`, sonst irgendeinen offenen) — vorher landete der `KaufEintrag`
-unsichtbar auf dem geschlossenen Vorgang und wurde vom nächsten
-Snapshot-Merge fälschlich wieder auf die offene Liste zurückgeholt. Zusätzlich
-bekommt ein so oder per Snapshot-Merge (`mergeKaufEintraege`) fremd
-materialisierter `KaufEintrag` bewusst **keinen** `kategorieBesuchsIndex` —
-er beschreibt die Laufreihenfolge des SENDENDEN Geräts, nicht die dieses
-Geräts, und würde sonst `WarengruppenDistanzService` mit einer erfundenen
-Besuchsposition füttern.
+`SyncImportService.einkaufsvorgang(mitID:context:aufOffenenNachfolgerUmleiten:)`
+auf den aktuell offenen Nachfolger für dieselbe `Einkaufsliste` umgeleitet
+(bevorzugt mit gleichem `Geschaeft`, sonst irgendeinen offenen, über den
+gemeinsamen Helfer `Einkaufsvorgang.offenerNachfolger(fuerListe:bevorzugtesGeschaeft:context:)`
+— genutzt sowohl hier als auch von `SyncSnapshotImportService.mergeEinkaufsvorgaenge`,
+das dieselbe Lücke im Bereich-C-Snapshot-Merge hatte) — vorher landete der
+`KaufEintrag` unsichtbar auf dem geschlossenen Vorgang und wurde vom nächsten
+Snapshot-Merge fälschlich wieder auf die offene Liste zurückgeholt. **Nur für
+`.artikelAbgehakt`** (materialisiert einen NEUEN Eintrag) — `.artikelAbgewaehlt`/
+`.artikelDauerhaftEntfernt` müssen einen bereits BESTEHENDEN Eintrag auf dem
+ursprünglichen Vorgang finden und werden bewusst nicht umgeleitet (Code-Review-
+Fund: eine Umleitung ließ sie sonst still ins Leere laufen, während das Event
+trotzdem als erledigt galt). Zusätzlich bekommt ein so oder per Snapshot-Merge
+(`mergeKaufEintraege`) fremd materialisierter `KaufEintrag` bewusst **keinen**
+`kategorieBesuchsIndex` — er beschreibt die Laufreihenfolge des SENDENDEN
+Geräts, nicht die dieses Geräts, und würde sonst `WarengruppenDistanzService`
+mit einer erfundenen Besuchsposition füttern; `Einkaufsvorgang.naechsterKategorieBesuchsIndex`
+ignoriert solche indexlosen Einträge bei der Suche nach einem bereits
+vorhandenen Index, um keinen Duplikat-Index für dieselbe Kategorie zu vergeben.
+
+**Zurückgestellte, tiefergehende Befunde aus demselben Code-Review** (siehe
+GitHub Issues): Geschäfts-Zuordnung eines per Umleitung materialisierten
+`KaufEintrag` (übernimmt das Geschäft des Nachfolge-Vorgangs, oft `nil`);
+`SyncEntitaetsAlias`s „einmal geschrieben, eingefroren"-Semantik passt nicht
+zu einer mehrfach rotierenden Umleitung; kein Ursprungsgerät-Feld auf
+`KaufEintrag` (zwei unabhängige, nicht typsicher erzwungene Stellen
+unterdrücken `kategorieBesuchsIndex`); store-loser Umleitungs-Fallback bei
+zwei konkurrierenden Einkäufen ohne Geschäft-Treffer.
 
 ## Builds, Versionierung & Migrationen
 

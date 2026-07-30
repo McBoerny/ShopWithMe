@@ -145,7 +145,11 @@ enum SyncImportService {
             liste.artikelEntfernenOhneEventAufzeichnung(artikel, context: context)
             return true
         case .artikelAbgehakt:
-            guard let vorgang = einkaufsvorgang(mitID: nutzlast.bezugsID, context: context),
+            // aufOffenenNachfolgerUmleiten: true — ein Abhaken MATERIALISIERT einen
+            // neuen KaufEintrag; landet der bezeichnete Vorgang inzwischen auf einem
+            // geschlossenen, ist die Umleitung auf den offenen Nachfolger korrekt
+            // (siehe `einkaufsvorgang(mitID:context:aufOffenenNachfolgerUmleiten:)`).
+            guard let vorgang = einkaufsvorgang(mitID: nutzlast.bezugsID, context: context, aufOffenenNachfolgerUmleiten: true),
                   let artikel = artikel(mitID: nutzlast.artikelID, context: context)
             else { return false }
             // indexFuerDistanzlernen: false — dieses Abhaken beschreibt die
@@ -156,12 +160,23 @@ enum SyncImportService {
             vorgang.artikelAbhakenOhneEventAufzeichnung(artikel, context: context, indexFuerDistanzlernen: false)
             return true
         case .artikelAbgewaehlt:
+            // KEINE Umleitung: Abwählen muss den bereits existierenden KaufEintrag
+            // FINDEN, der auf dem ursprünglich referenzierten (ggf. inzwischen
+            // geschlossenen) Vorgang liegt — nicht auf dessen offenem Nachfolger, wo
+            // gar kein passender Eintrag existiert. Eine Umleitung würde
+            // `artikelAbwaehlenOhneEventAufzeichnung` hier verlässlich ins Leere
+            // laufen lassen (kein Treffer, `false`), das Event trotzdem als
+            // materialisiert gelten (unten `return true`) und den eigentlichen
+            // Abwähl-Wunsch des Peers dauerhaft verwerfen.
             guard let vorgang = einkaufsvorgang(mitID: nutzlast.bezugsID, context: context),
                   let artikel = artikel(mitID: nutzlast.artikelID, context: context)
             else { return false }
             vorgang.artikelAbwaehlenOhneEventAufzeichnung(artikel, context: context)
             return true
         case .artikelDauerhaftEntfernt:
+            // KEINE Umleitung — dieselbe Begründung wie bei .artikelAbgewaehlt: der
+            // zu löschende KaufEintrag liegt auf dem ursprünglich referenzierten
+            // Vorgang, nicht auf einem offenen Nachfolger.
             guard let vorgang = einkaufsvorgang(mitID: nutzlast.bezugsID, context: context),
                   let artikel = artikel(mitID: nutzlast.artikelID, context: context)
             else { return false }
@@ -186,14 +201,24 @@ enum SyncImportService {
     /// lokalen zusammengeführt haben, GitHub #52-Nachfolgefund), bevor direkt
     /// per `id` gesucht wird — analog ``einkaufsliste(mitID:context:)``.
     ///
-    /// Leitet zusätzlich auf den aktuell offenen Nachfolge-Einkaufsvorgang um,
-    /// falls der so aufgelöste bereits abgeschlossen ist (siehe
-    /// ``aufOffenenNachfolgerUmgeleitet(_:fremdeID:context:)``).
-    private static func einkaufsvorgang(mitID id: UUID, context: ModelContext) -> Einkaufsvorgang? {
+    /// `aufOffenenNachfolgerUmleiten: true` leitet zusätzlich auf den aktuell
+    /// offenen Nachfolge-Einkaufsvorgang um, falls der so aufgelöste bereits
+    /// abgeschlossen ist (siehe ``aufOffenenNachfolgerUmgeleitet(_:fremdeID:context:)``)
+    /// — **nur** für Events sinnvoll, die einen NEUEN `KaufEintrag` anlegen
+    /// (`.artikelAbgehakt`). Events, die einen bereits bestehenden `KaufEintrag`
+    /// FINDEN müssen (`.artikelAbgewaehlt`/`.artikelDauerhaftEntfernt`), dürfen
+    /// nicht umgeleitet werden — der gesuchte Eintrag liegt auf dem ursprünglich
+    /// referenzierten Vorgang, nicht auf dessen offenem Nachfolger; eine
+    /// Umleitung ließe sie dort verlässlich ins Leere laufen (siehe
+    /// ``materialisiere(_:nutzlast:context:)``).
+    private static func einkaufsvorgang(
+        mitID id: UUID, context: ModelContext, aufOffenenNachfolgerUmleiten: Bool = false
+    ) -> Einkaufsvorgang? {
         let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(fuer: id, art: SyncEntitaetsArt.einkaufsvorgang, context: context)
         var deskriptor = FetchDescriptor<Einkaufsvorgang>(predicate: #Predicate { $0.id == aufgeloesteID })
         deskriptor.fetchLimit = 1
         guard let vorgang = try? context.fetch(deskriptor).first else { return nil }
+        guard aufOffenenNachfolgerUmleiten else { return vorgang }
         return aufOffenenNachfolgerUmgeleitet(vorgang, fremdeID: id, context: context)
     }
 
@@ -226,10 +251,9 @@ enum SyncImportService {
         _ vorgang: Einkaufsvorgang, fremdeID: UUID, context: ModelContext
     ) -> Einkaufsvorgang {
         guard vorgang.istAbgeschlossen, let einkaufsliste = vorgang.einkaufsliste else { return vorgang }
-        let deskriptor = FetchDescriptor<Einkaufsvorgang>(predicate: #Predicate { $0.endZeit == nil })
-        let offeneFuerListe = ((try? context.fetch(deskriptor)) ?? []).filter { $0.einkaufsliste == einkaufsliste }
-        guard let offenerNachfolger = offeneFuerListe.first(where: { $0.geschaeft == vorgang.geschaeft }) ?? offeneFuerListe.first
-        else { return vorgang }
+        guard let offenerNachfolger = Einkaufsvorgang.offenerNachfolger(
+            fuerListe: einkaufsliste, bevorzugtesGeschaeft: vorgang.geschaeft, context: context
+        ) else { return vorgang }
 
         SyncEntitaetsAliasService.registriere(
             entitaetsArt: SyncEntitaetsArt.einkaufsvorgang, fremdeID: fremdeID, lokaleID: offenerNachfolger.id, context: context

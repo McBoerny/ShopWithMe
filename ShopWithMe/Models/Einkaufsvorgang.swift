@@ -195,10 +195,38 @@ final class Einkaufsvorgang {
         SyncEventService.aufzeichnen(.artikelDauerhaftEntfernt, bezugsID: id, artikelID: artikel.id, context: context)
     }
 
+    /// Sucht bewusst nur unter Einträgen mit BEREITS VORHANDENEM Index (nicht per
+    /// simplem `first(where:)` über die ungeordnete `kaufEintraege`-Relationship):
+    /// seit remote materialisierte/gemergte Einträge bewusst `kategorieBesuchsIndex
+    /// == nil` bekommen (siehe ``artikelAbhakenOhneEventAufzeichnung(_:context:indexFuerDistanzlernen:kategorie:)``),
+    /// könnte die ungeordnete Aufzählung sonst zuerst auf so einen `nil`-Eintrag
+    /// treffen und fälschlich einen NEUEN Index für eine Kategorie vergeben, die
+    /// lokal bereits einen echten Index hat — zwei Besuchs-Slots für dieselbe
+    /// Kategorie, die die gelernte Distanzmatrix verfälschen.
     private func naechsterKategorieBesuchsIndex(fuer kategorie: ArtikelKategorie) -> Int {
-        if let vorhandenerIndex = kaufEintraege.first(where: { $0.kategorie == kategorie })?.kategorieBesuchsIndex {
+        if let vorhandenerIndex = kaufEintraege.first(where: { $0.kategorie == kategorie && $0.kategorieBesuchsIndex != nil })?.kategorieBesuchsIndex {
             return vorhandenerIndex
         }
         return (kaufEintraege.compactMap(\.kategorieBesuchsIndex).max() ?? -1) + 1
+    }
+}
+
+extension Einkaufsvorgang {
+    /// Sucht einen lokal noch offenen Einkaufsvorgang für `liste` — bevorzugt
+    /// mit `bevorzugtesGeschaeft` (zwei Geräte können gleichzeitig an
+    /// unterschiedlichen Geschäften für dieselbe Liste einkaufen), sonst
+    /// irgendeinen offenen für die Liste. Gemeinsam genutzt von
+    /// `SyncImportService` (Umleitung eines Bereich-A-Events, dessen Vorgang
+    /// inzwischen abgeschlossen wurde) und
+    /// `SyncSnapshotImportService.mergeEinkaufsvorgaenge` (dieselbe
+    /// Ursachen-Familie im Bereich-C-Snapshot-Merge) — vorher unabhängig
+    /// dupliziert, jetzt eine einzige Quelle für „was zählt als derselbe noch
+    /// laufende Einkauf".
+    static func offenerNachfolger(
+        fuerListe liste: Einkaufsliste, bevorzugtesGeschaeft: Geschaeft?, context: ModelContext
+    ) -> Einkaufsvorgang? {
+        let deskriptor = FetchDescriptor<Einkaufsvorgang>(predicate: #Predicate { $0.endZeit == nil })
+        let offeneFuerListe = ((try? context.fetch(deskriptor)) ?? []).filter { $0.einkaufsliste == liste }
+        return offeneFuerListe.first(where: { $0.geschaeft == bevorzugtesGeschaeft }) ?? offeneFuerListe.first
     }
 }
