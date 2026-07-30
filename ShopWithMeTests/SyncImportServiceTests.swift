@@ -225,14 +225,19 @@ struct SyncImportServiceTests {
     /// Regressionstest für den Absturz-Loop-Serie zugrundeliegenden „dangling
     /// Einkaufsvorgang"-Fall: Gerät A beendet den Einkauf (der Vorgang wird
     /// dadurch lokal abgeschlossen und ein neuer, offener Nachfolge-Vorgang für
-    /// dieselbe Geschäft/Liste-Kombination angelegt — analog
-    /// ``EinkaufenView/einkaufSicherstellen()``), BEVOR ein Peer erfährt, dass
-    /// der alte Vorgang beendet wurde. Ein knapp danach vom Peer gesendetes
-    /// `artikelAbgehakt`-Event referenziert deshalb noch den alten,
-    /// mittlerweile geschlossenen Vorgang. Ohne Umleitung würde der
-    /// `KaufEintrag` dort landen — unsichtbar in der aktuellen Einkaufsansicht
-    /// und (weil `istBereitsAbgehakt` nur offene Vorgänge prüft) beim nächsten
-    /// Snapshot-Merge fälschlich wieder auf die offene Liste zurückgeholt.
+    /// dieselbe Liste angelegt — analog ``EinkaufenView/einkaufSicherstellen()``),
+    /// BEVOR ein Peer erfährt, dass der alte Vorgang beendet wurde. Ein knapp
+    /// danach vom Peer gesendetes `artikelAbgehakt`-Event referenziert deshalb
+    /// noch den alten, mittlerweile geschlossenen Vorgang. Ohne Umleitung
+    /// würde der `KaufEintrag` dort landen — unsichtbar in der aktuellen
+    /// Einkaufsansicht und (weil `istBereitsAbgehakt` nur offene Vorgänge
+    /// prüft) beim nächsten Snapshot-Merge fälschlich wieder auf die offene
+    /// Liste zurückgeholt.
+    ///
+    /// Der neue Nachfolge-Vorgang hat hier bewusst `geschaeft == nil`: „Einkauf
+    /// abschließen" setzt die Geschäftsauswahl des schließenden Geräts zurück
+    /// (GitHub #51) — ein harter Geschäft-Abgleich bei der Umleitung würde
+    /// genau diesen (häufigsten) Fall verfehlen.
     @Test
     func artikelAbgehaktFuerBereitsAbgeschlossenenVorgangLandetAufOffenemNachfolger() async throws {
         let (container, context) = try machtLeerenContainer()
@@ -251,13 +256,14 @@ struct SyncImportServiceTests {
         context.insert(apfel)
         liste.artikelHinzufuegenOhneEventAufzeichnung(apfel, context: context)
 
-        // Gerät A: alter Vorgang bereits abgeschlossen, neuer Vorgang für
-        // dieselbe Kombination bereits (automatisch, siehe
-        // `einkaufSicherstellen()`) angelegt und noch offen.
+        // Gerät A: alter Vorgang (mit Geschäft) bereits abgeschlossen, neuer
+        // Vorgang für dieselbe Liste bereits angelegt und noch offen — aber
+        // mit zurückgesetzter Geschäftsauswahl (`geschaeft: nil`), wie es
+        // `einkaufSicherstellen()` nach „Einkauf abschließen" tatsächlich tut.
         let alterVorgang = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste)
         context.insert(alterVorgang)
         alterVorgang.abschliessen()
-        let neuerVorgang = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste)
+        let neuerVorgang = Einkaufsvorgang(geschaeft: nil, einkaufsliste: liste)
         context.insert(neuerVorgang)
         try context.save()
 
@@ -274,5 +280,52 @@ struct SyncImportServiceTests {
         #expect(alterVorgang.kaufEintraege.isEmpty)
         #expect(neuerVorgang.kaufEintraege.contains { $0.artikel == apfel })
         #expect(!liste.enthaelt(apfel))
+    }
+
+    /// Existieren für dieselbe Liste gleichzeitig ZWEI offene Vorgänge an
+    /// unterschiedlichen Geschäften (zwei Geräte kaufen parallel an
+    /// verschiedenen Läden dieselbe Liste ein), muss die Umleitung den
+    /// Geschäft-Treffer bevorzugen, statt die beiden realen Einkäufe
+    /// versehentlich zu vermischen.
+    @Test
+    func beiMehrerenOffenenNachfolgernWirdDerMitGleichemGeschaeftBevorzugt() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let typ = GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")
+        context.insert(typ)
+        let aldi = Geschaeft(name: "Aldi", typen: [typ])
+        context.insert(aldi)
+        let rewe = Geschaeft(name: "Rewe", typen: [typ])
+        context.insert(rewe)
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759")
+        context.insert(apfel)
+        liste.artikelHinzufuegenOhneEventAufzeichnung(apfel, context: context)
+
+        let alterVorgang = Einkaufsvorgang(geschaeft: aldi, einkaufsliste: liste)
+        context.insert(alterVorgang)
+        alterVorgang.abschliessen()
+        let neuerVorgangAldi = Einkaufsvorgang(geschaeft: aldi, einkaufsliste: liste)
+        context.insert(neuerVorgangAldi)
+        let parallelerVorgangRewe = Einkaufsvorgang(geschaeft: rewe, einkaufsliste: liste)
+        context.insert(parallelerVorgangRewe)
+        try context.save()
+
+        let fremdesEvent = SyncEventExportDarstellung(
+            id: UUID(), art: SyncEventArt.artikelAbgehakt.rawValue,
+            nutzlast: try JSONEncoder().encode(SyncEventNutzlast(bezugsID: alterVorgang.id, artikelID: apfel.id)),
+            lamportZaehler: 1, lamportGeraeteID: "fremdes-geraet", autorGeraeteID: "fremdes-geraet", wallClock: Date()
+        )
+        try schreibeFremdesEvent(fremdesEvent, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncImportService.importiereNeueEvents(context: context)
+
+        #expect(neuerVorgangAldi.kaufEintraege.contains { $0.artikel == apfel })
+        #expect(parallelerVorgangRewe.kaufEintraege.isEmpty)
     }
 }

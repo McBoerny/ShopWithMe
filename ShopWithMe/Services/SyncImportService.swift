@@ -203,20 +203,28 @@ enum SyncImportService {
     /// auf dem anderen Gerät nicht, UND landen (weil
     /// ``SyncSnapshotImportService/istBereitsAbgehakt(_:aufListe:context:)``
     /// nur offene Vorgänge prüft) beim nächsten Snapshot-Merge wieder
-    /// fälschlich auf der offenen Liste. Existiert für dieselbe
-    /// (``Geschaeft``, ``Einkaufsliste``)-Kombination bereits ein neuerer,
-    /// noch offener Einkaufsvorgang (der ihn ablöst — analog
+    /// fälschlich auf der offenen Liste.
+    ///
+    /// Sucht dafür einen offenen Nachfolger für dieselbe ``Einkaufsliste`` —
+    /// bevorzugt mit demselben ``Geschaeft`` (zwei Geräte können gleichzeitig
+    /// an unterschiedlichen Geschäften für dieselbe Liste einkaufen, analog
     /// ``SyncSnapshotImportService/mergeEinkaufsvorgaenge(_:geschaeftZuordnung:listeZuordnung:context:)``),
-    /// wird stattdessen auf diesen umgeleitet und ein Alias registriert, damit
-    /// künftige Events derselben `fremdeID` direkt dorthin auflösen.
+    /// sonst irgendeinen offenen Vorgang für die Liste. **Bewusst kein
+    /// Geschäft-Zwang:** „Einkauf abschließen" setzt die Geschäftsauswahl des
+    /// schließenden Geräts zurück (GitHub #51), der direkt danach neu
+    /// angelegte Nachfolger hat also fast immer `geschaeft == nil` — ein
+    /// harter Geschäft-Abgleich hätte hier NIE gegriffen und genau den Fall
+    /// verfehlt, für den diese Umleitung gedacht ist. Wird ein Nachfolger
+    /// gefunden, wird zusätzlich ein Alias registriert, damit künftige Events
+    /// derselben `fremdeID` direkt dorthin auflösen.
     private static func aufOffenenNachfolgerUmgeleitet(
         _ vorgang: Einkaufsvorgang, fremdeID: UUID, context: ModelContext
     ) -> Einkaufsvorgang {
-        guard vorgang.istAbgeschlossen, vorgang.einkaufsliste != nil else { return vorgang }
+        guard vorgang.istAbgeschlossen, let einkaufsliste = vorgang.einkaufsliste else { return vorgang }
         let deskriptor = FetchDescriptor<Einkaufsvorgang>(predicate: #Predicate { $0.endZeit == nil })
-        guard let offenerNachfolger = ((try? context.fetch(deskriptor)) ?? []).first(where: {
-            $0.geschaeft == vorgang.geschaeft && $0.einkaufsliste == vorgang.einkaufsliste
-        }) else { return vorgang }
+        let offeneFuerListe = ((try? context.fetch(deskriptor)) ?? []).filter { $0.einkaufsliste == einkaufsliste }
+        guard let offenerNachfolger = offeneFuerListe.first(where: { $0.geschaeft == vorgang.geschaeft }) ?? offeneFuerListe.first
+        else { return vorgang }
 
         SyncEntitaetsAliasService.registriere(
             entitaetsArt: SyncEntitaetsArt.einkaufsvorgang, fremdeID: fremdeID, lokaleID: offenerNachfolger.id, context: context
