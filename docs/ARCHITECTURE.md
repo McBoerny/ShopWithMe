@@ -253,6 +253,22 @@ mit einer erfundenen Besuchsposition füttern; `Einkaufsvorgang.naechsterKategor
 ignoriert solche indexlosen Einträge bei der Suche nach einem bereits
 vorhandenen Index, um keinen Duplikat-Index für dieselbe Kategorie zu vergeben.
 
+**Dieselbe Lücke bestand unadressiert auch im Bereich-A-„Sicherheitsnetz"**
+(`SyncSnapshotImportService.mergeEinkaufslistenEintraege`/`istBereitsAbgehakt`,
+siehe GitHub #52-Nachfolgefund oben): Der Check, ob ein Artikel bereits
+abgehakt ist, betrachtete nur lokal noch **offene** `Einkaufsvorgang`e. Schloss
+„Einkauf abschließen" den Vorgang mit dem `KaufEintrag`, fiel der Artikel aus
+diesem Check heraus — ein noch veralteter Peer-Snapshot holte ihn dann über das
+Sicherheitsnetz erneut auf die offene Liste zurück, ein anschließendes erneutes
+Abhaken erzeugte wegen der neuen `bezugsID` des Nachfolge-Vorgangs einen
+zusätzlichen `KaufEintrag` (sichtbare Dublette). `istBereitsAbgehakt` zählt
+seither auch geschlossene Vorgänge, aber **nur** solange für dieselbe Liste
+aktuell ein offener Nachfolger existiert (derselbe
+`Einkaufsvorgang.offenerNachfolger(fuerListe:bevorzugtesGeschaeft:context:)`-
+Helfer) — ein vor Wochen einmal gekaufter und später legitim neu zur Liste
+hinzugefügter Artikel bleibt dadurch weiterhin über das Sicherheitsnetz
+erreichbar.
+
 **Zurückgestellte, tiefergehende Befunde aus demselben Code-Review** (siehe
 GitHub Issues): Geschäfts-Zuordnung eines per Umleitung materialisierten
 `KaufEintrag` (übernimmt das Geschäft des Nachfolge-Vorgangs, oft `nil`);

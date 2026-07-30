@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.9 (Build 150) — Fix: Sicherheitsnetz holte abgehakte Artikel nach „Einkauf abschließen" zurück
+
+- Fix: `SyncSnapshotImportService.istBereitsAbgehakt` (Bereich-A-Sicherheitsnetz
+  für `EinkaufslistenEintrag`) prüfte nur lokal noch **offene**
+  `Einkaufsvorgang`e. Schloss „Einkauf abschließen" den Vorgang mit dem
+  `KaufEintrag` des Artikels, fiel der Check heraus — ein noch veralteter
+  Peer-Snapshot holte den bereits abgehakten Artikel dadurch wieder auf die
+  offene Liste zurück; ein erneutes Abhaken erzeugte wegen der neuen
+  `bezugsID` des Nachfolge-Vorgangs zusätzlich eine sichtbare Dublette.
+  Geschlossene Vorgänge zählen jetzt ebenfalls, aber nur solange für dieselbe
+  Liste aktuell ein offener Nachfolger existiert (derselbe
+  `Einkaufsvorgang.offenerNachfolger(fuerListe:bevorzugtesGeschaeft:context:)`-
+  Helfer wie die Vorgangs-Umleitung aus Build 148/149) — dieselbe
+  „dangling Einkaufsvorgang"-Ursachen-Familie wie GitHub #52, hier im
+  bislang unadressierten Bereich-A-Pfad.
+
 ## v0.9 (Build 149) — Code-Review-Fixes: fälschliche Vorgangs-Umleitung, doppelter Kategorie-Index
 
 - Fix: Die in v0.9 (Build 148) eingeführte Vorgangs-Umleitung

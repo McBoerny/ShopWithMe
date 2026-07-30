@@ -463,15 +463,32 @@ enum SyncSnapshotImportService {
         }
     }
 
-    /// Ob `artikel` in einem lokal noch offenen ``Einkaufsvorgang`` von
-    /// `liste` bereits abgehakt ist (siehe Warnung in
+    /// Ob `artikel` in einem ``Einkaufsvorgang`` von `liste` bereits abgehakt
+    /// ist (siehe Warnung in
     /// ``mergeEinkaufslistenEintraege(_:listeZuordnung:artikelZuordnung:context:)``).
+    ///
+    /// **Dieselbe „dangling Einkaufsvorgang"-Ursachen-Familie wie
+    /// `SyncImportService.aufOffenenNachfolgerUmgeleitet` /
+    /// `mergeEinkaufsvorgaenge` (siehe dort), hier im Bereich-A-Sicherheitsnetz:**
+    /// Ein rein auf offene Vorgänge beschränkter Check verliert den bereits
+    /// abgehakten Artikel genau in dem Moment, in dem „Einkauf abschließen"
+    /// den Vorgang mit seinem `KaufEintrag` schließt — das Sicherheitsnetz
+    /// hätte ihn dann beim nächsten (noch nicht aktuellen) Peer-Snapshot
+    /// fälschlich wieder auf die offene Liste geholt. Ein geschlossener
+    /// Vorgang zählt deshalb ebenfalls, aber NUR solange es für dieselbe
+    /// Liste aktuell einen offenen Nachfolger gibt (über den gemeinsamen
+    /// ``Einkaufsvorgang/offenerNachfolger(fuerListe:bevorzugtesGeschaeft:context:)``-Helfer)
+    /// — sonst könnte ein Artikel, der vor Wochen einmal gekauft und später
+    /// legitim neu zur Liste hinzugefügt wurde, nie wieder über dieses
+    /// Sicherheitsnetz zurückkommen.
     @MainActor
     private static func istBereitsAbgehakt(_ artikel: Artikel, aufListe liste: Einkaufsliste, context: ModelContext) -> Bool {
-        let deskriptor = FetchDescriptor<Einkaufsvorgang>(predicate: #Predicate { $0.endZeit == nil })
-        let offeneVorgaenge = (try? context.fetch(deskriptor)) ?? []
-        return offeneVorgaenge.contains {
-            $0.einkaufsliste == liste && $0.kaufEintraege.contains { $0.artikel == artikel }
+        let vorgaengeFuerListe = (((try? context.fetch(FetchDescriptor<Einkaufsvorgang>())) ?? []) as [Einkaufsvorgang])
+            .filter { $0.einkaufsliste == liste }
+        return vorgaengeFuerListe.contains { vorgang in
+            guard vorgang.kaufEintraege.contains(where: { $0.artikel == artikel }) else { return false }
+            guard vorgang.endZeit != nil else { return true }
+            return Einkaufsvorgang.offenerNachfolger(fuerListe: liste, bevorzugtesGeschaeft: vorgang.geschaeft, context: context) != nil
         }
     }
 

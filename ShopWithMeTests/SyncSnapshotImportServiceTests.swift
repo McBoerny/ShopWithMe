@@ -366,6 +366,59 @@ struct SyncSnapshotImportServiceTests {
         #expect(!liste.enthaelt(artikel))
     }
 
+    /// Regressionstest: derselbe Bug wie oben, aber für den Fall, dass der
+    /// Vorgang mit dem `KaufEintrag` zwischenzeitlich per „Einkauf
+    /// abschließen" geschlossen und sofort ein neuer, offener Nachfolger für
+    /// dieselbe Liste angelegt wurde (`EinkaufenView.einkaufSicherstellen()`).
+    /// `istBereitsAbgehakt` prüfte vorher NUR offene Vorgänge — der Artikel
+    /// fiel dadurch aus dem Sicherheitsnetz heraus und wurde vom nächsten,
+    /// noch veralteten Peer-Snapshot wieder auf die offene Liste geholt
+    /// (sichtbar als reales Wiederauftauchen/Duplizieren nach „Einkauf
+    /// abschließen").
+    @Test
+    func bereitsAbgehakterArtikelInGeschlossenemVorgangWirdNichtDurchSnapshotWiederAufDieListeGeholt() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
+        let artikel = Artikel(name: "Milch", symbolName: "drop.fill", farbeHex: "#34C759")
+        context.insert(artikel)
+        let geschlossenerVorgang = Einkaufsvorgang(einkaufsliste: liste)
+        context.insert(geschlossenerVorgang)
+        _ = geschlossenerVorgang.artikelAbhakenOhneEventAufzeichnung(artikel, context: context)
+        geschlossenerVorgang.abschliessen()
+        // "Einkauf abschließen" legt sofort einen neuen, offenen Vorgang für
+        // dieselbe Liste an (einkaufSicherstellen()).
+        let neuerOffenerVorgang = Einkaufsvorgang(einkaufsliste: liste)
+        context.insert(neuerOffenerVorgang)
+        try context.save()
+        #expect(!liste.enthaelt(artikel))
+
+        // Ein Peer, der die Abwahl noch nicht mitbekommen hat, listet Milch
+        // in seinem Snapshot weiterhin als Mitglied der Liste.
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.einkaufslisten = [EinkaufslisteSnapshot(id: liste.id, name: "Einkaufsliste", erstelltAm: liste.erstelltAm)]
+        snapshot.artikel = [
+            ArtikelSnapshot(
+                id: artikel.id, name: "Milch", symbolName: "drop.fill", farbeHex: "#34C759",
+                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+            ),
+        ]
+        snapshot.einkaufslistenEintraege = [
+            EinkaufslistenEintragSnapshot(einkaufslisteID: liste.id, artikelID: artikel.id, menge: 1, notiz: nil),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        #expect(!liste.enthaelt(artikel))
+        #expect(neuerOffenerVorgang.kaufEintraege.isEmpty)
+    }
+
     @Test
     func zuAlterSnapshotWirdIgnoriert() async throws {
         let (container, context) = try machtLeerenContainer()
