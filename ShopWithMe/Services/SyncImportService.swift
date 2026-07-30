@@ -180,11 +180,48 @@ enum SyncImportService {
     /// Bereich-B-Matching kann einen fremden Einkaufsvorgang mit einem anderen
     /// lokalen zusammengeführt haben, GitHub #52-Nachfolgefund), bevor direkt
     /// per `id` gesucht wird — analog ``einkaufsliste(mitID:context:)``.
+    ///
+    /// Leitet zusätzlich auf den aktuell offenen Nachfolge-Einkaufsvorgang um,
+    /// falls der so aufgelöste bereits abgeschlossen ist (siehe
+    /// ``aufOffenenNachfolgerUmgeleitet(_:fremdeID:context:)``).
     private static func einkaufsvorgang(mitID id: UUID, context: ModelContext) -> Einkaufsvorgang? {
         let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(fuer: id, art: SyncEntitaetsArt.einkaufsvorgang, context: context)
         var deskriptor = FetchDescriptor<Einkaufsvorgang>(predicate: #Predicate { $0.id == aufgeloesteID })
         deskriptor.fetchLimit = 1
-        return try? context.fetch(deskriptor).first
+        guard let vorgang = try? context.fetch(deskriptor).first else { return nil }
+        return aufOffenenNachfolgerUmgeleitet(vorgang, fremdeID: id, context: context)
+    }
+
+    /// **Bug (Absturz-Loop-Serie, dieselbe Ursachen-Familie wie GitHub
+    /// #52-Nachfolgefund — hier: „dangling Einkaufsvorgang" statt „dangling
+    /// Geschaeft"):** Ein Peer, der ``Einkaufsvorgang/artikelAbhaken(_:context:)``
+    /// noch für einen gerade auf einem ANDEREN Gerät per „Einkauf abschließen"
+    /// beendeten Vorgang aufzeichnet (weil er dessen ``Einkaufsvorgang/endZeit``
+    /// beim Senden noch nicht kannte), lieferte hier bislang den bereits
+    /// geschlossenen, für die aktuelle Einkaufsansicht unsichtbaren
+    /// ``Einkaufsvorgang`` zurück — sichtbar als: abgehakte Artikel erscheinen
+    /// auf dem anderen Gerät nicht, UND landen (weil
+    /// ``SyncSnapshotImportService/istBereitsAbgehakt(_:aufListe:context:)``
+    /// nur offene Vorgänge prüft) beim nächsten Snapshot-Merge wieder
+    /// fälschlich auf der offenen Liste. Existiert für dieselbe
+    /// (``Geschaeft``, ``Einkaufsliste``)-Kombination bereits ein neuerer,
+    /// noch offener Einkaufsvorgang (der ihn ablöst — analog
+    /// ``SyncSnapshotImportService/mergeEinkaufsvorgaenge(_:geschaeftZuordnung:listeZuordnung:context:)``),
+    /// wird stattdessen auf diesen umgeleitet und ein Alias registriert, damit
+    /// künftige Events derselben `fremdeID` direkt dorthin auflösen.
+    private static func aufOffenenNachfolgerUmgeleitet(
+        _ vorgang: Einkaufsvorgang, fremdeID: UUID, context: ModelContext
+    ) -> Einkaufsvorgang {
+        guard vorgang.istAbgeschlossen, vorgang.einkaufsliste != nil else { return vorgang }
+        let deskriptor = FetchDescriptor<Einkaufsvorgang>(predicate: #Predicate { $0.endZeit == nil })
+        guard let offenerNachfolger = ((try? context.fetch(deskriptor)) ?? []).first(where: {
+            $0.geschaeft == vorgang.geschaeft && $0.einkaufsliste == vorgang.einkaufsliste
+        }) else { return vorgang }
+
+        SyncEntitaetsAliasService.registriere(
+            entitaetsArt: SyncEntitaetsArt.einkaufsvorgang, fremdeID: fremdeID, lokaleID: offenerNachfolger.id, context: context
+        )
+        return offenerNachfolger
     }
 
     /// Löst zuerst einen bekannten Alias auf (siehe ``SyncEntitaetsAlias`` —

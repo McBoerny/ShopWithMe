@@ -17,7 +17,7 @@ struct SyncImportServiceTests {
         let schema = Schema([
             Artikel.self, ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self,
             Einkaufsvorgang.self, KaufEintrag.self,
-            Einkaufsliste.self, EinkaufslistenEintrag.self, SyncEvent.self,
+            Einkaufsliste.self, EinkaufslistenEintrag.self, SyncEvent.self, SyncEntitaetsAlias.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
@@ -220,5 +220,59 @@ struct SyncImportServiceTests {
         // Nicht als bekannt markiert -> beim nächsten Zyklus wird ein erneuter
         // Versuch unternommen (kein permanenter Datenverlust).
         #expect(SyncEventService.istBereitsBekannt(fremdesEvent.id, context: context) == false)
+    }
+
+    /// Regressionstest für den Absturz-Loop-Serie zugrundeliegenden „dangling
+    /// Einkaufsvorgang"-Fall: Gerät A beendet den Einkauf (der Vorgang wird
+    /// dadurch lokal abgeschlossen und ein neuer, offener Nachfolge-Vorgang für
+    /// dieselbe Geschäft/Liste-Kombination angelegt — analog
+    /// ``EinkaufenView/einkaufSicherstellen()``), BEVOR ein Peer erfährt, dass
+    /// der alte Vorgang beendet wurde. Ein knapp danach vom Peer gesendetes
+    /// `artikelAbgehakt`-Event referenziert deshalb noch den alten,
+    /// mittlerweile geschlossenen Vorgang. Ohne Umleitung würde der
+    /// `KaufEintrag` dort landen — unsichtbar in der aktuellen Einkaufsansicht
+    /// und (weil `istBereitsAbgehakt` nur offene Vorgänge prüft) beim nächsten
+    /// Snapshot-Merge fälschlich wieder auf die offene Liste zurückgeholt.
+    @Test
+    func artikelAbgehaktFuerBereitsAbgeschlossenenVorgangLandetAufOffenemNachfolger() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let typ = GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")
+        context.insert(typ)
+        let geschaeft = Geschaeft(name: "Testladen", typen: [typ])
+        context.insert(geschaeft)
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759")
+        context.insert(apfel)
+        liste.artikelHinzufuegenOhneEventAufzeichnung(apfel, context: context)
+
+        // Gerät A: alter Vorgang bereits abgeschlossen, neuer Vorgang für
+        // dieselbe Kombination bereits (automatisch, siehe
+        // `einkaufSicherstellen()`) angelegt und noch offen.
+        let alterVorgang = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste)
+        context.insert(alterVorgang)
+        alterVorgang.abschliessen()
+        let neuerVorgang = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste)
+        context.insert(neuerVorgang)
+        try context.save()
+
+        // Peer hatte den alten Vorgang beim Abhaken noch als offen gesehen.
+        let fremdesEvent = SyncEventExportDarstellung(
+            id: UUID(), art: SyncEventArt.artikelAbgehakt.rawValue,
+            nutzlast: try JSONEncoder().encode(SyncEventNutzlast(bezugsID: alterVorgang.id, artikelID: apfel.id)),
+            lamportZaehler: 1, lamportGeraeteID: "fremdes-geraet", autorGeraeteID: "fremdes-geraet", wallClock: Date()
+        )
+        try schreibeFremdesEvent(fremdesEvent, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncImportService.importiereNeueEvents(context: context)
+
+        #expect(alterVorgang.kaufEintraege.isEmpty)
+        #expect(neuerVorgang.kaufEintraege.contains { $0.artikel == apfel })
+        #expect(!liste.enthaelt(apfel))
     }
 }
