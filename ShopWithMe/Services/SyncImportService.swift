@@ -20,6 +20,14 @@ import SwiftData
 /// aber selbstständig auf den korrekten Endzustand, sobald auch das stärkere
 /// Event anwendbar wird (die Mutationsfunktionen sind für genau diesen Fall
 /// bereits idempotent/selbstkorrigierend ausgelegt).
+///
+/// **Ausnahme vom Retry:** Ist die referenzierte Entität nicht bloß noch
+/// nicht angekommen, sondern per ``SyncTombstoneService`` als absichtlich
+/// gelöscht markiert, wird sie nie entstehen — ein endloser Retry würde das
+/// Event bei jedem Sync-Zyklus erneut protokollieren, ohne je zu
+/// konvergieren. Dieser Fall wird daher wie ein bereits entschiedener
+/// Konflikt behandelt und sofort als bekannt markiert (siehe
+/// ``referenzDauerhaftGeloescht(art:bezugsID:artikelID:context:)``).
 enum SyncImportService {
     @MainActor
     static func importiereNeueEvents(context: ModelContext) async {
@@ -93,6 +101,14 @@ enum SyncImportService {
         }
 
         guard materialisiere(art, nutzlast: nutzlast, context: context) else {
+            guard !referenzDauerhaftGeloescht(art: art, bezugsID: nutzlast.bezugsID, artikelID: nutzlast.artikelID, context: context) else {
+                // Liste/Einkauf/Artikel wurde absichtlich gelöscht (Tombstone) und
+                // wird deshalb NIE mehr lokal entstehen — anders als bei einer
+                // bloß noch nicht eingetroffenen Referenz ist ein Retry hier
+                // sinnlos und würde das Event jeden Zyklus erneut protokollieren.
+                SyncEventService.uebernehmen(empfangen, context: context)
+                return
+            }
             // Referenzierte Liste/Einkauf/Artikel noch nicht lokal bekannt.
             // Bewusst NICHT als bekannt markieren, siehe Typ-Dokumentation —
             // wird also bei jedem weiteren Zyklus erneut protokolliert, bis
@@ -188,6 +204,34 @@ enum SyncImportService {
             vorgang.artikelDauerhaftEntfernenOhneEventAufzeichnung(artikel, context: context)
             return true
         }
+    }
+
+    /// Unterscheidet die beiden `false`-Fälle von ``materialisiere(_:nutzlast:context:)``:
+    /// Referenz nur *noch nicht* lokal bekannt (retrywürdig) vs. Referenz
+    /// *bewusst gelöscht* (Tombstone, siehe ``SyncTombstoneService``) und damit
+    /// dauerhaft unauflösbar — ein Retry würde hier bei jedem Sync-Zyklus
+    /// erneut fehlschlagen und protokolliert werden, ohne je zu konvergieren.
+    /// Prüft sowohl `artikelID` (immer ein ``Artikel``) als auch `bezugsID`
+    /// (je nach `art` eine ``Einkaufsliste`` oder ein ``Einkaufsvorgang``,
+    /// jeweils über denselben Alias-Pfad wie die zugehörige Lookup-Funktion
+    /// aufgelöst).
+    private static func referenzDauerhaftGeloescht(
+        art: SyncEventArt, bezugsID: UUID, artikelID: UUID, context: ModelContext
+    ) -> Bool {
+        let aufgeloesteArtikelID = SyncEntitaetsAliasService.aufgeloesteID(fuer: artikelID, art: SyncEntitaetsArt.artikel, context: context)
+        if SyncTombstoneService.istGeloescht(art: SyncEntitaetsArt.artikel, id: aufgeloesteArtikelID, context: context) {
+            return true
+        }
+
+        let bezugsArt: String
+        switch art {
+        case .artikelHinzugefuegt, .artikelEntfernt:
+            bezugsArt = SyncEntitaetsArt.einkaufsliste
+        case .artikelAbgehakt, .artikelAbgewaehlt, .artikelDauerhaftEntfernt:
+            bezugsArt = SyncEntitaetsArt.einkaufsvorgang
+        }
+        let aufgeloesteBezugsID = SyncEntitaetsAliasService.aufgeloesteID(fuer: bezugsID, art: bezugsArt, context: context)
+        return SyncTombstoneService.istGeloescht(art: bezugsArt, id: aufgeloesteBezugsID, context: context)
     }
 
     /// Löst zuerst einen bekannten Alias auf (siehe ``SyncEntitaetsAlias`` —
