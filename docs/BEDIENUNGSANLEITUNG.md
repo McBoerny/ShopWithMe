@@ -27,9 +27,12 @@ Die App startet immer direkt mit der Einkaufsliste.
 Jeder Artikel hat einen Namen, eine oder mehrere Kategorien (z.B. Obst,
 Milchprodukte — Mehrfachauswahl beim Bearbeiten), eine Einheit (Stück, kg, g, l,
 ml) und eine Standardmenge — die zugleich die Schrittweite ist, um die die Menge
-beim Einkaufen erhöht/verringert wird. Hat ein Artikel mehrere Kategorien,
-entscheidet pro Geschäft automatisch eine davon (die im Geschäft verfügbare) über
-seine Einordnung beim Einkaufen. Neue Artikel legst du meist direkt beim Einkaufen an (landen dann
+beim Einkaufen erhöht/verringert wird. Hat ein Artikel mehrere Kategorien (z.B.
+Ohropax unter „Drogerie" und „Reisebedarf"), erscheint er beim Einkaufen
+gleichzeitig in allen zugehörigen Abschnitten — abgehakt wird er dabei überall
+auf einmal. Aus welchem Abschnitt du ihn tatsächlich abhakst, merkt sich die App
+pro Geschäft: so lernt sie z.B., dass Sojasauce bei Edeka unter „Soßen", bei
+Aldi aber unter „Asia" steht. Neue Artikel legst du meist direkt beim Einkaufen an (landen dann
 automatisch auf der Liste); in der Artikel-Verwaltung (Einstellungen) per „+“
 angelegte Artikel landen nicht automatisch auf der Liste. Beim Anlegen schlägt
 Apple Intelligence (sofern auf deinem Gerät verfügbar) automatisch eine passende

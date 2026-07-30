@@ -875,14 +875,6 @@ private struct EinkaufslisteView: View {
         var id: PersistentIdentifier { kategorie.persistentModelID }
     }
 
-    /// Die für ``geschaeft`` führende Kategorie eines Artikels (siehe
-    /// ``Artikel/fuehrendeKategorie(inGeschaeft:context:)``) — hat ein Artikel
-    /// mehrere Kategorien, entscheidet das (nicht eine Duplizierung über mehrere
-    /// Sektionen), welcher Sektion er beim Einkaufen zugeordnet wird.
-    private func effektiveKategorie(fuer artikel: Artikel) -> ArtikelKategorie {
-        artikel.fuehrendeKategorie(inGeschaeft: geschaeft, context: modelContext)
-    }
-
     /// `artikelListe` (üblicherweise ``artikelAufListe``), gruppiert nach
     /// Artikelkategorie und sortiert über ``WarengruppenDistanzService`` — der
     /// gelernten, paarweisen Warengruppen-Distanzmatrix dieses Geschäfts
@@ -893,6 +885,15 @@ private struct EinkaufslisteView: View {
     /// (``WarengruppenDistanzService/genuegendDatenVerfuegbar(fuer:)``) bleibt es
     /// bei alphabetischer Reihenfolge.
     ///
+    /// Ein Artikel mit mehreren Kategorien (``Artikel/effektiveKategorien(context:)``,
+    /// z.B. Ohropax unter "Drogerie" UND "Reisebedarf") landet bewusst in JEDER
+    /// zugehörigen Gruppe statt nur in einer einzigen "führenden" — vorherige
+    /// Architektur-Revision: eine Duplizierung ist hier gewollt (der Nutzer tappt
+    /// ihn dort ab, wo er im jeweiligen Geschäft tatsächlich steht), außerdem
+    /// hing die frühere Einzelauswahl von der nicht ordnungsgarantierten
+    /// SwiftData-Relationship ``Artikel/kategorien`` ab und sprang dadurch
+    /// zwischen Sync-Zyklen sichtbar zwischen Abschnitten hin und her.
+    ///
     /// Als Funktion statt als computed property, damit `body` sie einmal pro
     /// Render mit einer bereits berechneten `artikelListe` aufruft, statt sie
     /// (inklusive der darin enthaltenen Sortierung samt SwiftData-Fetch) mehrfach
@@ -900,8 +901,9 @@ private struct EinkaufslisteView: View {
     private func kategorieGruppen(fuer artikelListe: [Artikel]) -> [KategorieGruppe] {
         var nachKategorie: [PersistentIdentifier: KategorieGruppe] = [:]
         for artikel in artikelListe {
-            let kategorie = effektiveKategorie(fuer: artikel)
-            nachKategorie[kategorie.persistentModelID, default: KategorieGruppe(kategorie: kategorie, artikel: [])].artikel.append(artikel)
+            for kategorie in artikel.effektiveKategorien(context: modelContext) {
+                nachKategorie[kategorie.persistentModelID, default: KategorieGruppe(kategorie: kategorie, artikel: [])].artikel.append(artikel)
+            }
         }
         let alphabetisch = nachKategorie.values.map(\.kategorie)
             .sorted { $0.name.vergleicheAlphabetisch(mit: $1.name) == .orderedAscending }
@@ -975,7 +977,7 @@ private struct EinkaufslisteView: View {
                             eintrag: einkaufsliste.eintrag(fuer: artikel),
                             mengeAnzeige: menge(fuer: artikel),
                             istAbgehakt: istAbgehakt(artikel),
-                            abhaken: { umschalten(artikel) },
+                            abhaken: { umschalten(artikel, kategorie: gruppe.kategorie) },
                             mengeErhoehen: { mengeErhoehen(artikel) },
                             mengeVerringern: { mengeVerringern(artikel) },
                             dauerhaftEntfernen: istAbgehakt(artikel) ? { entferneDauerhaft(artikel) } : nil
@@ -1099,14 +1101,21 @@ private struct EinkaufslisteView: View {
         einkaufsvorgang.kaufEintraege.contains { $0.artikel == artikel }
     }
 
-    private func umschalten(_ artikel: Artikel) {
+    /// `kategorie`: die Sektion, aus der heraus getappt wurde (siehe
+    /// ``kategorieGruppen(fuer:)``) — bei einem Artikel mit mehreren Kategorien
+    /// ist das die tatsächliche Beobachtung, in welcher davon er in diesem
+    /// Geschäft steht, und wird unverändert an
+    /// ``Einkaufsvorgang/artikelAbhaken(_:context:kategorie:)`` weitergereicht.
+    private func umschalten(_ artikel: Artikel, kategorie: ArtikelKategorie) {
         interaktionRegistrieren()
         // Nur die Identitäten über die `await`-Grenze hinweg sichern (siehe
         // ``ModelReference``) — während des Micro-Lease-Erwerbs kann ein
-        // nebenläufiger Sync-Zyklus genau diesen Artikel oder Einkaufsvorgang
-        // (z.B. per Peer-Zusammenführung) gelöscht haben.
+        // nebenläufiger Sync-Zyklus genau diesen Artikel, Einkaufsvorgang oder
+        // diese Kategorie (z.B. per Peer-Zusammenführung/Löschung) verändert
+        // haben.
         let artikelReferenz = ModelReference(artikel)
         let einkaufsvorgangReferenz = ModelReference(einkaufsvorgang)
+        let kategorieReferenz = ModelReference(kategorie)
         Task {
             var abhakErgebnis: AbhakErgebnis?
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
@@ -1116,7 +1125,11 @@ private struct EinkaufslisteView: View {
                 if istAbgehakt(artikelFrisch) {
                     einkaufsvorgangFrisch.artikelAbwaehlen(artikelFrisch, context: modelContext)
                 } else {
-                    abhakErgebnis = einkaufsvorgangFrisch.artikelAbhaken(artikelFrisch, context: modelContext)
+                    // `nil`, falls die Kategorie inzwischen gelöscht wurde — fällt
+                    // dann auf `Artikel/fuehrendeKategorie(inGeschaeft:context:)`
+                    // zurück, statt abzustürzen oder die Aktion abzubrechen.
+                    let kategorieFrisch = kategorieReferenz.resolved(in: modelContext)
+                    abhakErgebnis = einkaufsvorgangFrisch.artikelAbhaken(artikelFrisch, context: modelContext, kategorie: kategorieFrisch)
                 }
             }
             if let abhakErgebnis {

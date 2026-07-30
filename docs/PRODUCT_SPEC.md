@@ -14,11 +14,22 @@ Geschäfte und den Einkaufsvorgang selbst intelligent unterstützt.
   Mehrfachauswahl) sowie **Menge** und **Einheit** (Gewicht: kg/g, Volumen: ltr/ml,
   oder Stück) — die beim Anlegen festgelegte Menge ist zugleich die
   Standard-Schrittweite für Erhöhen/Verringern auf der Einkaufsliste. Hat ein Artikel
-  mehrere Kategorien, entscheidet pro Geschäft eine **führende** Kategorie
-  (`Artikel/fuehrendeKategorie(inGeschaeft:context:)`) über die Gruppierung beim
-  Einkaufen — bevorzugt eine im Geschäft verfügbare Kategorie, sonst die erste
-  zugeordnete. Symbol/Farbe existieren weiterhin als Datenfelder, werden aber in
-  keiner UI mehr angezeigt oder vom Anwender/der KI gesetzt.
+  mehrere Kategorien, erscheint er beim Einkaufen gleichzeitig in JEDEM zugehörigen
+  Abschnitt (GitHub-Nachfolgefund zu #36 — vorherige Architektur-Revision entschied
+  noch pro Geschäft eine einzelne „führende" Kategorie und duplizierte den Artikel
+  bewusst nicht; das hing zusätzlich von der nicht ordnungsgarantierten
+  `kategorien`-Relationship ab und ließ den Artikel bei Sync-Zyklen sichtbar
+  zwischen Abschnitten springen). Abgehakt wird er dabei überall zugleich; aus
+  welchem Abschnitt tatsächlich abgehakt wurde, geht als Kategorie in den
+  `KaufEintrag` ein — Grundlage dafür, dass `WarengruppenDistanzService` pro
+  Geschäft lernt, in welcher der mehreren Kategorien ein Artikel dort tatsächlich
+  steht (z.B. Sojasauce bei Edeka unter „Soßen", bei Aldi unter „Asia"), statt einer
+  global geratenen. `Artikel/fuehrendeKategorie(inGeschaeft:context:)` bleibt als
+  Fallback für Kontexte ohne konkret getappten Abschnitt (Belegscan,
+  Preisschild-Scan, Sync-Import empfangener Events) — bevorzugt eine im Geschäft
+  verfügbare Kategorie, sonst die erste (deterministisch nach `sortIndex`
+  sortierte) zugeordnete. Symbol/Farbe existieren weiterhin als Datenfelder, werden
+  aber in keiner UI mehr angezeigt oder vom Anwender/der KI gesetzt.
 - **Artikelkategorie**: z.B. Obst, Milchprodukte, Drogerieartikel. Kategorien sind global,
   nicht pro Geschäft.
 - **Geschäft**: hat einen oder mehrere Typen (Lebensmittel, Drogerie, Baumarkt,

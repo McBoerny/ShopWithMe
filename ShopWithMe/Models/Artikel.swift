@@ -153,15 +153,30 @@ extension Artikel {
         return [ArtikelKategorie.sonstige(context: context)]
     }
 
-    /// Die für Gruppierung und Sortierung (``WarengruppenDistanzService``) beim
-    /// Einkaufen in `geschaeft` **führende** Kategorie, falls ein Artikel mehreren
-    /// Kategorien zugeordnet ist — Nutzer-Entscheidung: pro Geschäft gewinnt genau
-    /// eine Kategorie, kein Duplizieren des Artikels über mehrere Abschnitte.
+    /// Beste Schätzung der Kategorie eines Artikels in `geschaeft`, wenn keine
+    /// explizite Sektionsauswahl vorliegt (Belegscan, Preisschild-Scan,
+    /// Sync-Import empfangener Bereich-A-Events — siehe
+    /// ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:indexFuerDistanzlernen:kategorie:)``,
+    /// deren `kategorie`-Parameter für die reguläre Einkaufsliste bevorzugt
+    /// genutzt wird). **Kein "Gewinner" mehr im Sinne der EinkaufenView-Anzeige**
+    /// (die zeigt einen Artikel mit mehreren Kategorien inzwischen gleichzeitig
+    /// in allen zugehörigen Abschnitten, GitHub-Nachfolgefund zu #36 — zwei
+    /// Geräte/Nutzer können pro Artikel und Geschäft unterschiedliche, jeweils
+    /// tatsächlich zutreffende Kategorien lernen, z.B. Sojasauce bei Edeka unter
+    /// "Soßen", bei Aldi unter "Asia").
+    ///
     /// Priorität: eine im Geschäft tatsächlich verfügbare Kategorie > die erste
     /// zugeordnete Kategorie (ohne `geschaeft`, z.B. in der geschäftsunabhängigen
-    /// Artikel-Verwaltung).
+    /// Artikel-Verwaltung). Kandidaten werden vor der Auswahl deterministisch
+    /// sortiert (``sortIndex``, dann `id` als letzter Tiebreaker) — `kategorien`
+    /// selbst ist eine ungeordnete SwiftData-Relationship, deren Aufzählungs-
+    /// reihenfolge sich zwischen Fetches/Sync-Merges ändern kann; ohne diese
+    /// Sortierung hätte ein mehrfach kategorisierter Artikel bei jedem Sync-
+    /// Zyklus zufällig eine andere Kategorie liefern können.
     func fuehrendeKategorie(inGeschaeft geschaeft: Geschaeft?, context: ModelContext) -> ArtikelKategorie {
-        let kandidaten = effektiveKategorien(context: context)
+        let kandidaten = effektiveKategorien(context: context).sorted { a, b in
+            a.sortIndex != b.sortIndex ? a.sortIndex < b.sortIndex : a.id.uuidString < b.id.uuidString
+        }
         guard let geschaeft else { return kandidaten[0] }
         let alleKategorien = (try? context.fetch(FetchDescriptor<ArtikelKategorie>())) ?? []
         let verfuegbareKategorien = geschaeft.verfuegbareKategorien(alleKategorien: alleKategorien)

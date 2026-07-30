@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.8 (Build 147) — Artikel mit mehreren Kategorien: gleichzeitig in allen Abschnitten, geschäftsspezifisches Lernen
+
+- Fix/Neu (GitHub-Nachfolgefund zu #36): ein Artikel mit mehreren Kategorien
+  (z.B. Ohropax unter „Drogerie" und „Reisebedarf") wird beim Einkaufen jetzt
+  gleichzeitig in ALLEN zugehörigen Abschnitten angezeigt statt nur in einer
+  einzigen „führenden" — die vorherige Einzelauswahl hing von der nicht
+  ordnungsgarantierten `Artikel/kategorien`-Relationship ab und ließ den
+  Artikel bei Sync-Zyklen sichtbar zwischen Abschnitten springen. Abgehakt
+  wird der Artikel dabei überall zugleich; aus welchem Abschnitt tatsächlich
+  abgehakt wurde, geht als Kategorie in den `KaufEintrag` ein — Grundlage
+  dafür, dass `WarengruppenDistanzService` jetzt pro Geschäft lernen kann, in
+  welcher der mehreren Kategorien ein Artikel dort tatsächlich steht (z.B.
+  Sojasauce bei Edeka unter „Soßen", bei Aldi unter „Asia").
+- Fix: mehrere durch Sync verursachte Dateninkonsistenzen behoben — abgehakte
+  Artikel, die kurz nach „Einkauf abschließen" auf einem Peer eintrafen,
+  landeten auf dem bereits geschlossenen statt dem neuen offenen
+  Einkaufsvorgang (unsichtbar in der Ansicht, tauchte danach fälschlich
+  wieder auf der Liste auf); außerdem verfälschten remote abgehakte Artikel
+  (Live-Event wie Snapshot-Merge) bislang die lokale
+  ``WarengruppenDistanzService``-Lernbasis, da ihnen ein Besuchsindex aus der
+  eigenen Reihenfolge zugewiesen wurde statt gar keinem.
+
 ## v0.8 (Build 142) — Inaktivitäts-Reset der Geschäftsauswahl
 
 - Neu (GitHub #51): die aktive Geschäftsauswahl beim Einkaufen wird jetzt

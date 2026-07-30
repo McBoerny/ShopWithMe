@@ -279,4 +279,86 @@ struct EinkaufsvorgangTests {
         }
         #expect(geraeteID == "fremdes-geraet")
     }
+
+    /// GitHub-Nachfolgefund zu #36: ``EinkaufenView`` zeigt einen Artikel mit
+    /// mehreren Kategorien jetzt gleichzeitig in allen zugehörigen Abschnitten
+    /// an (statt nur in einer "führenden") und übergibt beim Abhaken die
+    /// tatsächlich getappte Kategorie — Grundlage dafür, dass
+    /// ``WarengruppenDistanzService`` pro Geschäft lernen kann, in welcher der
+    /// mehreren Kategorien ein Artikel dort tatsächlich steht (z.B. Sojasauce
+    /// bei Edeka unter "Soßen", bei Aldi unter "Asia"), statt einer für den
+    /// Artikel global geratenen.
+    @Test
+    func explizitUebergebeneKategorieUeberschreibtFuehrendeKategorie() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let sossen = ArtikelKategorie(name: "Soßen", standardSymbol: "drop.fill", standardFarbeHex: "#FF9500")
+        let asia = ArtikelKategorie(name: "Asia", standardSymbol: "fork.knife", standardFarbeHex: "#FF3B30")
+        context.insert(sossen)
+        context.insert(asia)
+        let geschaeft = Geschaeft(name: "Aldi", typen: [lebensmittelTyp()])
+        context.insert(geschaeft)
+        let sojasauce = Artikel(
+            name: "Sojasauce", symbolName: "drop.fill", farbeHex: "#FF9500", kategorien: [sossen, asia]
+        )
+        context.insert(sojasauce)
+
+        let einkauf = Einkaufsvorgang(geschaeft: geschaeft)
+        context.insert(einkauf)
+
+        // Getappt aus dem "Asia"-Abschnitt, nicht aus dem (ggf. "führenden")
+        // "Soßen"-Abschnitt.
+        einkauf.artikelAbhaken(sojasauce, context: context, kategorie: asia)
+
+        #expect(einkauf.kaufEintraege.first?.kategorie == asia)
+    }
+
+    /// Ohne explizite Kategorie (Belegscan, Preisschild-Scan, Sync-Import) bleibt
+    /// das bisherige Verhalten über ``Artikel/fuehrendeKategorie(inGeschaeft:context:)``
+    /// erhalten.
+    @Test
+    func ohneExpliziteKategorieWirdWeiterhinDieFuehrendeVerwendet() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        context.insert(obst)
+        let geschaeft = Geschaeft(name: "Testladen", typen: [lebensmittelTyp()])
+        context.insert(geschaeft)
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst])
+        context.insert(apfel)
+        let einkauf = Einkaufsvorgang(geschaeft: geschaeft)
+        context.insert(einkauf)
+
+        einkauf.artikelAbhaken(apfel, context: context)
+
+        #expect(einkauf.kaufEintraege.first?.kategorie == obst)
+    }
+
+    /// Regressionstest für die Ursache des "Anzeige springt hin und her"-Bugs:
+    /// ``Artikel/kategorien`` ist eine ungeordnete SwiftData-Relationship, deren
+    /// Enumerationsreihenfolge sich zwischen Fetches/Sync-Merges ändern kann.
+    /// ``Artikel/fuehrendeKategorie(inGeschaeft:context:)`` muss deshalb
+    /// unabhängig von der Initialisierungs-/Zuweisungsreihenfolge immer
+    /// dieselbe Kategorie liefern (hier: niedrigerer ``ArtikelKategorie/sortIndex``
+    /// gewinnt).
+    @Test
+    func fuehrendeKategorieIstUnabhaengigVonDerZuweisungsreihenfolge() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let drogerie = ArtikelKategorie(name: "Drogerie", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE", sortIndex: 0)
+        let reise = ArtikelKategorie(name: "Reisebedarf", standardSymbol: "airplane", standardFarbeHex: "#5AC8FA", sortIndex: 1)
+        context.insert(drogerie)
+        context.insert(reise)
+
+        let ohropaxA = Artikel(name: "Ohropax A", symbolName: "sparkles", farbeHex: "#AF52DE", kategorien: [drogerie, reise])
+        let ohropaxB = Artikel(name: "Ohropax B", symbolName: "sparkles", farbeHex: "#AF52DE", kategorien: [reise, drogerie])
+        context.insert(ohropaxA)
+        context.insert(ohropaxB)
+
+        #expect(ohropaxA.fuehrendeKategorie(inGeschaeft: nil, context: context) == drogerie)
+        #expect(ohropaxB.fuehrendeKategorie(inGeschaeft: nil, context: context) == drogerie)
+    }
 }

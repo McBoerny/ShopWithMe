@@ -59,12 +59,11 @@ final class Einkaufsvorgang {
     /// Markiert einen Artikel als gekauft: legt einen ``KaufEintrag`` (zunächst ohne
     /// Preis) in diesem Einkaufsvorgang an und entfernt den Artikel von
     /// ``einkaufsliste`` (falls dort noch ein ``EinkaufslistenEintrag`` existiert).
-    /// Artikel mit derselben, für ``geschaeft`` führenden ``ArtikelKategorie``
-    /// (``Artikel/fuehrendeKategorie(inGeschaeft:context:)``) erhalten denselben
+    /// Artikel mit derselben Kategorie erhalten denselben
     /// ``KaufEintrag/kategorieBesuchsIndex``, neue Kategorien den jeweils nächsten
     /// Index — das ist die Rohdatenbasis für ``WarengruppenDistanzService``. Artikel
     /// ohne eigene Kategorie fallen dabei automatisch unter "Sonstiges". Reine
-    /// Zustandsmutation ohne Event-Aufzeichnung, siehe ``artikelAbhaken(_:context:)``.
+    /// Zustandsmutation ohne Event-Aufzeichnung, siehe ``artikelAbhaken(_:context:kategorie:)``.
     /// Liefert ``AbhakErgebnis/abgehakt``, falls tatsächlich ein ``KaufEintrag``
     /// entstanden ist (Grundlage dafür, ob die aufzeichnende Variante ein Event
     /// erzeugt) — sonst ``AbhakErgebnis/bereitsAbgehaktVon(geraeteID:)`` (GitHub
@@ -83,9 +82,20 @@ final class Einkaufsvorgang {
     /// Artikel gilt dadurch weiterhin korrekt als abgehakt (KaufEintrag
     /// existiert, verschwindet von der offenen Liste), fließt aber nicht in die
     /// Reihenfolge-Analyse ein.
+    ///
+    /// `kategorie`: explizite Kategorie, aus deren Abschnitt der Nutzer
+    /// tatsächlich abgehakt hat (``EinkaufenView`` zeigt einen Artikel mit
+    /// mehreren Kategorien gleichzeitig in allen zugehörigen Abschnitten an) —
+    /// `nil` fällt auf ``Artikel/fuehrendeKategorie(inGeschaeft:context:)`` zurück
+    /// (Belegscan, Preisschild-Scan, Sync-Import, wo kein konkreter Abschnitt
+    /// getappt wurde). Genau dieses Signal ist die Grundlage dafür, dass
+    /// ``WarengruppenDistanzService`` pro Geschäft lernen kann, in welcher der
+    /// mehreren zugeordneten Kategorien ein Artikel dort tatsächlich steht (z.B.
+    /// Sojasauce bei Edeka unter "Soßen", bei Aldi unter "Asia") statt einer
+    /// global für den Artikel geratenen.
     @discardableResult
     func artikelAbhakenOhneEventAufzeichnung(
-        _ artikel: Artikel, context: ModelContext, indexFuerDistanzlernen: Bool = true
+        _ artikel: Artikel, context: ModelContext, indexFuerDistanzlernen: Bool = true, kategorie kategorieUeberschreibung: ArtikelKategorie? = nil
     ) -> AbhakErgebnis {
         // Dedupe-Schutz gegen das in `docs/DATABASE_CONCURRENCY.md` dokumentierte
         // Restrisiko (Sync-Latenz-Kollisionsfenster bei zeitgleichem Abhaken auf zwei
@@ -107,7 +117,7 @@ final class Einkaufsvorgang {
             return .bereitsAbgehaktVon(geraeteID: gewinner?.autorGeraeteID)
         }
 
-        let kategorie = artikel.fuehrendeKategorie(inGeschaeft: geschaeft, context: context)
+        let kategorie = kategorieUeberschreibung ?? artikel.fuehrendeKategorie(inGeschaeft: geschaeft, context: context)
         let index = indexFuerDistanzlernen ? naechsterKategorieBesuchsIndex(fuer: kategorie) : nil
         let eintrag = KaufEintrag(
             artikel: artikel,
@@ -124,13 +134,13 @@ final class Einkaufsvorgang {
         return .abgehakt
     }
 
-    /// Wie ``artikelAbhakenOhneEventAufzeichnung(_:context:)``, zeichnet
-    /// zusätzlich (nur bei tatsächlicher Neuanlage) ein
+    /// Wie ``artikelAbhakenOhneEventAufzeichnung(_:context:indexFuerDistanzlernen:kategorie:)``,
+    /// zeichnet zusätzlich (nur bei tatsächlicher Neuanlage) ein
     /// ``SyncEventArt/artikelAbgehakt``-Event auf (Phase 0,
     /// `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`).
     @discardableResult
-    func artikelAbhaken(_ artikel: Artikel, context: ModelContext) -> AbhakErgebnis {
-        let ergebnis = artikelAbhakenOhneEventAufzeichnung(artikel, context: context)
+    func artikelAbhaken(_ artikel: Artikel, context: ModelContext, kategorie: ArtikelKategorie? = nil) -> AbhakErgebnis {
+        let ergebnis = artikelAbhakenOhneEventAufzeichnung(artikel, context: context, kategorie: kategorie)
         if ergebnis == .abgehakt {
             SyncEventService.aufzeichnen(.artikelAbgehakt, bezugsID: id, artikelID: artikel.id, context: context)
         }
