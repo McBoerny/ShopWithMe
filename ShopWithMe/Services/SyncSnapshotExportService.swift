@@ -55,31 +55,35 @@ enum SyncSnapshotExportService {
     /// Baut den ``SyncSnapshot`` aus dem aktuellen Modellzustand und schreibt ihn
     /// nach `peers/{geraeteID}/export.json`. Ohne hinterlegten Sync-Ordner
     /// (``SyncOrdnerService/gewaehlterOrdner()`` liefert `nil`) ohne Wirkung.
+    /// Rückgabewert meldet ausschließlich, ob der Ordnerzugriff (Berechtigung)
+    /// geklappt hat, analog ``SyncSnapshotImportService/importiereSnapshots(context:)``.
+    @discardableResult
     @MainActor
-    static func exportiereSnapshot(context: ModelContext) async {
-        guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return }
+    static func exportiereSnapshot(context: ModelContext) async -> Bool {
+        guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return true }
 
         let snapshot = erstelleSnapshot(context: context)
-        guard let fingerabdruck = inhaltsFingerabdruck(of: snapshot) else { return }
+        guard let fingerabdruck = inhaltsFingerabdruck(of: snapshot) else { return true }
         guard fingerabdruck != letzterGeschriebenerFingerabdruck else {
             SyncDebugLogger.log(.snapshotUnveraendertUebersprungen, details: "")
-            return
+            return true
         }
-        guard let daten = try? JSONEncoder().encode(snapshot) else { return }
+        guard let daten = try? JSONEncoder().encode(snapshot) else { return true }
 
         guard syncOrdner.startAccessingSecurityScopedResource() else {
             SyncDebugLogger.log(.ordnerZugriffFehlgeschlagen, details: "exportiereSnapshot")
-            return
+            return false
         }
         defer { syncOrdner.stopAccessingSecurityScopedResource() }
 
         let zielURL = eigeneExportURL(in: syncOrdner)
         guard (try? FileManager.default.createDirectory(
             at: zielURL.deletingLastPathComponent(), withIntermediateDirectories: true
-        )) != nil else { return }
+        )) != nil else { return true }
 
-        guard schreibeBlocking(daten, nach: zielURL) else { return }
+        guard schreibeBlocking(daten, nach: zielURL) else { return true }
         letzterGeschriebenerFingerabdruck = fingerabdruck
+        return true
     }
 
     /// SHA256-Fingerabdruck des inhaltlichen Teils von `snapshot` — ohne die

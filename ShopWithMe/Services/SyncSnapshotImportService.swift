@@ -52,12 +52,20 @@ enum SyncSnapshotImportService {
     /// Tests sie auf sehr kurze Werte setzen können.
     @MainActor static var maximalesSnapshotAlter: TimeInterval = 30 * 24 * 60 * 60
 
+    /// Rückgabewert meldet ausschließlich, ob der Ordnerzugriff (Berechtigung)
+    /// geklappt hat — die einzige Fehlerart, die für die Person tatsächlich
+    /// handlungsrelevant ist (z.B. Ordner erneut auswählen). Alle anderen,
+    /// weiter unten bereits einzeln abgefangenen Sonderfälle (fehlender
+    /// `peers`-Ordner, defekte einzelne Snapshot-Datei) bleiben bewusst intern
+    /// behandelt statt hier als Fehlschlag hochgereicht zu werden, siehe
+    /// ``SyncOrdnerSettingsView``.
+    @discardableResult
     @MainActor
-    static func importiereSnapshots(context: ModelContext) async {
-        guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return }
+    static func importiereSnapshots(context: ModelContext) async -> Bool {
+        guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return true }
         guard syncOrdner.startAccessingSecurityScopedResource() else {
             SyncDebugLogger.log(.ordnerZugriffFehlgeschlagen, details: "importiereSnapshots")
-            return
+            return false
         }
         defer { syncOrdner.stopAccessingSecurityScopedResource() }
 
@@ -65,7 +73,7 @@ enum SyncSnapshotImportService {
         let eigeneGeraeteID = DatabaseLeaseService.geraeteID
         guard let peerVerzeichnisse = try? FileManager.default.contentsOfDirectory(
             at: peersOrdner, includingPropertiesForKeys: nil
-        ) else { return }
+        ) else { return true }
 
         for peerOrdner in peerVerzeichnisse where peerOrdner.lastPathComponent != eigeneGeraeteID {
             let exportURL = SyncSnapshotExportService.exportURL(fuerPeer: peerOrdner.lastPathComponent, in: syncOrdner)
@@ -86,8 +94,9 @@ enum SyncSnapshotImportService {
         // Bereich-B/C/D-Änderungen als auch die (jetzt gedrosselte, siehe
         // ``SyncPeerInfo/aktualisiere(peerGeraeteID:geraeteName:zuletztGesehen:context:)``)
         // Peer-Metadaten-Pflege.
-        guard context.hasChanges else { return }
+        guard context.hasChanges else { return true }
         try? context.save()
+        return true
     }
 
     /// Wendet einen einzelnen, bereits vorliegenden Snapshot an (z.B. aus einem

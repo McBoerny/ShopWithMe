@@ -148,14 +148,23 @@ struct SyncOrdnerSettingsView: View {
 
     /// Nutzt denselben Sync-Zyklus wie ``SyncPollingService`` (statt die vier
     /// Schritte hier zu duplizieren), damit z.B. die Diagnose-Protokollierung
-    /// (``SyncDebugLogger``) an einer einzigen Stelle passiert.
+    /// (``SyncDebugLogger``) an einer einzigen Stelle passiert. Zeigt den
+    /// tatsächlichen Rückgabewert an, statt wie zuvor unbedingt „erfolgreich"
+    /// zu melden — ein fehlgeschlagener Ordnerzugriff (Berechtigung entzogen,
+    /// externer Datenträger nicht verbunden) landet dadurch als echte
+    /// Fehlermeldung statt unbemerkt zu verpuffen.
     private func jetztSynchronisieren() {
         letzterSyncErfolgreich = false
+        fehlermeldung = nil
         wirdSynchronisiert = true
         Task {
-            await syncPollingService.syncZyklus()
+            let erfolgreich = await syncPollingService.syncZyklus()
             wirdSynchronisiert = false
-            letzterSyncErfolgreich = true
+            if erfolgreich {
+                letzterSyncErfolgreich = true
+            } else {
+                fehlermeldung = "Zugriff auf den Sync-Ordner fehlgeschlagen. Bitte Ordner erneut auswählen oder Berechtigung prüfen."
+            }
         }
     }
 

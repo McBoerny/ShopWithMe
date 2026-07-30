@@ -29,12 +29,15 @@ import SwiftData
 /// Konflikt behandelt und sofort als bekannt markiert (siehe
 /// ``referenzDauerhaftGeloescht(art:bezugsID:artikelID:context:)``).
 enum SyncImportService {
+    /// Rückgabewert meldet ausschließlich, ob der Ordnerzugriff (Berechtigung)
+    /// geklappt hat, analog ``SyncSnapshotImportService/importiereSnapshots(context:)``.
+    @discardableResult
     @MainActor
-    static func importiereNeueEvents(context: ModelContext) async {
-        guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return }
+    static func importiereNeueEvents(context: ModelContext) async -> Bool {
+        guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return true }
         guard syncOrdner.startAccessingSecurityScopedResource() else {
             SyncDebugLogger.log(.ordnerZugriffFehlgeschlagen, details: "importiereNeueEvents")
-            return
+            return false
         }
         defer { syncOrdner.stopAccessingSecurityScopedResource() }
 
@@ -42,7 +45,7 @@ enum SyncImportService {
         let eigeneGeraeteID = DatabaseLeaseService.geraeteID
         guard let peerVerzeichnisse = try? FileManager.default.contentsOfDirectory(
             at: peersOrdner, includingPropertiesForKeys: nil
-        ) else { return }
+        ) else { return true }
 
         for peerOrdner in peerVerzeichnisse where peerOrdner.lastPathComponent != eigeneGeraeteID {
             let eventsOrdner = SyncExportService.eventsOrdner(fuerPeer: peerOrdner.lastPathComponent, in: syncOrdner)
@@ -63,8 +66,9 @@ enum SyncImportService {
         // Poll-Zyklus ohne neue fremde Events (der Normalfall) soll keine
         // Store-Änderung erzwingen (GitHub #60/#70, siehe Typ-Doku
         // ``SyncSnapshotImportService``).
-        guard context.hasChanges else { return }
+        guard context.hasChanges else { return true }
         try? context.save()
+        return true
     }
 
     /// Lädt und dekodiert Event-Dateien über einen koordinierten Lesezugriff

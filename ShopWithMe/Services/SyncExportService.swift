@@ -40,26 +40,29 @@ enum SyncExportService {
     /// die es aktuell nicht gibt — siehe „Offene Alt-Datei-Frage" oben, jetzt
     /// wieder bewusst offen statt mit einem unsicheren Heuristik-Ersatz
     /// geschlossen.
+    /// Rückgabewert meldet ausschließlich, ob der Ordnerzugriff (Berechtigung)
+    /// geklappt hat, analog ``SyncSnapshotImportService/importiereSnapshots(context:)``.
+    @discardableResult
     @MainActor
-    static func exportiereNeueEvents(context: ModelContext) async {
-        guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return }
+    static func exportiereNeueEvents(context: ModelContext) async -> Bool {
+        guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return true }
 
         var beschreibung = FetchDescriptor<SyncEvent>(
             predicate: #Predicate { $0.hochgeladen == false }
         )
         beschreibung.sortBy = [SortDescriptor(\.lamportZaehler)]
-        guard let ausstehende = try? context.fetch(beschreibung), !ausstehende.isEmpty else { return }
+        guard let ausstehende = try? context.fetch(beschreibung), !ausstehende.isEmpty else { return true }
 
         guard syncOrdner.startAccessingSecurityScopedResource() else {
             SyncDebugLogger.log(.ordnerZugriffFehlgeschlagen, details: "exportiereNeueEvents")
-            return
+            return false
         }
         defer { syncOrdner.stopAccessingSecurityScopedResource() }
 
         let eventsOrdner = eigenerEventsOrdner(in: syncOrdner)
         guard (try? FileManager.default.createDirectory(
             at: eventsOrdner, withIntermediateDirectories: true
-        )) != nil else { return }
+        )) != nil else { return true }
 
         for event in ausstehende {
             guard let daten = try? JSONEncoder().encode(event.exportDarstellung) else { continue }
@@ -69,6 +72,7 @@ enum SyncExportService {
         }
 
         if context.hasChanges { try? context.save() }
+        return true
     }
 
     /// Zehnstellig nullgepolsterter Lamport-Zähler sorgt für lexikografisch

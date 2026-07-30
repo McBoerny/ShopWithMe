@@ -78,17 +78,27 @@ final class SyncPollingService: ObservableObject {
         schleife = nil
     }
 
-    func syncZyklus() async {
-        guard let context else { return }
+    /// Rückgabewert meldet, ob der Ordnerzugriff in allen vier Teilschritten
+    /// geklappt hat — die einzige Fehlerart, die den Zyklus insgesamt als
+    /// fehlgeschlagen ausweist (siehe Doku der einzelnen Services). Vom
+    /// automatischen Polling-Loop bewusst ignoriert (der versucht es beim
+    /// nächsten Intervall einfach erneut); ``SyncOrdnerSettingsView`` nutzt
+    /// ihn dagegen für ehrliches Erfolgs-/Fehler-Feedback beim manuellen
+    /// „Jetzt synchronisieren".
+    @discardableResult
+    func syncZyklus() async -> Bool {
+        guard let context else { return true }
         SyncDebugLogger.log(.zyklusStart, details: einkaufAktiv ? "einkaufAktiv" : "ruhend")
         let start = ContinuousClock.now
 
-        await SyncSnapshotImportService.importiereSnapshots(context: context)
-        await SyncImportService.importiereNeueEvents(context: context)
-        await SyncExportService.exportiereNeueEvents(context: context)
-        await SyncSnapshotExportService.exportiereSnapshot(context: context)
+        let snapshotImportErfolgreich = await SyncSnapshotImportService.importiereSnapshots(context: context)
+        let eventImportErfolgreich = await SyncImportService.importiereNeueEvents(context: context)
+        let eventExportErfolgreich = await SyncExportService.exportiereNeueEvents(context: context)
+        let snapshotExportErfolgreich = await SyncSnapshotExportService.exportiereSnapshot(context: context)
 
         let dauer = start.duration(to: .now)
         SyncDebugLogger.log(.zyklusEnde, details: "dauer=\(dauer)")
+
+        return snapshotImportErfolgreich && eventImportErfolgreich && eventExportErfolgreich && snapshotExportErfolgreich
     }
 }
