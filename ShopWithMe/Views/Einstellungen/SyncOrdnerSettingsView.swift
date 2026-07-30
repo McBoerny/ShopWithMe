@@ -34,12 +34,7 @@ struct SyncOrdnerSettingsView: View {
 
             Section {
                 LabeledContent("Sync-Ordner") {
-                    Text(ausgewaehlterOrdner != nil ? "Festgelegt" : "Nicht festgelegt")
-                        .foregroundStyle(.secondary)
-                }
-                if let ordner = ausgewaehlterOrdner {
-                    Text(ordner.lastPathComponent)
-                        .font(.footnote)
+                    Text(ausgewaehlterOrdner?.lastPathComponent ?? "ohne")
                         .foregroundStyle(.secondary)
                 }
             }
