@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.9 (Build 151) — Suchfeld bleibt nach Artikel-Auswahl gefiltert (GitHub #64)
+
+- `ArtikelHinzufuegenView`: Nach Tap auf einen Artikel (Hinzufügen, Entfernen oder
+  Neuanlage) wird das Suchfeld sofort geleert, damit direkt weitergetippt werden
+  kann, ohne vorher per (x) zu löschen. Die Trefferliste fällt dabei aber **nicht**
+  mehr sofort auf die volle unfilterte Ansicht zurück, sondern bleibt auf dem
+  bisherigen Suchtext eingefroren (neuer State `wirksamerSuchtext` +
+  `filterEinfrieren`-Flag), bis der Nutzer das nächste Zeichen tippt.
+
 ## v0.9 (Build 150) — Fix: Sicherheitsnetz holte abgehakte Artikel nach „Einkauf abschließen" zurück
 
 - Fix: `SyncSnapshotImportService.istBereitsAbgehakt` (Bereich-A-Sicherheitsnetz

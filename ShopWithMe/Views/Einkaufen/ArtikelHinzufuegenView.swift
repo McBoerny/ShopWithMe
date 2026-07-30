@@ -22,6 +22,14 @@ struct ArtikelHinzufuegenView: View {
     @Environment(\.modelContext) private var modelContext
 
     @State private var suchtext = ""
+    /// Bleibt nach einer Artikel-Auswahl auf dem bisherigen Suchtext stehen,
+    /// solange ``filterEinfrieren`` aktiv ist — verhindert, dass die Trefferliste
+    /// sofort auf die volle unfilterte Ansicht zurückfällt, bevor der Nutzer das
+    /// nächste Zeichen tippt (GitHub #64).
+    @State private var wirksamerSuchtext = ""
+    /// Unterdrückt genau eine Aktualisierung von ``wirksamerSuchtext`` — gesetzt
+    /// unmittelbar bevor `suchtext` nach einer Auswahl programmatisch geleert wird.
+    @State private var filterEinfrieren = false
     /// Explizit auf `false` initialisiert und an `.searchable(isPresented:)`
     /// gebunden, damit das Suchfeld beim Öffnen dieses Sheets garantiert
     /// unfokussiert startet (GitHub #23) — unabhängig von der genauen Ursache
@@ -35,7 +43,7 @@ struct ArtikelHinzufuegenView: View {
     @State private var zuletztAngelegterEntwurf: Artikel?
 
     private var getrimmterSuchtext: String {
-        suchtext.trimmingCharacters(in: .whitespacesAndNewlines)
+        wirksamerSuchtext.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// Zusätzlich zum Teilstring-Vergleich auch Singular/Plural-unabhängig
@@ -90,6 +98,7 @@ struct ArtikelHinzufuegenView: View {
                                 } else {
                                     hinzufuegen(artikel)
                                 }
+                                suchfeldFuerNaechsteEingabeZuruecksetzen()
                             } label: {
                                 ArtikelAuswahlZeile(artikel: artikel, bereitsAufListe: bereitsAufListe)
                             }
@@ -107,6 +116,18 @@ struct ArtikelHinzufuegenView: View {
                 }
             }
             .searchable(text: $suchtext, isPresented: $sucheAktiv, prompt: "Artikel suchen oder anlegen")
+            .onChange(of: suchtext) { _, neuerText in
+                if filterEinfrieren {
+                    filterEinfrieren = false
+                } else {
+                    wirksamerSuchtext = neuerText
+                }
+            }
+            .onChange(of: sucheAktiv) { _, aktiv in
+                if !aktiv {
+                    wirksamerSuchtext = suchtext
+                }
+            }
             .navigationTitle("Artikel hinzufügen")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -183,6 +204,14 @@ struct ArtikelHinzufuegenView: View {
         defer { zuletztAngelegterEntwurf = nil }
         guard let entwurf = zuletztAngelegterEntwurf, entwurf.modelContext != nil else { return }
         hinzufuegen(entwurf)
+        suchfeldFuerNaechsteEingabeZuruecksetzen()
+    }
+
+    /// Leert `suchtext` nach einer Auswahl, friert aber ``wirksamerSuchtext`` auf
+    /// dem bisherigen Wert ein — die Trefferliste bleibt so stehen, bis der
+    /// Nutzer das nächste Zeichen tippt (GitHub #64).
+    private func suchfeldFuerNaechsteEingabeZuruecksetzen() {
+        filterEinfrieren = true
         suchtext = ""
     }
 }
