@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.9 (Build 161) — Fix: Besuchszähler wuchs unbegrenzt durch Sync (G-Counter-Korrektur)
+
+- Der neue Diagnose-Log zeigte: `export.json` wurde praktisch bei jedem
+  Sync-Zyklus neu geschrieben, weil sich `Geschaeft.anzahlEinkaufsvorgaenge`
+  ständig änderte — ohne dass tatsächlich neue Einkäufe stattfanden.
+  Ursache: die additive Merge-Regel behandelte den von einem Peer gemeldeten
+  Gesamtwert als reinen Zuwachs, obwohl dieser Gesamtwert selbst schon
+  Beiträge des EMPFANGENDEN Geräts enthielt (aus einem früheren Sync) — jeder
+  Beitrag wurde dadurch bei jedem Hin-und-Her zwischen zwei Geräten erneut
+  mitgezählt, unbegrenzt aufschaukelnd.
+- Fix: echtes G-Counter-Muster (CRDT). `Geschaeft` unterscheidet jetzt
+  `eigeneAnzahlEinkaufsvorgaenge` (nur lokal, nie durch Sync verändert) von
+  `anzahlEinkaufsvorgaenge` (berechnete Summe aus eigenem Anteil + zuletzt
+  bekanntem eigenen Beitrag jedes Peers). Der Snapshot exportiert nur noch
+  den eigenen Anteil, nie den bereits gemergten Gesamtwert.
+  `SyncSnapshot.aktuelleFormatVersion` auf 3 erhöht.
+- Details: `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` Abschnitt 17.
+- Bereits vor diesem Fix aufgelaufene, überhöhte Zähler lassen sich über
+  „Zähler zurücksetzen" in den Geschäfts-Stammdaten manuell bereinigen.
+
 ## v0.9 (Build 160) — Sync-Debug-Modus: sichtbar machen, welcher Bereich export.json neu schreibt
 
 - Neues Protokoll-Ereignis `sync_snapshot_geschrieben` (bisher gab es nur

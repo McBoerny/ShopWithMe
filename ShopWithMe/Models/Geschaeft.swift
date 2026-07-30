@@ -116,18 +116,66 @@ final class Geschaeft {
         get { (alternativeNamenRaw ?? "").split(separator: "\n").map(String.init) }
         set { alternativeNamenRaw = newValue.isEmpty ? nil : newValue.joined(separator: "\n") }
     }
-    /// Rohwert für ``anzahlEinkaufsvorgaenge``. Optional gespeichert, damit vor
-    /// Einführung dieses Attributs angelegte Geschäfte beim automatischen Laden
-    /// nicht abstürzen — ein `nil`-Rohwert fällt auf `0` zurück.
+    /// Rohwert für ``eigeneAnzahlEinkaufsvorgaenge``. Optional gespeichert, damit
+    /// vor Einführung dieses Attributs angelegte Geschäfte beim automatischen
+    /// Laden nicht abstürzen — ein `nil`-Rohwert fällt auf `0` zurück.
     private var anzahlEinkaufsvorgaengeRaw: Int?
-    /// Wie oft der Anwender in diesem Geschäft bereits einen Einkaufsvorgang
-    /// abgeschlossen hat (``Einkaufsvorgang/abschliessen(am:)``) — unabhängig von der
-    /// Preishistorie, daher unabhängig von deren Aufbewahrungsfrist. In
-    /// ``GeschaeftStammdatenEditView`` manuell auf `0` zurücksetzbar, ohne die
-    /// eigentliche Kaufhistorie zu löschen (GitHub #30).
-    var anzahlEinkaufsvorgaenge: Int {
+    /// Wie oft DIESES Gerät in diesem Geschäft bereits selbst einen
+    /// Einkaufsvorgang abgeschlossen hat (``Einkaufsvorgang/abschliessen(am:)``)
+    /// — NIE durch Sync verändert, nur durch eine echte lokale Aktion oder den
+    /// manuellen Reset (siehe ``zaehlerZuruecksetzen(context:)``, GitHub #30).
+    /// Grundlage (zusammen mit dem zuletzt bekannten eigenen Beitrag jedes
+    /// Peers) für ``anzahlEinkaufsvorgaenge``.
+    var eigeneAnzahlEinkaufsvorgaenge: Int {
         get { anzahlEinkaufsvorgaengeRaw ?? 0 }
         set { anzahlEinkaufsvorgaengeRaw = newValue }
+    }
+    /// Wie oft in diesem Geschäft gruppenweit, über alle bekannten Geräte
+    /// hinweg, bereits ein Einkaufsvorgang abgeschlossen wurde — unabhängig von
+    /// der Preishistorie, daher unabhängig von deren Aufbewahrungsfrist.
+    ///
+    /// **Bewusst ein reiner G-Counter (CRDT-Muster) statt der ursprünglichen
+    /// "Delta seit zuletzt gesehenem Gesamtwert"-Regel:** Summe aus
+    /// ``eigeneAnzahlEinkaufsvorgaenge`` und dem zuletzt bekannten EIGENEN
+    /// Beitrag jedes Peers (``SyncPeerZaehlerStand``, jetzt „was hat Peer P
+    /// selbst beigetragen", nicht mehr „welchen Gesamtwert hatte Peer P
+    /// zuletzt"). Die vorherige Regel addierte bei jedem Sync-Durchlauf einen
+    /// Zuwachs auf einen bereits gemergten Gesamtwert — da dieser Gesamtwert
+    /// selbst schon Beiträge anderer Peers enthielt, wurde derselbe Beitrag bei
+    /// jedem weiteren Hin-und-Her zwischen zwei Geräten erneut mitgezählt und
+    /// wuchs dadurch unbegrenzt, ohne dass je ein echter neuer Einkauf
+    /// stattfand (Live-Test-Fund, siehe `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`
+    /// Abschnitt 17) — als Nebeneffekt änderte sich dadurch bei praktisch jedem
+    /// Sync-Zyklus der Inhalt von `export.json`. Ein G-Counter zählt jeden
+    /// Beitrag an genau einer Stelle, unabhängig davon, über wie viele Geräte
+    /// er weitergereicht wird.
+    ///
+    /// Berechnet bei jedem Zugriff (kein zusätzlicher gespeicherter
+    /// Gesamtwert) — bei den hier realistischen Peer-Zahlen unkritisch. Ohne
+    /// zugeordneten ``modelContext`` (z.B. ein noch nicht eingefügtes,
+    /// frisches Geschäft) liefert nur ``eigeneAnzahlEinkaufsvorgaenge`` zurück.
+    var anzahlEinkaufsvorgaenge: Int {
+        guard let context = modelContext else { return eigeneAnzahlEinkaufsvorgaenge }
+        let eigeneID = id
+        let deskriptor = FetchDescriptor<SyncPeerZaehlerStand>(predicate: #Predicate { $0.geschaeftID == eigeneID })
+        let peerBeitraege = (try? context.fetch(deskriptor)) ?? []
+        return eigeneAnzahlEinkaufsvorgaenge + peerBeitraege.reduce(0) { $0 + $1.zuletztGesehenerWert }
+    }
+
+    /// Setzt ``eigeneAnzahlEinkaufsvorgaenge`` auf `0` und vergisst die zuletzt
+    /// bekannten eigenen Beiträge aller Peers für dieses Geschäft (GitHub #30)
+    /// — lässt die eigentliche Kaufhistorie (``KaufEintrag``) unangetastet.
+    /// Rein lokal: andere Geräte erfahren davon nicht automatisch (dieselbe,
+    /// bereits vorher akzeptierte Einschränkung wie beim alten Zähler — ein
+    /// Peer, der seinen eigenen Beitrag später erneut meldet, würde ihn sonst
+    /// wieder mitzählen).
+    func zaehlerZuruecksetzen(context: ModelContext) {
+        eigeneAnzahlEinkaufsvorgaenge = 0
+        let eigeneID = id
+        let deskriptor = FetchDescriptor<SyncPeerZaehlerStand>(predicate: #Predicate { $0.geschaeftID == eigeneID })
+        for beitrag in (try? context.fetch(deskriptor)) ?? [] {
+            context.delete(beitrag)
+        }
     }
     /// Rohwert für ``umbauVerdacht``. Optional gespeichert, damit vor Einführung
     /// dieses Attributs angelegte Geschäfte beim automatischen Laden nicht

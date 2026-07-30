@@ -202,7 +202,7 @@ enum SyncSnapshotExportService {
                 ausgeschlosseneKategorieIDs: sichereIDs(geschaeft.ausgeschlosseneKategorien, gueltigeIDs: gueltigeKategorieIDs),
                 alternativeNamen: geschaeft.alternativeNamen,
                 ignorierteArtikelNamen: geschaeft.ignorierteArtikel.map(\.erkannterName),
-                anzahlEinkaufsvorgaenge: geschaeft.anzahlEinkaufsvorgaenge,
+                eigeneAnzahlEinkaufsvorgaenge: geschaeft.eigeneAnzahlEinkaufsvorgaenge,
                 umbauVerdacht: geschaeft.umbauVerdacht,
                 unauffaelligeEinkaeufeInFolge: geschaeft.unauffaelligeEinkaeufeInFolge
             )

@@ -49,11 +49,13 @@ final class Einkaufsvorgang {
     var istAbgeschlossen: Bool { endZeit != nil }
 
     /// Beendet den Einkaufsvorgang zum angegebenen Zeitpunkt (Standard: jetzt) und
-    /// erhöht — falls ``geschaeft`` gesetzt ist — dessen
-    /// ``Geschaeft/anzahlEinkaufsvorgaenge`` (GitHub #30).
+    /// erhöht — falls ``geschaeft`` gesetzt ist — dessen rein lokalen Anteil
+    /// ``Geschaeft/eigeneAnzahlEinkaufsvorgaenge`` (GitHub #30; der über alle
+    /// Geräte gemergte ``Geschaeft/anzahlEinkaufsvorgaenge`` ergibt sich daraus
+    /// automatisch beim Lesen).
     func abschliessen(am zeitpunkt: Date = Date()) {
         endZeit = zeitpunkt
-        geschaeft?.anzahlEinkaufsvorgaenge += 1
+        geschaeft?.eigeneAnzahlEinkaufsvorgaenge += 1
     }
 
     /// Markiert einen Artikel als gekauft: legt einen ``KaufEintrag`` (zunächst ohne

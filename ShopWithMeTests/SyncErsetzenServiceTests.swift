@@ -62,7 +62,7 @@ struct SyncErsetzenServiceTests {
         GeschaeftSnapshot(
             id: UUID(), name: name, typIDs: [], adresse: nil, breitengrad: nil, laengengrad: nil,
             erkennungsradius: nil, kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
-            ignorierteArtikelNamen: [], anzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
+            ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
         )
     }
 

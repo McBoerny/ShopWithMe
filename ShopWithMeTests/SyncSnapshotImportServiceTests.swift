@@ -93,7 +93,7 @@ struct SyncSnapshotImportServiceTests {
                 id: UUID(), name: "REWE Musterstadt", typIDs: [], adresse: nil,
                 breitengrad: 52.5201, laengengrad: 13.4051, erkennungsradius: 120,
                 kategorieIDs: [remoteKategorieID], ausgeschlosseneKategorieIDs: [], alternativeNamen: ["Rewe Center"],
-                ignorierteArtikelNamen: ["Pfand"], anzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
+                ignorierteArtikelNamen: ["Pfand"], eigeneAnzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
             ),
         ]
         try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
@@ -109,8 +109,13 @@ struct SyncSnapshotImportServiceTests {
         #expect(lokal.ignorierteArtikel.map(\.erkannterName) == ["Pfand"])
     }
 
+    /// Prüft das grundlegende G-Counter-Verhalten (siehe
+    /// `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` Abschnitt 17): der
+    /// Gesamtwert ist die Summe aus dem eigenen Anteil und dem zuletzt
+    /// gemeldeten EIGENEN Beitrag jedes Peers — kein additives Delta mehr
+    /// gegenüber einem bereits gemergten Gesamtwert.
     @Test
-    func anzahlEinkaufsvorgaengeWirdUeberMehrereSyncsAdditivGemergtOhneDoppelzaehlung() async throws {
+    func eigenerBeitragJedesPeersWirdGenauEinmalGezaehlt() async throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
         let syncOrdner = macheTempSyncOrdner()
@@ -120,34 +125,93 @@ struct SyncSnapshotImportServiceTests {
         let typ = GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")
         context.insert(typ)
         let lokal = Geschaeft(name: "Rewe", typen: [typ])
-        lokal.anzahlEinkaufsvorgaenge = 2
+        lokal.eigeneAnzahlEinkaufsvorgaenge = 2
         context.insert(lokal)
         try context.save()
 
         let remoteID = UUID()
-        func snapshotMitZaehler(_ wert: Int) -> SyncSnapshot {
+        func snapshotMitEigenemBeitrag(_ wert: Int) -> SyncSnapshot {
             var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
             snapshot.geschaefte = [
                 GeschaeftSnapshot(
                     id: remoteID, name: "Rewe", typIDs: [], adresse: nil, breitengrad: nil, laengengrad: nil,
                     erkennungsradius: nil, kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
-                    ignorierteArtikelNamen: [], anzahlEinkaufsvorgaenge: wert, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
+                    ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: wert, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
                 ),
             ]
             return snapshot
         }
 
-        try schreibeFremdenSnapshot(snapshotMitZaehler(3), fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+        try schreibeFremdenSnapshot(snapshotMitEigenemBeitrag(3), fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
         await SyncSnapshotImportService.importiereSnapshots(context: context)
-        #expect(lokal.anzahlEinkaufsvorgaenge == 5) // 2 (lokal) + 3 (Zuwachs)
+        #expect(lokal.anzahlEinkaufsvorgaenge == 5) // 2 (eigen) + 3 (Peer-Beitrag)
 
-        try schreibeFremdenSnapshot(snapshotMitZaehler(5), fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+        // Peer meldet zwei weitere echte Einkäufe (eigener Beitrag jetzt 5 statt 3).
+        try schreibeFremdenSnapshot(snapshotMitEigenemBeitrag(5), fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
         await SyncSnapshotImportService.importiereSnapshots(context: context)
-        #expect(lokal.anzahlEinkaufsvorgaenge == 7) // + 2 Zuwachs (5-3)
+        #expect(lokal.anzahlEinkaufsvorgaenge == 7) // 2 (eigen) + 5 (neuer Peer-Beitrag)
 
         // Erneuter Import desselben (unveränderten) Standes darf nichts addieren.
         await SyncSnapshotImportService.importiereSnapshots(context: context)
         #expect(lokal.anzahlEinkaufsvorgaenge == 7)
+    }
+
+    /// Regressionstest für den in einem echten Zwei-Geräte-Live-Test
+    /// beobachteten Fund (`docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`
+    /// Abschnitt 17): die ursprüngliche "Delta seit zuletzt gesehenem
+    /// Gesamtwert"-Regel zählte denselben Beitrag bei jedem Hin-und-Her
+    /// zwischen zwei Geräten erneut mit, weil der von einem Peer gemeldete
+    /// "Gesamtwert" selbst schon zurückenthaltene eigene Beiträge trug.
+    /// Simuliert zwei Geräte, die sich wiederholt gegenseitig importieren
+    /// (über zwei getrennte, physische Sync-Ordner, damit sich keine Seite
+    /// versehentlich selbst importiert), OHNE dass je ein neuer echter
+    /// Einkauf stattfindet — der Gesamtwert darf sich dabei auf keiner Seite
+    /// mehr verändern.
+    @Test
+    func zaehlerWaechstNichtDurchWiederholtesHinUndHerSynchronisieren() async throws {
+        let (containerA, contextA) = try machtLeerenContainer()
+        _ = containerA
+        let (containerB, contextB) = try machtLeerenContainer()
+        _ = containerB
+
+        let syncOrdnerVonA = macheTempSyncOrdner()
+        let syncOrdnerVonB = macheTempSyncOrdner()
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let typA = GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")
+        contextA.insert(typA)
+        let geschaeftA = Geschaeft(name: "Rewe", typen: [typA])
+        geschaeftA.eigeneAnzahlEinkaufsvorgaenge = 1 // Ein echter Einkauf auf Gerät A, sonst nie wieder.
+        contextA.insert(geschaeftA)
+        try contextA.save()
+
+        let typB = GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")
+        contextB.insert(typB)
+        let geschaeftB = Geschaeft(name: "Rewe", typen: [typB]) // Per Name gematcht, kein echter Einkauf auf B.
+        contextB.insert(geschaeftB)
+        try contextB.save()
+
+        func exportiere(_ context: ModelContext, nach ordner: URL) throws {
+            let snapshot = SyncSnapshotExportService.erstelleSnapshot(context: context)
+            let url = SyncSnapshotExportService.exportURL(fuerPeer: "peer", in: ordner)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try JSONEncoder().encode(snapshot).write(to: url)
+        }
+
+        for _ in 0..<4 {
+            try exportiere(contextA, nach: syncOrdnerVonA)
+            try SyncOrdnerService.ordnerFestlegen(syncOrdnerVonA)
+            await SyncSnapshotImportService.importiereSnapshots(context: contextB)
+
+            try exportiere(contextB, nach: syncOrdnerVonB)
+            try SyncOrdnerService.ordnerFestlegen(syncOrdnerVonB)
+            await SyncSnapshotImportService.importiereSnapshots(context: contextA)
+        }
+
+        let geschaeftAAktuell = try #require(try contextA.fetch(FetchDescriptor<Geschaeft>()).first)
+        let geschaeftBAktuell = try #require(try contextB.fetch(FetchDescriptor<Geschaeft>()).first)
+        #expect(geschaeftAAktuell.anzahlEinkaufsvorgaenge == 1)
+        #expect(geschaeftBAktuell.anzahlEinkaufsvorgaenge == 1)
     }
 
     @Test
@@ -278,7 +342,7 @@ struct SyncSnapshotImportServiceTests {
             GeschaeftSnapshot(
                 id: geschaeftID, name: "Netto", typIDs: [], adresse: nil, breitengrad: nil, laengengrad: nil,
                 erkennungsradius: nil, kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
-                ignorierteArtikelNamen: [], anzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
+                ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
             ),
         ]
         try schreibeFremdenSnapshot(veralteterSnapshot, fremdeGeraeteID: "veralteter-peer", in: syncOrdner)
@@ -510,7 +574,7 @@ struct SyncSnapshotImportServiceTests {
             GeschaeftSnapshot(
                 id: UUID(), name: "Sollte ignoriert werden", typIDs: [], adresse: nil, breitengrad: nil, laengengrad: nil,
                 erkennungsradius: nil, kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
-                ignorierteArtikelNamen: [], anzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
+                ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
             ),
         ]
         try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "verwaister-peer", in: syncOrdner)
@@ -593,7 +657,7 @@ struct SyncSnapshotImportServiceTests {
             GeschaeftSnapshot(
                 id: geschaeft.id, name: "Rewe", typIDs: [], adresse: nil, breitengrad: nil, laengengrad: nil,
                 erkennungsradius: nil, kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
-                ignorierteArtikelNamen: [], anzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
+                ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
             ),
         ]
         snapshot.einkaufslisten = [EinkaufslisteSnapshot(id: liste.id, name: "Einkaufsliste", erstelltAm: liste.erstelltAm)]
@@ -782,7 +846,7 @@ struct SyncSnapshotImportServiceTests {
             GeschaeftSnapshot(
                 id: remoteGeschaeftID, name: "Rewe", typIDs: [], adresse: nil, breitengrad: nil, laengengrad: nil,
                 erkennungsradius: nil, kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
-                ignorierteArtikelNamen: [], anzahlEinkaufsvorgaenge: 1, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
+                ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 1, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
             ),
         ]
         snapshot.einkaufsvorgaenge = [
@@ -916,7 +980,7 @@ struct SyncSnapshotImportServiceTests {
             GeschaeftSnapshot(
                 id: geschaeft.id, name: "Rewe", typIDs: [], adresse: nil, breitengrad: nil, laengengrad: nil,
                 erkennungsradius: nil, kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
-                ignorierteArtikelNamen: [], anzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
+                ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
             ),
         ]
         snapshot.warengruppenDistanzen = [

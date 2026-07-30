@@ -339,12 +339,14 @@ enum SyncSnapshotImportService {
                 context.insert(IgnorierterArtikel(erkannterName: name, geschaeft: lokal))
             }
 
-            // Additive Merge-Regel für Zähler (Abschnitt 4.2a) statt Überschreiben.
-            let zuwachs = SyncPeerZaehlerStand.zuwachs(
-                peerGeraeteID: peerGeraeteID, geschaeftID: eintrag.id,
-                remoteWert: eintrag.anzahlEinkaufsvorgaenge, context: context
+            // G-Counter statt additiver Delta-Regel (Abschnitt 4.2a, korrigiert
+            // in Abschnitt 17): merkt sich nur den von diesem Peer gemeldeten
+            // EIGENEN Beitrag unter der bereits lokal aufgelösten `lokal.id` —
+            // `Geschaeft.anzahlEinkaufsvorgaenge` summiert beim Lesen selbst.
+            SyncPeerZaehlerStand.merkeEigenenZuwachsDesPeers(
+                peerGeraeteID: peerGeraeteID, geschaeftID: lokal.id,
+                eigenerWertDesPeers: eintrag.eigeneAnzahlEinkaufsvorgaenge, context: context
             )
-            lokal.anzahlEinkaufsvorgaenge += zuwachs
             lokal.umbauVerdacht = lokal.umbauVerdacht || eintrag.umbauVerdacht
             // unauffaelligeEinkaeufeInFolge bewusst NICHT gemergt — Streak-Zähler,
             // siehe Abschnitt 4.2a.

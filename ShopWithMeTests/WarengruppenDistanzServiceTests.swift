@@ -9,6 +9,7 @@ struct WarengruppenDistanzServiceTests {
         let schema = Schema([
             Artikel.self, ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self,
             Einkaufsvorgang.self, KaufEintrag.self, WarengruppenDistanz.self, SyncEvent.self,
+            SyncPeerZaehlerStand.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
@@ -127,7 +128,7 @@ struct WarengruppenDistanzServiceTests {
         context.insert(b)
         context.insert(c)
         let geschaeft = Geschaeft(name: "Testladen", typen: [lebensmittelTyp()])
-        geschaeft.anzahlEinkaufsvorgaenge = 3
+        geschaeft.eigeneAnzahlEinkaufsvorgaenge = 3
         context.insert(geschaeft)
 
         // A und B liegen nah beieinander, B und C ebenfalls, A und C sind weit
@@ -158,7 +159,7 @@ struct WarengruppenDistanzServiceTests {
         context.insert(b)
         context.insert(c)
         let geschaeft = Geschaeft(name: "Testladen", typen: [lebensmittelTyp()])
-        geschaeft.anzahlEinkaufsvorgaenge = 3
+        geschaeft.eigeneAnzahlEinkaufsvorgaenge = 3
         context.insert(geschaeft)
 
         let sortiert = WarengruppenDistanzService.sortierteReihenfolge(
@@ -177,7 +178,7 @@ struct WarengruppenDistanzServiceTests {
         context.insert(a)
         context.insert(b)
         let geschaeft = Geschaeft(name: "Testladen", typen: [lebensmittelTyp()])
-        geschaeft.anzahlEinkaufsvorgaenge = 1
+        geschaeft.eigeneAnzahlEinkaufsvorgaenge = 1
         context.insert(geschaeft)
 
         let eingabe = [a, b]

@@ -10,6 +10,7 @@ struct SyncSnapshotExportServiceTests {
             Artikel.self, ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self,
             Einkaufsvorgang.self, KaufEintrag.self, WarengruppenDistanz.self,
             Einkaufsliste.self, EinkaufslistenEintrag.self, IgnorierterArtikel.self, SyncEvent.self,
+            SyncPeerZaehlerStand.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
@@ -35,7 +36,7 @@ struct SyncSnapshotExportServiceTests {
         let geschaeft = Geschaeft(name: "Rewe", typen: [typ])
         geschaeft.erkennungsradiusRaw = 150
         geschaeft.kategorien = [kategorie]
-        geschaeft.anzahlEinkaufsvorgaenge = 3
+        geschaeft.eigeneAnzahlEinkaufsvorgaenge = 3
         context.insert(geschaeft)
         let ignoriert = IgnorierterArtikel(erkannterName: "Pfand", geschaeft: geschaeft)
         context.insert(ignoriert)
@@ -67,7 +68,7 @@ struct SyncSnapshotExportServiceTests {
         #expect(geschaeftSnapshot.erkennungsradius == 150)
         #expect(geschaeftSnapshot.kategorieIDs == [kategorie.id])
         #expect(geschaeftSnapshot.ignorierteArtikelNamen == ["Pfand"])
-        #expect(geschaeftSnapshot.anzahlEinkaufsvorgaenge == 3)
+        #expect(geschaeftSnapshot.eigeneAnzahlEinkaufsvorgaenge == 3)
 
         let artikelSnapshot = try #require(snapshot.artikel.first { $0.id == apfel.id })
         #expect(artikelSnapshot.kategorieIDs == [kategorie.id])

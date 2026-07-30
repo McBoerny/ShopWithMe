@@ -151,7 +151,7 @@ struct GeschaeftStammdatenEditView: View {
                         LabeledContent("Abgeschlossene Einkäufe", value: "\(geschaeft.anzahlEinkaufsvorgaenge)")
                         if geschaeft.anzahlEinkaufsvorgaenge != 0 {
                             Button("Zähler zurücksetzen", role: .destructive) {
-                                geschaeft.anzahlEinkaufsvorgaenge = 0
+                                geschaeft.zaehlerZuruecksetzen(context: modelContext)
                             }
                         }
                     } footer: {

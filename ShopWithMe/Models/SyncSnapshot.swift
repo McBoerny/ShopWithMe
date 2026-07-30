@@ -35,7 +35,18 @@ struct SyncSnapshot: Codable {
     /// unwissentlich wiederbelebt werden). Keine Rückwärtskompatibilität zu
     /// Version 1 nötig (Projekt ohne feste Nutzerbasis, siehe
     /// `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`).
-    static let aktuelleFormatVersion = 2
+    ///
+    /// **Version 3 (G-Counter-Korrektur, Abschnitt 17):**
+    /// ``GeschaeftSnapshot/anzahlEinkaufsvorgaenge`` (bereits gemergter
+    /// Gesamtwert) wurde zu ``GeschaeftSnapshot/eigeneAnzahlEinkaufsvorgaenge``
+    /// (nur der rein lokale Anteil des exportierenden Geräts) — die alte
+    /// Feldbedeutung führte zu unbegrenzt aufschaukelndem Doppelzählen bei
+    /// jedem Sync-Zyklus. Wieder keine Rückwärtskompatibilität nötig; bis
+    /// beide Geräte einmal mit dem neuen Code exportiert haben, wird das
+    /// jeweils andere `export.json` beim Decodieren übergangsweise wie „kein
+    /// Snapshot vorhanden" behandelt (stiller Fehlschlag über `try?`,
+    /// selbstheilend nach dem nächsten eigenen Export).
+    static let aktuelleFormatVersion = 3
 
     var formatVersion: Int
     var erzeugtAm: Date
@@ -109,11 +120,16 @@ struct GeschaeftSnapshot: Codable {
     /// Lebensmittelladen ist, gibt es dort kein XY"), daher Bereich B statt
     /// gerätelokal.
     var ignorierteArtikelNamen: [String]
-    /// Additive Merge-Regel (siehe Plan-Dokument Abschnitt 4.4-B): Summe der
-    /// Zuwächse seit dem letzten bekannten Stand jedes Peers, nicht einfaches
-    /// Überschreiben — sonst gehen Besuche verloren, die auf einem Gerät
-    /// zwischen zwei Sync-Zyklen entstanden sind.
-    var anzahlEinkaufsvorgaenge: Int
+    /// NUR der rein lokal auf dem exportierenden Gerät entstandene Anteil von
+    /// ``Geschaeft/anzahlEinkaufsvorgaenge`` (``Geschaeft/eigeneAnzahlEinkaufsvorgaenge``)
+    /// — bewusst NICHT der bereits gemergte Gesamtwert. G-Counter-Muster
+    /// (Plan-Dokument Abschnitt 4.4-B, korrigiert in Abschnitt 17): jeder
+    /// Beitrag wird beim Empfänger einmalig unter (Peer, Geschäft) gemerkt
+    /// (``SyncPeerZaehlerStand``), der tatsächliche Gesamtwert ergibt sich
+    /// erst beim Lesen aus der Summe aller bekannten Beiträge. Die
+    /// ursprüngliche „Delta seit letztem Gesamtwert"-Regel zählte denselben
+    /// Beitrag bei jedem Hin-und-Her zwischen zwei Geräten erneut mit.
+    var eigeneAnzahlEinkaufsvorgaenge: Int
     /// Merge-Vorschlag: ODER-Verknüpfung (verdächtigt irgendein Gerät einen
     /// Umbau, gilt er als verdächtigt).
     var umbauVerdacht: Bool

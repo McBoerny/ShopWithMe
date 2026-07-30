@@ -1025,3 +1025,79 @@ Regressionstests (`SyncSnapshotImportServiceTests`) — mehrere neue Vorgänge
 derselben Liste in einem Snapshot werden zusammengeführt statt dupliziert;
 eine unplausible `endZeit` vor dem eigenen `startZeit` wird verworfen. Noch
 nicht erneut mit echten Geräten nachverifiziert.
+
+### 17. Nachtrag: `Geschaeft.anzahlEinkaufsvorgaenge` zählte sich bei jedem Sync doppelt — G-Counter-Korrektur
+
+Der Sync-Debug-Modus (Diagnose-Erweiterung aus dem vorherigen Nachtrag,
+Abschnitt 16-Umfeld) zeigte: `export.json` wurde auf einem Testgerät
+praktisch bei **jedem** Zyklus (5–60s) neu geschrieben, über Stunden hinweg,
+ohne erkennbare Nutzeraktivität — der `geschaefte`-Teilbereich hatte bei
+fast jedem Zyklus einen anderen Kurz-Fingerabdruck, obwohl Anzahl und
+Kategorien/Artikel/Kaufeinträge über mehrere Zyklen hinweg stabil blieben.
+Das deutete auf ein sich kontinuierlich veränderndes Feld innerhalb
+`GeschaeftSnapshot` hin.
+
+**Ursache (durch Nachrechnen der Merge-Regel bestätigt):**
+``SyncPeerZaehlerStand/zuwachs(peerGeraeteID:geschaeftID:remoteWert:context:)``
+(Abschnitt 4.2a) implementierte eine „Delta seit zuletzt gesehenem
+Gesamtwert"-Regel — korrekt für einen Zähler, den nur EIN Gerät fortschreibt,
+aber strukturell falsch für einen Wert, der selbst schon aus mehreren
+Geräten gemergt wurde: Gerät A meldet seinen (bereits Bs Beitrag
+enthaltenden) Gesamtwert an B zurück; B kennt A als Peer noch nicht und
+zählt den gesamten Wert als neu — darunter den ursprünglich von B selbst
+stammenden Anteil, der jetzt über A zurückkam. Jede weitere Synchronisation
+zwischen zwei Geräten erhöhte dadurch BEIDE Zähler um genau 1, ganz ohne
+neuen echten Einkauf — ein unbegrenzt aufschaukelnder Regelkreis, der
+gleichzeitig erklärt, warum `export.json` nie zur Ruhe kam: Das Feld änderte
+sich tatsächlich bei jedem Zyklus, die Fingerabdruck-Logik aus der
+vorherigen Optimierungsrunde funktionierte korrekt, es gab nur echten
+(unerwünschten) Inhalt zum Erkennen.
+
+**Fix: echtes G-Counter-Muster (CRDT) statt Delta-auf-Gesamtwert.**
+1. `Geschaeft` unterscheidet jetzt zwei Werte: ``Geschaeft/eigeneAnzahlEinkaufsvorgaenge``
+   (NUR die auf diesem Gerät selbst entstandenen Abschlüsse, nie durch Sync
+   verändert) und ``Geschaeft/anzahlEinkaufsvorgaenge`` (der bisherige,
+   weiterhin überall gelesene Name — jetzt eine berechnete Eigenschaft: Summe
+   aus dem eigenen Anteil und dem zuletzt bekannten EIGENEN Beitrag jedes
+   Peers). Keine neue gespeicherte Eigenschaft — derselbe
+   `anzahlEinkaufsvorgaengeRaw`-Rohwert wie vorher, nur zwei unterschiedlich
+   benannte berechnete Sichten darauf; additiv-optional, keine
+   Migrationsentscheidung nötig.
+2. `SyncPeerZaehlerStand` merkt sich jetzt den von einem Peer gemeldeten
+   EIGENEN Beitrag (reines Ablegen, `merkeEigenenZuwachsDesPeers`, keine
+   Arithmetik mehr) statt eines Gesamtwert-Deltas — und ist über die bereits
+   lokal aufgelöste ``Geschaeft/id`` statt der peer-eigenen Fremd-ID indiziert
+   (sauberer: verschiedene Peers können für dasselbe reale Geschäft
+   unterschiedliche Fremd-IDs melden, siehe ``SyncEntitaetsAlias``).
+3. `GeschaeftSnapshot.anzahlEinkaufsvorgaenge` → `eigeneAnzahlEinkaufsvorgaenge`
+   — der Snapshot exportiert jetzt nur noch den rein lokalen Anteil des
+   sendenden Geräts, nie mehr den bereits gemergten Gesamtwert.
+   `SyncSnapshot.aktuelleFormatVersion` auf 3 erhöht (wieder keine
+   Rückwärtskompatibilität nötig; bis beide Geräte einmal mit dem neuen Code
+   exportiert haben, wird das jeweils andere `export.json` beim Decodieren
+   übergangsweise wie „kein Snapshot vorhanden" behandelt — stiller
+   Fehlschlag über `try?`, selbstheilend nach dem nächsten eigenen Export).
+4. Manueller Reset (GitHub #30, `GeschaeftStammdatenEditView`) läuft jetzt
+   über die neue Methode ``Geschaeft/zaehlerZuruecksetzen(context:)`` — setzt
+   den eigenen Anteil auf 0 UND vergisst die bekannten Peer-Beiträge für
+   dieses Geschäft (rein lokal, dieselbe bereits vorher akzeptierte
+   Einschränkung wie beim alten Zähler: ein Peer, der seinen Beitrag später
+   erneut meldet, zählt ihn wieder mit, bis auch er zurücksetzt).
+5. `merkeEigenenZuwachsDesPeers` schreibt nur bei tatsächlicher Änderung
+   (dieselbe Überlegung wie bei ``SyncPeerInfo`` in Abschnitt 14) — sobald
+   niemand einen neuen echten Einkauf abschließt, bleibt der Wert über
+   beliebig viele Sync-Zyklen stabil, `export.json` wird dann (zusammen mit
+   der Fingerabdruck-Logik aus Abschnitt 14) tatsächlich nicht mehr
+   neu geschrieben.
+
+**Verifikationsstand:** `xcodebuild build`/`build-for-testing` grün. Zwei
+Regressionstests in `SyncSnapshotImportServiceTests`: Grundverhalten (Summe
+aus eigenem Anteil + Peer-Beiträgen, wiederholter Import desselben Standes
+addiert nichts) sowie eine gezielte Zwei-Geräte-Simulation (zwei getrennte
+`ModelContainer`, vier Runden abwechselndes Hin-und-Her-Synchronisieren ohne
+neuen echten Einkauf) — der Gesamtwert bleibt auf beiden Seiten bei 1 statt
+(mit der alten Regel) auf 5 bzw. 4 anzuwachsen. Noch nicht mit echten
+Geräten nachverifiziert; bereits vor diesem Fix aufgelaufene, überhöhte
+Zähler-Werte werden nicht rückwirkend korrigiert (über den bereits
+bestehenden „Zähler zurücksetzen"-Button in den Geschäfts-Stammdaten bei
+Bedarf manuell behebbar).
