@@ -59,6 +59,8 @@ struct DebuggingView: View {
 
             BekannteSyncPeersSection()
 
+            StatuskonsolidierungSection()
+
             DatenintegritaetSection()
 
             #if DEBUG
@@ -163,6 +165,62 @@ private struct BekannteSyncPeersSection: View {
                 syncOrdner.stopAccessingSecurityScopedResource()
             }
             modelContext.delete(peer)
+        }
+    }
+}
+
+/// Manuelle Statuskonsolidierung für Live-Tests, bei denen die automatische
+/// Konvergenz (48h-Give-up-Frist für nicht anwendbare Events,
+/// Fingerabdruck-basiertes Skip-Verhalten des eigenen Exports, 30-Tage-
+/// Altersgrenze für fremde Exports) zu lange dauern würde, um sie im Test
+/// abzuwarten — hier sofort auslösbar. Beide Werkzeuge rühren bewusst nicht
+/// an den eigenen, noch nicht abgeholten ausgehenden Event-Dateien (siehe
+/// Revert-Begründung in ``SyncExportService``, „Kein Aufräumen alter
+/// Event-Dateien").
+private struct StatuskonsolidierungSection: View {
+    @Environment(\.modelContext) private var modelContext
+    @State private var wirdAusgefuehrt = false
+    @State private var meldung: String?
+
+    var body: some View {
+        if SyncOrdnerService.gewaehlterOrdner() != nil {
+            Section {
+                Button("Events aufräumen") {
+                    fuehreAus("Events aufgeräumt.") {
+                        await SyncImportService.raeumeNichtAnwendbareEventsAuf(context: modelContext)
+                    }
+                }
+                .disabled(wirdAusgefuehrt)
+
+                Button("Export.json aufräumen") {
+                    fuehreAus("Export.json aufgeräumt.") {
+                        await SyncSnapshotExportService.erzwingeFrischenExport(context: modelContext)
+                        await SyncSnapshotImportService.raeumeVerwaisteFremdeExportsAuf()
+                    }
+                }
+                .disabled(wirdAusgefuehrt)
+
+                if wirdAusgefuehrt {
+                    ProgressView()
+                } else if let meldung {
+                    Text(meldung)
+                        .foregroundStyle(.secondary)
+                }
+            } header: {
+                Text("Statuskonsolidierung erzwingen")
+            } footer: {
+                Text("„Events aufräumen“ gibt aktuell nicht anwendbare empfangene Events sofort auf, statt die automatische 48h-Frist abzuwarten. „Export.json aufräumen“ erzwingt einen frischen eigenen Export und löscht verwaiste export.json-Dateien von Peers, die die 30-Tage-Altersgrenze überschritten haben.")
+            }
+        }
+    }
+
+    private func fuehreAus(_ erfolgsmeldung: String, _ aktion: @escaping () async -> Void) {
+        meldung = nil
+        wirdAusgefuehrt = true
+        Task {
+            await aktion()
+            wirdAusgefuehrt = false
+            meldung = erfolgsmeldung
         }
     }
 }

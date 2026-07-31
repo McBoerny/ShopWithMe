@@ -52,6 +52,19 @@ enum SyncSnapshotExportService {
         exportURL(fuerPeer: DatabaseLeaseService.geraeteID, in: syncOrdner)
     }
 
+    /// Debug-Werkzeug für manuelle Statuskonsolidierung
+    /// (``SyncOrdnerSettingsView``): verwirft den gespeicherten
+    /// Fingerabdruck-Cache und erzwingt dadurch einen sofortigen, garantiert
+    /// frischen Voll-Export — unabhängig vom sonstigen Skip-Mechanismus. Rein
+    /// additiv/sicher: schreibt nur die eigene `export.json` neu, rührt keine
+    /// fremden Dateien an.
+    @discardableResult
+    @MainActor
+    static func erzwingeFrischenExport(context: ModelContext) async -> Bool {
+        letzterGeschriebenerFingerabdruck = nil
+        return await exportiereSnapshot(context: context)
+    }
+
     /// Baut den ``SyncSnapshot`` aus dem aktuellen Modellzustand und schreibt ihn
     /// nach `peers/{geraeteID}/export.json`. Ohne hinterlegten Sync-Ordner
     /// (``SyncOrdnerService/gewaehlterOrdner()`` liefert `nil`) ohne Wirkung.

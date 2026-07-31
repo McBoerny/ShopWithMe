@@ -1140,3 +1140,90 @@ fachlichen Inhalt, aber unterschiedlicher Reihenfolge sowohl der äußeren
 Geschäfte-Liste als auch der inneren `typIDs`/`kategorieIDs`/
 `alternativeNamen`/`ignorierteArtikelNamen` ergeben denselben Fingerabdruck.
 Noch nicht mit echten Geräten nachverifiziert.
+
+### 19. Nachtrag: Fingerabdruck-Fix reichte nicht — echte periodische Oszillation, plus manuelle Statuskonsolidierung
+
+Live-Retest nach Abschnitt 18 (neuer Build auf beiden Geräten): `export.json`
+wurde weiterhin bei praktisch jedem Zyklus neu geschrieben. Diesmal aber ein
+konkreterer Befund: der Diagnose-Kurzhash für `geschaeftsTypen` (11 Einträge,
+KEINE inneren ID-Arrays, keine Stelle im Code schreibt je auf `GeschaeftTyp`s
+eigene Felder außer bei der Neuanlage) durchläuft über ~20 Zyklen einen exakt
+wiederkehrenden 4-Werte-Zyklus (`9eb56318 → 87b5521b → b20f12e5 → 75007f91 →
+9eb56318 → …`). Bei 32 Bit Hash-Raum ist ein zufälliges Zusammentreffen auf
+exakt dieselben vier Werte über so viele Wiederholungen praktisch
+ausgeschlossen — der zugrunde liegende Inhalt ändert sich also wirklich,
+nicht bloß eine Diagnose-Artefakt-Fetch-Reihenfolge.
+
+**Naheliegende Hypothese geprüft und verworfen:** Vermutet wurde, dass
+`GeschaeftTyp.mitNamen` (unsortierter `FetchDescriptor` mit `fetchLimit = 1`)
+bei lokalen Namens-Duplikaten nichtdeterministisch zwischen zwei
+unterschiedlichen `GeschaeftTyp`-Objekten hin- und herwechseln könnte — anders
+als `ArtikelKategorie`/`Geschaeft`/`Artikel` hat `GeschaeftTyp` kein
+Alias-Register für Namenstreffer mit abweichender ID. Ein direkter Abgleich
+der beiden vom Nutzer bereitgestellten `export.json`-Dateien (Endzustand nach
+dem Test) zeigt jedoch: auf jedem Gerät exakt 11 `GeschaeftTyp`-Einträge ohne
+Namens-Duplikate; die IDs unterscheiden sich zwar erwartungsgemäß zwischen den
+Geräten (z.B. „Lebensmittel" `6CC8FD96` auf Bernhard vs. `628B6F3A` auf
+Backup — nie über einen Alias vereinheitlicht, aber stabil pro Gerät), was für
+sich genommen keine Oszillation erklärt, solange `mitNamen` innerhalb EINES
+Geräts immer dasselbe Objekt zurückliefert. Die Hypothese ist damit nicht
+bestätigt.
+
+**Offen:** Die beiden bereitgestellten Dateien sind Endzustände nach Abschluss
+des Tests, keine aufeinanderfolgenden Exports während der beobachteten
+Oszillation — die genaue Ursache des 4-Werte-Zyklus ist damit noch nicht
+lokalisiert. Nächster sinnvoller Diagnoseschritt: zwei tatsächlich
+aufeinanderfolgende `export.json`-Exporte desselben Geräts sichern (z.B. durch
+kurzzeitiges Kopieren zwischen zwei Zyklen) und byteweise diffen, statt sich
+auf die 32-Bit-Kurzhashes im Protokoll zu verlassen.
+
+**Pragmatischer Zwischenschritt:** Da die automatische Konvergenz auf zwei
+Fristen wartet (48h Event-Give-up, Abschnitt 15/16; 30 Tage Peer-Snapshot-
+Alter, ``SyncSnapshotImportService/maximalesSnapshotAlter``) — beide zu lang,
+um sie in einem Testlauf abzuwarten — gibt es jetzt in den Debugging-
+Einstellungen zwei manuelle Werkzeuge („Statuskonsolidierung erzwingen"):
+- **Events aufräumen** (``SyncImportService/raeumeNichtAnwendbareEventsAuf(context:)``):
+  setzt die Give-up-Schwelle für einen einzelnen Durchlauf auf 0 und gibt so
+  alle aktuell nicht anwendbaren empfangenen Events sofort auf.
+- **Export.json aufräumen** (``SyncSnapshotExportService/erzwingeFrischenExport(context:)``
+  + ``SyncSnapshotImportService/raeumeVerwaisteFremdeExportsAuf()``): verwirft
+  den eigenen Fingerabdruck-Cache und erzwingt einen sofortigen frischen
+  Voll-Export, UND löscht fremde `export.json`-Dateien jenseits der
+  30-Tage-Altersgrenze.
+
+Beide rühren bewusst nicht an den eigenen, noch nicht abgeholten ausgehenden
+Event-Dateien — siehe Abschnitt zur revertierten Event-Pruning-Regression
+weiter oben, warum genau das schon einmal echte, noch nicht angekommene
+Syncs zerstört hat.
+
+**Zusätzlich gefunden und behoben, beim Prüfen der Merge-Logik auf diese
+Fragestellung hin:** ``mergeArtikelKategorien``/``mergeGeschaefte``/
+``vervollstaendige`` wiesen `lokal.typen`/`lokal.kategorien`/
+`lokal.ausgeschlosseneKategorien`/`lokal.geschaeftsTypen` bislang UNBEDINGT
+das Ergebnis von `vereinigtGeordnet(...)` zu — auch dann, wenn sich dadurch
+inhaltlich nichts änderte. Eine SwiftData-`@Relationship`-Eigenschaft gilt bei
+jeder Zuweisung als verändert, unabhängig davon, ob der neue Wert inhaltlich
+mit dem alten übereinstimmt — das erzwang bei praktisch jedem Merge-Durchlauf
+ein `context.hasChanges == true` und damit einen echten `context.save()`,
+selbst wenn kein Peer tatsächlich etwas Neues beitrug. Neuer Helfer
+``vereinigeGeordnetFallsNoetig(_:mit:)`` weist nur noch zu, wenn sich das
+Ergebnis tatsächlich vom bisherigen Wert unterscheidet. Dies allein erklärt
+noch nicht den beobachteten 4-Werte-Zyklus in ``geschaeftsTypen`` (dessen
+eigene Felder bleiben davon unberührt), reduziert aber unnötige Saves bei
+jedem Sync-Zyklus unabhängig davon.
+
+**Aus einem direkten Vergleich der vom Nutzer bereitgestellten
+`export.json`-Dateien beantwortet: Kann iCloud Drive selbst (statt der App)
+das wiederholte Neuschreiben auslösen?** Nein — ``sync_snapshot_geschrieben``
+wird ausschließlich nach einem In-Prozess-SHA256-Fingerabdruck-Vergleich auf
+bereits aus SwiftData geladenen, noch nicht auf die Festplatte geschriebenen
+Daten protokolliert (``exportiereSnapshot(context:)``, vor jeder
+Dateisystem-/Cloud-Interaktion). iCloud Drive/Synology Drive sind reine
+Byte-Relays: sie können Datei-METADATEN (Änderungsdatum, Cloud-Status)
+verändern, aber keine Inhalts-Bytes erfinden, die diesen Vergleich
+beeinflussen könnten. Die Oszillationsursache liegt also mit Sicherheit in
+der App-eigenen Datenschicht, nicht in der Cloud-Synchronisation selbst.
+
+**Verifikationsstand:** `xcodebuild build`/`build-for-testing` grün. Noch
+nicht mit echten Geräten nachverifiziert; die eigentliche Oszillationsursache
+bleibt offen.

@@ -52,6 +52,23 @@ enum SyncImportService {
     /// verkürzen können.
     @MainActor static var maximalesEventAlterFuerRetry: TimeInterval = 48 * 60 * 60
 
+    /// Debug-Werkzeug für manuelle Statuskonsolidierung
+    /// (``SyncOrdnerSettingsView``): gibt alle aktuell nicht anwendbaren
+    /// empfangenen Events sofort auf, statt auf ``maximalesEventAlterFuerRetry``
+    /// zu warten — indem die Schwelle für einen einzelnen Durchlauf auf 0
+    /// gesetzt wird. Rührt bewusst NICHT an den eigenen, noch nicht
+    /// abgeholten ausgehenden Event-Dateien (siehe Revert-Begründung in
+    /// ``SyncExportService``, „Kein Aufräumen alter Event-Dateien") — nur der
+    /// bereits bestehende, sichere Give-up-Pfad wird vorgezogen.
+    @discardableResult
+    @MainActor
+    static func raeumeNichtAnwendbareEventsAuf(context: ModelContext) async -> Bool {
+        let vorherigeSchwelle = maximalesEventAlterFuerRetry
+        maximalesEventAlterFuerRetry = 0
+        defer { maximalesEventAlterFuerRetry = vorherigeSchwelle }
+        return await importiereNeueEvents(context: context)
+    }
+
     /// Rückgabewert meldet ausschließlich, ob der Ordnerzugriff (Berechtigung)
     /// geklappt hat, analog ``SyncSnapshotImportService/importiereSnapshots(context:)``.
     @discardableResult

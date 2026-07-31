@@ -229,6 +229,21 @@ enum SyncSnapshotImportService {
         bestehende + neue.filter { !bestehende.contains($0) }
     }
 
+    /// Weist `vereinigtGeordnet(bestehende, neue)` nur zu, falls sich dadurch
+    /// tatsächlich etwas ändert (Live-Test-Nachfolgefund, Abschnitt 19): eine
+    /// SwiftData-`@Relationship`-Eigenschaft gilt bei JEDER Zuweisung als
+    /// verändert, auch wenn der neue Wert inhaltlich identisch zum alten ist —
+    /// die bisherige unbedingte Zuweisung bei ``mergeArtikelKategorien``/
+    /// ``mergeGeschaefte``/``vervollstaendige`` erzwang dadurch bei praktisch
+    /// jedem Sync-Zyklus ein `context.hasChanges == true` und damit einen
+    /// echten `context.save()`, selbst wenn kein Peer tatsächlich etwas Neues
+    /// beigetragen hatte.
+    private static func vereinigeGeordnetFallsNoetig<T: Equatable>(_ bestehende: inout [T], mit neue: [T]) {
+        let vereinigt = vereinigtGeordnet(bestehende, neue)
+        guard vereinigt != bestehende else { return }
+        bestehende = vereinigt
+    }
+
     // MARK: - GeschaeftTyp
 
     @MainActor
@@ -273,7 +288,7 @@ enum SyncSnapshotImportService {
                 lokal.id = eintrag.id
                 context.insert(lokal)
             }
-            lokal.geschaeftsTypen = vereinigtGeordnet(lokal.geschaeftsTypen, eintrag.geschaeftsTypIDs.compactMap { typZuordnung[$0] })
+            vereinigeGeordnetFallsNoetig(&lokal.geschaeftsTypen, mit: eintrag.geschaeftsTypIDs.compactMap { typZuordnung[$0] })
             zuordnung[eintrag.id] = lokal
         }
         return zuordnung
@@ -326,10 +341,10 @@ enum SyncSnapshotImportService {
             if lokal.laengengrad == nil, let l = eintrag.laengengrad { lokal.laengengrad = l }
             if lokal.erkennungsradiusRaw == nil, let radius = eintrag.erkennungsradius { lokal.erkennungsradiusRaw = radius }
 
-            lokal.typen = vereinigtGeordnet(lokal.typen, eintrag.typIDs.compactMap { typZuordnung[$0] })
-            lokal.kategorien = vereinigtGeordnet(lokal.kategorien, eintrag.kategorieIDs.compactMap { kategorieZuordnung[$0] })
-            lokal.ausgeschlosseneKategorien = vereinigtGeordnet(
-                lokal.ausgeschlosseneKategorien, eintrag.ausgeschlosseneKategorieIDs.compactMap { kategorieZuordnung[$0] }
+            vereinigeGeordnetFallsNoetig(&lokal.typen, mit: eintrag.typIDs.compactMap { typZuordnung[$0] })
+            vereinigeGeordnetFallsNoetig(&lokal.kategorien, mit: eintrag.kategorieIDs.compactMap { kategorieZuordnung[$0] })
+            vereinigeGeordnetFallsNoetig(
+                &lokal.ausgeschlosseneKategorien, mit: eintrag.ausgeschlosseneKategorieIDs.compactMap { kategorieZuordnung[$0] }
             )
             for name in eintrag.alternativeNamen {
                 lokal.alternativenNamenLernen(name)
@@ -403,7 +418,7 @@ enum SyncSnapshotImportService {
     private static func vervollstaendige(
         _ lokal: Artikel, mit eintrag: ArtikelSnapshot, kategorieZuordnung: [UUID: ArtikelKategorie]
     ) {
-        lokal.kategorien = vereinigtGeordnet(lokal.kategorien, eintrag.kategorieIDs.compactMap { kategorieZuordnung[$0] })
+        vereinigeGeordnetFallsNoetig(&lokal.kategorien, mit: eintrag.kategorieIDs.compactMap { kategorieZuordnung[$0] })
         if lokal.notiz == nil { lokal.notiz = eintrag.notiz }
     }
 
@@ -736,6 +751,54 @@ enum SyncSnapshotImportService {
                 let neuer = WarengruppenDistanz(geschaeft: geschaeft, kategorieA: kanonA, kategorieB: kanonB, distanz: eintrag.distanz)
                 context.insert(neuer)
             }
+        }
+    }
+
+    // MARK: - Debug: verwaiste fremde Exports aufräumen
+
+    /// Debug-Werkzeug für manuelle Statuskonsolidierung
+    /// (``SyncOrdnerSettingsView``): löscht `export.json`-Dateien fremder
+    /// Peer-Ordner, deren `erzeugtAm` bereits über ``maximalesSnapshotAlter``
+    /// hinaus ist — dieselbe Schwelle, die ``importiereSnapshots(context:)``
+    /// ohnehin verwendet, um solche Snapshots beim Import zu ignorieren
+    /// (siehe dort); hier wird die verwaiste Datei zusätzlich sichtbar aus dem
+    /// geteilten Ordner entfernt, statt nur beim Import stillschweigend
+    /// übersprungen zu werden. Rührt weder den eigenen Export noch fremde
+    /// Event-Ordner an. Rückgabewert meldet ausschließlich, ob der
+    /// Ordnerzugriff (Berechtigung) geklappt hat.
+    @discardableResult
+    @MainActor
+    static func raeumeVerwaisteFremdeExportsAuf() async -> Bool {
+        guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return true }
+        guard syncOrdner.startAccessingSecurityScopedResource() else {
+            SyncDebugLogger.log(.ordnerZugriffFehlgeschlagen, details: "raeumeVerwaisteFremdeExportsAuf")
+            return false
+        }
+        defer { syncOrdner.stopAccessingSecurityScopedResource() }
+
+        let peersOrdner = syncOrdner.appendingPathComponent("peers", isDirectory: true)
+        let eigeneGeraeteID = DatabaseLeaseService.geraeteID
+        guard let peerVerzeichnisse = try? FileManager.default.contentsOfDirectory(
+            at: peersOrdner, includingPropertiesForKeys: nil
+        ) else { return true }
+
+        for peerOrdner in peerVerzeichnisse where peerOrdner.lastPathComponent != eigeneGeraeteID {
+            let exportURL = SyncSnapshotExportService.exportURL(fuerPeer: peerOrdner.lastPathComponent, in: syncOrdner)
+            guard let snapshot = await ladeSnapshot(von: exportURL) else { continue }
+            guard Date().timeIntervalSince(snapshot.erzeugtAm) > maximalesSnapshotAlter else { continue }
+            loescheKoordiniert(exportURL)
+        }
+        return true
+    }
+
+    /// Löscht über `NSFileCoordinator`, damit File-Provider-Erweiterungen
+    /// (iCloud Drive/Synology Drive/…) von der Änderung erfahren — analog zum
+    /// bestehenden Schreib-Muster in ``SyncSnapshotExportService``.
+    nonisolated private static func loescheKoordiniert(_ url: URL) {
+        let coordinator = NSFileCoordinator()
+        var coordinatorFehler: NSError?
+        coordinator.coordinate(writingItemAt: url, options: .forDeleting, error: &coordinatorFehler) { zielURL in
+            try? FileManager.default.removeItem(at: zielURL)
         }
     }
 }

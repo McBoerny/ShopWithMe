@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.9 (Build 164) — Debug: manuelle Statuskonsolidierung + unnötige Saves bei Bereich-B-Merge vermieden
+
+- Live-Tests der Fingerabdruck-Normalisierung (Abschnitt 18) zeigten weiterhin
+  Sync-Ping-Pong, dessen Konvergenz auf zwei automatische Fristen wartet (48h
+  Event-Give-up, 30 Tage Peer-Alter) — zu lange, um es im Test abzuwarten.
+  Debugging-Einstellungen haben jetzt eine Sektion „Statuskonsolidierung
+  erzwingen" mit zwei Werkzeugen: „Events aufräumen" gibt aktuell nicht
+  anwendbare empfangene Events sofort auf statt die 48h-Frist abzuwarten;
+  „Export.json aufräumen" erzwingt einen frischen eigenen Voll-Export und
+  löscht verwaiste `export.json`-Dateien von Peers jenseits der
+  30-Tage-Altersgrenze. Beide rühren bewusst nicht an eigenen, noch nicht
+  abgeholten ausgehenden Event-Dateien (siehe frühere, revertierte
+  Event-Pruning-Regression).
+- Beim Prüfen der Merge-Logik zusätzlich gefunden: `SyncSnapshotImportService`
+  wies Typ-/Kategorie-Relationen bei jedem Merge-Durchlauf unbedingt neu zu,
+  selbst wenn sich inhaltlich nichts änderte — eine SwiftData-`@Relationship`
+  gilt bei jeder Zuweisung als verändert, unabhängig vom tatsächlichen Inhalt,
+  was bei praktisch jedem Sync-Zyklus einen unnötigen `context.save()`
+  erzwang. Zuweisung erfolgt jetzt nur noch, wenn sich das Ergebnis
+  tatsächlich vom bisherigen Wert unterscheidet.
+- Details, inkl. der noch offenen Frage nach einer beobachteten periodischen
+  4-Werte-Oszillation im `geschaeftsTypen`-Bereich des Exports:
+  `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` Abschnitt 19.
+
 ## v0.9 (Build 163) — Fix: Backup-Anzeige/-Wiederherstellung fehlte (GitHub #63), Belegscan-Vorschlag nicht antippbar (GitHub #57)
 
 - #63: Der vorherige Fix legte zwar ein lokales Backup an, zeigte es aber nirgends
