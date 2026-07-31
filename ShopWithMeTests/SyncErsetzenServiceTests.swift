@@ -146,6 +146,34 @@ struct SyncErsetzenServiceTests {
         #expect(try context.fetchCount(FetchDescriptor<Geschaeft>()) == 1)
     }
 
+    /// Regressionstest für die Reparaturstrategie ohne SQLite-Direktzugriff
+    /// (Abschnitt 24): erstellt einen frischen Snapshot des AKTUELLEN Bestands
+    /// (der ein bereits bestehendes Backup überschreibt) und merkt „Wiederherstellen
+    /// aus Backup" vor — identischer Mechanismus wie `planeWiederherstellenAusBackup()`,
+    /// nur mit einem eben erst erstellten statt einem irgendwann früher
+    /// erstellten Snapshot. Der volle Rundlauf gegen eine echte baumelnde
+    /// Referenz ist mangels künstlich erzeugbarer Testreferenz nicht
+    /// automatisiert verifizierbar (siehe Typ-Doku) — hier wird nur der
+    /// Mechanismus selbst geprüft.
+    @Test
+    func planeBereinigungBaumelnderReferenzenSetztWiederherstellenAktionUndErstelltFrischesBackup() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        defer { SyncErsetzenService.loescheBackup() }
+        defer { raeumeAusstehendeAktionAuf() }
+
+        context.insert(Geschaeft(name: "Rewe", typen: []))
+        try context.save()
+
+        try SyncErsetzenService.planeBereinigungBaumelnderReferenzen(context: context)
+
+        #expect(SyncErsetzenService.ausstehendeAktion == .wiederherstellenAusBackup)
+        #expect(SyncErsetzenService.vorhandenesBackup() != nil)
+        // Noch nichts am aktuellen Datenbestand verändert - das passiert erst
+        // beim nächsten Start.
+        #expect(try context.fetchCount(FetchDescriptor<Geschaeft>()) == 1)
+    }
+
     // MARK: - Store-Datei löschen (ohne ModelContainer, siehe Typ-Doku)
 
     @Test

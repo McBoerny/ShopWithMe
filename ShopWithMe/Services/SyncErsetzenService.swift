@@ -155,6 +155,30 @@ enum SyncErsetzenService {
         ausstehendeAktion = .wiederherstellenAusBackup
     }
 
+    /// Strategie gegen baumelnde Referenzen (`DatenintegritaetsService`),
+    /// OHNE direkten SQLite-Zugriff (siehe Typ-Doku dort, warum eine
+    /// Reparatur über die normale SwiftData-API unsicher ist): Ein frischer
+    /// Snapshot des AKTUELLEN, ggf. bereits korrumpierten Bestands ist von
+    /// Natur aus bereits „repariert" — ``SyncSnapshotExportService/erstelleSnapshot(context:)``
+    /// liest jede Relationship über ``SyncSnapshotExportService/sichereID(_:gueltigeIDs:)``,
+    /// das eine baumelnde `persistentModelID` still zu `nil` auflöst, statt
+    /// sie in den Snapshot zu übernehmen (nur `persistentModelID` selbst ist
+    /// auf einer baumelnden Referenz sicher lesbar — genau das nutzt
+    /// `sichereID`, nie eine andere Eigenschaft). Ein Wipe-und-Neuaufbau
+    /// ausschließlich aus diesem eigenen, frischen Snapshot enthält die
+    /// baumelnden Referenzen dadurch strukturell nicht mehr.
+    ///
+    /// Erstellt deshalb JETZT einen frischen Snapshot (überschreibt ein
+    /// eventuell vorhandenes älteres Backup) und merkt dessen
+    /// Wiederherstellung für den nächsten Start vor — identischer
+    /// Wipe-und-Neuaufbau-Mechanismus wie ``planeWiederherstellenAusBackup()``,
+    /// nur mit einem eben erst (nicht irgendwann früher) erstellten Snapshot.
+    @MainActor
+    static func planeBereinigungBaumelnderReferenzen(context: ModelContext) throws {
+        try erstelleBackup(context: context)
+        ausstehendeAktion = .wiederherstellenAusBackup
+    }
+
     // MARK: - Ausführen (nächster App-Start)
 
     /// Löscht die Store-Datei (samt `-wal`/`-shm`) physisch, falls eine

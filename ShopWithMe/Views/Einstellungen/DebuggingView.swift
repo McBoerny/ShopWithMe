@@ -237,6 +237,7 @@ private struct DatenintegritaetSection: View {
     @State private var logGroesse = DatenintegritaetsLogger.gesamtGroesse()
     @State private var zeigeTeilen = false
     @State private var zeigeResetBestaetigung = false
+    @State private var zeigeBereinigungBestaetigung = false
     @State private var zeigeNeustartHinweis = false
     @State private var resetFehlermeldung: String?
     @State private var neuaufbauZusammenfassung = SyncErsetzenService.letzteNeuaufbauZusammenfassung
@@ -278,6 +279,17 @@ private struct DatenintegritaetSection: View {
             }
             .disabled(SyncOrdnerService.gewaehlterOrdner() == nil)
 
+            // Alternative ohne Sync-Gerät: ein frischer Snapshot des eigenen
+            // (ggf. korrupten) Bestands ist bereits „repariert", da
+            // erstelleSnapshot baumelnde Referenzen ohnehin ausfiltert (siehe
+            // ``SyncErsetzenService/planeBereinigungBaumelnderReferenzen(context:)``)
+            // — nur sinnvoll anzubieten, wenn oben tatsächlich etwas gemeldet wurde.
+            if !bericht.isEmpty {
+                Button("Baumelnde Referenzen bereinigen (ohne Sync-Gerät)…", role: .destructive) {
+                    zeigeBereinigungBestaetigung = true
+                }
+            }
+
             if let resetFehlermeldung {
                 Label(resetFehlermeldung, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
@@ -285,7 +297,7 @@ private struct DatenintegritaetSection: View {
         } header: {
             Text("Datenintegrität")
         } footer: {
-            Text("Zeigt bei jedem App-Start erkannte baumelnde Referenzen auf bereits gelöschte Objekte sowie Einkaufsvorgänge ohne Einkaufsliste, die dadurch für die App unerreichbar sind (z.B. nach einer fehlerhaften Synchronisation) — rein informativ, keine automatische Reparatur. Das vollständige Protokoll lässt sich über „Protokoll teilen…“ exportieren. „Gerät zurücksetzen“ sichert den aktuellen Bestand lokal und baut die Datenbank anschließend ausschließlich aus dem Stand eines erreichbaren Sync-Geräts neu auf — setzt eine aktive Datensynchronisation mit mindestens einem erreichbaren Gerät voraus.")
+            Text("Zeigt bei jedem App-Start erkannte baumelnde Referenzen auf bereits gelöschte Objekte sowie Einkaufsvorgänge ohne Einkaufsliste, die dadurch für die App unerreichbar sind (z.B. nach einer fehlerhaften Synchronisation) — rein informativ, ohne selbst etwas zu reparieren. Das vollständige Protokoll lässt sich über „Protokoll teilen…“ exportieren. „Gerät zurücksetzen“ sichert den aktuellen Bestand lokal und baut die Datenbank anschließend ausschließlich aus dem Stand eines erreichbaren Sync-Geräts neu auf — setzt eine aktive Datensynchronisation mit mindestens einem erreichbaren Gerät voraus. „Baumelnde Referenzen bereinigen“ macht dasselbe ohne Sync-Gerät, aus einem frisch erstellten Snapshot des eigenen Bestands.")
         }
         .sheet(isPresented: $zeigeTeilen) {
             DebugLogTeilenView(urls: DatenintegritaetsLogger.exportURLs)
@@ -302,6 +314,14 @@ private struct DatenintegritaetSection: View {
         } message: {
             Text("Sichert den aktuellen Bestand lokal und merkt den Neuaufbau aus einem erreichbaren Sync-Gerät für den nächsten App-Start vor — dafür muss die App danach einmal neu gestartet werden. Nicht rückgängig zu machen, außer über die Wiederherstellung bei „Synchronisierung deaktivieren“.")
         }
+        .confirmationDialog("Baumelnde Referenzen bereinigen", isPresented: $zeigeBereinigungBestaetigung, titleVisibility: .visible) {
+            Button("Bereinigen und neu aufbauen", role: .destructive) {
+                bereinigen()
+            }
+            Button("Abbrechen", role: .cancel) {}
+        } message: {
+            Text("Erstellt jetzt einen frischen Snapshot des eigenen Bestands und baut die Datenbank ausschließlich daraus neu auf — dafür muss die App danach einmal neu gestartet werden. Funktioniert ohne Sync-Gerät. Alle gültigen Daten bleiben erhalten, nur baumelnde Bezüge (siehe Bericht oben) werden dabei automatisch aufgelöst statt übernommen.")
+        }
         .alert("Neustart nötig", isPresented: $zeigeNeustartHinweis) {
             Button("OK") {}
         } message: {
@@ -317,6 +337,19 @@ private struct DatenintegritaetSection: View {
         resetFehlermeldung = nil
         do {
             try SyncErsetzenService.planeErsetzenDurchPeer(context: modelContext)
+            zeigeNeustartHinweis = true
+        } catch {
+            resetFehlermeldung = error.localizedDescription
+        }
+    }
+
+    /// Merkt den Neuaufbau aus einem JETZT erstellten Snapshot des eigenen
+    /// Bestands vor (siehe ``SyncErsetzenService/planeBereinigungBaumelnderReferenzen(context:)``)
+    /// — verändert selbst noch nichts am Datenbestand.
+    private func bereinigen() {
+        resetFehlermeldung = nil
+        do {
+            try SyncErsetzenService.planeBereinigungBaumelnderReferenzen(context: modelContext)
             zeigeNeustartHinweis = true
         } catch {
             resetFehlermeldung = error.localizedDescription

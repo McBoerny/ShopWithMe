@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.9 (Build 169) — Reparaturweg für baumelnde Referenzen ohne SQLite-Direktzugriff
+
+- Baumelnde Referenzen (Absturzrisiko) konnten bisher nur gemeldet, nie
+  automatisch repariert werden — eine echte Reparatur wurde als „bräuchte
+  direkten SQLite-Zugriff, nicht trivial" eingeschätzt. Tatsächlich reicht
+  das bereits vorhandene Zusammenspiel aus Export (filtert baumelnde
+  Referenzen beim Schreiben ohnehin zu `nil`) und dem bestehenden
+  Wipe-und-Neuaufbau-Mechanismus: ein frischer Snapshot des eigenen,
+  aktuellen Bestands ist von Natur aus bereits „repariert".
+- Neuer Debugging-Einstiegspunkt „Baumelnde Referenzen bereinigen (ohne
+  Sync-Gerät)…" — funktioniert unabhängig von einem konfigurierten
+  Sync-Ordner, nur sichtbar, wenn tatsächlich etwas gemeldet wurde.
+- Details: `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 24.
+
 ## v0.9 (Build 168) — Automatische Bereinigung leerer Geister-Einkaufsvorgänge
 
 - Von den zuvor gefundenen listenlosen „Geister"-Einkaufsvorgängen (fehlende

@@ -1550,3 +1550,55 @@ entschieden ist.
 Test `raeumtNurLeereListenloseVorgaengeAufUndBehaeltSolcheMitKaeufen` in
 `DatenintegritaetsServiceTests`. Noch nicht mit echten Geräten
 nachverifiziert.
+
+## 24. Reparaturstrategie für baumelnde Referenzen ohne SQLite-Direktzugriff
+
+`DatenintegritaetsService` konnte baumelnde Referenzen seit jeher nur melden,
+nie reparieren (siehe dessen Typ-Doku) — jede schreibende Operation auf eine
+bereits baumelnde `@Relationship(inverse:)`-Beziehung crasht, weil SwiftData
+beim Nullen/Löschen die alte Gegenseite auffalten muss, und genau die ist ja
+bereits ungültig. `docs/DATABASE_CONCURRENCY.md` schätzte eine echte
+rückwirkende Reparatur deshalb als „bräuchte einen direkten Zugriff auf die
+SQLite-Datei unterhalb von SwiftData/CoreData (nicht trivial, noch nicht
+umgesetzt)" ein.
+
+**Erkenntnis: dieser Zugriff ist gar nicht nötig — die Lösung existiert
+bereits, nur an einer anderen Stelle im Code.**
+``SyncSnapshotExportService/erstelleSnapshot(context:)`` liest jede
+Relationship über ``sichereID(_:gueltigeIDs:)``, das ausschließlich die
+sicher lesbare `persistentModelID` prüft und bei einer baumelnden Referenz
+still `nil` statt der `id` liefert — ein frischer Export des AKTUELLEN, ggf.
+bereits korrumpierten Bestands enthält baumelnde Referenzen dadurch
+strukturell nicht mehr, ganz ohne sie aktiv zu „reparieren". Und
+`SyncErsetzenService` hat mit „Store-Datei löschen, dann ausschließlich aus
+einem Snapshot neu aufbauen" (Abschnitt 13) bereits einen getesteten,
+sicheren Mechanismus dafür — bisher nur für Peer-Snapshots und für zuvor
+explizit erstellte eigene Backups genutzt.
+
+**Fix:** Neue, drei Zeilen lange Funktion
+``SyncErsetzenService/planeBereinigungBaumelnderReferenzen(context:)`` —
+erstellt JETZT ein Backup (= frischer, dangling-freier Snapshot des aktuellen
+Bestands) und merkt dessen Wiederherstellung für den nächsten Start vor,
+identischer Mechanismus wie `planeWiederherstellenAusBackup()`, nur mit
+einem eben erst statt irgendwann früher erstellten Snapshot. Neuer
+UI-Einstiegspunkt in `DebuggingView.DatenintegritaetSection`, nur sichtbar,
+wenn `pruefe(context:)` tatsächlich etwas gemeldet hat: „Baumelnde Referenzen
+bereinigen (ohne Sync-Gerät)…" — funktioniert unabhängig von einem
+konfigurierten Sync-Ordner, da nichts von einem Peer gebraucht wird.
+
+**Bewusst kein Test, der den vollständigen Reparatur-Rundlauf gegen eine
+echte baumelnde Referenz verifiziert** — aus demselben Grund wie in
+`DatenintegritaetsServiceTests` dokumentiert: seit den
+`@Relationship(inverse:)`-Deklarationen lässt sich eine echte baumelnde
+Referenz mit dem aktuellen Modell nicht mehr über eine normale
+Programmoperation künstlich erzeugen, sie betrifft ausschließlich
+Alt-Bestände von vor deren Einführung. Verifiziert wird stattdessen der
+Mechanismus selbst (Backup wird erstellt, richtige Aktion vorgemerkt,
+aktueller Store unverändert) — analog zum bestehenden Test für
+`planeErsetzenDurchPeer`.
+
+**Verifikationsstand:** `xcodebuild build`/`build-for-testing` grün. Neuer
+Test in `SyncErsetzenServiceTests`. Der volle Ablauf (echte baumelnde
+Referenz auf einem Altbestand → Bereinigung → Neustart → repariert) ist
+mangels künstlich erzeugbarer Testreferenz nicht automatisiert verifizierbar
+und bräuchte eine manuelle Prüfung auf einem betroffenen Altgerät.

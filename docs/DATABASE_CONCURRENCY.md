@@ -573,9 +573,14 @@ artikelNameSnapshot`-Muster zentral an einer Stelle.
 **Bleibt offen:** eine vollständige, systematische Garantie, dass *jeder*
 künftige Lesepfad automatisch geschützt ist, gibt es nicht — jede neue Stelle,
 die `.geschaeft?.name`/`.artikel?.name` o.ä. direkt liest, muss weiterhin bewusst
-`existiertNochImStore`/die `...Sicher`-Eigenschaften verwenden. Die
-zugrundeliegende Korruption selbst bleibt unrepariert im Store bestehen (siehe
-„Nachtrag: rückwirkende Reparatur"), bis eine SQLite-Ebenen-Lösung existiert.
+`existiertNochImStore`/die `...Sicher`-Eigenschaften verwenden.
+
+**Nachtrag: Reparaturweg ohne SQLite-Direktzugriff gefunden** (siehe
+`docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 24) — die hier noch als
+„nicht trivial, noch nicht umgesetzt" eingeschätzte rückwirkende Reparatur
+existiert inzwischen: ``SyncErsetzenService/planeBereinigungBaumelnderReferenzen(context:)``
+nutzt aus, dass ein frischer Export baumelnde Referenzen ohnehin zu `nil`
+auflöst, und baut die Datenbank ausschließlich daraus neu auf.
 
 **Der gescheiterte Versuch, den Store zur Laufzeit physisch zu ersetzen**
 (Crash-Details, Ursache, Lehre) ist nach

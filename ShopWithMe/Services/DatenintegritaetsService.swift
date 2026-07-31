@@ -5,8 +5,8 @@ import SwiftData
 /// `@Relationship(inverse:)`-Deklarationen (siehe `docs/DATABASE_CONCURRENCY.md`)
 /// bereits im lokalen Datenbestand entstanden sind.
 ///
-/// **Bewusst nur Erkennung, keine automatische Reparatur mehr** — ein früherer
-/// Versuch, eine baumelnde Referenz einfach auf `nil` zu setzen (z.B.
+/// **`pruefe(context:)` selbst bleibt bewusst rein lesend** — ein früherer
+/// Versuch, eine baumelnde Referenz direkt auf `nil` zu setzen (z.B.
 /// `eintrag.artikel = nil`), führte selbst zum Absturz: SwiftDatas Setter für
 /// eine Beziehung mit `inverse:`-Deklaration muss beim Nullen die **alte**
 /// Gegenseite auffalten, um sich selbst aus deren inversem Array zu entfernen
@@ -18,14 +18,20 @@ import SwiftData
 /// bereits baumelnde Beziehung (Nullen wie Löschen, da Löschen dieselbe
 /// Inverse-Pflege auslöst) ist über die normale SwiftData-Objektgraph-API
 /// unsicher, gerade WEIL die `inverse:`-Deklaration (die künftige Korruption
-/// verhindert) hier existiert. Eine echte rückwirkende Reparatur bräuchte einen
-/// direkten Zugriff auf die SQLite-Datei unterhalb von SwiftData/CoreData
-/// (nicht trivial, noch nicht umgesetzt).
+/// verhindert) hier existiert.
 ///
-/// Bis dahin liefert ``pruefe(context:)`` nur einen Bericht (persistiert in
-/// ``letzterBericht``, einsehbar/exportierbar über ``DebuggingView``) — die
-/// eigentliche Absicherung gegen Abstürze muss an den einzelnen Lesepfaden
-/// erfolgen (siehe z.B. ``GeschaeftHaeufigkeitService/favoriten(aus:anzahl:zeitfensterTage:jetzt:)``).
+/// **Tatsächliche Reparatur läuft seitdem über einen indirekten Weg, kein
+/// SQLite-Direktzugriff nötig:** ``SyncErsetzenService/planeBereinigungBaumelnderReferenzen(context:)``
+/// nutzt aus, dass ein frischer Export (``SyncSnapshotExportService/erstelleSnapshot(context:)``)
+/// baumelnde Referenzen bereits beim Schreiben stillschweigend zu `nil`
+/// auflöst (er liest dafür nur die sicher lesbare `persistentModelID`, nie
+/// eine andere Eigenschaft) — ein Wipe-und-Neuaufbau ausschließlich aus
+/// diesem eigenen, frischen Snapshot enthält sie danach strukturell nicht
+/// mehr. `pruefe(context:)` liefert dafür weiterhin nur den Bericht
+/// (persistiert in ``letzterBericht``, einsehbar/exportierbar über
+/// ``DebuggingView``) — die eigentliche Absicherung gegen Abstürze muss
+/// zusätzlich an den einzelnen Lesepfaden erfolgen (siehe z.B.
+/// ``GeschaeftHaeufigkeitService/favoriten(aus:anzahl:zeitfensterTage:jetzt:)``).
 enum DatenintegritaetsService {
     struct Befund: Identifiable {
         let id = UUID()
