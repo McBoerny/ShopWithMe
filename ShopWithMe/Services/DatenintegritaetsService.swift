@@ -106,6 +106,17 @@ enum DatenintegritaetsService {
             ))
         }
 
+        for punkt in (try? context.fetch(FetchDescriptor<Preispunkt>())) ?? [] {
+            var betroffeneFelder: [String] = []
+            if istBaumelnd(punkt.artikel, gueltigeIDs: gueltigeArtikelIDs) { betroffeneFelder.append("Artikel") }
+            if istBaumelnd(punkt.geschaeft, gueltigeIDs: gueltigeGeschaeftIDs) { betroffeneFelder.append("Geschäft") }
+            guard !betroffeneFelder.isEmpty else { continue }
+            let datum = punkt.datum.formatted(date: .abbreviated, time: .omitted)
+            befunde.append(Befund(
+                beschreibung: "Preispunkt vom \(datum) (Schnappschuss: „\(punkt.artikelNameSnapshot)“ bei \(punkt.geschaeftNameSnapshot)): Bezug zu \(betroffeneFelder.joined(separator: ", ")) zeigt auf nicht mehr Existierendes"
+            ))
+        }
+
         for vorgang in (try? context.fetch(FetchDescriptor<Einkaufsvorgang>())) ?? [] {
             let datum = vorgang.startZeit.formatted(date: .abbreviated, time: .omitted)
             if istBaumelnd(vorgang.geschaeft, gueltigeIDs: gueltigeGeschaeftIDs) {

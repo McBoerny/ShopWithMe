@@ -10,7 +10,7 @@ struct SyncSnapshotExportServiceTests {
             Artikel.self, ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self,
             Einkaufsvorgang.self, KaufEintrag.self, WarengruppenDistanz.self,
             Einkaufsliste.self, EinkaufslistenEintrag.self, IgnorierterArtikel.self, SyncEvent.self,
-            SyncPeerZaehlerStand.self,
+            SyncPeerZaehlerStand.self, Preispunkt.self, ArtikelAlias.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
@@ -46,9 +46,13 @@ struct SyncSnapshotExportServiceTests {
         context.insert(liste)
         let laufenderEinkauf = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste)
         context.insert(laufenderEinkauf)
-        let eintrag = KaufEintrag(artikel: apfel, geschaeft: geschaeft, kategorie: kategorie, preis: 1.99)
+        let eintrag = KaufEintrag(artikel: apfel, geschaeft: geschaeft, kategorie: kategorie)
         context.insert(eintrag)
         eintrag.einkaufsvorgang = laufenderEinkauf
+        let preispunkt = Preispunkt(artikel: apfel, geschaeft: geschaeft, preis: 1.99)
+        context.insert(preispunkt)
+        let alias = ArtikelAlias(erkannterName: "APF-BIO", alternativerName: "Bio-Apfel", artikel: apfel)
+        context.insert(alias)
         let kategorie2 = ArtikelKategorie(name: "Milchprodukte", standardSymbol: "drop", standardFarbeHex: "#007AFF")
         context.insert(kategorie2)
         let distanz = WarengruppenDistanz(geschaeft: geschaeft, kategorieA: kategorie, kategorieB: kategorie2, distanz: 0.3)
@@ -83,7 +87,15 @@ struct SyncSnapshotExportServiceTests {
         let kaufEintragSnapshot = try #require(snapshot.kaufEintraege.first { $0.id == eintrag.id })
         #expect(kaufEintragSnapshot.artikelID == apfel.id)
         #expect(kaufEintragSnapshot.einkaufsvorgangID == laufenderEinkauf.id)
-        #expect(kaufEintragSnapshot.preis == 1.99)
+
+        let preispunktSnapshot = try #require(snapshot.preispunkte.first { $0.id == preispunkt.id })
+        #expect(preispunktSnapshot.artikelID == apfel.id)
+        #expect(preispunktSnapshot.preis == 1.99)
+
+        let aliasSnapshot = try #require(snapshot.artikelAliase.first { $0.id == alias.id })
+        #expect(aliasSnapshot.erkannterName == "APF-BIO")
+        #expect(aliasSnapshot.alternativerName == "Bio-Apfel")
+        #expect(aliasSnapshot.artikelID == apfel.id)
 
         let distanzSnapshot = try #require(snapshot.warengruppenDistanzen.first { $0.id == distanz.id })
         #expect(distanzSnapshot.kategorieAID == kategorie.id)
@@ -153,6 +165,7 @@ struct SyncSnapshotExportServiceTests {
                     ),
                 ],
                 artikel: [], einkaufslisten: [], einkaufslistenEintraege: [], einkaufsvorgaenge: [], kaufEintraege: [],
+                preispunkte: [], artikelAliase: [],
                 warengruppenDistanzen: [], tombstones: []
             )
         }

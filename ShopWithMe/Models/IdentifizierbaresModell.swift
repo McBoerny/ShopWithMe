@@ -18,6 +18,8 @@ extension EinkaufslistenEintrag: IdentifizierbaresModell {}
 extension Einkaufsvorgang: IdentifizierbaresModell {}
 extension KaufEintrag: IdentifizierbaresModell {}
 extension WarengruppenDistanz: IdentifizierbaresModell {}
+extension Preispunkt: IdentifizierbaresModell {}
+extension ArtikelAlias: IdentifizierbaresModell {}
 
 extension ModelContext {
     /// `true`, wenn `objekt` noch tatsächlich im Store existiert — `false` bei

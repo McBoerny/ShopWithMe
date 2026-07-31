@@ -14,7 +14,7 @@ struct ArtikelEditView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \ArtikelKategorie.sortIndex) private var kategorien: [ArtikelKategorie]
-    @Query private var kaufHistorie: [KaufEintrag]
+    @Query private var preisHistorie: [Preispunkt]
 
     @State private var kiVorschlagLaeuft = false
     @State private var kiFehlermeldung: String?
@@ -24,8 +24,8 @@ struct ArtikelEditView: View {
         self.artikel = artikel
         self.istNeu = istNeu
         let artikelID = artikel.persistentModelID
-        _kaufHistorie = Query(
-            filter: #Predicate<KaufEintrag> { $0.artikel?.persistentModelID == artikelID },
+        _preisHistorie = Query(
+            filter: #Predicate<Preispunkt> { $0.artikel?.persistentModelID == artikelID },
             sort: [SortDescriptor(\.datum, order: .reverse)]
         )
     }
@@ -116,9 +116,9 @@ struct ArtikelEditView: View {
                     )
                 }
 
-                if !istNeu && !kaufHistorie.isEmpty {
+                if !istNeu && !preisHistorie.isEmpty {
                     Section("Preishistorie") {
-                        ForEach(kaufHistorie) { eintrag in
+                        ForEach(preisHistorie) { eintrag in
                             PreisHistorieZeile(eintrag: eintrag, zeigeArtikel: false)
                         }
                     }

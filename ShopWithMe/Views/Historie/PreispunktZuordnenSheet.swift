@@ -2,13 +2,19 @@ import SwiftUI
 import SwiftData
 
 /// Sheet zum Vergeben eines Alias-Namens und/oder Zuordnen eines übergreifenden
-/// ``Artikel``s für eine einzelne Belegposition (``KaufEintrag``) — siehe
-/// `docs/BELEGSCAN.md`.
+/// ``Artikel``s für einen einzelnen ``Preispunkt`` — siehe `docs/BELEGSCAN.md`.
+/// Vormals `KaufEintragZuordnenSheet` (GitHub #76 — Preishistorie-Rolle von
+/// ``KaufEintrag`` nach ``Preispunkt`` verschoben).
 ///
 /// Existiert der gewünschte Artikel noch nicht, lässt er sich direkt hier über die
 /// bestehende ``ArtikelEditView`` anlegen und wird danach automatisch ausgewählt.
-struct KaufEintragZuordnenSheet: View {
-    let eintrag: KaufEintrag
+///
+/// Speichert die Zuordnung zusätzlich als ``ArtikelAlias``, damit künftige
+/// Beleg-/Preisschild-Scans desselben erkannten Namens sie automatisch
+/// wiederfinden (ersetzt die frühere Suche über die komplette Kaufhistorie,
+/// siehe ``ArtikelZuordnungsService``).
+struct PreispunktZuordnenSheet: View {
+    let eintrag: Preispunkt
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -19,7 +25,7 @@ struct KaufEintragZuordnenSheet: View {
     @State private var suchtext = ""
     @State private var neuerArtikelEntwurf: Artikel?
 
-    init(eintrag: KaufEintrag) {
+    init(eintrag: Preispunkt) {
         self.eintrag = eintrag
         _aliasText = State(initialValue: eintrag.alternativerName ?? "")
         _ausgewaehlterArtikel = State(initialValue: eintrag.artikel)
@@ -136,6 +142,7 @@ struct KaufEintragZuordnenSheet: View {
 
     private func speichern() {
         let getrimmterAlias = aliasText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let erkannterName = eintrag.produktName ?? eintrag.artikelNameSnapshot
         // Nur die Identität über die `await`-Grenze hinweg sichern (siehe
         // ``ModelReference``) — zwischen dem Erwerb des Micro-Lease und dieser
         // Zuweisung kann ein nebenläufiger Sync-Zyklus genau diesen Artikel
@@ -146,10 +153,11 @@ struct KaufEintragZuordnenSheet: View {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
                 guard let eintragFrisch = eintragReferenz.resolved(in: modelContext) else { return }
                 let artikel = artikelReferenz?.resolved(in: modelContext)
-                eintragFrisch.alternativerName = getrimmterAlias.isEmpty ? nil : getrimmterAlias
+                let alias = getrimmterAlias.isEmpty ? nil : getrimmterAlias
+                eintragFrisch.alternativerName = alias
                 eintragFrisch.artikel = artikel
-                if let artikel {
-                    eintragFrisch.kategorie = artikel.fuehrendeKategorie(inGeschaeft: eintragFrisch.geschaeft, context: modelContext)
+                if !erkannterName.isEmpty {
+                    ArtikelAlias.lernen(erkannterName: erkannterName, alternativerName: alias, artikel: artikel, context: modelContext)
                 }
             }
             dismiss()
@@ -158,9 +166,9 @@ struct KaufEintragZuordnenSheet: View {
 }
 
 #Preview {
-    let eintrag = KaufEintrag(artikel: nil, geschaeft: nil, preis: 2.49)
+    let eintrag = Preispunkt(artikel: nil, geschaeft: nil, preis: 2.49)
     eintrag.artikelNameSnapshot = "COL-ZAH"
     eintrag.produktName = "COL-ZAH"
-    return KaufEintragZuordnenSheet(eintrag: eintrag)
-        .modelContainer(for: [Artikel.self, ArtikelKategorie.self, GeschaeftTyp.self, KaufEintrag.self, Einkaufsliste.self, EinkaufslistenEintrag.self], inMemory: true)
+    return PreispunktZuordnenSheet(eintrag: eintrag)
+        .modelContainer(for: [Artikel.self, ArtikelKategorie.self, GeschaeftTyp.self, Preispunkt.self, ArtikelAlias.self], inMemory: true)
 }

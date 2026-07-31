@@ -42,6 +42,7 @@ enum SyncEntitaetsArt {
     static let artikelKategorie = "ArtikelKategorie"
     static let geschaeftTyp = "GeschaeftTyp"
     static let kaufEintrag = "KaufEintrag"
+    static let preispunkt = "Preispunkt"
 }
 
 enum SyncEntitaetsAliasService {

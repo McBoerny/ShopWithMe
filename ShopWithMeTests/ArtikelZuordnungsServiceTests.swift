@@ -9,14 +9,11 @@ struct ArtikelZuordnungsServiceTests {
     @Test
     func textBasierteZuordnungFindetGelerntenAliasZuerst() {
         let zahnpasta = Artikel(name: "Zahnpasta", symbolName: "sparkles", farbeHex: "#AF52DE")
-        let eintrag = KaufEintrag(artikel: zahnpasta, geschaeft: nil)
-        eintrag.artikelNameSnapshot = "COL-ZAH"
-        eintrag.produktName = "COL-ZAH"
-        eintrag.alternativerName = "Colgate"
+        let alias = ArtikelAlias(erkannterName: "COL-ZAH", alternativerName: "Colgate", artikel: zahnpasta)
 
         let ergebnis = ArtikelZuordnungsService.textBasierteZuordnung(
             erkannterName: "COL-ZAH",
-            bekannterVerlauf: [eintrag],
+            bekannteAliase: [alias],
             alleArtikel: [zahnpasta]
         )
 
@@ -30,7 +27,7 @@ struct ArtikelZuordnungsServiceTests {
 
         let ergebnis = ArtikelZuordnungsService.textBasierteZuordnung(
             erkannterName: "Bio Vollmilch 3,5%",
-            bekannterVerlauf: [],
+            bekannteAliase: [],
             alleArtikel: [milch]
         )
 
@@ -44,7 +41,7 @@ struct ArtikelZuordnungsServiceTests {
 
         let ergebnis = ArtikelZuordnungsService.textBasierteZuordnung(
             erkannterName: "Schokolade",
-            bekannterVerlauf: [],
+            bekannteAliase: [],
             alleArtikel: [milch]
         )
 

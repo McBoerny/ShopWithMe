@@ -11,23 +11,23 @@ import Charts
 /// `docs/BELEGSCAN.md`.
 struct GeschaeftPreisUebersichtView: View {
     let geschaeft: Geschaeft
-    @Query private var kaufHistorie: [KaufEintrag]
+    @Query private var preisHistorie: [Preispunkt]
 
     init(geschaeft: Geschaeft) {
         self.geschaeft = geschaeft
         let geschaeftID = geschaeft.persistentModelID
-        _kaufHistorie = Query(
-            filter: #Predicate<KaufEintrag> { $0.geschaeft?.persistentModelID == geschaeftID },
+        _preisHistorie = Query(
+            filter: #Predicate<Preispunkt> { $0.geschaeft?.persistentModelID == geschaeftID },
             sort: [SortDescriptor(\.datum, order: .reverse)]
         )
     }
 
     private var artikelPreisSpannen: [ArtikelPreisSpanne] {
-        ArtikelPreisSpanne.gruppieren(kaufHistorie)
+        ArtikelPreisSpanne.gruppieren(preisHistorie)
     }
 
-    private var eintraegeOhneArtikel: [KaufEintrag] {
-        kaufHistorie.filter { $0.artikel == nil }
+    private var eintraegeOhneArtikel: [Preispunkt] {
+        preisHistorie.filter { $0.artikel == nil }
     }
 
     var body: some View {
@@ -117,13 +117,13 @@ private struct ArtikelPreisVerlaufView: View {
     /// Kurzem als Closure-Destination eines wertlosen `NavigationLink` konstruiert
     /// wurde (siehe ``GeschaeftPreisUebersichtView``, jetzt `NavigationLink(value:)`
     /// + `.navigationDestination(for:)`).
-    @Query private var eintraegeDesGeschaefts: [KaufEintrag]
+    @Query private var eintraegeDesGeschaefts: [Preispunkt]
 
     init(artikel: Artikel, geschaeft: Geschaeft) {
         self.artikel = artikel
         let geschaeftID = geschaeft.persistentModelID
         _eintraegeDesGeschaefts = Query(
-            filter: #Predicate<KaufEintrag> { $0.geschaeft?.persistentModelID == geschaeftID },
+            filter: #Predicate<Preispunkt> { $0.geschaeft?.persistentModelID == geschaeftID },
             sort: [SortDescriptor(\.datum, order: .reverse)]
         )
     }
@@ -131,19 +131,16 @@ private struct ArtikelPreisVerlaufView: View {
     /// ``eintraegeDesGeschaefts``, zusätzlich auf ``artikel`` eingegrenzt — die
     /// zweite Filterbedingung läuft bewusst in Swift statt im `#Predicate` (siehe
     /// Dokumentation an ``eintraegeDesGeschaefts``).
-    private var eintraege: [KaufEintrag] {
+    private var eintraege: [Preispunkt] {
         eintraegeDesGeschaefts.filter { $0.artikel?.persistentModelID == artikel.persistentModelID }
     }
 
-    /// ``eintraege`` mit vorhandenem Preis, chronologisch aufsteigend — Grundlage
-    /// für ``preisDiagramm``. `eintraege` selbst bleibt absteigend (neueste zuerst)
+    /// ``eintraege``, chronologisch aufsteigend — Grundlage für
+    /// ``preisDiagramm``. `eintraege` selbst bleibt absteigend (neueste zuerst)
     /// für die Listendarstellung darunter.
     private var preisPunkte: [PreisVerlaufPunkt] {
         eintraege
-            .compactMap { eintrag -> PreisVerlaufPunkt? in
-                guard let preis = eintrag.preis else { return nil }
-                return PreisVerlaufPunkt(id: eintrag.persistentModelID, datum: eintrag.datum, preis: preis)
-            }
+            .map { PreisVerlaufPunkt(id: $0.persistentModelID, datum: $0.datum, preis: $0.preis) }
             .sorted { $0.datum < $1.datum }
     }
 
@@ -184,13 +181,13 @@ private struct ArtikelPreisVerlaufView: View {
 
     /// Löscht `eintrag` dauerhaft — bewusst ohne Rückfrage, analog zu anderen
     /// Wisch-Lösch-Aktionen in der App (z.B. Kategorie-Entfernen).
-    private func eintragLoeschen(_ eintrag: KaufEintrag) {
+    private func eintragLoeschen(_ eintrag: Preispunkt) {
         Task {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
-                // Tombstone verhindert, dass ein Peer, der den Kaufeintrag
+                // Tombstone verhindert, dass ein Peer, der den Preispunkt
                 // noch in seinem eigenen Snapshot führt, ihn beim nächsten
                 // Sync unwissentlich wiederbelebt (GitHub #52-Nachfolgefund).
-                SyncTombstoneService.markiereGeloescht(art: SyncEntitaetsArt.kaufEintrag, id: eintrag.id, context: modelContext)
+                SyncTombstoneService.markiereGeloescht(art: SyncEntitaetsArt.preispunkt, id: eintrag.id, context: modelContext)
                 modelContext.delete(eintrag)
             }
         }
@@ -212,5 +209,5 @@ private struct PreisVerlaufPunkt: Identifiable {
     NavigationStack {
         GeschaeftPreisUebersichtView(geschaeft: Geschaeft(name: "Rewe", typen: [GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")]))
     }
-    .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self, Artikel.self, KaufEintrag.self], inMemory: true)
+    .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self, Artikel.self, Preispunkt.self], inMemory: true)
 }

@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.10 (Build 172) — Preishistorie von KaufEintrag entkoppelt: neue Modelle Preispunkt/ArtikelAlias
+
+- **GitHub #76, Phase 1.** `KaufEintrag` bündelte bisher zwei unabhängige Rollen:
+  operative Buchungszeile eines laufenden Einkaufsvorgangs UND Preishistorie-
+  Datenpunkt. Preishistorie ist jetzt ein eigenständiges Model (`Preispunkt`) —
+  entsteht unabhängig von einem Einkaufsvorgang (z.B. beim Preisschild-Scan) und nur
+  bei tatsächlicher Preisänderung ggü. dem zuletzt bekannten Preis für dasselbe
+  (Artikel, Geschäft)-Paar (Slowly-Changing-Dimension-Muster, `PreispunktService`).
+- Alias-Lernen (vormals `KaufEintrag.gelernteZuordnung`, lineare Suche über die
+  komplette Kaufhistorie bei jedem Scan) ist jetzt ein eigenes, kleines
+  `ArtikelAlias`-Modell — ein Eintrag pro erkanntem Rohnamen, O(1) statt O(Historie).
+- `KaufEintrag.preis`/`produktName`/`alternativerName` bleiben als migrierte Altlast
+  bestehen (analog `Geschaeft.typenRaw`) — `KaufEintrag.preisverlaufMigrierenFallsNoetig(context:)`
+  überführt bestehende Werte beim nächsten App-Start einmalig nach
+  `Preispunkt`/`ArtikelAlias` und setzt sie danach auf `nil`.
+- `SyncSnapshot.formatVersion` 3 → 4: `KaufEintragSnapshot` verliert die Preisfelder,
+  `preispunkte`/`artikelAliase` neu hinzugekommen. Keine Rückwärtskompatibilität
+  nötig (Projekt ohne feste Nutzerbasis, wie bei früheren Versionssprüngen).
+- Neue `@Relationship(inverse:)`-Deklarationen für `Preispunkt` auf `Geschaeft`
+  (`.cascade`) und `Artikel` (`.nullify`) — analog den bestehenden für `KaufEintrag`,
+  verhindert dieselbe Klasse baumelnder Referenzen wie beim historischen
+  „fehlende inverse-Deklarationen"-Vorfall (`docs/DATABASE_CONCURRENCY.md`).
+- Hintergrund/Größenabschätzung: `docs/ROADMAP.md` → „`export.json` als Paket statt
+  Monolith", Issue #76.
+
 ## v0.9 (Build 170) — Fix: zwei unabhängig baumelnde Einkaufsvorgang-Referenzen konnten fälschlich zusammengeführt werden
 
 - Systematischer Audit aller Merge-Pfade (Auslöser: ein Einkaufsvorgang

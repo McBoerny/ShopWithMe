@@ -179,6 +179,8 @@ enum SyncSnapshotExportService {
         }
         normalisiert.einkaufsvorgaenge.sort { $0.id.uuidString < $1.id.uuidString }
         normalisiert.kaufEintraege.sort { $0.id.uuidString < $1.id.uuidString }
+        normalisiert.preispunkte.sort { $0.id.uuidString < $1.id.uuidString }
+        normalisiert.artikelAliase.sort { $0.id.uuidString < $1.id.uuidString }
         normalisiert.warengruppenDistanzen.sort { $0.id.uuidString < $1.id.uuidString }
         normalisiert.tombstones.sort { "\($0.entitaetsArt)_\($0.geloeschteID)" < "\($1.entitaetsArt)_\($1.geloeschteID)" }
         return normalisiert
@@ -218,6 +220,8 @@ enum SyncSnapshotExportService {
             teil("einkaufslistenEintraege", normalisiert.einkaufslistenEintraege),
             teil("einkaufsvorgaenge", normalisiert.einkaufsvorgaenge),
             teil("kaufEintraege", normalisiert.kaufEintraege),
+            teil("preispunkte", normalisiert.preispunkte),
+            teil("artikelAliase", normalisiert.artikelAliase),
             teil("warengruppenDistanzen", normalisiert.warengruppenDistanzen),
             teil("tombstones", normalisiert.tombstones),
         ].joined(separator: " ")
@@ -322,12 +326,32 @@ enum SyncSnapshotExportService {
                 kategorieID: sichereID($0.kategorie, gueltigeIDs: gueltigeKategorieIDs),
                 artikelNameSnapshot: $0.artikelNameSnapshot,
                 geschaeftNameSnapshot: $0.geschaeftNameSnapshot,
-                produktName: $0.produktName,
-                alternativerName: $0.alternativerName,
                 datum: $0.datum,
-                preis: $0.preis,
                 menge: $0.menge,
                 kategorieBesuchsIndex: $0.kategorieBesuchsIndex
+            )
+        }
+
+        let preispunkte = ((try? context.fetch(FetchDescriptor<Preispunkt>())) ?? []).map {
+            PreispunktSnapshot(
+                id: $0.id,
+                artikelID: sichereID($0.artikel, gueltigeIDs: gueltigeArtikelIDs),
+                geschaeftID: sichereID($0.geschaeft, gueltigeIDs: gueltigeGeschaeftIDs),
+                preis: $0.preis,
+                datum: $0.datum,
+                produktName: $0.produktName,
+                alternativerName: $0.alternativerName,
+                artikelNameSnapshot: $0.artikelNameSnapshot,
+                geschaeftNameSnapshot: $0.geschaeftNameSnapshot
+            )
+        }
+
+        let artikelAliase = ((try? context.fetch(FetchDescriptor<ArtikelAlias>())) ?? []).map {
+            ArtikelAliasSnapshot(
+                id: $0.id,
+                erkannterName: $0.erkannterName,
+                alternativerName: $0.alternativerName,
+                artikelID: sichereID($0.artikel, gueltigeIDs: gueltigeArtikelIDs)
             )
         }
 
@@ -362,6 +386,8 @@ enum SyncSnapshotExportService {
             einkaufslistenEintraege: einkaufslistenEintraege,
             einkaufsvorgaenge: einkaufsvorgaenge,
             kaufEintraege: kaufEintraege,
+            preispunkte: preispunkte,
+            artikelAliase: artikelAliase,
             warengruppenDistanzen: warengruppenDistanzen,
             tombstones: tombstones
         )

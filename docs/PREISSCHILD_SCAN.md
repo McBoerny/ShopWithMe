@@ -2,9 +2,10 @@
 
 Der Preisschild-Scan fotografiert/lädt das Foto eines **einzelnen** Regal-Preisschilds,
 erkennt Artikelname und Verkaufspreis per On-Device-KI und legt dafür sofort einen
-`KaufEintrag` mit heutigem Datum an — unabhängig davon, ob der Artikel tatsächlich
-gekauft wird. Anwendungsfall: Preisvergleich vor der Kaufentscheidung, ohne auf einen
-späteren Kassenbon warten zu müssen.
+`Preispunkt` (GitHub #76, vormals `KaufEintrag`) mit heutigem Datum an — unabhängig
+davon, ob der Artikel tatsächlich gekauft wird; ohne Bezug zu einem Einkaufsvorgang,
+da hier per Definition keiner läuft. Anwendungsfall: Preisvergleich vor der
+Kaufentscheidung, ohne auf einen späteren Kassenbon warten zu müssen.
 
 Dieselbe technische Basis (Vision-OCR + FoundationModels) wie beim Belegscan, siehe
 `docs/BELEGSCAN.md` für das ausführlichere, analoge Muster. Dieses Dokument beschreibt
@@ -16,7 +17,7 @@ Regal-Scan.
 - `ShopWithMe/Services/PriceTagScanService.swift` — OCR + KI-Extraktion
   (`VisionFoundationModelsPriceTagScanner`, `PreisschildErgebnis`).
 - `ShopWithMe/Views/Einkaufen/PreisschildScanView.swift` — Aufnahme, Prüf-/Korrektur-UI,
-  Übernahme als `KaufEintrag`.
+  Übernahme als `Preispunkt` (`PreispunktService.erfassen(...)`).
 - `ShopWithMe/Views/Geschaefte/GeschaeftDetailView.swift` — Einstiegspunkt „Preisschild
   scannen“ neben „Kaufbeleg scannen“.
 - `ShopWithMe/Views/Einkaufen/EinkaufenView.swift` — weiterer Einstiegspunkt, sobald
@@ -37,7 +38,7 @@ feststehendes Geschäft, siehe „Kein geschäftsloser Einstieg“ unten.
 | Kontext | `BelegScanKontext` (`.einkaufsvorgang`/`.geschaeft`/`.unbekannt`) | `geschaeft: Geschaeft` — immer feststehend, kein geschäftsloser Fall |
 | Grundpreis | kommt auf Kassenbons praktisch nicht vor | Preisschilder zeigen oft zusätzlich einen Grundpreis (z.B. „1,99 € / 100g“) — die KI-Instruktion weist explizit an, ausschließlich den Verkaufspreis zurückzugeben, nicht den Grundpreis |
 
-Mitlern-Logik (`KaufEintrag.gelernteZuordnung`), Artikel-Namensabgleich
+Mitlern-Logik (`ArtikelAlias.passend(fuerErkannterName:in:)`), Artikel-Namensabgleich
 (`passendesArtikel`) und `alternativerName`-Ableitung sind identisch zum Belegscan
 übernommen (siehe `docs/BELEGSCAN.md` → „Mitlernen“/„Übernahme“).
 

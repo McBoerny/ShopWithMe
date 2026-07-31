@@ -6,8 +6,7 @@ import Foundation
 /// „Automatische Artikel-Zuordnung“.
 enum ArtikelZuordnungsService {
     /// Textbasierte Zuordnung ohne KI, in zwei Stufen:
-    /// 1. Gelernter Alias aus einem früheren, bereits korrigierten Kauf
-    ///    (``KaufEintrag/gelernteZuordnung(fuerErkannterName:in:)``).
+    /// 1. Gelernter Alias (``ArtikelAlias/passend(fuerErkannterName:in:)``).
     /// 2. Einfacher, beidseitiger Teilstring-Abgleich gegen alle vorhandenen
     ///    ``Artikel`` (ersetzt die frühere, auf `.geschaeft`/`.unbekannt`
     ///    beschränkte private `BelegScanView.passendesArtikel(fuer:)`).
@@ -16,11 +15,11 @@ enum ArtikelZuordnungsService {
     /// `GeschaeftErkennungService.passendenVorschlag(...)`.
     static func textBasierteZuordnung(
         erkannterName: String,
-        bekannterVerlauf: [KaufEintrag],
+        bekannteAliase: [ArtikelAlias],
         alleArtikel: [Artikel]
     ) -> (alias: String?, artikel: Artikel?)? {
-        if let gelernt = KaufEintrag.gelernteZuordnung(fuerErkannterName: erkannterName, in: bekannterVerlauf) {
-            return (gelernt.alias, gelernt.artikel)
+        if let gelernt = ArtikelAlias.passend(fuerErkannterName: erkannterName, in: bekannteAliase) {
+            return gelernt
         }
         let name = erkannterName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return nil }
@@ -30,7 +29,7 @@ enum ArtikelZuordnungsService {
         return (nil, treffer)
     }
 
-    /// Volle Zuordnungs-Pipeline: erst ``textBasierteZuordnung(erkannterName:bekannterVerlauf:alleArtikel:)``;
+    /// Volle Zuordnungs-Pipeline: erst ``textBasierteZuordnung(erkannterName:bekannteAliase:alleArtikel:)``;
     /// bleibt die erfolglos und ist lokale KI verfügbar
     /// (``AISuggestionService/istVerfuegbar``), wird zusätzlich
     /// ``AISuggestionService/artikelMatch(fuerName:bekannteArtikel:)`` befragt und
@@ -40,10 +39,10 @@ enum ArtikelZuordnungsService {
     @MainActor
     static func zuordnen(
         erkannterName: String,
-        bekannterVerlauf: [KaufEintrag],
+        bekannteAliase: [ArtikelAlias],
         alleArtikel: [Artikel]
     ) async -> (alias: String?, artikel: Artikel?) {
-        if let treffer = textBasierteZuordnung(erkannterName: erkannterName, bekannterVerlauf: bekannterVerlauf, alleArtikel: alleArtikel) {
+        if let treffer = textBasierteZuordnung(erkannterName: erkannterName, bekannteAliase: bekannteAliase, alleArtikel: alleArtikel) {
             return treffer
         }
         guard AISuggestionService.istVerfuegbar,

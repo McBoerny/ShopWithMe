@@ -74,11 +74,16 @@ final class Geschaeft {
     /// ``KategorieHinzufuegenSheet``), sticht das den Ausschluss (siehe
     /// ``verfuegbareKategorien(alleKategorien:)``).
     var ausgeschlosseneKategorien: [ArtikelKategorie] = []
-    /// Preishistorie (``KaufEintrag``), die in diesem Geschäft erfasst wurde. Wird das
-    /// Geschäft gelöscht, wird auch seine gesamte Preishistorie gelöscht — siehe
-    /// `docs/GESCHAEFTSERKENNUNG.md`.
+    /// Operative Einkaufs-Buchungszeilen (``KaufEintrag``) in diesem Geschäft — seit
+    /// GitHub #76 ohne Preisrolle, siehe ``preispunkte``. Wird das Geschäft gelöscht,
+    /// werden auch seine Buchungszeilen gelöscht — siehe `docs/GESCHAEFTSERKENNUNG.md`.
     @Relationship(deleteRule: .cascade, inverse: \KaufEintrag.geschaeft)
     var kaufEintraege: [KaufEintrag] = []
+    /// Preishistorie (``Preispunkt``, GitHub #76), die in diesem Geschäft erfasst
+    /// wurde. Wird das Geschäft gelöscht, wird auch seine gesamte Preishistorie
+    /// gelöscht — dieselbe Begründung wie ``kaufEintraege``.
+    @Relationship(deleteRule: .cascade, inverse: \Preispunkt.geschaeft)
+    var preispunkte: [Preispunkt] = []
     /// Beim Belegscan dauerhaft ignorierte Artikelnamen für dieses Geschäft (siehe
     /// ``IgnorierterArtikel``). Wird das Geschäft gelöscht, verschwinden auch seine
     /// Ignorier-Einträge.

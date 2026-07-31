@@ -11,7 +11,7 @@ struct SyncSnapshotImportServiceTests {
             Einkaufsvorgang.self, KaufEintrag.self, WarengruppenDistanz.self,
             Einkaufsliste.self, EinkaufslistenEintrag.self, IgnorierterArtikel.self,
             SyncEvent.self, SyncEntitaetsAlias.self, SyncPeerZaehlerStand.self, SyncPeerInfo.self,
-            SyncTombstone.self,
+            SyncTombstone.self, Preispunkt.self, ArtikelAlias.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
@@ -29,6 +29,7 @@ struct SyncSnapshotImportServiceTests {
             formatVersion: SyncSnapshot.aktuelleFormatVersion, erzeugtAm: Date(), geraeteID: geraeteID, geraeteName: geraeteName,
             geschaeftsTypen: [], artikelKategorien: [], geschaefte: [], artikel: [],
             einkaufslisten: [], einkaufslistenEintraege: [], einkaufsvorgaenge: [], kaufEintraege: [],
+            preispunkte: [], artikelAliase: [],
             warengruppenDistanzen: [], tombstones: []
         )
     }
@@ -414,8 +415,8 @@ struct SyncSnapshotImportServiceTests {
         veralteterKaufEintragSnapshot.kaufEintraege = [
             KaufEintragSnapshot(
                 id: kaufEintragID, artikelID: nil, einkaufsvorgangID: nil, geschaeftID: nil, kategorieID: nil,
-                artikelNameSnapshot: "Milch", geschaeftNameSnapshot: "Netto", produktName: nil, alternativerName: nil,
-                datum: .distantPast, preis: nil, menge: 1, kategorieBesuchsIndex: nil
+                artikelNameSnapshot: "Milch", geschaeftNameSnapshot: "Netto",
+                datum: .distantPast, menge: 1, kategorieBesuchsIndex: nil
             ),
         ]
         try schreibeFremdenSnapshot(veralteterKaufEintragSnapshot, fremdeGeraeteID: "veralteter-peer", in: syncOrdner)
@@ -887,8 +888,8 @@ struct SyncSnapshotImportServiceTests {
         snapshot.kaufEintraege = [
             KaufEintragSnapshot(
                 id: UUID(), artikelID: apfel.id, einkaufsvorgangID: alterVorgang.id, geschaeftID: nil, kategorieID: nil,
-                artikelNameSnapshot: "Apfel", geschaeftNameSnapshot: "Rewe", produktName: nil, alternativerName: nil,
-                datum: Date(), preis: nil, menge: 1, kategorieBesuchsIndex: nil
+                artikelNameSnapshot: "Apfel", geschaeftNameSnapshot: "Rewe",
+                datum: Date(), menge: 1, kategorieBesuchsIndex: nil
             ),
         ]
         try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
@@ -965,8 +966,8 @@ struct SyncSnapshotImportServiceTests {
         snapshot.kaufEintraege = [
             KaufEintragSnapshot(
                 id: kaufEintragID, artikelID: apfel.id, einkaufsvorgangID: nil, geschaeftID: nil, kategorieID: nil,
-                artikelNameSnapshot: "Apfel", geschaeftNameSnapshot: "", produktName: nil, alternativerName: nil,
-                datum: Date(), preis: 1.49, menge: 3, kategorieBesuchsIndex: nil
+                artikelNameSnapshot: "Apfel", geschaeftNameSnapshot: "",
+                datum: Date(), menge: 3, kategorieBesuchsIndex: nil
             ),
         ]
         try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
@@ -978,7 +979,46 @@ struct SyncSnapshotImportServiceTests {
         #expect(alleEintraege.count == 1)
         #expect(alleEintraege.first?.id == kaufEintragID)
         #expect(alleEintraege.first?.artikel?.id == apfel.id)
-        #expect(alleEintraege.first?.preis == 1.49)
+    }
+
+    /// Wie ``kaufEintragWirdAlsUnveraenderlicheHistorieUebernommenOhneDuplikat``,
+    /// für ``Preispunkt`` (GitHub #76) — derselbe Union-nach-`id`-Merge.
+    @Test
+    func preispunktWirdAlsUnveraenderlicheHistorieUebernommenOhneDuplikat() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759")
+        context.insert(apfel)
+        try context.save()
+
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.artikel = [
+            ArtikelSnapshot(
+                id: apfel.id, name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759",
+                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+            ),
+        ]
+        let preispunktID = UUID()
+        snapshot.preispunkte = [
+            PreispunktSnapshot(
+                id: preispunktID, artikelID: apfel.id, geschaeftID: nil, preis: 1.49, datum: Date(),
+                produktName: nil, alternativerName: nil, artikelNameSnapshot: "Apfel", geschaeftNameSnapshot: ""
+            ),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+        await SyncSnapshotImportService.importiereSnapshots(context: context) // wiederholter Sync
+
+        let allePunkte = try context.fetch(FetchDescriptor<Preispunkt>())
+        #expect(allePunkte.count == 1)
+        #expect(allePunkte.first?.id == preispunktID)
+        #expect(allePunkte.first?.artikel?.id == apfel.id)
+        #expect(allePunkte.first?.preis == 1.49)
     }
 
     /// Ein per Snapshot gemergter (also per Konstruktion von einem ANDEREN
@@ -1010,8 +1050,8 @@ struct SyncSnapshotImportServiceTests {
         snapshot.kaufEintraege = [
             KaufEintragSnapshot(
                 id: UUID(), artikelID: apfel.id, einkaufsvorgangID: nil, geschaeftID: nil, kategorieID: nil,
-                artikelNameSnapshot: "Apfel", geschaeftNameSnapshot: "", produktName: nil, alternativerName: nil,
-                datum: Date(), preis: nil, menge: 1, kategorieBesuchsIndex: 3
+                artikelNameSnapshot: "Apfel", geschaeftNameSnapshot: "",
+                datum: Date(), menge: 1, kategorieBesuchsIndex: 3
             ),
         ]
         try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)

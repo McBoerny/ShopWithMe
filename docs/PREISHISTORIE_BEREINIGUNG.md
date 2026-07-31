@@ -3,6 +3,14 @@
 Status: **Umgesetzt** (`Services/PreisHistorieBereinigungService.swift`,
 `Views/Einstellungen/PreisHistorieSettingsView.swift`).
 
+**Update GitHub #76:** Die Preishistorie-Rolle ist von `KaufEintrag` nach
+`Preispunkt` verschoben (eigenständiges Model, siehe `docs/BELEGSCAN.md` →
+„Datenmodell"). Diese Datei/der beschriebene Bereinigungsmechanismus bezieht sich
+weiterhin auf `KaufEintrag`, das jetzt nur noch die operative Buchungszeile eines
+laufenden Einkaufsvorgangs ist — die Löschung alter `KaufEintrag`e ist dadurch nicht
+mehr direkt gleichbedeutend mit „alte Preise löschen". Eine eigene
+Aufbewahrungsfrist für `Preispunkt` existiert noch nicht (offene Frage in Issue #76).
+
 ## Ausgangslage
 
 Jeder Belegscan und jedes Abhaken auf der Einkaufsliste erzeugt einen dauerhaften

@@ -76,14 +76,20 @@ final class Artikel {
     var einkaufslistenEintraege: [EinkaufslistenEintrag] = []
     /// Kaufeinträge, die diesen Artikel referenzieren — inverse zu
     /// ``KaufEintrag/artikel``. Nullify statt Cascade: ``KaufEintrag`` bleibt
-    /// als historischer Preishistorie-Eintrag bestehen, auch wenn der
-    /// zugehörige Artikel gelöscht wird (genau dafür existiert
-    /// ``KaufEintrag/artikelNameSnapshot``). Ohne diese `inverse`-Deklaration
-    /// bliebe `KaufEintrag.artikel` beim Löschen eines Artikels eine
-    /// "baumelnde" Referenz statt automatisch auf `nil` gesetzt zu werden —
-    /// Absturzrisiko wie bei ``Geschaeft/einkaufsvorgaenge`` beschrieben.
+    /// als operative Buchungszeile bestehen, auch wenn der zugehörige Artikel
+    /// gelöscht wird (genau dafür existiert ``KaufEintrag/artikelNameSnapshot``).
+    /// Ohne diese `inverse`-Deklaration bliebe `KaufEintrag.artikel` beim
+    /// Löschen eines Artikels eine "baumelnde" Referenz statt automatisch auf
+    /// `nil` gesetzt zu werden — Absturzrisiko wie bei
+    /// ``Geschaeft/einkaufsvorgaenge`` beschrieben.
     @Relationship(deleteRule: .nullify, inverse: \KaufEintrag.artikel)
     var kaufEintraege: [KaufEintrag] = []
+    /// Preishistorie (``Preispunkt``, GitHub #76), die diesen Artikel
+    /// referenziert — inverse zu ``Preispunkt/artikel``. Nullify statt Cascade,
+    /// dieselbe Begründung wie ``kaufEintraege`` (``Preispunkt/artikelNameSnapshot``
+    /// hält den Namen dauerhaft fest).
+    @Relationship(deleteRule: .nullify, inverse: \Preispunkt.artikel)
+    var preispunkte: [Preispunkt] = []
 
     /// Rohwert für ``einheit``. Optional gespeichert, damit vor Einführung dieses
     /// Attributs angelegte Artikel beim automatischen Laden nicht abstürzen — ein

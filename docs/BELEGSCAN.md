@@ -10,13 +10,20 @@ Belegscans hinweg.
 
 - `ShopWithMe/Services/ReceiptScanService.swift` — OCR + KI-Extraktion.
 - `ShopWithMe/Views/Einkaufen/BelegScanView.swift` — Aufnahme, Prüf-/Korrektur-UI,
-  Übernahme in `KaufEintrag`e, Mitlern-Vorbelegung, automatischer
-  Geschäfts-Abgleich (siehe unten).
+  Übernahme in `Preispunkt`e (operative `KaufEintrag`-Buchungszeile bei laufendem
+  Einkauf unverändert), Mitlern-Vorbelegung, automatischer Geschäfts-Abgleich (siehe
+  unten).
 - `ShopWithMe/Views/Einkaufen/PreisschildScanView.swift` — analoger, einzelner
   Preisschild-Scan (`docs/PREISSCHILD_SCAN.md`); funktioniert immer direkt für ein
   feststehendes Geschäft, **ohne** den automatischen Geschäfts-Abgleich unten.
-- `ShopWithMe/Models/KaufEintrag.swift` — persistentes Ziel-Model, `anzeigeName`,
-  `gelernteZuordnung(fuerErkannterName:in:)`.
+- `ShopWithMe/Models/Preispunkt.swift` — persistentes Preishistorie-Ziel-Model
+  (GitHub #76, vormals Teil von `KaufEintrag`), `anzeigeName`.
+- `ShopWithMe/Models/ArtikelAlias.swift` — gelernte Beleg-/Preisschild-Aliase
+  (GitHub #76, vormals `KaufEintrag.gelernteZuordnung`), `passend(fuerErkannterName:in:)`.
+- `ShopWithMe/Services/PreispunktService.swift` — zentrale Schreiblogik: legt nur bei
+  tatsächlicher Preisänderung einen neuen `Preispunkt` an.
+- `ShopWithMe/Models/KaufEintrag.swift` — operative Buchungszeile eines laufenden
+  Einkaufsvorgangs (Dedupe, `kategorieBesuchsIndex`), seit GitHub #76 ohne Preisrolle.
 - `ShopWithMe/Models/Geschaeft.swift` — `alternativeNamen`,
   `alternativenNamenLernen(_:)`, `passendes(fuerErkannterName:unter:)`.
 - `ShopWithMe/Views/Geschaefte/GeschaeftWahlSheet.swift` — Geschäftsauswahl, falls
@@ -24,8 +31,8 @@ Belegscans hinweg.
 - `ShopWithMe/Models/ArtikelPreisSpanne.swift` — Gruppierung nach Artikel + Preisspanne.
 - `ShopWithMe/Views/Historie/PreisHistorieZeile.swift` — einzelne Zeile, öffnet die
   Zuordnen-Sheet.
-- `ShopWithMe/Views/Historie/KaufEintragZuordnenSheet.swift` — Alias vergeben +
-  Artikel zuordnen/neu anlegen.
+- `ShopWithMe/Views/Historie/PreispunktZuordnenSheet.swift` — Alias vergeben +
+  Artikel zuordnen/neu anlegen (vormals `KaufEintragZuordnenSheet`).
 - `ShopWithMe/Views/Geschaefte/GeschaeftPreisUebersichtView.swift` — eigener View
   für die Preisübersicht (GitHub #20), `ArtikelPreisSpanneZeile`/
   `ArtikelPreisVerlaufView` (Drill-down mit Preisdiagramm, GitHub #21), aufrufbar
@@ -98,19 +105,22 @@ Belegscans hinweg.
 6. **Übernahme** (`BelegScanView.uebernehmen()`): abhängig vom `BelegScanKontext`,
    in allen drei Fällen mit `position.effektivZugeordneterArtikel` verknüpft (siehe
    „Automatische Artikel-Zuordnung“ unten):
-   - `.einkaufsvorgang(Einkaufsvorgang)`: Preise werden nach Namensabgleich
-     (`passtZu`) bereits abgehakten `KaufEintrag`en dieses Einkaufsvorgangs
-     zugeordnet (dort bleibt eine bestehende `Artikel`-Verknüpfung unverändert,
-     nur Preis/Datum/Alias werden aktualisiert). Ohne Treffer entsteht ein neuer,
-     eigenständiger `KaufEintrag`.
+   - `.einkaufsvorgang(Einkaufsvorgang)`: die operative Buchungszeile (Namensabgleich
+     `passtZu` gegen bereits abgehakte `KaufEintrag`e dieses Einkaufsvorgangs) bleibt
+     bis auf das Datum unverändert (bzw. wird bei fehlendem Treffer neu, rein
+     operativ ohne Preisfelder angelegt) — die Preisrolle übernimmt in **allen**
+     drei Fällen ausschließlich `PreispunktService.erfassen(...)`.
    - `.geschaeft(Geschaeft)`: unabhängig von einem laufenden Einkauf, direkt aus der
-     Geschäfts-Detailansicht. Jede Position wird als neuer `KaufEintrag` angelegt.
+     Geschäfts-Detailansicht. Jede Position erzeugt einen `Preispunkt`, keinen
+     `KaufEintrag` (kein laufender Einkauf, also keine operative Rolle).
    - `.unbekannt`: geschäftsloser Scan (siehe „Automatischer Geschäfts-Abgleich“
      unten) — verhält sich sonst wie `.geschaeft`, nur dass das Geschäft erst nach
      dem Scan feststeht (`erkanntesGeschaeft` statt eines fest übergebenen Werts).
    - In allen Fällen: weicht der (ggf. korrigierte) Anzeigetext vom rohen erkannten
-     Namen ab, wird er als `alternativerName` übernommen (`leiteAlternativenNamenAb`)
-     — das ist zugleich die Quelle für das Mitlernen beim nächsten Scan.
+     Namen ab, wird er als `alternativerName` auf dem `Preispunkt` übernommen
+     (`leiteAlternativenNamenAb`) und zusätzlich als `ArtikelAlias` gelernt — das ist
+     die Quelle für das Mitlernen beim nächsten Scan (siehe „Mitlernen zwischen
+     Belegscans“ unten).
 
 ## Originalbeleg anzeigen
 
@@ -200,7 +210,7 @@ in `EinkaufenView`) decken diesen Fall ab:
    allen vorhandenen Geschäften nach einem Treffer — sowohl gegen `Geschaeft.name`
    als auch gegen dessen gelernte `alternativeNamen` (beidseitiger
    `localizedCaseInsensitiveContains`-Abgleich, analog
-   `KaufEintrag.gelernteZuordnung`). **Mehrere namensgleiche Geschäfte** (z.B. zwei
+   `ArtikelAlias.passend(fuerErkannterName:in:)`). **Mehrere namensgleiche Geschäfte** (z.B. zwei
    „Rewe“-Filialen): die erkannte Adresse dient als automatischer Tie-Breaker
    (gleicher Abgleich gegen `Geschaeft.adresse`) — **ohne Rückfrage**. Bleibt danach
    mehr als ein Kandidat übrig oder wurde keine/keine passende Adresse erkannt,
@@ -209,7 +219,7 @@ in `EinkaufenView`) decken diesen Fall ab:
 3. **Kein Treffer → Anwenderauswahl** (`GeschaeftWahlSheet`): öffnet sich
    automatisch, sobald kein Treffer gefunden wurde. Bietet Suche unter
    bestehenden Geschäften, „Kein Geschäft“ (bewusstes Überspringen — die
-   entstehenden `KaufEintrag`e bleiben dann ohne `geschaeft`, wie bisher) sowie
+   entstehenden `Preispunkt`e bleiben dann ohne `geschaeft`, wie bisher) sowie
    „„<Suchtext>“ neu anlegen“ (öffnet `GeschaeftStammdatenEditView`, vorausgefüllt
    mit dem erkannten Namen **und** der erkannten Adresse). Die Adresse wird dabei
    sofort über `GeschaeftErkennungService.koordinaten(fuerAdresse:)` geocodiert und
@@ -265,8 +275,8 @@ Händlers (oft abgekürzt, z.B. „COL-ZAH“) — er wird konsistent über alle
 `BelegScanKontext`e (vorher inkonsistent, siehe unten) beim Einlesen einem
 bestehenden, generischen `Artikel` zugeordnet, dreistufig:
 
-1. **Gelernter Alias**: `KaufEintrag.gelernteZuordnung(fuerErkannterName:in:)`
-   (unverändert, siehe „Mitlernen zwischen Belegscans“ unten).
+1. **Gelernter Alias**: `ArtikelAlias.passend(fuerErkannterName:in:)`
+   (siehe „Mitlernen zwischen Belegscans“ unten).
 2. **Teilstring-Abgleich**: einfacher, beidseitiger
    `localizedCaseInsensitiveContains`-Vergleich gegen alle vorhandenen `Artikel`.
 3. **KI-Best-Match** — nur falls Stufe 1+2 erfolglos **und** lokale KI verfügbar
@@ -304,7 +314,7 @@ bekam bislang gar keine Katalog-Zuordnung.
   darunter; Antippen übernimmt Name + Zuordnung. Passt der eingegebene Text zu
   keinem bestehenden Artikel, erscheint zusätzlich „„<Text>“ neu anlegen“ — öffnet
   `ArtikelEditView(artikel: entwurf, istNeu: true)` als Sheet (identisches Muster
-  wie `KaufEintragZuordnenSheet.neuenArtikelAnlegen()`), übernimmt den neu
+  wie `PreispunktZuordnenSheet.neuenArtikelAnlegen()`), übernimmt den neu
   gesicherten Artikel danach automatisch als Zuordnung.
 
 ## Dauerhaft ignorierte Artikel pro Geschäft
@@ -330,28 +340,33 @@ bereits persistierte `Geschaeft`-Relationship — zum Zeitpunkt des Ignorierens
 steht das Geschäft immer schon fest). Cascade-Delete: Wird das Geschäft gelöscht,
 verschwinden auch seine Ignorier-Einträge (`Geschaeft.ignorierteArtikel`).
 
-## Datenmodell: `KaufEintrag`
+## Datenmodell: `Preispunkt`
 
-Es gibt kein eigenes „Belegposition“-Model — erkannte Positionen landen direkt in
-`KaufEintrag` (auch das Ziel für normale Einkaufslisten-Abhak-Käufe ohne Beleg):
+**Seit GitHub #76** gibt es kein eigenes „Belegposition“-Model, aber zwei getrennte
+Ziel-Typen statt eines: `Preispunkt` trägt die Preishistorie-Rolle, `KaufEintrag`
+bleibt die rein operative Buchungszeile eines laufenden Einkaufsvorgangs (Dedupe,
+`kategorieBesuchsIndex` für `WarengruppenDistanzService`, keine Preisfelder mehr).
+Grund für die Trennung: die beiden Rollen wuchsen unterschiedlich (jeder Kauf vs. nur
+echte Preisänderungen) und ein Preisschild-Scan hat ohnehin nie einen
+Einkaufsvorgang — siehe `docs/ROADMAP.md`/Issue #76 für die volle Herleitung.
 
 | Feld | Bedeutung |
 | --- | --- |
-| `artikel: Artikel?` | Verknüpfter, übergreifender Artikel — gesetzt aus einer gelernten Zuordnung, per Namensabgleich, oder manuell über `KaufEintragZuordnenSheet`. `nil`, solange keine Zuordnung existiert oder der Artikel später gelöscht wurde. |
-| `artikelNameSnapshot: String` | Name zum Kaufzeitpunkt, dauerhaft — Fallback, falls `artikel` fehlt/gelöscht ist. |
-| `produktName: String?` | Genauer, vom Kassenbon erkannter Marken-/Produktname, falls er vom (ggf. generischen) `artikel` abweicht (z.B. „COL-ZAH“ bei `artikel.name == "Zahnpasta"`). Bleibt beim Umbenennen zwecks Zuordnung erhalten, damit unterschiedliche Marken desselben generischen Artikels in der Preishistorie unterscheidbar bleiben. `nil` bei normalen Einkaufslisten-Käufen ohne Belegscan. |
-| `alternativerName: String?` | Alias für **genau diese eine Position** (z.B. „Colgate“) — vom Nutzer vergeben (`KaufEintragZuordnenSheet`) oder beim Belegscan aus einem korrigierten Namensfeld übernommen. Verändert `artikelNameSnapshot`/`produktName` nicht. Zentrale Grundlage für das Mitlernen (siehe unten). |
-| `preis: Decimal?` | Bezahlter Einzelpreis; `nil`, solange noch kein Beleg dazu erfasst wurde. |
-| `menge: Double` | Gekaufte Menge (Standard 1) — vom Belegscan nicht verändert. |
-| `datum: Date` | Kaufdatum, aus dem Beleg erkannt oder manuell gesetzt. |
-| `kategorie: ArtikelKategorie?` | Snapshot der Artikel-Kategorie zum Kaufzeitpunkt — wird bei Artikel-Zuordnung (Scan oder `KaufEintragZuordnenSheet`) auf `artikel?.kategorie` gesetzt. |
+| `artikel: Artikel?` | Verknüpfter, übergreifender Artikel — gesetzt aus einer gelernten Zuordnung, per Namensabgleich, oder manuell über `PreispunktZuordnenSheet`. `nil`, solange keine Zuordnung existiert oder der Artikel später gelöscht wurde. |
+| `artikelNameSnapshot: String` | Name zum Beobachtungszeitpunkt, dauerhaft — Fallback, falls `artikel` fehlt/gelöscht ist. |
+| `produktName: String?` | Genauer, vom Kassenbon/Preisschild erkannter Marken-/Produktname, falls er vom (ggf. generischen) `artikel` abweicht (z.B. „COL-ZAH“ bei `artikel.name == "Zahnpasta"`). Bleibt beim Umbenennen zwecks Zuordnung erhalten, damit unterschiedliche Marken desselben generischen Artikels in der Preishistorie unterscheidbar bleiben. |
+| `alternativerName: String?` | Alias für **genau diesen einen Preispunkt** (z.B. „Colgate“) — vom Nutzer vergeben (`PreispunktZuordnenSheet`) oder beim Scan aus einem korrigierten Namensfeld übernommen. Verändert `artikelNameSnapshot`/`produktName` nicht. |
+| `preis: Decimal` | Beobachteter Einzelpreis — nicht optional, ein `Preispunkt` entsteht nur, wenn tatsächlich ein Preis erfasst wurde. |
+| `datum: Date` | Beobachtungsdatum, aus dem Beleg erkannt oder manuell gesetzt. |
 
-Alle Felder außer `id`, `artikelNameSnapshot`, `datum`, `preis`, `menge` sind optional;
-`alternativerName` und `produktName` wurden beide additiv zu einem bereits
-ausgelieferten Model ergänzt (rein optional → keine neue `SchemaVN`/`MigrationStage`
-nötig, siehe `docs/DECISIONS.md`, „Duplicate version checksums“-Vorfall).
+Nur bei tatsächlicher Preisänderung entsteht ein neuer `Preispunkt`
+(`PreispunktService.erfassen(...)`, Slowly-Changing-Dimension-Muster): ist der
+Preis gegenüber dem zuletzt bekannten `Preispunkt` desselben (`artikel`,
+`geschaeft`)-Paars unverändert, wird nur dessen `datum` aktualisiert statt ein
+Duplikat anzulegen. Reines Abhaken auf der Einkaufsliste ohne Beleg erzeugt gar
+keinen `Preispunkt`.
 
-## Anzeige: `KaufEintrag.anzeigeName`
+## Anzeige: `Preispunkt.anzeigeName`
 
 Zentrale Computed-Property, die alle Anzeigestellen statt eigener Priorisierungslogik
 verwenden:
@@ -361,13 +376,13 @@ var anzeigeName: String {
     if let alternativerName, !alternativerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
         return alternativerName
     }
-    let name = produktName ?? artikel?.name ?? artikelNameSnapshot
+    let name = produktName ?? artikelNameSicher
     return name.isEmpty ? "Unbekannter Artikel" : name
 }
 ```
 
 Priorität: **`alternativerName`** (Alias, falls gesetzt) → `produktName` (Original vom
-Kassenbon) → `artikel?.name` → `artikelNameSnapshot`.
+Kassenbon) → `artikel?.name` (sofern noch existent) → `artikelNameSnapshot`.
 
 Verwendet in `PreisHistorieZeile`, angezeigt in:
 
@@ -376,12 +391,12 @@ Verwendet in `PreisHistorieZeile`, angezeigt in:
   Abschnitt „Ohne Artikel-Zuordnung“ (`zeigeArtikel: true`)
 - `ArtikelEditView` (Preishistorie-Sektion eines Artikels, `zeigeArtikel: false` — zeigt
   dort den Geschäftsnamen statt des Artikelnamens; `alternativerName` bleibt trotzdem
-  am `KaufEintrag` gesetzt, ist dort nur nicht die sichtbare Spalte)
+  am `Preispunkt` gesetzt, ist dort nur nicht die sichtbare Spalte)
 
-## Alias vergeben + Artikel zuordnen (UI): `KaufEintragZuordnenSheet`
+## Alias vergeben + Artikel zuordnen (UI): `PreispunktZuordnenSheet`
 
 `PreisHistorieZeile` bietet überall eine Wisch-Aktion „Zuordnen“ (führende Kante,
-Tag-Symbol), die `KaufEintragZuordnenSheet` öffnet:
+Tag-Symbol), die `PreispunktZuordnenSheet` öffnet:
 
 - **Alias-Textfeld**, vorbelegt mit `eintrag.alternativerName`. Leeres Feld beim
   Speichern → `alternativerName = nil` (fällt auf `produktName`/`artikel?.name`/
@@ -391,10 +406,11 @@ Tag-Symbol), die `KaufEintragZuordnenSheet` öffnet:
   existiert — öffnet `ArtikelEditView(artikel:istNeu:true)` und übernimmt den neu
   gesicherten Artikel automatisch als Auswahl (gleiches Muster wie
   `ArtikelHinzufuegenView.nachNeuanlageAufraeumen`).
-- **Speichern** setzt `alternativerName`, `artikel` sowie — falls ein Artikel gewählt
-  wurde — `kategorie = artikel.kategorie`, geschützt durch
-  `DatabaseLeaseService.performMicroLease` (explizite Speicherung, da
-  `ModelContext.autosaveEnabled == false`, siehe `docs/DATABASE_CONCURRENCY.md`).
+- **Speichern** setzt `alternativerName`/`artikel` auf dem `Preispunkt`, geschützt
+  durch `DatabaseLeaseService.performMicroLease` (explizite Speicherung, da
+  `ModelContext.autosaveEnabled == false`, siehe `docs/DATABASE_CONCURRENCY.md`), und
+  lernt zusätzlich einen `ArtikelAlias` (`erkannterName` des Preispunkts →
+  `alternativerName`/`artikel`) für künftige Scans.
 
 Jede so gesetzte Alias-/Artikel-Kombination ist die Lerngrundlage für künftige
 Belegscans desselben Produkts (Schritt 4 oben).
@@ -403,71 +419,73 @@ Belegscans desselben Produkts (Schritt 4 oben).
 
 `GeschaeftPreisUebersichtView` (eigener View, aufrufbar über einen Eintrag in
 `GeschaeftDetailView`, GitHub #20) zeigt statt einer flachen Liste aller
-`KaufEintrag`e eine nach Artikel gruppierte **Preisübersicht**:
+`Preispunkt`e eine nach Artikel gruppierte **Preisübersicht**:
 
 ```swift
 struct ArtikelPreisSpanne: Identifiable {
     let artikel: Artikel
-    let eintraege: [KaufEintrag]
-    var minimum: Decimal? { eintraege.compactMap(\.preis).min() }
-    var maximum: Decimal? { eintraege.compactMap(\.preis).max() }
+    let eintraege: [Preispunkt]
+    var minimum: Decimal? { eintraege.map(\.preis).min() }
+    var maximum: Decimal? { eintraege.map(\.preis).max() }
 }
 ```
 
-`ArtikelPreisSpanne.gruppieren(_:)` gruppiert alle `KaufEintrag`e eines Geschäfts nach
+`ArtikelPreisSpanne.gruppieren(_:)` gruppiert alle `Preispunkt`e eines Geschäfts nach
 ihrem verknüpften `artikel` (Einträge ohne Verknüpfung werden ausgelassen) und liefert
 pro Artikel eine Preisspanne, alphabetisch sortiert. Jede Zeile
 (`ArtikelPreisSpanneZeile`) zeigt Artikel-Symbol, -Name und die Preisspanne
 („1,99 € – 2,49 €“, oder ein einzelner Preis, falls minimum == maximum). Ein
 Antippen (Info-/Drill-down-Funktion über `NavigationLink`) öffnet
 `ArtikelPreisVerlaufView`: eine eigene, live per `@Query` gefilterte Liste aller
-`KaufEintrag`e dieses Artikels **in diesem Geschäft**, sortiert nach Datum absteigend
-— die historische Kaufliste mit Einzelpreisen. Gibt es mindestens einen erfassten
-Preis, zeigt ein `Charts`-Liniendiagramm zusätzlich den Preisverlauf chronologisch
-aufsteigend (GitHub #21). Jede Position lässt sich per Wischgeste (Standard-Löschen,
-`.onDelete`) dauerhaft entfernen — z.B. bei einer offensichtlich falsch erfassten
-Position, die die Preisspanne verzerrt.
+`Preispunkt`e dieses Artikels **in diesem Geschäft**, sortiert nach Datum absteigend
+— die historische Preisliste. Gibt es mindestens einen Punkt, zeigt ein
+`Charts`-Liniendiagramm zusätzlich den Preisverlauf chronologisch aufsteigend
+(GitHub #21). Jede Position lässt sich per Wischgeste (Standard-Löschen, `.onDelete`)
+dauerhaft entfernen — z.B. bei einer offensichtlich falsch erfassten Position, die die
+Preisspanne verzerrt.
 
-**Ohne Artikel-Zuordnung**: `KaufEintrag`e ohne `artikel` (z.B. weil beim Scan kein
+**Ohne Artikel-Zuordnung**: `Preispunkt`e ohne `artikel` (z.B. weil beim Scan kein
 Namensabgleich griff und noch keine manuelle Zuordnung erfolgte) erscheinen weiterhin
 sichtbar in einem eigenen Abschnitt darunter, mit der bestehenden Wisch-Aktion
 „Zuordnen“ zum Nachholen der Verknüpfung.
 
 ## Mitlernen zwischen Belegscans
 
-`KaufEintrag.gelernteZuordnung(fuerErkannterName:in:)` ist die zentrale, reine
-(UI-unabhängige) Funktion dafür:
+**Seit GitHub #76** ein dediziertes, kleines `ArtikelAlias`-Modell (ein Eintrag pro
+`erkannterName`, per Upsert aktuell gehalten) statt einer Suche über die komplette
+Kaufhistorie. `ArtikelAlias.passend(fuerErkannterName:in:)` ist die zentrale, reine
+(UI-unabhängige) Lookup-Funktion:
 
 ```swift
-static func gelernteZuordnung(
+static func passend(
     fuerErkannterName erkannterName: String,
-    in verlauf: [KaufEintrag]
-) -> (alias: String, artikel: Artikel?)?
+    in alle: [ArtikelAlias]
+) -> (alias: String?, artikel: Artikel?)?
 ```
 
-Durchsucht `verlauf` (i.d.R. alle vorhandenen `KaufEintrag`e, absteigend nach `datum`)
-nach dem jüngsten Eintrag mit gesetztem `alternativerName`, dessen
-`produktName`/`artikelNameSnapshot` zum übergebenen `erkannterName` passt
-(beidseitiger `localizedCaseInsensitiveContains`-Abgleich, wie auch an anderen Stellen
-in `BelegScanView` üblich). Der jüngste Treffer gewinnt, damit eine spätere Korrektur
-eine ältere Fehlzuordnung ersetzt.
+Sucht zuerst einen exakten (case-insensitiven) Treffer für `erkannterName`, sonst
+einen beidseitigen `localizedCaseInsensitiveContains`-Abgleich. `ArtikelAlias.lernen(
+erkannterName:alternativerName:artikel:context:)` legt bei Bedarf einen neuen Eintrag
+an oder aktualisiert den bestehenden — aufgerufen sowohl aus
+`BelegScanView.uebernehmen()`/`PreisschildScanView.uebernehmen()` (automatisches
+Lernen aus einer geänderten Namenszuordnung) als auch aus
+`PreispunktZuordnenSheet.speichern()` (manuelle Korrektur).
 
-`BelegScanView.verarbeite(bild:)` ruft diese Funktion für jede frisch erkannte Position
-auf und übernimmt Alias (als Vorbelegung des Namensfelds) und `Artikel` (als
-`gelernterArtikel`) in `BearbeitbarePosition`. Damit schließt sich der Kreis: Eine
-einmal über `KaufEintragZuordnenSheet` (oder eine frühere manuelle Korrektur im
-Scan-Dialog) gesetzte Alias-/Artikel-Kombination wird beim nächsten Scan desselben
-Produkts automatisch vorgeschlagen und verknüpft, ohne dass der Nutzer erneut
-zuordnen muss.
+`BelegScanView.verarbeite(bild:)`/`PreisschildScanView.verarbeite(bild:)` rufen
+`ArtikelAlias.passend(...)` für jede frisch erkannte Position auf und übernehmen
+Alias (als Vorbelegung des Namensfelds) und `Artikel` (als `gelernterArtikel`) in die
+jeweilige `Bearbeitbare...Position`. Damit schließt sich der Kreis: Eine einmal
+gesetzte Alias-/Artikel-Kombination wird beim nächsten Scan desselben Produkts
+automatisch vorgeschlagen und verknüpft, ohne dass der Nutzer erneut zuordnen muss.
 
 ## Bewusst nicht umgesetzt
 
-- **Kein Alias auf `Artikel`-Ebene**: Alias und Artikel-Zuordnung hängen an der
-  einzelnen `KaufEintrag`-Position, nicht am übergreifenden `Artikel` selbst. Das
-  erlaubt weiterhin, dass verschiedene Marken/Varianten (verschiedene `produktName`/
-  `alternativerName`) demselben generischen `Artikel` zugeordnet sind, ohne dass ein
-  Alias für eine bestimmte Marke versehentlich alle anderen überschreibt.
-- **Kein Fuzzy-Vorschlag für die Artikel-Auswahl** in `KaufEintragZuordnenSheet` über
+- **Kein Alias auf `Artikel`-Ebene**: Alias und Artikel-Zuordnung hängen am
+  `erkannterName` (`ArtikelAlias`), nicht am übergreifenden `Artikel` selbst. Das
+  erlaubt weiterhin, dass verschiedene Marken/Varianten (verschiedene erkannte Namen)
+  demselben generischen `Artikel` zugeordnet sind, ohne dass ein Alias für eine
+  bestimmte Marke versehentlich alle anderen überschreibt.
+- **Kein Fuzzy-Vorschlag für die Artikel-Auswahl** in `PreispunktZuordnenSheet` über
   den bereits erkannten Namen hinaus — die Suche ist bewusst eine einfache
   Teilstring-Suche wie in `ArtikelHinzufuegenView`, kein KI-Vorschlag.
 - **Ablösen von `ReceiptScanService`/`VisionFoundationModelsReceiptScanner`** durch

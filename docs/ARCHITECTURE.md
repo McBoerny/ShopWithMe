@@ -51,28 +51,33 @@ sortIndex: Int                       geschaefte: [Geschaeft]     adresse: String
                                                                    unauffaelligeEinkaeufeInFolgeRaw: Int?
                                                                    kaufEintraege: [KaufEintrag]
                                                                      (cascade — siehe unten)
+                                                                   preispunkte: [Preispunkt]
+                                                                     (cascade)
 
-Artikel                              Einkaufsvorgang            KaufEintrag
-───────                              ───────────────            ───────────
+Artikel                              Einkaufsvorgang            KaufEintrag (operativ, kein Preis mehr —
+───────                              ───────────────            ───────────  seit GitHub #76, siehe Preispunkt)
 id: UUID                             id: UUID                   id: UUID
 name: String                         geschaeft: Geschaeft?      artikel: Artikel?
 symbolName: String (UI-los)          einkaufsliste: Einkaufsliste? einkaufsvorgang: Einkaufsvorgang?
 farbeHex: String (UI-los)            startZeit: Date            geschaeft: Geschaeft?  (denormalisiert)
 kategorie: ArtikelKategorie? (führend) endZeit: Date?           datum: Date
-kategorienRaw: [ArtikelKategorie] (→kategorien)                  preis: Decimal?
-erstelltAm: Date                     kaufEintraege: [KaufEintrag]
-notiz: String?                                                   menge: Double
-einheitRaw: String?                                              produktName: String?
-mengenSchrittRaw: Double?                                        alternativerName: String?
-┌einkaufslistenEintraege:                                        kategorieBesuchsIndex: Int?
-│ [EinkaufslistenEintrag]
-│
-Einkaufsliste                        EinkaufslistenEintrag
-─────────────                        ─────────────────────
-id: UUID                             id: UUID
-name: String                         einkaufsliste: Einkaufsliste?
-erstelltAm: Date                     artikel: Artikel? ─────────────┘
-└eintraege: [EinkaufslistenEintrag]  menge: Double
+kategorienRaw: [ArtikelKategorie] (→kategorien)                  menge: Double
+erstelltAm: Date                     kaufEintraege: [KaufEintrag]  kategorieBesuchsIndex: Int?
+notiz: String?
+einheitRaw: String?                  Preispunkt (GitHub #76 — Preishistorie, unabhängig vom Einkaufsvorgang)
+mengenSchrittRaw: Double?            ──────────
+┌einkaufslistenEintraege:            id: UUID
+│ [EinkaufslistenEintrag]            artikel: Artikel?  (nullify)
+│                                    geschaeft: Geschaeft?  (cascade)
+├preispunkte: [Preispunkt]           preis: Decimal
+│ (nullify)                          datum: Date
+│                                    produktName/alternativerName: String?
+Einkaufsliste                        EinkaufslistenEintrag           ArtikelAlias (GitHub #76 — Mitlernen)
+─────────────                        ─────────────────────           ─────────────
+id: UUID                             id: UUID                        id: UUID
+name: String                         einkaufsliste: Einkaufsliste?   erkannterName: String
+erstelltAm: Date                     artikel: Artikel? ─────────────┘ alternativerName: String?
+└eintraege: [EinkaufslistenEintrag]  menge: Double                   artikel: Artikel?
                                       notiz: String?
                                       erstelltAm: Date
 
@@ -118,17 +123,18 @@ Abschnitt (Belegscan, Preisschild-Scan, Sync-Import).
 - **ReceiptScanService** (Protokoll): Implementierung `VisionFoundationModelsReceiptScanner`
   kombiniert Vision-OCR mit FoundationModels-Extraktion. Als Protokoll gekapselt, damit
   eine spätere, spezifischere On-Device-API (z.B. eine künftige System-Beleg-Scan-API)
-  ohne UI-Änderungen eingesetzt werden kann. `KaufEintrag.anzeigeName` priorisiert einen
-  optionalen, vom Nutzer pro Position vergebenen `alternativerName` (Alias) vor dem
-  erkannten `produktName`/`artikel`/`artikelNameSnapshot`; `KaufEintragZuordnenSheet`
-  lässt Alias und `Artikel`-Zuordnung (inkl. Neuanlage) gemeinsam pflegen.
-  `ArtikelPreisSpanne.gruppieren(_:)` aggregiert die Preisübersicht eines Geschäfts pro
-  Artikel; `KaufEintrag.gelernteZuordnung(fuerErkannterName:in:)` schlägt beim nächsten
-  Scan bereits bekannte Alias-/Artikel-Kombinationen automatisch vor — Details in
-  `docs/BELEGSCAN.md`.
+  ohne UI-Änderungen eingesetzt werden kann. Erkannte Preise landen seit GitHub #76 in
+  einem eigenständigen `Preispunkt` (nicht mehr in `KaufEintrag`, siehe Datenmodell
+  oben) — `Preispunkt.anzeigeName` priorisiert einen optionalen, vom Nutzer pro Punkt
+  vergebenen `alternativerName` (Alias) vor dem erkannten `produktName`/`artikel`/
+  `artikelNameSnapshot`; `PreispunktZuordnenSheet` lässt Alias und `Artikel`-Zuordnung
+  (inkl. Neuanlage) gemeinsam pflegen. `ArtikelPreisSpanne.gruppieren(_:)` aggregiert
+  die Preisübersicht eines Geschäfts pro Artikel; `ArtikelAlias.passend(fuerErkannterName:in:)`
+  schlägt beim nächsten Scan bereits bekannte Alias-/Artikel-Kombinationen automatisch
+  vor — Details in `docs/BELEGSCAN.md`.
 - **PriceTagScanService** (Protokoll): dasselbe Vision-OCR-+-FoundationModels-Muster wie
   `ReceiptScanService`, hier auf ein einzelnes fotografiertes Preisschild statt einen
-  ganzen Kassenbon angewendet. Legt direkt einen `KaufEintrag` mit heutigem Datum an,
+  ganzen Kassenbon angewendet. Legt direkt einen `Preispunkt` mit heutigem Datum an,
   unabhängig vom tatsächlichen Kauf. Funktioniert immer direkt für ein bereits
   feststehendes `Geschaeft` (kein geschäftsloser Einstieg, siehe unten). Details,
   Abgrenzung zum Belegscan und das (noch nicht umgesetzte) Konzept für einen
@@ -187,11 +193,12 @@ Abschnitt (Belegscan, Preisschild-Scan, Sync-Import).
 - **DebugLogWriter**/**DatabaseDebugLogger**: optionaler, standardmäßig deaktivierter
   Diagnose-Logging-Mechanismus für den Mehrbenutzerzugriff (Rotation, `os.Logger`) —
   siehe `docs/LOGGING.md`.
-- **PreisHistorieBereinigungService**: löscht alte `KaufEintrag`e (Preishistorie)
+- **PreisHistorieBereinigungService**: löscht alte, operative `KaufEintrag`e
   anhand einer vom Nutzer gewählten, standardmäßig deaktivierten Aufbewahrungsfrist,
   automatisch bei App-Start/Vordergrund-Wechsel oder manuell — lässt Einträge eines
-  laufenden `Einkaufsvorgang`s dabei immer unangetastet. Details in
-  `docs/PREISHISTORIE_BEREINIGUNG.md`.
+  laufenden `Einkaufsvorgang`s dabei immer unangetastet. Seit GitHub #76 keine
+  Preishistorie mehr (die ist jetzt `Preispunkt`, siehe Datenmodell oben) — Details
+  in `docs/PREISHISTORIE_BEREINIGUNG.md`.
 
 ## Liquid Glass
 

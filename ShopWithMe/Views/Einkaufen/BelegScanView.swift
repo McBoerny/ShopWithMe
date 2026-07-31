@@ -8,7 +8,7 @@ import VisionKit
 /// Während eines laufenden ``Einkaufsvorgang``s werden erkannte Preise bereits
 /// abgehakten ``KaufEintrag``en zugeordnet (Namensabgleich). Unabhängig davon lässt
 /// sich ein Beleg auch direkt für ein ``Geschaeft`` scannen — dort entsteht für jede
-/// erkannte Position ein neuer, eigenständiger ``KaufEintrag``, standardmäßig mit dem
+/// erkannte Position ein neuer, eigenständiger ``Preispunkt``, standardmäßig mit dem
 /// heutigen Datum (vom Anwender bei Bedarf überschreibbar, siehe ``BelegScanView``).
 ///
 /// ``unbekannt`` deckt den Fall ab, dass der Beleg nachträglich (z.B. zuhause) ohne
@@ -32,7 +32,7 @@ enum BelegScanKontext {
     }
 }
 
-/// Scannt einen Kassenbon und trägt die erkannten Einzelpreise als ``KaufEintrag``e
+/// Scannt einen Kassenbon und trägt die erkannten Einzelpreise als ``Preispunkt``e
 /// ein — siehe ``BelegScanKontext`` für die beiden möglichen Aufrufsituationen.
 ///
 /// Neben den bestehenden Sheet-Einstiegspunkten (Einkaufen-Menü, nach
@@ -43,7 +43,7 @@ enum BelegScanKontext {
 /// ein zusätzlicher, schnellerer Weg.
 ///
 /// Erkannte Positionen, die sich keinem bestehenden ``Artikel`` zuordnen lassen,
-/// werden trotzdem als eigenständiger ``KaufEintrag`` ohne ``Artikel``-Verknüpfung
+/// werden trotzdem als eigenständiger ``Preispunkt`` ohne ``Artikel``-Verknüpfung
 /// gespeichert — der Artikelname bleibt über `artikelNameSnapshot` trotzdem in der
 /// Preishistorie lesbar. Kassenbons weisen bei mehreren Stück oft nur einen
 /// Gesamtpreis aus; übernommen wird ausschließlich der von der KI berechnete
@@ -53,17 +53,17 @@ enum BelegScanKontext {
 /// vor dem Übernehmen aber jederzeit manuell korrigieren (``ErgebnisListe``). Benennt
 /// der Anwender eine Position zwecks Zuordnung auf einen bestehenden, ggf.
 /// generischen ``Artikel`` um (z.B. „Colgate Total“ → „Zahnpasta“), bleibt der
-/// ursprünglich erkannte Produktname über ``KaufEintrag/produktName`` erhalten —
+/// ursprünglich erkannte Produktname über ``Preispunkt/produktName`` erhalten —
 /// so lassen sich verschiedene Marken desselben generischen Artikels weiterhin
 /// getrennt in der Preishistorie nachverfolgen.
 ///
 /// **Automatische Artikel-Zuordnung (``ArtikelZuordnungsService``):** Beim Einlesen
 /// wird jede erkannte Position dreistufig einem bestehenden, generischen ``Artikel``
-/// zugeordnet — gelernter Alias, sonst Teilstring-Abgleich, sonst (nur falls lokale
-/// KI verfügbar) ein KI-Best-Match. Das Textfeld zeigt dabei den gefundenen
-/// generischen Namen, der ursprüngliche Beleg-Text bleibt zusätzlich sichtbar
-/// (``ErgebnisListe``). Bleibt jede Stufe erfolglos, gilt die Position als „neu
-/// erkannt“ — der Anwender kann dann per Autocomplete einen bestehenden Artikel
+/// zugeordnet — gelernter Alias (``ArtikelAlias``), sonst Teilstring-Abgleich, sonst
+/// (nur falls lokale KI verfügbar) ein KI-Best-Match. Das Textfeld zeigt dabei den
+/// gefundenen generischen Namen, der ursprüngliche Beleg-Text bleibt zusätzlich
+/// sichtbar (``ErgebnisListe``). Bleibt jede Stufe erfolglos, gilt die Position als
+/// „neu erkannt“ — der Anwender kann dann per Autocomplete einen bestehenden Artikel
 /// wählen oder direkt einen neuen anlegen. Siehe `docs/BELEGSCAN.md`.
 ///
 /// **Originalbeleg prüfen:** Solange die Ergebnis-Prüfung läuft, bleibt das
@@ -225,7 +225,7 @@ struct BelegScanView: View {
                     belegDatum = erkanntesDatum
                 }
                 geschaeftAbgleichen(erkannterName: ergebnis.geschaeftName, erkannteAdresse: ergebnis.geschaeftAdresse)
-                let bekannterVerlauf = (try? modelContext.fetch(FetchDescriptor<KaufEintrag>())) ?? []
+                let bekannteAliase = (try? modelContext.fetch(FetchDescriptor<ArtikelAlias>())) ?? []
                 var neuePositionen: [BearbeitbarePosition] = []
                 for position in ergebnis.positionen {
                     if IgnorierterArtikel.istIgnoriert(position.artikelName, geschaeft: erkanntesGeschaeft, unter: alleIgnoriertenArtikel) {
@@ -233,7 +233,7 @@ struct BelegScanView: View {
                     }
                     let zuordnung = await ArtikelZuordnungsService.zuordnen(
                         erkannterName: position.artikelName,
-                        bekannterVerlauf: bekannterVerlauf,
+                        bekannteAliase: bekannteAliase,
                         alleArtikel: alleArtikel
                     )
                     neuePositionen.append(BearbeitbarePosition(
@@ -333,6 +333,7 @@ struct BelegScanView: View {
                     else { continue }
                     let artikel = positionsArtikelReferenzen[index]?.resolved(in: modelContext)
 
+                    let geschaeftFuerPreispunkt: Geschaeft?
                     switch kontext {
                     case .einkaufsvorgang:
                         // Der Einkaufsvorgang selbst kann inzwischen gelöscht worden
@@ -340,38 +341,44 @@ struct BelegScanView: View {
                         // Position, sie wird übersprungen statt einen losgelösten
                         // Kaufeintrag anzulegen.
                         guard let einkaufsvorgangFrisch else { continue }
+                        geschaeftFuerPreispunkt = einkaufsvorgangFrisch.geschaeft
+                        // Nur die operative Buchungszeile: existiert bereits ein
+                        // passender ``KaufEintrag`` (Artikel wurde auf der Liste
+                        // abgehakt), bleibt er unverändert bis auf das vom Beleg
+                        // erkannte Datum — die Preisrolle übernimmt ausschließlich
+                        // ``PreispunktService`` unten. Kein Treffer → neuer,
+                        // rein operativer Eintrag ohne Preisfelder (z.B. Spontankauf,
+                        // der nicht auf der Liste stand).
                         if let vorhandenerEintrag = einkaufsvorgangFrisch.kaufEintraege.first(where: { passtZu(name: name, eintrag: $0) }) {
-                            vorhandenerEintrag.preis = preis
                             vorhandenerEintrag.datum = belegDatum
-                            vorhandenerEintrag.produktName = produktName
-                            vorhandenerEintrag.alternativerName = neuerAlternativerName
                         } else {
                             let neuerEintrag = KaufEintrag(
                                 artikel: artikel,
                                 geschaeft: einkaufsvorgangFrisch.geschaeft,
                                 kategorie: artikel?.fuehrendeKategorie(inGeschaeft: einkaufsvorgangFrisch.geschaeft, context: modelContext),
-                                preis: preis,
                                 datum: belegDatum
                             )
                             neuerEintrag.artikelNameSnapshot = artikel?.name ?? name
-                            neuerEintrag.produktName = produktName
-                            neuerEintrag.alternativerName = neuerAlternativerName
                             modelContext.insert(neuerEintrag)
                             neuerEintrag.einkaufsvorgang = einkaufsvorgangFrisch
                         }
                     case .geschaeft, .unbekannt:
-                        let neuerEintrag = KaufEintrag(
-                            artikel: artikel,
-                            geschaeft: erkanntesGeschaeftFrisch,
-                            kategorie: artikel?.fuehrendeKategorie(inGeschaeft: erkanntesGeschaeftFrisch, context: modelContext),
-                            preis: preis,
-                            datum: belegDatum
-                        )
-                        neuerEintrag.artikelNameSnapshot = artikel?.name ?? name
-                        neuerEintrag.produktName = produktName
-                        neuerEintrag.alternativerName = neuerAlternativerName
-                        modelContext.insert(neuerEintrag)
+                        // Kein laufender Einkauf, also keine operative Rolle — hier
+                        // entsteht ausschließlich ein ``Preispunkt``, kein ``KaufEintrag``.
+                        geschaeftFuerPreispunkt = erkanntesGeschaeftFrisch
                     }
+
+                    PreispunktService.erfassen(
+                        preis: preis, artikel: artikel, geschaeft: geschaeftFuerPreispunkt, datum: belegDatum,
+                        produktName: produktName, alternativerName: neuerAlternativerName, nameFallback: name, context: modelContext
+                    )
+                    // Lernt sowohl einen expliziten Alias (falls der Anwender den
+                    // Namen zwecks Zuordnung geändert hat) als auch eine reine
+                    // Artikel-Zuordnung ohne Alias — ohne Wirkung, wenn keins von
+                    // beidem vorliegt (siehe ``ArtikelAlias/lernen(...)``).
+                    ArtikelAlias.lernen(
+                        erkannterName: erkannterName, alternativerName: neuerAlternativerName, artikel: artikel, context: modelContext
+                    )
                 }
             }
             if istEigenerTab {
@@ -397,9 +404,10 @@ struct BelegScanView: View {
     }
 
     /// Der Text im „Artikel“-Feld weicht vom rohen erkannten Namen ab (manuell
-    /// korrigiert oder aus ``KaufEintrag/gelernteZuordnung(fuerErkannterName:in:)``
-    /// vorbelegt) → als ``KaufEintrag/alternativerName`` übernehmen, damit spätere
-    /// Belegscans desselben Produkts ihn wiederfinden (siehe `docs/BELEGSCAN.md`).
+    /// korrigiert oder aus ``ArtikelAlias/passend(fuerErkannterName:in:)``
+    /// vorbelegt) → als Alias übernehmen (``ArtikelAlias/lernen(erkannterName:alternativerName:artikel:context:)``),
+    /// damit spätere Belegscans desselben Produkts ihn wiederfinden (siehe
+    /// `docs/BELEGSCAN.md`).
     private func leiteAlternativenNamenAb(eingegeben: String, erkannt: String) -> String? {
         guard !erkannt.isEmpty, eingegeben.localizedCaseInsensitiveCompare(erkannt) != .orderedSame else { return nil }
         return eingegeben
@@ -434,7 +442,7 @@ struct BelegScanView: View {
 /// `artikelName` ist editierbar, damit der Anwender die Position zwecks Zuordnung
 /// auf einen bestehenden (ggf. generischen) ``Artikel`` umbenennen kann — z.B.
 /// „Colgate Total“ → „Zahnpasta“. `erkannterName` bleibt dabei unverändert der
-/// ursprünglich erkannte Produktname und wird als ``KaufEintrag/produktName``
+/// ursprünglich erkannte Produktname und wird als ``Preispunkt/produktName``
 /// übernommen, damit die Preishistorie weiterhin nach Marke/Produkt unterscheidet.
 /// `zugeordneterArtikel` ist bereits beim Einlesen über
 /// ``ArtikelZuordnungsService/zuordnen(erkannterName:bekannterVerlauf:alleArtikel:)``
@@ -618,7 +626,7 @@ private struct ErgebnisListe: View {
 /// Artikel-/Preisfeld, Original-Beleg-Name (falls abweichend), Zuordnungs-Status
 /// sowie Inline-Autocomplete gegen ``alleArtikel``, solange das Artikelfeld
 /// fokussiert ist. Tippen auf einen Vorschlag oder Neuanlegen eines Artikels
-/// (``ArtikelEditView``, identisches Muster wie `KaufEintragZuordnenSheet`)
+/// (``ArtikelEditView``, identisches Muster wie `PreispunktZuordnenSheet`)
 /// aktualisiert `position` direkt — siehe `docs/BELEGSCAN.md` → „Automatische
 /// Artikel-Zuordnung“.
 private struct PositionsZeile: View {
@@ -750,7 +758,7 @@ private struct PositionsZeile: View {
 
     /// Wurde der Entwurf tatsächlich gesichert (also in den Model-Context
     /// eingefügt), übernimmt diese Zeile ihn direkt als Zuordnung — siehe
-    /// `KaufEintragZuordnenSheet.nachNeuanlageAufraeumen()` für dasselbe Muster.
+    /// `PreispunktZuordnenSheet.nachNeuanlageAufraeumen()` für dasselbe Muster.
     private func nachNeuanlageAufraeumen() {
         guard let entwurf = neuerArtikelEntwurf, entwurf.modelContext != nil else {
             neuerArtikelEntwurf = nil

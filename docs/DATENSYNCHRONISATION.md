@@ -43,8 +43,8 @@ Zwei Kanäle mit unterschiedlicher Frequenz/Konfliktsemantik:
 | Bereich | Inhalt | Kanal | Konfliktregel |
 |---|---|---|---|
 | **A — zeitkritisch** | Einkaufslisten-Mitgliedschaft, Abhaken/Abwählen | `SyncEvent`, jeder Sync-Zyklus | Lamport-Uhr + `SyncKonfliktAufloesung` (Abschnitt 3) |
-| **B — Stammdaten** | `GeschaeftTyp`, `ArtikelKategorie`, `Geschaeft`, `Artikel`, `Einkaufsliste` | `SyncSnapshot`, jeder Sync-Zyklus | additiv/nie destruktiv (Abschnitt 4) |
-| **C — Historie** | `Einkaufsvorgang`, `KaufEintrag` | `SyncSnapshot` | Union nach `id` |
+| **B — Stammdaten** | `GeschaeftTyp`, `ArtikelKategorie`, `Geschaeft`, `Artikel`, `Einkaufsliste`, `ArtikelAlias` | `SyncSnapshot`, jeder Sync-Zyklus | additiv/nie destruktiv (Abschnitt 4) |
+| **C — Historie** | `Einkaufsvorgang`, `KaufEintrag`, `Preispunkt` | `SyncSnapshot` | Union nach `id` |
 | **D — Lernen** | `WarengruppenDistanz` | `SyncSnapshot` | gewichteter Mittelwert |
 
 Bewusst **kein** MultipeerConnectivity-Kanal (WiFi/Bluetooth-Echtzeitaustausch
@@ -158,6 +158,8 @@ haben. Matching-Strategie je Typ:
 | `Einkaufsliste` | case-insensitiver Name | Alias bei abweichender ID — **nicht** ID-basiert (siehe Grund unten) |
 | `Einkaufsvorgang` | ID **plus** „lokal noch offener Vorgang für dasselbe (Geschäft, Liste)-Paar gilt als derselbe" | Alias bei Zusammenführung; s. 4.3 |
 | `KaufEintrag` | ID (unveränderliche Historie, nie gemergt, nur ergänzt) | — |
+| `Preispunkt` (seit v4, GitHub #76) | ID (unveränderliche Historie, nie gemergt, nur ergänzt) | Absender hat SCD-Kompression bereits vorgenommen (`PreispunktService`) |
+| `ArtikelAlias` (seit v4, GitHub #76) | case-insensitiver `erkannterName` | nie destruktiv — ein bereits lokal bekannter Alias wird nie überschrieben |
 | `WarengruppenDistanz` | (Geschäft, KategorieA, KategorieB) | gewichteter Mittelwert bei Treffer |
 
 **`Einkaufsliste` bewusst namensbasiert statt ID-basiert:** Jedes Gerät legt
@@ -183,7 +185,8 @@ Kategorien-/Artikel-Verwaltung bleibt der Weg, kein automatischer
 **Abhängigkeitsreihenfolge beim Merge** (spätere Schritte brauchen die
 Zuordnungstabellen früherer): `GeschaeftTyp` → `ArtikelKategorie` →
 `Geschaeft` → `Artikel` → `Einkaufsliste` → `EinkaufslistenEintrag` →
-`Einkaufsvorgang` → `KaufEintrag` → `WarengruppenDistanz`.
+`Einkaufsvorgang` → `KaufEintrag` → `Preispunkt` → `ArtikelAlias` →
+`WarengruppenDistanz`.
 
 ### 4.3 Einkaufsvorgang — Erkennung „ist das derselbe reale Einkauf"
 

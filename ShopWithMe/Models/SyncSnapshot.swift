@@ -46,7 +46,17 @@ struct SyncSnapshot: Codable {
     /// jeweils andere `export.json` beim Decodieren übergangsweise wie „kein
     /// Snapshot vorhanden" behandelt (stiller Fehlschlag über `try?`,
     /// selbstheilend nach dem nächsten eigenen Export).
-    static let aktuelleFormatVersion = 3
+    ///
+    /// **Version 4 (Preishistorie-Entkopplung, GitHub #76):** ``preispunkte``
+    /// und ``artikelAliase`` neu hinzugekommen, ``KaufEintragSnapshot`` verliert
+    /// dafür `preis`/`produktName`/`alternativerName` — die Preishistorie-Rolle
+    /// ist nach ``Preispunkt`` verschoben (unabhängig vom laufenden
+    /// ``Einkaufsvorgang``, nur bei tatsächlicher Preisänderung ein neuer
+    /// Eintrag statt bei jedem Kauf, siehe `docs/BELEGSCAN.md`).
+    /// Alias-Lernen (vormals implizit über die komplette ``KaufEintrag``-
+    /// Historie) ist jetzt ein eigener, kleiner ``ArtikelAlias``-Bestand.
+    /// Wieder keine Rückwärtskompatibilität nötig, siehe Version 3.
+    static let aktuelleFormatVersion = 4
 
     var formatVersion: Int
     var erzeugtAm: Date
@@ -72,10 +82,16 @@ struct SyncSnapshot: Codable {
     var einkaufslistenEintraege: [EinkaufslistenEintragSnapshot]
     var einkaufsvorgaenge: [EinkaufsvorgangSnapshot]
     var kaufEintraege: [KaufEintragSnapshot]
+    /// Preishistorie (seit Version 4, GitHub #76) — unabhängig vom
+    /// ``Einkaufsvorgang``, siehe ``Preispunkt``.
+    var preispunkte: [PreispunktSnapshot]
+    /// Gelernte Beleg-/Preisschild-Aliase (seit Version 4, GitHub #76), siehe
+    /// ``ArtikelAlias``.
+    var artikelAliase: [ArtikelAliasSnapshot]
     var warengruppenDistanzen: [WarengruppenDistanzSnapshot]
     /// Absichtliche Löschungen von Bereich-B-Entitäten (``Geschaeft``,
-    /// ``Artikel``, ``ArtikelKategorie``, ``Einkaufsliste``, ``KaufEintrag``),
-    /// siehe ``SyncTombstone``.
+    /// ``Artikel``, ``ArtikelKategorie``, ``Einkaufsliste``, ``KaufEintrag``,
+    /// ``Preispunkt``), siehe ``SyncTombstone``.
     var tombstones: [SyncTombstoneSnapshot]
 }
 
@@ -188,10 +204,7 @@ struct KaufEintragSnapshot: Codable {
     var kategorieID: UUID?
     var artikelNameSnapshot: String
     var geschaeftNameSnapshot: String
-    var produktName: String?
-    var alternativerName: String?
     var datum: Date
-    var preis: Decimal?
     var menge: Double
     var kategorieBesuchsIndex: Int?
 }
@@ -202,4 +215,23 @@ struct WarengruppenDistanzSnapshot: Codable {
     var kategorieAID: UUID
     var kategorieBID: UUID
     var distanz: Double
+}
+
+struct PreispunktSnapshot: Codable {
+    var id: UUID
+    var artikelID: UUID?
+    var geschaeftID: UUID?
+    var preis: Decimal
+    var datum: Date
+    var produktName: String?
+    var alternativerName: String?
+    var artikelNameSnapshot: String
+    var geschaeftNameSnapshot: String
+}
+
+struct ArtikelAliasSnapshot: Codable {
+    var id: UUID
+    var erkannterName: String
+    var alternativerName: String?
+    var artikelID: UUID?
 }

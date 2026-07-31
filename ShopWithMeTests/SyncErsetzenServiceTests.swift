@@ -48,6 +48,7 @@ struct SyncErsetzenServiceTests {
             formatVersion: SyncSnapshot.aktuelleFormatVersion, erzeugtAm: Date(), geraeteID: geraeteID, geraeteName: geraeteName,
             geschaeftsTypen: [], artikelKategorien: [], geschaefte: [], artikel: [],
             einkaufslisten: [], einkaufslistenEintraege: [], einkaufsvorgaenge: [], kaufEintraege: [],
+            preispunkte: [], artikelAliase: [],
             warengruppenDistanzen: [], tombstones: []
         )
     }

@@ -31,6 +31,8 @@ enum SchemaV1: VersionedSchema {
             Einkaufsvorgang.self,
             KaufEintrag.self,
             WarengruppenDistanz.self,
+            Preispunkt.self,
+            ArtikelAlias.self,
             Einkaufsliste.self,
             EinkaufslistenEintrag.self,
             IgnorierterGeschaeftsVorschlag.self,

@@ -1,16 +1,22 @@
 import Foundation
 import SwiftData
 
-/// Ein einzelner Kauf eines Artikels — die Grundlage der historischen
-/// Preisübersicht.
+/// Ein einzelner Kauf eines Artikels — die operative Buchungszeile eines
+/// laufenden ``Einkaufsvorgang``s (Dedupe-Schutz, Entfernen von der Liste,
+/// ``kategorieBesuchsIndex`` für ``WarengruppenDistanzService``).
 ///
-/// `preis` ist bewusst optional: Beim Abhaken auf der Einkaufsliste (siehe
-/// ``Einkaufsvorgang/artikelAbhaken(_:context:)``) entsteht der Eintrag zunächst
-/// ohne Preis; erst der spätere Belegscan trägt den tatsächlich bezahlten Preis nach.
+/// **Seit GitHub #76 keine Preishistorie-Rolle mehr** — die ist nach
+/// ``Preispunkt`` verschoben, da sie fachlich unabhängig vom laufenden
+/// Einkauf ist (z.B. beim Preisschild-Scan ganz ohne ``Einkaufsvorgang``) und
+/// anders wächst (jeder Kauf vs. nur echte Preisänderungen). `preis`/
+/// `produktName`/`alternativerName` bleiben als migrierte Altlast auf diesem
+/// Typ bestehen, siehe deren Dokumentation und
+/// ``preisverlaufMigrierenFallsNoetig(context:)``.
 ///
 /// `artikelNameSnapshot`/`geschaeftNameSnapshot` speichern den Namen zum Kaufzeitpunkt
-/// dauerhaft, damit die Preishistorie auch dann noch lesbar bleibt, wenn der
-/// zugehörige ``Artikel`` oder ``Geschaeft`` später umbenannt oder gelöscht wird.
+/// dauerhaft, damit ``passtZu(name:eintrag:)`` in ``BelegScanView`` auch dann noch
+/// funktioniert, wenn der zugehörige ``Artikel`` oder ``Geschaeft`` später
+/// umbenannt oder gelöscht wird.
 @Model
 final class KaufEintrag {
     /// Eindeutige Kennung.
@@ -29,23 +35,19 @@ final class KaufEintrag {
     var artikelNameSnapshot: String
     /// Name des Geschäfts zum Kaufzeitpunkt (dauerhafter Schnappschuss).
     var geschaeftNameSnapshot: String
-    /// Genauer Produkt-/Markenname vom Kassenbon, falls er sich vom (ggf.
-    /// generischen) ``artikel`` unterscheidet — z.B. „Colgate Total“ bei einem auf
-    /// „Zahnpasta“ verlinkten ``Artikel``. Wird beim Belegscan gesetzt, damit
-    /// unterschiedliche Marken desselben generischen Artikels in der Preishistorie
-    /// unterscheidbar bleiben (siehe ``BelegScanView``), statt beim Umbenennen zwecks
-    /// Zuordnung verlorenzugehen. `nil` für normale Einkaufslisten-Käufe ohne
-    /// Belegscan.
+    /// **Altlast seit GitHub #76** (Preishistorie-Rolle nach ``Preispunkt``
+    /// verschoben, analog ``Geschaeft/typenRaw``): wird nicht mehr befüllt,
+    /// bleibt nur, bis ``preisverlaufMigrierenFallsNoetig(context:)`` sie beim
+    /// nächsten App-Start liest und danach auf `nil` zurücksetzt. Niemals neu
+    /// lesen oder schreiben — siehe ``Preispunkt/produktName``.
     var produktName: String?
-    /// Vom Nutzer vergebener alternativer Anzeigename für diese Position, z.B. um
-    /// einen unhandlich abgekürzten Kassenbon-Namen durch einen sprechenden Namen zu
-    /// ersetzen. `nil`/leer, solange kein alternativer Name gesetzt wurde. Hat, sobald
-    /// gesetzt, Vorrang vor ``produktName``/``artikel``/``artikelNameSnapshot`` — siehe
-    /// ``anzeigeName`` und `docs/BELEGSCAN.md`.
+    /// **Altlast seit GitHub #76**, siehe ``produktName`` — siehe
+    /// ``Preispunkt/alternativerName``.
     var alternativerName: String?
     /// Datum des Kaufs.
     var datum: Date
-    /// Bezahlter Preis — `nil`, solange noch kein Beleg dazu gescannt/erfasst wurde.
+    /// **Altlast seit GitHub #76**, siehe ``produktName`` — siehe
+    /// ``Preispunkt/preis``.
     var preis: Decimal?
     /// Gekaufte Menge (Standard: 1).
     var menge: Double
@@ -97,43 +99,44 @@ extension KaufEintrag {
         return geschaeft.name
     }
 
-    /// Der für Anzeigen (z.B. ``PreisHistorieZeile``) tatsächlich zu verwendende
-    /// Artikelname, mit ``alternativerName`` an oberster Priorität, sonst wie bisher
-    /// ``produktName`` (Original vom Kassenbon), dann ``artikelNameSicher``.
-    /// Siehe `docs/BELEGSCAN.md`.
-    var anzeigeName: String {
-        if let alternativerName, !alternativerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return alternativerName
-        }
-        let name = produktName ?? artikelNameSicher
-        return name.isEmpty ? "Unbekannter Artikel" : name
-    }
-
-    /// Sucht in `verlauf` (typischerweise alle vorhandenen ``KaufEintrag``e) den
-    /// jüngsten Eintrag, dessen erkannter Name (``produktName``/``artikelNameSnapshot``)
-    /// zu `erkannterName` passt und der bereits einen ``alternativerName`` trägt —
-    /// Grundlage für das Mitlernen zwischen Belegscans (siehe ``BelegScanView`` und
-    /// `docs/BELEGSCAN.md`). Liefert dessen Alias sowie den ggf. verknüpften
-    /// ``artikel`` (kann `nil` sein, falls damals nur ein Alias ohne Artikel-Zuordnung
-    /// vergeben wurde). `nil`, falls kein passender, bereits benannter Eintrag existiert.
-    static func gelernteZuordnung(
-        fuerErkannterName erkannterName: String,
-        in verlauf: [KaufEintrag]
-    ) -> (alias: String, artikel: Artikel?)? {
-        let erkannterName = erkannterName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !erkannterName.isEmpty else { return nil }
-        let sortiert = verlauf.sorted { $0.datum > $1.datum }
-        for eintrag in sortiert {
-            guard let alias = eintrag.alternativerName,
-                  !alias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            else { continue }
-            let vergleichsName = eintrag.produktName ?? eintrag.artikelNameSnapshot
-            guard !vergleichsName.isEmpty else { continue }
-            if vergleichsName.localizedCaseInsensitiveContains(erkannterName)
-                || erkannterName.localizedCaseInsensitiveContains(vergleichsName) {
-                return (alias, eintrag.artikel)
+    /// Migriert vor GitHub #76 erfasste Preise/Namen (``preis``/``produktName``/
+    /// ``alternativerName``, jetzt Altlast-Felder) einmalig nach ``Preispunkt``/
+    /// ``ArtikelAlias`` — dieselbe Rolle wie
+    /// ``Geschaeft/typenMigrierenFallsNoetig(context:)``. Wird beim App-Start
+    /// aufgerufen (siehe ``ShopWithMeApp``).
+    ///
+    /// Verarbeitet chronologisch aufsteigend nach ``datum``, damit
+    /// ``PreispunktService`` die Preishistorie korrekt auf echte Änderungen
+    /// komprimiert (Slowly-Changing-Dimension-Muster) und
+    /// ``ArtikelAlias/lernen(erkannterName:alternativerName:artikel:context:)``
+    /// denselben „neuester Alias gewinnt"-Effekt erzielt wie vormals die nach
+    /// `datum` absteigend suchende `gelernteZuordnung` (Upsert, letzter Aufruf
+    /// gewinnt). Setzt die migrierten Altlast-Felder danach auf `nil` zurück —
+    /// macht die Funktion idempotent (ein wiederholter Aufruf findet nichts
+    /// mehr vor) und verhindert doppelte ``Preispunkt``e bei jedem weiteren
+    /// App-Start.
+    @MainActor
+    static func preisverlaufMigrierenFallsNoetig(context: ModelContext) {
+        let deskriptor = FetchDescriptor<KaufEintrag>(sortBy: [SortDescriptor(\.datum, order: .forward)])
+        let alle = (try? context.fetch(deskriptor)) ?? []
+        for eintrag in alle {
+            guard let preis = eintrag.preis else { continue }
+            PreispunktService.erfassen(
+                preis: preis, artikel: eintrag.artikel, geschaeft: eintrag.geschaeft, datum: eintrag.datum,
+                produktName: eintrag.produktName, alternativerName: eintrag.alternativerName, context: context
+            )
+            if let alternativerName = eintrag.alternativerName,
+               !alternativerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let erkannterName = eintrag.produktName ?? eintrag.artikelNameSnapshot
+                if !erkannterName.isEmpty {
+                    ArtikelAlias.lernen(
+                        erkannterName: erkannterName, alternativerName: alternativerName, artikel: eintrag.artikel, context: context
+                    )
+                }
             }
+            eintrag.preis = nil
+            eintrag.produktName = nil
+            eintrag.alternativerName = nil
         }
-        return nil
     }
 }

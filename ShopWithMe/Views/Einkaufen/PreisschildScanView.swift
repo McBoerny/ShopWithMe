@@ -3,15 +3,15 @@ import SwiftData
 import PhotosUI
 
 /// Scannt das Foto eines einzelnen Preisschilds im Regal und legt dafür sofort
-/// einen ``KaufEintrag`` mit heutigem Datum an — unabhängig von einem tatsächlichen
+/// einen ``Preispunkt`` mit heutigem Datum an — unabhängig von einem tatsächlichen
 /// Kauf, um Preise auch ohne späteren Belegscan (z.B. beim Preisvergleich vor dem
 /// Kauf) in der Preishistorie zu erfassen.
 ///
 /// Anders als ``BelegScanView`` gibt es hier nur eine einzelne Position ohne
 /// Mengenangabe (ein Preisschild zeigt keine Stückzahl) und kein vom Beleg
 /// erkanntes Datum — das Erfassungsdatum ist immer der Scan-Zeitpunkt. Die
-/// Mitlern-Logik (``KaufEintrag/gelernteZuordnung(fuerErkannterName:in:)``,
-/// ``alternativerName``) entspricht ansonsten dem Belegscan, siehe
+/// Mitlern-Logik (``ArtikelAlias/passend(fuerErkannterName:in:)``,
+/// ``ArtikelAlias/alternativerName``) entspricht ansonsten dem Belegscan, siehe
 /// `docs/PREISSCHILD_SCAN.md`.
 ///
 /// Funktioniert immer direkt für ein feststehendes ``Geschaeft`` (aus
@@ -103,10 +103,10 @@ struct PreisschildScanView: View {
             defer { laeuft = false }
             do {
                 let ergebnis = try await scanner.auswerten(bild: bild)
-                let bekannterVerlauf = (try? modelContext.fetch(FetchDescriptor<KaufEintrag>())) ?? []
-                let gelernt = KaufEintrag.gelernteZuordnung(
+                let bekannteAliase = (try? modelContext.fetch(FetchDescriptor<ArtikelAlias>())) ?? []
+                let gelernt = ArtikelAlias.passend(
                     fuerErkannterName: ergebnis.artikelName,
-                    in: bekannterVerlauf
+                    in: bekannteAliase
                 )
                 bearbeitbarePosition = BearbeitbarePreisschildPosition(
                     erkannterName: ergebnis.artikelName,
@@ -153,17 +153,13 @@ struct PreisschildScanView: View {
                 // dem sich diese Position sinnvoll zuordnen ließe.
                 guard let geschaeftFrisch = geschaeftReferenz.resolved(in: modelContext) else { return }
                 let artikel = gelernterArtikelReferenz?.resolved(in: modelContext) ?? passendesArtikel(fuer: name)
-                let neuerEintrag = KaufEintrag(
-                    artikel: artikel,
-                    geschaeft: geschaeftFrisch,
-                    kategorie: artikel?.fuehrendeKategorie(inGeschaeft: geschaeftFrisch, context: modelContext),
-                    preis: preis,
-                    datum: .now
+                let produktName: String? = erkannterName.isEmpty ? nil : erkannterName
+                let alternativerName = leiteAlternativenNamenAb(eingegeben: name, erkannt: erkannterName)
+                PreispunktService.erfassen(
+                    preis: preis, artikel: artikel, geschaeft: geschaeftFrisch, datum: .now,
+                    produktName: produktName, alternativerName: alternativerName, nameFallback: name, context: modelContext
                 )
-                neuerEintrag.artikelNameSnapshot = artikel?.name ?? name
-                neuerEintrag.produktName = erkannterName.isEmpty ? nil : erkannterName
-                neuerEintrag.alternativerName = leiteAlternativenNamenAb(eingegeben: name, erkannt: erkannterName)
-                modelContext.insert(neuerEintrag)
+                ArtikelAlias.lernen(erkannterName: erkannterName, alternativerName: alternativerName, artikel: artikel, context: modelContext)
             }
             dismiss()
         }
@@ -177,7 +173,7 @@ struct PreisschildScanView: View {
     }
 
     /// Sucht unter allen vorhandenen Artikeln einen, dessen Name zum erkannten
-    /// Preisschild-Text passt, damit der neue ``KaufEintrag`` in der Preishistorie
+    /// Preisschild-Text passt, damit der neue ``Preispunkt`` in der Preishistorie
     /// dieses ``Artikel``s auftaucht statt nur als Namens-Schnappschuss zu existieren.
     private func passendesArtikel(fuer name: String) -> Artikel? {
         let alleArtikel = (try? modelContext.fetch(FetchDescriptor<Artikel>())) ?? []

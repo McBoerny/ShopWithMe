@@ -167,6 +167,10 @@ enum SyncSnapshotImportService {
             snapshot.kaufEintraege, artikelZuordnung: artikelZuordnung, einkaufsvorgangZuordnung: einkaufsvorgangZuordnung,
             geschaeftZuordnung: geschaeftZuordnung, kategorieZuordnung: kategorieZuordnung, context: context
         )
+        mergePreispunkte(
+            snapshot.preispunkte, artikelZuordnung: artikelZuordnung, geschaeftZuordnung: geschaeftZuordnung, context: context
+        )
+        mergeArtikelAliase(snapshot.artikelAliase, artikelZuordnung: artikelZuordnung, context: context)
         mergeWarengruppenDistanzen(
             snapshot.warengruppenDistanzen, geschaeftZuordnung: geschaeftZuordnung, kategorieZuordnung: kategorieZuordnung, context: context
         )
@@ -211,6 +215,10 @@ enum SyncSnapshotImportService {
             if let objekt = try? context.fetch(deskriptor).first { context.delete(objekt) }
         case SyncEntitaetsArt.kaufEintrag:
             var deskriptor = FetchDescriptor<KaufEintrag>(predicate: #Predicate { $0.id == id })
+            deskriptor.fetchLimit = 1
+            if let objekt = try? context.fetch(deskriptor).first { context.delete(objekt) }
+        case SyncEntitaetsArt.preispunkt:
+            var deskriptor = FetchDescriptor<Preispunkt>(predicate: #Predicate { $0.id == id })
             deskriptor.fetchLimit = 1
             if let objekt = try? context.fetch(deskriptor).first { context.delete(objekt) }
         case SyncEntitaetsArt.einkaufsvorgang:
@@ -738,7 +746,6 @@ enum SyncSnapshotImportService {
                 artikel: eintrag.artikelID.flatMap { artikelZuordnung[$0] },
                 geschaeft: eintrag.geschaeftID.flatMap { geschaeftZuordnung[$0] },
                 kategorie: eintrag.kategorieID.flatMap { kategorieZuordnung[$0] },
-                preis: eintrag.preis,
                 menge: eintrag.menge,
                 datum: eintrag.datum,
                 kategorieBesuchsIndex: nil
@@ -749,8 +756,59 @@ enum SyncSnapshotImportService {
             // umbenannten) gemergten Objekten neu abzuleiten.
             neuer.artikelNameSnapshot = eintrag.artikelNameSnapshot
             neuer.geschaeftNameSnapshot = eintrag.geschaeftNameSnapshot
-            neuer.produktName = eintrag.produktName
-            neuer.alternativerName = eintrag.alternativerName
+            context.insert(neuer)
+        }
+    }
+
+    // MARK: - Preispunkt (Bereich C, GitHub #76)
+
+    /// Union nach `id`, analog ``mergeKaufEintraege``: der Absender hat die
+    /// Slowly-Changing-Dimension-Kompression bereits selbst vorgenommen
+    /// (``PreispunktService``), ein empfangener ``Preispunkt`` ist deshalb ein
+    /// unveränderliches historisches Ereignis — ein bereits lokal bekannter
+    /// wird nie verändert, ein fehlender einfach übernommen.
+    @MainActor
+    private static func mergePreispunkte(
+        _ remote: [PreispunktSnapshot], artikelZuordnung: [UUID: Artikel], geschaeftZuordnung: [UUID: Geschaeft], context: ModelContext
+    ) {
+        let alleLokalen = (try? context.fetch(FetchDescriptor<Preispunkt>())) ?? []
+        let geloeschteIDs = SyncTombstoneService.geloeschteIDs(art: SyncEntitaetsArt.preispunkt, context: context)
+        for eintrag in remote {
+            guard alleLokalen.first(where: { $0.id == eintrag.id }) == nil else { continue }
+            guard !geloeschteIDs.contains(eintrag.id) else { continue }
+            let neuer = Preispunkt(
+                artikel: eintrag.artikelID.flatMap { artikelZuordnung[$0] },
+                geschaeft: eintrag.geschaeftID.flatMap { geschaeftZuordnung[$0] },
+                preis: eintrag.preis,
+                datum: eintrag.datum,
+                produktName: eintrag.produktName,
+                alternativerName: eintrag.alternativerName
+            )
+            neuer.id = eintrag.id
+            neuer.artikelNameSnapshot = eintrag.artikelNameSnapshot
+            neuer.geschaeftNameSnapshot = eintrag.geschaeftNameSnapshot
+            context.insert(neuer)
+        }
+    }
+
+    // MARK: - ArtikelAlias (Bereich B, GitHub #76)
+
+    /// **Nie destruktiv, analog allen Bereich-B-Regeln:** ein bereits lokal
+    /// vorhandener Alias für denselben ``ArtikelAlias/erkannterName`` (case-
+    /// insensitiv) wird nie durch den Remote-Wert überschrieben — nur ein
+    /// bislang unbekannter Rohname wird ergänzt.
+    @MainActor
+    private static func mergeArtikelAliase(_ remote: [ArtikelAliasSnapshot], artikelZuordnung: [UUID: Artikel], context: ModelContext) {
+        let alleLokalen = (try? context.fetch(FetchDescriptor<ArtikelAlias>())) ?? []
+        for eintrag in remote {
+            guard eintrag.alternativerName != nil || eintrag.artikelID != nil else { continue }
+            guard !alleLokalen.contains(where: { $0.erkannterName.localizedCaseInsensitiveCompare(eintrag.erkannterName) == .orderedSame })
+            else { continue }
+            let neuer = ArtikelAlias(
+                erkannterName: eintrag.erkannterName, alternativerName: eintrag.alternativerName,
+                artikel: eintrag.artikelID.flatMap { artikelZuordnung[$0] }
+            )
+            neuer.id = eintrag.id
             context.insert(neuer)
         }
     }
