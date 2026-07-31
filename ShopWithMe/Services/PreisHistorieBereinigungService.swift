@@ -112,7 +112,7 @@ enum PreisHistorieBereinigungService {
     /// Löschungen hinterlassen einen ``SyncTombstone``, damit sie im
     /// Mehrgeräte-Fall nicht von einem Peer, der die Einträge noch führt,
     /// unwissentlich wiederbelebt werden — vorher bewusst unterlassen (siehe
-    /// `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`, Abschnitt 11 „Bewusst
+    /// `docs/DATENSYNCHRONISATION_VERLAUF.md`, Abschnitt 11 „Bewusst
     /// nicht enthalten"), was die Bereinigung im Mehrgeräte-Fall faktisch
     /// wirkungslos machte, sobald mindestens ein Peer die Einträge noch hatte.
     ///

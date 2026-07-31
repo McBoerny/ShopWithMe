@@ -222,61 +222,14 @@ SwiftData-Datenbank am Standardpfad; ein zusätzliches, additives
 abgeglichen (kein Wechsel der Persistenzschicht, kein aktiv aus mehreren
 Geräten gleichzeitig beschriebener Store). Bewusst ohne den
 MultipeerConnectivity-Kanal (WiFi/Bluetooth-Echtzeitaustausch im Laden, dafür
-weiterhin Issue #49, an Bedingungen geknüpft). Maßgeblicher Plan:
-`docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`. Die ursprüngliche, inzwischen
-überholte Abwägung (weshalb dieser Ansatz zunächst nicht verfolgt wurde) steht in
-`docs/DATENSYNCHRONISATION_BEWERTUNG.md`; die Ersetzen-/Merge-Logik für den
-einmaligen Beitritts-/Bootstrap-Moment eines neuen Geräts in
-`docs/DATENBANK_BACKUP_RESTORE_BEWERTUNG.md`.
-
-**v0.9-Robustheits-Fixes (dieselbe Ursachen-Familie wie GitHub #52):** Ein per
-Bereich-A-Event empfangenes Abhaken, das noch einen von diesem Gerät bereits
-per „Einkauf abschließen" geschlossenen `Einkaufsvorgang` referenziert (der
-sendende Peer kannte dessen `endZeit` beim Senden noch nicht), wird von
-`SyncImportService.einkaufsvorgang(mitID:context:aufOffenenNachfolgerUmleiten:)`
-auf den aktuell offenen Nachfolger für dieselbe `Einkaufsliste` umgeleitet
-(bevorzugt mit gleichem `Geschaeft`, sonst irgendeinen offenen, über den
-gemeinsamen Helfer `Einkaufsvorgang.offenerNachfolger(fuerListe:bevorzugtesGeschaeft:context:)`
-— genutzt sowohl hier als auch von `SyncSnapshotImportService.mergeEinkaufsvorgaenge`,
-das dieselbe Lücke im Bereich-C-Snapshot-Merge hatte) — vorher landete der
-`KaufEintrag` unsichtbar auf dem geschlossenen Vorgang und wurde vom nächsten
-Snapshot-Merge fälschlich wieder auf die offene Liste zurückgeholt. **Nur für
-`.artikelAbgehakt`** (materialisiert einen NEUEN Eintrag) — `.artikelAbgewaehlt`/
-`.artikelDauerhaftEntfernt` müssen einen bereits BESTEHENDEN Eintrag auf dem
-ursprünglichen Vorgang finden und werden bewusst nicht umgeleitet (Code-Review-
-Fund: eine Umleitung ließ sie sonst still ins Leere laufen, während das Event
-trotzdem als erledigt galt). Zusätzlich bekommt ein so oder per Snapshot-Merge
-(`mergeKaufEintraege`) fremd materialisierter `KaufEintrag` bewusst **keinen**
-`kategorieBesuchsIndex` — er beschreibt die Laufreihenfolge des SENDENDEN
-Geräts, nicht die dieses Geräts, und würde sonst `WarengruppenDistanzService`
-mit einer erfundenen Besuchsposition füttern; `Einkaufsvorgang.naechsterKategorieBesuchsIndex`
-ignoriert solche indexlosen Einträge bei der Suche nach einem bereits
-vorhandenen Index, um keinen Duplikat-Index für dieselbe Kategorie zu vergeben.
-
-**Dieselbe Lücke bestand unadressiert auch im Bereich-A-„Sicherheitsnetz"**
-(`SyncSnapshotImportService.mergeEinkaufslistenEintraege`/`istBereitsAbgehakt`,
-siehe GitHub #52-Nachfolgefund oben): Der Check, ob ein Artikel bereits
-abgehakt ist, betrachtete nur lokal noch **offene** `Einkaufsvorgang`e. Schloss
-„Einkauf abschließen" den Vorgang mit dem `KaufEintrag`, fiel der Artikel aus
-diesem Check heraus — ein noch veralteter Peer-Snapshot holte ihn dann über das
-Sicherheitsnetz erneut auf die offene Liste zurück, ein anschließendes erneutes
-Abhaken erzeugte wegen der neuen `bezugsID` des Nachfolge-Vorgangs einen
-zusätzlichen `KaufEintrag` (sichtbare Dublette). `istBereitsAbgehakt` zählt
-seither auch geschlossene Vorgänge, aber **nur** solange für dieselbe Liste
-aktuell ein offener Nachfolger existiert (derselbe
-`Einkaufsvorgang.offenerNachfolger(fuerListe:bevorzugtesGeschaeft:context:)`-
-Helfer) — ein vor Wochen einmal gekaufter und später legitim neu zur Liste
-hinzugefügter Artikel bleibt dadurch weiterhin über das Sicherheitsnetz
-erreichbar.
-
-**Zurückgestellte, tiefergehende Befunde aus demselben Code-Review** (siehe
-GitHub Issues): Geschäfts-Zuordnung eines per Umleitung materialisierten
-`KaufEintrag` (übernimmt das Geschäft des Nachfolge-Vorgangs, oft `nil`);
-`SyncEntitaetsAlias`s „einmal geschrieben, eingefroren"-Semantik passt nicht
-zu einer mehrfach rotierenden Umleitung; kein Ursprungsgerät-Feld auf
-`KaufEintrag` (zwei unabhängige, nicht typsicher erzwungene Stellen
-unterdrücken `kategorieBesuchsIndex`); store-loser Umleitungs-Fallback bei
-zwei konkurrierenden Einkäufen ohne Geschäft-Treffer.
+weiterhin Issue #49, an Bedingungen geknüpft). **Maßgebliche, aktuelle
+Referenz für Architektur und Funktionsweise:** `docs/DATENSYNCHRONISATION.md`.
+Entstehungsgeschichte, jeder Live-Test-Fund und jeder Bugfix (u.a. die
+`offenerNachfolger`-Umleitung für per Event empfangenes Abhaken auf einen
+zwischenzeitlich abgeschlossenen `Einkaufsvorgang`, die
+`kategorieBesuchsIndex`-Sonderbehandlung fremd materialisierter Käufe, und
+das Bereich-A-Sicherheitsnetz für bereits abgehakte Artikel) in
+`docs/DATENSYNCHRONISATION_VERLAUF.md`.
 
 ## Builds, Versionierung & Migrationen
 

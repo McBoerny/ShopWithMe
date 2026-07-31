@@ -8,7 +8,7 @@ import SwiftData
 /// ``Geschaeft/anzahlEinkaufsvorgaenge``.
 ///
 /// **Architektur-Korrektur (Live-Test-Fund, siehe
-/// `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` Abschnitt 17):** Ursprünglich
+/// `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 17):** Ursprünglich
 /// eine „Delta seit zuletzt gesehenem Gesamtwert"-Regel — dabei wurde
 /// versehentlich derselbe echte Beitrag bei jedem Hin-und-Her zwischen zwei
 /// Geräten erneut mitgezählt, weil der gemeldete „Gesamtwert" eines Peers

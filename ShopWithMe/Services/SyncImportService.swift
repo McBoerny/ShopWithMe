@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-/// Bereich-A-Import (`docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` Abschnitt
+/// Bereich-A-Import (`docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt
 /// 5.3, Phase 2): liest Event-Dateien aus allen fremden Peer-Ordnern, wendet
 /// ``SyncKonfliktAufloesung`` auf konkurrierende Events desselben
 /// (`bezugsID`, `artikelID`)-Paares an und materialisiert das Ergebnis über

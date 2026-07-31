@@ -139,7 +139,7 @@ final class Einkaufsvorgang {
     /// Wie ``artikelAbhakenOhneEventAufzeichnung(_:context:indexFuerDistanzlernen:kategorie:)``,
     /// zeichnet zusätzlich (nur bei tatsächlicher Neuanlage) ein
     /// ``SyncEventArt/artikelAbgehakt``-Event auf (Phase 0,
-    /// `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`).
+    /// `docs/DATENSYNCHRONISATION_VERLAUF.md`).
     @discardableResult
     func artikelAbhaken(_ artikel: Artikel, context: ModelContext, kategorie: ArtikelKategorie? = nil) -> AbhakErgebnis {
         let ergebnis = artikelAbhakenOhneEventAufzeichnung(artikel, context: context, kategorie: kategorie)

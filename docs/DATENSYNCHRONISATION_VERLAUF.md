@@ -1,20 +1,33 @@
-# Datensynchronisation — Umsetzungsplan (GitHub #39, ohne Multipeer)
+# Datensynchronisation — Verlauf (GitHub #39, ohne Multipeer)
+
+**Dieses Dokument ist ein chronologisches Verlaufsprotokoll** — ursprünglicher
+Plan (Abschnitte 1–13), dann fortlaufend numerierte „Nachtrag"-Abschnitte für
+jeden späteren Live-Test-Fund/Bugfix. Für die Frage „wie funktioniert
+Datensynchronisation *heute*" ist `docs/DATENSYNCHRONISATION.md` die
+maßgebliche, aktuelle Referenz — hier nachlesen für „warum ist das so",
+„was wurde wann entschieden/gefixt", nicht für den aktuellen Sollzustand.
+Diese Datei wurde im Zuge einer Doku-Konsolidierung umbenannt (vormals
+`DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`) und um vormals an anderer Stelle
+verstreute, thematisch hierher gehörende Abschnitte ergänzt: 11c (aus
+`docs/ARCHITECTURE.md`), 13a (aus `docs/DATABASE_CONCURRENCY.md`) und 22 (aus
+`docs/DATABASE_CONCURRENCY.md`).
 
 **Bezug:** [Issue #39](https://github.com/McBoerny/ShopWithMe/issues/39).
 
-**Kursänderung gegenüber `docs/DATENSYNCHRONISATION_BEWERTUNG.md`:** Jenes Dokument
-empfahl, den Großteil von #39 nicht umzusetzen, weil die bestehende
-„ein geteilter Ordner + Lease"-Architektur für Mehrgeräte-Zugriff ausreiche. Nach
-erneuter, ausdrücklicher Nutzervorgabe gilt das nicht mehr: Gewünscht ist die in
-#39 vorgeschlagene **event-basierte, dynamische Architektur** — jedes Gerät führt
+**Kursänderung gegenüber einer früheren internen Bewertung** (vormals eigene
+Datei `DATENSYNCHRONISATION_BEWERTUNG.md`, im Zuge der Doku-Konsolidierung
+gelöscht — ihr einziger noch relevanter Inhalt ist diese Kursänderung selbst,
+hier bereits vollständig wiedergegeben): jene Bewertung empfahl, den
+Großteil von #39 nicht umzusetzen, weil die bestehende „ein geteilter Ordner
++ Lease"-Architektur für Mehrgeräte-Zugriff ausreiche. Nach erneuter,
+ausdrücklicher Nutzervorgabe gilt das nicht mehr: Gewünscht ist die in #39
+vorgeschlagene **event-basierte, dynamische Architektur** — jedes Gerät führt
 seine **eigene, lokale, live genutzte Datenbank**, ein Remote-Share hält
 Kopien/Events aller Teilnehmer möglichst zeitnah synchron, darüber gleichen sich
 alle Mitnutzer ab. **Bewusst ausgeklammert bleibt vorerst der
 MultipeerConnectivity-Kanal** (WiFi/Bluetooth-Echtzeitaustausch im Laden, siehe
 Issue #49) — dieser Plan deckt ausschließlich den FileProvider-Kanal
-(iCloud Drive/Synology Drive o.ä.) ab. `docs/DATENSYNCHRONISATION_BEWERTUNG.md`
-bleibt als Aufzeichnung der ursprünglichen Abwägung bestehen, ist für den
-Mehrbenutzer-Anwendungsfall aber durch diesen Plan **ersetzt**.
+(iCloud Drive/Synology Drive o.ä.) ab.
 
 **Status: Phase 0 umgesetzt** (`LamportClock`, `SyncEvent`-Modell,
 `SyncEventService`, lokale Aufzeichnung in allen 5 relevanten
@@ -82,7 +95,7 @@ Phasen zusammen.
 `SyncSnapshotImportService` liest `export.json` aus allen fremden Peer-Ordnern
 und merged `GeschaeftTyp`/`ArtikelKategorie`/`Geschaeft`/`Artikel`/
 `Einkaufsliste` dependency-geordnet in den lokalen Bestand, unter
-Wiederverwendung der in `docs/DATENBANK_BACKUP_RESTORE_BEWERTUNG.md` §5.1
+Wiederverwendung der in `docs/DATENSYNCHRONISATION.md` Abschnitt 4.2
 hergeleiteten Matching-Bausteine (`GeschaeftTyp.mitNamen`,
 `GeschaeftErkennungService.istGleicherOrt`, Namensabgleich für
 `ArtikelKategorie`/`Artikel`). Grundprinzip aller Merge-Regeln: **nie
@@ -312,7 +325,7 @@ angelehnt an die „Datenbereiche"-Tabelle aus dem #39-Vorschlag:
 | Bereich | Inhalt | Sync-Frequenz | Konfliktregel |
 |---|---|---|---|
 | **A — zeitkritisch** | `Einkaufsliste`-Mitgliedschaft (hinzufügen/entfernen/Menge), Abhaken/Abwählen (`Einkaufsvorgang`) | Bei jedem Sync-Zyklus (Abschnitt 5.3) | CRDT-Regeln (Abschnitt 4.4) |
-| **B — Stammdaten** | `Artikel`, `ArtikelKategorie`, `GeschaeftTyp`, `Geschaeft` (inkl. `erkennungsradius`, `ausgeschlosseneKategorien`, `IgnorierterArtikel` — siehe Entscheidungen unten), `Einkaufsliste` (nur `id`/`name`, siehe 4.2a) | Export bei jedem Sync-Zyklus, weniger zeitkritisch | Namens-/Koordinaten-Matching (bereits vorhandene Bausteine, siehe `docs/DATENBANK_BACKUP_RESTORE_BEWERTUNG.md` §5.1) |
+| **B — Stammdaten** | `Artikel`, `ArtikelKategorie`, `GeschaeftTyp`, `Geschaeft` (inkl. `erkennungsradius`, `ausgeschlosseneKategorien`, `IgnorierterArtikel` — siehe Entscheidungen unten), `Einkaufsliste` (nur `id`/`name`, siehe 4.2a) | Export bei jedem Sync-Zyklus, weniger zeitkritisch | Namens-/Koordinaten-Matching (bereits vorhandene Bausteine, siehe `docs/DATENSYNCHRONISATION.md` Abschnitt 4.2) |
 | **C — Historie** | `KaufEintrag`, **alle** `Einkaufsvorgang` (auch laufende, siehe 4.2a) | Export, seltener (z.B. nur bei Konsolidierung) | Union nach `id`, nie Konflikt (jeder Kauf ein abgeschlossenes Ereignis) |
 | **D — Lernen** | `WarengruppenDistanz` | Export, selten | Gewichteter Mittelwert (siehe #39-Vorschlag §5.2 „mergeDistanzMatrix", direkt übertragbar) |
 | **Nicht synchronisiert** | `DebugEinstellungen`, lokale UI-Zustände, `IgnorierterGeschaeftsVorschlag` (siehe Entscheidungen unten) | — | — |
@@ -460,7 +473,7 @@ andere Geräte sie vorher lesen konnten) löschen — identisch zum #39-Vorschla
 3. **Bootstrap:** Beim ersten Verknüpfen eines Ordners mit bereits vorhandenen
    Peer-Daten wird der komplette fremde Bestand gelesen und mit dem eigenen
    lokalen Bestand gemergt (identischer Algorithmus wie in
-   `docs/DATENBANK_BACKUP_RESTORE_BEWERTUNG.md` §5 hergeleitet — der bleibt
+   `docs/DATENSYNCHRONISATION.md` Abschnitt 4.2 hergeleitet — der bleibt
    also nicht ungenutzt, sondern wird hier für den einmaligen Bootstrap-Moment
    gebraucht). Ab dann läuft der laufende Betrieb über Events (Abschnitt 5).
 4. Kein separates Vertrauens-/Freigabemodell in der App nötig — Zugriff auf den
@@ -693,6 +706,62 @@ abgehakte Artikel explizit aus, `abgehakteArtikel` dedupliziert nach
 Artikel-Identität (schützt auch gegen die in 11a beschriebenen, bereits
 bestehenden doppelten `KaufEintrag`e).
 
+### 11c. Nachtrag: dieselbe Umleitungslücke im Bereich-A-Event-Pfad (verschoben aus `docs/ARCHITECTURE.md`)
+
+Dieselbe „dangling Einkaufsvorgang"-Ursachenfamilie wie 11a/11b, hier für den
+Bereich-A-Event-Empfang statt den Bereich-C-Snapshot-Merge: Ein per
+Bereich-A-Event empfangenes Abhaken, das noch einen von diesem Gerät bereits
+per „Einkauf abschließen" geschlossenen `Einkaufsvorgang` referenziert (der
+sendende Peer kannte dessen `endZeit` beim Senden noch nicht), wurde von
+`SyncImportService.einkaufsvorgang(mitID:context:aufOffenenNachfolgerUmleiten:)`
+auf den aktuell offenen Nachfolger für dieselbe `Einkaufsliste` umgeleitet
+(bevorzugt mit gleichem `Geschaeft`, sonst irgendeinen offenen, über den
+gemeinsamen Helfer
+`Einkaufsvorgang.offenerNachfolger(fuerListe:bevorzugtesGeschaeft:context:)` —
+genutzt sowohl hier als auch von
+`SyncSnapshotImportService.mergeEinkaufsvorgaenge`, das dieselbe Lücke im
+Bereich-C-Snapshot-Merge hatte, siehe 11a) — vorher landete der `KaufEintrag`
+unsichtbar auf dem geschlossenen Vorgang und wurde vom nächsten
+Snapshot-Merge fälschlich wieder auf die offene Liste zurückgeholt.
+
+**Nur für `.artikelAbgehakt`** (materialisiert einen NEUEN Eintrag) —
+`.artikelAbgewaehlt`/`.artikelDauerhaftEntfernt` müssen einen bereits
+BESTEHENDEN Eintrag auf dem ursprünglichen Vorgang finden und werden bewusst
+nicht umgeleitet (Code-Review-Fund: eine Umleitung ließ sie sonst still ins
+Leere laufen, während das Event trotzdem als erledigt galt). Zusätzlich
+bekommt ein so oder per Snapshot-Merge (`mergeKaufEintraege`) fremd
+materialisierter `KaufEintrag` bewusst **keinen** `kategorieBesuchsIndex` — er
+beschreibt die Laufreihenfolge des SENDENDEN Geräts, nicht die dieses
+Geräts, und würde `WarengruppenDistanzService` sonst mit einer erfundenen
+Besuchsposition füttern; `Einkaufsvorgang.naechsterKategorieBesuchsIndex`
+ignoriert solche indexlosen Einträge bei der Suche nach einem bereits
+vorhandenen Index, um keinen Duplikat-Index für dieselbe Kategorie zu
+vergeben.
+
+**Dieselbe Lücke bestand unadressiert auch im Bereich-A-„Sicherheitsnetz"**
+(`SyncSnapshotImportService.mergeEinkaufslistenEintraege`/
+`istBereitsAbgehakt` — bereits in 11b beschrieben, hier ergänzend): Der
+Check, ob ein Artikel bereits abgehakt ist, betrachtete nur lokal noch
+**offene** `Einkaufsvorgang`e. Schloss „Einkauf abschließen" den Vorgang mit
+dem `KaufEintrag`, fiel der Artikel aus diesem Check heraus — ein noch
+veralteter Peer-Snapshot holte ihn dann über das Sicherheitsnetz erneut auf
+die offene Liste zurück, ein anschließendes erneutes Abhaken erzeugte wegen
+der neuen `bezugsID` des Nachfolge-Vorgangs einen zusätzlichen `KaufEintrag`
+(sichtbare Dublette). `istBereitsAbgehakt` zählt seither auch geschlossene
+Vorgänge, aber **nur** solange für dieselbe Liste aktuell ein offener
+Nachfolger existiert (derselbe `offenerNachfolger`-Helfer) — ein vor Wochen
+einmal gekaufter und später legitim neu zur Liste hinzugefügter Artikel
+bleibt dadurch weiterhin über das Sicherheitsnetz erreichbar.
+
+**Zurückgestellte, tiefergehende Befunde aus demselben Code-Review:**
+Geschäfts-Zuordnung eines per Umleitung materialisierten `KaufEintrag`
+(übernimmt das Geschäft des Nachfolge-Vorgangs, oft `nil`);
+`SyncEntitaetsAlias`s „einmal geschrieben, eingefroren"-Semantik passt nicht
+zu einer mehrfach rotierenden Umleitung; kein Ursprungsgerät-Feld auf
+`KaufEintrag` (zwei unabhängige, nicht typsicher erzwungene Stellen
+unterdrücken `kategorieBesuchsIndex`); store-loser Umleitungs-Fallback bei
+zwei konkurrierenden Einkäufen ohne Geschäft-Treffer.
+
 ## 12. Restrisiko: unerreichbare Vorgeschichte vor Einführung dieses Features
 
 Einkaufslisten-Einträge, die entstanden, **bevor** Bereich-A-Events (Phase 0)
@@ -810,6 +879,46 @@ wird — im echten Prozess-Neustart-Fall kann es diese Restaktivität aus dem
 alten Prozess dagegen gar nicht geben. Der volle Ablauf (Neustart-Hinweis →
 tatsächlicher Neustart → korrekt befüllter Store) muss daher manuell auf
 einem echten Gerät verifiziert werden.
+
+### 13a. Nachtrag: Crash-Details und generelle Lehre (verschoben aus `docs/DATABASE_CONCURRENCY.md`)
+
+Der in Abschnitt 13 beschriebene erste Entwurf (Laufzeit-Austausch des
+`ModelContainer`) führte auf einem echten Gerät konkret zu:
+
+```
+BUG IN CLIENT OF libsqlite3.dylib: database integrity compromised by API
+violation: vnode unlinked while in use: .../default.store
+CoreData: error: (6922) I/O error for database ... SQLite error code:6922,
+'disk I/O error'
+data store (...) did not return a snapshot for: PersistentIdentifier(...
+EinkaufslistenEintrag/p60...)
+Fatal error: This model instance was invalidated because its backing data
+could no longer be found the store.
+```
+
+**Ursache:** `SyncPollingService.stoppen()` (`schleife?.cancel()`) fordert
+Cancellation nur kooperativ an — der Loop-Body prüft `Task.isCancelled` nur
+zwischen zwei Zyklen, nicht während eines bereits laufenden `syncZyklus()`.
+War beim Tippen auf „Ersetzen"/„Gerät zurücksetzen" gerade ein Zyklus aktiv,
+lief er nach `stoppen()` einfach weiter und griff auf die Store-Datei zu,
+während sie physisch gelöscht wurde. Ein zusätzlicher Fund beim Nachbau
+eines entsprechenden Unit-Tests: selbst innerhalb eines einzigen
+Testprozesses ließ sich „Store-Datei löschen, dann an derselben URL neu
+öffnen" nicht sicher nachstellen, obwohl der erste `ModelContainer` sauber
+per ARC dealloziert war — derselbe `BUG IN CLIENT OF libsqlite3.dylib`-Fehler
+trat weiterhin auf und brachte teils den Testprozess selbst zum Absturz.
+SwiftData/CoreData scheint intern noch etwas asynchron gegen die Datei zu
+laufen (vermutlich WAL-Checkpointing oder Coordinator-Aufräumarbeiten), das
+durch bloßes Dealloziieren der sichtbaren Swift-Referenz nicht sofort beendet
+wird.
+
+**Lehre für künftige Fälle dieser Art:** „ich pausiere den Hintergrund-Timer,
+bevor ich etwas Destruktives tue" reicht nicht, wenn die Pause nur über
+kooperative Task-Cancellation läuft — ein bereits laufender Durchlauf ist
+davon unberührt. Wo eine destruktive Operation wirklich exklusiven Zugriff
+braucht, ist eine Prozessgrenze (Neustart) einer laufzeitinternen
+Koordination vorzuziehen, sofern die UX das zulässt — genau der Ansatz, der
+in Abschnitt 13 als `SyncErsetzenService` umgesetzt wurde.
 
 ## 14. DB-Optimierung — Datenminimierung im Sync-Zyklus (GitHub #60/#70/#71)
 
@@ -1357,3 +1466,61 @@ sofern gewünscht.
 Tests in `SyncErsetzenServiceTests` (Vorher-/Nachher-Zusammenfassung) und
 `DatenintegritaetsServiceTests` (aggregierte Meldung, Wachstums-Warnung). Noch
 nicht mit echten Geräten nachverifiziert.
+
+## 22. Behobener Bug: neu beigetretenes Gerät synchronisiert keine Bestandsdaten (GitHub #52); teilbehobenes Problem: langsamer App-Start (GitHub #55)
+
+*(Verschoben aus `docs/DATABASE_CONCURRENCY.md` — thematisch Bereich-A/B-Import,
+gehört hierher statt in die lokale Schreibkoordinations-Doku.)*
+
+**Symptom (#52):** Tritt ein Gerät einem bereits genutzten geteilten
+Sync-Ordner neu bei (`SyncOrdnerSettingsView.ordnerFestlegen`, löst sofort
+einen ersten Sync-Zyklus aus), wurden trotz vorhandener Peer-Daten im Ordner
+keine Daten auf das neue Gerät übernommen. Bereits länger im Share aktive
+Geräte waren von dem Bug nicht betroffen.
+
+**Ursache:** Die Schreibpfade (`SyncExportService`, `SyncSnapshotExportService`)
+nutzten bereits `NSFileCoordinator`, um File-Provider-Erweiterungen (iCloud
+Drive, Synology Drive, …) korrekt einzubinden. Die Lesepfade
+(`SyncImportService.importiereNeueEvents`, `SyncSnapshotImportService.importiereSnapshots`)
+lasen dagegen ungeschützt per `Data(contentsOf:)`. Eine Datei, die von einer
+File-Provider-Erweiterung verwaltet wird, aber auf einem Gerät noch nie
+heruntergeladen wurde, liegt dort nur als Cloud-Platzhalter vor — ein
+direktes `Data(contentsOf:)` schlägt dafür sofort fehl (per `try?` still
+verschluckt), statt auf die Materialisierung zu warten. Bestehende Geräte
+hatten alle Peer-Dateien durch frühere Sync-Zyklen längst lokal
+zwischengespeichert, ein neu beitretendes Gerät sah sie zum allerersten Mal
+— daher trat der Bug ausschließlich beim ersten Sync auf.
+
+**Fix:** Neuer Helfer `SyncDateiZugriff.leseKoordiniert(_:)`, der die Datei
+über `NSFileCoordinator.coordinate(readingItemAt:...)` liest — das löst bei
+Bedarf zuverlässig den Download/die Materialisierung aus, bevor gelesen wird
+(providerunabhängig, im Gegensatz zum iCloud-spezifischen
+`startDownloadingUbiquitousItem`). Da dieser Aufruf für die Dauer eines
+Downloads blockieren kann, läuft er in beiden Importpfaden in einem
+`Task.detached`, damit dabei nicht der `MainActor` blockiert wird.
+
+**Symptom (#55):** Der App-Start (und jede Rückkehr aus dem Hintergrund)
+fühlte sich kurzzeitig träge an — `SyncPollingService.starten(context:)` löst
+dabei bewusst sofort einen ersten Sync-Zyklus aus (Nutzerentscheidung für
+möglichst aktuelle Daten), der direkt mit dem initialen SwiftUI-Rendering um
+den `MainActor` konkurriert.
+
+**Umgesetzte Teilmaßnahme:** Der Polling-Loop läuft mit expliziter
+`.utility`-Priorität statt der ererbten Standardpriorität — signalisiert dem
+kooperativen Scheduler, konkurrierende UI-Arbeit vorzuziehen. Ergänzt die
+oben beschriebene Auslagerung der Datei-I/O in `Task.detached`.
+
+**Bewusst nicht umgesetzt (größere Änderung, eigene Entscheidung nötig):**
+Die eigentliche Merge-/Speicherlogik (`SyncSnapshotImportService.merge`,
+`context.save()`, `SyncSnapshotExportService.erstelleSnapshot`) bleibt
+synchrone, `MainActor`-gebundene Arbeit — bei umfangreichem lokalem Bestand
+kann ein einzelner Sync-Zyklus dadurch weiterhin spürbar Zeit auf dem
+Hauptthread beanspruchen. Eine vollständige Lösung bräuchte einen zweiten,
+hintergrundgebundenen `ModelContext` für die Merge-Berechnung mit
+anschließendem Rücktransfer der Ergebnisse — ein größerer Architektur-Eingriff,
+der eine eigene Bewertung verdient, sollte die Priority-Maßnahme allein nicht
+ausreichen. Die Zyklusdauer-Protokollierung (`SyncDebugLogger`,
+`sync_zyklus_start`/`-ende`) liefert dafür bei Bedarf echte Messdaten statt
+Vermutungen — die DB-Optimierungsrunde in Abschnitt 14 dürfte die tatsächlich
+gemessene Zyklusdauer bereits spürbar gesenkt haben, unabhängig von diesem
+weiterhin zurückgestellten Eingriff.

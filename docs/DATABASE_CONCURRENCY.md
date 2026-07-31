@@ -12,7 +12,7 @@ wurde entfernt — die Store-Datei liegt seitdem immer am SwiftData-Standardpfad
 App-Container, nie mehr in einem geteilten Cloud-Ordner. Das hier beschriebene
 Szenario „mehrere Geräte greifen direkt auf dieselbe Store-Datei zu" ist damit
 nicht mehr herstellbar; **gemeinsames Einkaufen läuft ausschließlich über die
-event-basierte Synchronisation** (`docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`,
+event-basierte Synchronisation** (`docs/DATENSYNCHRONISATION_VERLAUF.md`,
 `SyncOrdnerService`). `DatabaseLeaseService` selbst bleibt aktiv und relevant —
 es dient inzwischen als allgemeiner Schreibkoordinations-Mechanismus für explizite
 Speicherpunkte (statt implizitem Autosave) innerhalb eines einzelnen Geräts, siehe
@@ -379,81 +379,12 @@ Zukunft bleiben, kein Server/CloudKit jetzt):
 - Eigener Backend-Server (REST/GraphQL + z.B. PostgreSQL).
 - Backend-as-a-Service (z.B. Firebase/Supabase).
 
-## Behobener Bug: neu beigetretenes Gerät synchronisiert keine Bestandsdaten (GitHub #52)
-
-**Symptom:** Tritt ein Gerät einem bereits genutzten geteilten Sync-Ordner neu
-bei (`SyncOrdnerSettingsView.ordnerFestlegen`, löst sofort einen ersten
-Sync-Zyklus aus), werden trotz vorhandener Peer-Daten im Ordner keine Daten auf
-das neue Gerät übernommen. Bereits länger im Share aktive Geräte sind von dem
-Bug nicht betroffen.
-
-**Ursache:** Die Schreibpfade (`SyncExportService`, `SyncSnapshotExportService`)
-nutzen bereits `NSFileCoordinator`, um File-Provider-Erweiterungen (iCloud
-Drive, Synology Drive, …) korrekt einzubinden. Die Lesepfade
-(`SyncImportService.importiereNeueEvents`, `SyncSnapshotImportService.importiereSnapshots`)
-lasen dagegen ungeschützt per `Data(contentsOf:)`. Eine Datei, die von einer
-File-Provider-Erweiterung verwaltet wird, aber auf einem Gerät noch nie
-heruntergeladen wurde, liegt dort nur als Cloud-Platzhalter vor — ein direktes
-`Data(contentsOf:)` schlägt dafür sofort fehl (per `try?` still verschluckt),
-statt auf die Materialisierung zu warten. Bestehende Geräte hatten alle
-Peer-Dateien durch frühere Sync-Zyklen längst lokal zwischengespeichert, ein neu
-beitretendes Gerät sah sie zum allerersten Mal — daher trat der Bug
-ausschließlich beim ersten Sync auf.
-
-**Fix:** Neuer Helfer `SyncDateiZugriff.leseKoordiniert(_:)`, der die Datei
-über `NSFileCoordinator.coordinate(readingItemAt:...)` liest — das löst bei
-Bedarf zuverlässig den Download/die Materialisierung aus, bevor gelesen wird
-(providerunabhängig, im Gegensatz zum iCloud-spezifischen
-`startDownloadingUbiquitousItem`). Da dieser Aufruf für die Dauer eines
-Downloads blockieren kann, läuft er in beiden Importpfaden in einem
-`Task.detached`, damit dabei nicht der `MainActor` blockiert wird — betrifft
-auch die in `docs/LOGGING.md`/GitHub #55 diskutierte Startzeit-Problematik,
-löst sie aber nicht vollständig (der Sync-Zyklus selbst läuft weiterhin
-sequentiell pro Peer).
-
-**Testgrenze:** Die bestehenden Sync-Import-Tests laufen gegen echte temporäre
-lokale Dateien (kein File-Provider-Platzhalter simulierbar) — sie verifizieren,
-dass die Umstellung normale, bereits lokal vorhandene Dateien weiterhin korrekt
-liest, nicht aber das eigentliche Platzhalter-Szenario selbst. Eine
-abschließende Verifikation erfordert einen echten Test mit einem neu
-beitretenden Gerät gegen einen echten Cloud-Anbieter.
-
-## Teilbehobenes Problem: langsamer App-Start durch Sync-Zyklus (GitHub #55)
-
-**Symptom:** Der App-Start (und jede Rückkehr aus dem Hintergrund) fühlt sich
-kurzzeitig träge an — `SyncPollingService.starten(context:)` löst dabei bewusst
-sofort einen ersten Sync-Zyklus aus (siehe Typ-Doku, Nutzerentscheidung für
-möglichst aktuelle Daten), der direkt mit dem initialen SwiftUI-Rendering um
-den `MainActor` konkurriert (auf dem sowohl UI-Arbeit als auch alle
-`ModelContext`-Zugriffe dieser App laufen, siehe `docs/DATABASE_CONCURRENCY.md`
-oben).
-
-**Umgesetzte Teilmaßnahme:** Der Polling-Loop läuft jetzt mit expliziter
-`.utility`-Priorität statt der ererbten Standardpriorität — das signalisiert
-dem kooperativen Scheduler, gerade konkurrierende UI-Arbeit vorzuziehen, statt
-den Sync-Zyklus stur dazwischenzudrängen. Ergänzt die in GitHub #52 bereits
-umgesetzte Auslagerung der Datei-I/O in `Task.detached`.
-
-**Bewusst nicht umgesetzt (größere Änderung, eigene Entscheidung nötig):** Die
-eigentliche Merge-/Speicherlogik (`SyncSnapshotImportService.merge`,
-`context.save()`, `SyncSnapshotExportService.erstelleSnapshot`) bleibt
-synchrone, `MainActor`-gebundene Arbeit — bei umfangreichem lokalem Bestand
-(viele Geschäfte/Artikel/Kaufeinträge) kann ein einzelner Sync-Zyklus dadurch
-weiterhin spürbar Zeit auf dem Hauptthread beanspruchen. Eine vollständige
-Lösung bräuchte einen zweiten, hintergrundgebundenen `ModelContext` für die
-Merge-Berechnung mit anschließendem Rücktransfer der Ergebnisse — ein größerer
-Architektur-Eingriff, der eine eigene Bewertung verdient, sollte die
-Priority-Maßnahme allein nicht ausreichen. Die bereits vorhandene
-Zyklusdauer-Protokollierung (`SyncDebugLogger`, `sync_zyklus_start`/`-ende`)
-liefert dafür bei Bedarf echte Messdaten statt Vermutungen.
-
-**Nachtrag (DB-Optimierungsrunde, GitHub #60/#70/#71):** Bevor dieser größere
-Eingriff erwogen wird, sollte mit `SyncDebugLogger` neu gemessen werden — eine
-separate Optimierungsrunde hat mehrere unbedingte Schreibvorgänge pro
-Sync-Zyklus (auch ohne inhaltliche Änderung) beseitigt, siehe
-`docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` → Abschnitt 14. Das dürfte die
-tatsächlich gemessene Zyklusdauer bereits spürbar senken, unabhängig vom hier
-beschriebenen, weiterhin zurückgestellten Architektur-Eingriff.
+**Zwei Bugs rund um den Bereich-A/B-Import verschoben:** „Neu beigetretenes
+Gerät synchronisiert keine Bestandsdaten" (GitHub #52) und „Langsamer
+App-Start durch Sync-Zyklus" (GitHub #55) gehören thematisch zur
+Datensynchronisation, nicht zur hier beschriebenen lokalen
+Schreibkoordination — verschoben nach
+`docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 22.
 
 ## Behobener Absturz: fehlende `inverse`-Deklarationen führen zu baumelnden Referenzen
 
@@ -646,57 +577,10 @@ die `.geschaeft?.name`/`.artikel?.name` o.ä. direkt liest, muss weiterhin bewus
 zugrundeliegende Korruption selbst bleibt unrepariert im Store bestehen (siehe
 „Nachtrag: rückwirkende Reparatur"), bis eine SQLite-Ebenen-Lösung existiert.
 
-## Nachtrag: gescheiterter Versuch, den Store zur Laufzeit physisch zu ersetzen
-
-Als „SQLite-Ebenen-Lösung" (siehe oben) wurde versucht, den lokalen Store zur
-Laufzeit komplett zu löschen und durch einen frischen, leeren `ModelContainer`
-an derselben URL zu ersetzen (`ModelContainerController`, `RootView().id(generation)`
-für einen erzwungenen View-Baum-Neuaufbau — Details siehe
-`docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` Abschnitt 13). Auf einem echten
-Gerät führte das zu:
-
-```
-BUG IN CLIENT OF libsqlite3.dylib: database integrity compromised by API
-violation: vnode unlinked while in use: .../default.store
-CoreData: error: (6922) I/O error for database ... SQLite error code:6922,
-'disk I/O error'
-data store (...) did not return a snapshot for: PersistentIdentifier(...
-EinkaufslistenEintrag/p60...)
-Fatal error: This model instance was invalidated because its backing data
-could no longer be found the store.
-```
-
-**Ursache:** `SyncPollingService.stoppen()` (`schleife?.cancel()`) fordert
-Cancellation nur kooperativ an — der Loop-Body prüft `Task.isCancelled` nur
-zwischen zwei Zyklen, nicht während eines bereits laufenden `syncZyklus()`.
-War beim Tippen auf „Ersetzen"/„Gerät zurücksetzen" gerade ein Zyklus aktiv,
-lief er nach `stoppen()` einfach weiter und griff auf die Store-Datei zu,
-während sie physisch gelöscht wurde — daher der SQLite-I/O-Fehler und
-anschließend der Absturz auf einer jetzt ungültigen Referenz. Ein zusätzlicher
-Fund beim Nachbau eines entsprechenden Unit-Tests: selbst innerhalb eines
-einzigen Testprozesses ließ sich „Store-Datei löschen, dann an derselben URL
-neu öffnen" nicht sicher nachstellen, obwohl der erste `ModelContainer` sauber
-per ARC dealloziert war — derselbe `BUG IN CLIENT OF libsqlite3.dylib`-Fehler
-trat weiterhin auf und brachte teils den Testprozess selbst zum Absturz.
-SwiftData/CoreData scheint intern noch etwas asynchron gegen die Datei laufen
-zu haben (vermutlich WAL-Checkpointing oder Coordinator-Aufräumarbeiten), das
-durch bloßes Dealloziieren der sichtbaren Swift-Referenz nicht sofort beendet
-wird.
-
-**Korrektur (mit dem Anwender abgestimmt):** kein Laufzeit-Austausch mehr,
-sondern eine Neustart-Aufforderung — die eigentliche Löschung passiert erst
-am Anfang eines komplett neuen Prozesses (`ShopWithMeApp.init()`, bevor
-überhaupt ein `ModelContainer` existiert), wo garantiert keine Restaktivität
-aus einem vorherigen Prozess mehr existieren kann, weil dieser vollständig
-beendet wurde. `ModelContainerController` wurde wieder entfernt. Siehe
-``SyncErsetzenService`` für die aktuelle Umsetzung.
-
-**Lehre für künftige Fälle dieser Art:** „ich pausiere den Hintergrund-Timer,
-bevor ich etwas Destruktives tue" reicht nicht, wenn die Pause nur über
-kooperative Task-Cancellation läuft — ein bereits laufender Durchlauf ist
-davon unberührt. Wo eine destruktive Operation wirklich exklusiven Zugriff
-braucht, ist eine Prozessgrenze (Neustart) einer laufzeitinternen
-Koordination vorzuziehen, sofern die UX das zulässt.
+**Der gescheiterte Versuch, den Store zur Laufzeit physisch zu ersetzen**
+(Crash-Details, Ursache, Lehre) ist nach
+`docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 13a verschoben — er betraf
+konkret `SyncErsetzenService`, nicht das hier beschriebene Lease-Verfahren.
 
 ## Diagnose-Logging (DB-Debug-Modus)
 

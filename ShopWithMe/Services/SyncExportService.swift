@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-/// Bereich-A-Export (`docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` Abschnitt 5.2):
+/// Bereich-A-Export (`docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 5.2):
 /// schreibt lokale, noch nicht hochgeladene ``SyncEvent``s als einzelne
 /// JSON-Dateien in den eigenen Peer-Ordner (`peers/{geraeteID}/events/`). Reines
 /// Schreiben — Lesen fremder Peer-Ordner (Import) ist Phase 2/3 des Plans.

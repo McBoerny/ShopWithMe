@@ -13,7 +13,7 @@ enum SyncOrdnerError: LocalizedError {
 }
 
 /// Verwaltet den vom Anwender gewählten geteilten Ordner für die
-/// Datensynchronisation (`docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`,
+/// Datensynchronisation (`docs/DATENSYNCHRONISATION_VERLAUF.md`,
 /// GitHub #39). Hier wird nur ein zusätzlicher Ordner referenziert, in den
 /// ``SyncExportService`` Peer-Exportdateien schreibt — die lokale Datenbank
 /// bleibt immer am Standardpfad (siehe Plan-Dokument Abschnitt 2, GitHub #54).

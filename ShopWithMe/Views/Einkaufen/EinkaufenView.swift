@@ -837,7 +837,7 @@ private struct EinkaufslisteView: View {
     /// Kurzer, nicht blockierender Hinweis, wenn ein Artikel beim Abhaken
     /// bereits (von diesem oder einem anderen Gerät) abgehakt war (GitHub #48,
     /// Überkauf-Hinweis) — bewusst kein Bestätigungsdialog (YAGNI, siehe
-    /// `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` Abschnitt 8). Blendet sich
+    /// `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 8). Blendet sich
     /// nach kurzer Zeit von selbst wieder aus (``ueberkaufHinweisAnzeigen(fuer:)``).
     @State private var ueberkaufHinweisText: String?
 

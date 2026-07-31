@@ -72,7 +72,7 @@ extension Einkaufsliste {
     /// Variante. Wird von ``SyncImportService`` genutzt, um ein empfangenes
     /// ``SyncEventArt/artikelHinzugefuegt``-Event zu materialisieren, ohne es
     /// dabei fälschlich diesem Gerät als Urheber zuzuschreiben (siehe
-    /// `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`, Phase 2).
+    /// `docs/DATENSYNCHRONISATION_VERLAUF.md`, Phase 2).
     @discardableResult
     func artikelHinzufuegenOhneEventAufzeichnung(_ artikel: Artikel, context: ModelContext) -> EinkaufslistenEintrag {
         if let bestehender = eintrag(fuer: artikel) {
@@ -87,7 +87,7 @@ extension Einkaufsliste {
 
     /// Wie ``artikelHinzufuegenOhneEventAufzeichnung(_:context:)``, zeichnet
     /// zusätzlich ein ``SyncEventArt/artikelHinzugefuegt``-Event auf (Phase 0,
-    /// `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`) — die Stelle für alle lokal
+    /// `docs/DATENSYNCHRONISATION_VERLAUF.md`) — die Stelle für alle lokal
     /// ausgelösten Aktionen, die einen Artikel (neu oder erneut) auf eine Liste
     /// setzen (siehe ``ArtikelHinzufuegenView``,
     /// ``Einkaufsvorgang/artikelAbwaehlen(_:context:)``). Zeichnet bewusst auch

@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 
 /// Zeichnet ``SyncEvent``e für die geplante Datensynchronisation auf
-/// (`docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`, GitHub #39, Phase 0) — die
+/// (`docs/DATENSYNCHRONISATION_VERLAUF.md`, GitHub #39, Phase 0) — die
 /// einzige Stelle, die einen ``SyncEvent`` erzeugt, damit Lamport-Zähler-Vergabe
 /// und Geräte-ID-Zuordnung konsistent an einem Ort passieren.
 ///

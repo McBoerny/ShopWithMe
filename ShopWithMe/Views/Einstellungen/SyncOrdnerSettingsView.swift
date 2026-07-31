@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 /// Hier wird nur ein zusätzlicher Ordner referenziert, in den eigene Änderungen
 /// als Events exportiert werden (``SyncExportService``) — die lokale Datenbank
 /// bleibt unangetastet am Standardpfad. Siehe
-/// `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`.
+/// `docs/DATENSYNCHRONISATION_VERLAUF.md`.
 ///
 /// Ein erster Sync-Zyklus läuft automatisch direkt beim Verknüpfen eines
 /// Ordners (Bootstrap, GitHub #39 Phase 5) — „Jetzt synchronisieren“ danach

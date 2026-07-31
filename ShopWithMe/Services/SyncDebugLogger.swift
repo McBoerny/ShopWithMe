@@ -1,7 +1,7 @@
 import Foundation
 
 /// Fachlicher Wrapper um ``DebugLogWriter`` für die Datensynchronisation
-/// (`docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`, GitHub #39, `docs/LOGGING.md`).
+/// (`docs/DATENSYNCHRONISATION_VERLAUF.md`, GitHub #39, `docs/LOGGING.md`).
 /// Protokolliert nur, wenn der Debug-Modus in den Einstellungen aktiv ist —
 /// Standard: aus, kein spürbarer Overhead bei Deaktivierung (In-Memory-gecachter
 /// Schalter-Zustand, analog ``DatabaseDebugLogger``).

@@ -1,14 +1,14 @@
 import Foundation
 import SwiftData
 
-/// Bereich-B/C/D-Import (`docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`
+/// Bereich-B/C/D-Import (`docs/DATENSYNCHRONISATION_VERLAUF.md`
 /// Abschnitt 5.3, Phase 3): liest `export.json`-Snapshots aus allen fremden
 /// Peer-Ordnern und merged Stammdaten (``GeschaeftTyp``, ``ArtikelKategorie``,
 /// ``Geschaeft``, ``Artikel``, ``Einkaufsliste``, Bereich B), Historie
 /// (``Einkaufsvorgang``, ``KaufEintrag``, Bereich C) und Lernen
 /// (``WarengruppenDistanz``, Bereich D) dependency-geordnet in den lokalen
 /// Bestand — Matching-Bausteine für Bereich B wiederverwendet aus
-/// `docs/DATENBANK_BACKUP_RESTORE_BEWERTUNG.md` §5.1.
+/// `docs/DATENSYNCHRONISATION.md` Abschnitt 4.2.
 ///
 /// **Grundprinzip aller Bereich-B-Merge-Regeln: nie destruktiv.** Ein bereits
 /// lokal gesetzter Wert wird nie durch einen abweichenden Remote-Wert
@@ -427,8 +427,8 @@ enum SyncSnapshotImportService {
     /// Namensbasiert gematcht wie ``mergeGeschaefte``/``mergeArtikel`` (Alias
     /// via ``SyncEntitaetsAliasService`` für spätere Bereich-A-``SyncEvent``s,
     /// die weiterhin die fremde ID referenzieren) — **revidiert** gegenüber der
-    /// ursprünglichen ID-basierten Entscheidung (siehe `docs/DATENBANK_BACKUP_RESTORE_BEWERTUNG.md`
-    /// §5.1): Jedes Gerät legt beim allerersten Start automatisch eine eigene
+    /// ursprünglichen ID-basierten Entscheidung (siehe `docs/DATENSYNCHRONISATION.md`
+    /// Abschnitt 4.2): Jedes Gerät legt beim allerersten Start automatisch eine eigene
     /// Standardliste namens „Einkaufsliste" an (``Einkaufsliste/standard(context:)``),
     /// bereits bevor je synchronisiert wurde. Bei ID-basiertem Matching entstand
     /// dadurch beim ersten Beitritt zu einem bestehenden Sync-Ordner IMMER eine

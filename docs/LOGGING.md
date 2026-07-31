@@ -111,8 +111,10 @@ ergänzt.
 
 ## Mechanismus: Datensynchronisation
 
-Zweiter konkreter Mechanismus, ergänzt mit Phase 4 des
-`docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` (GitHub #39). Zweck: Der Plan
+Zweiter konkreter Mechanismus (siehe `docs/DATENSYNCHRONISATION.md` für die
+aktuelle Architektur, Abschnitt 7 für die Debug-/Statuskonsolidierungs-
+Werkzeuge), ergänzt mit Phase 4 des `docs/DATENSYNCHRONISATION_VERLAUF.md`
+(GitHub #39). Zweck: Der Plan
 schätzt die tatsächliche Sync-Latenz (5–30s iCloud Drive, 1–10s Synology
 Drive) auf Basis von `docs/DATABASE_CONCURRENCY.md`, nicht auf Basis echter
 Messungen, und Phase 4 verzichtet bewusst auf Fehler-Backoff, weil die
@@ -173,7 +175,7 @@ Peer — dessen Snapshot ist älter als
 ignoriert, siehe Architektur-Revision „Alternative A"), `sync_event_aufgegeben`
 (Details wie `sync_event_nicht_anwendbar` — Event ist auch nach
 `SyncImportService.maximalesEventAlterFuerRetry` nicht anwendbar und wird
-aufgegeben statt weiter versucht, siehe `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`
+aufgegeben statt weiter versucht, siehe `docs/DATENSYNCHRONISATION_VERLAUF.md`
 Abschnitt 15), `sync_snapshot_unveraendert_uebersprungen`/`sync_snapshot_geschrieben`
 (GitHub #70-Nachfolgefrage „welche Änderung löst tatsächlich ein Schreiben
 von `export.json` aus": Details bei beiden ein Diagnose-Text `bereich=Anzahl/KurzHash`
@@ -267,7 +269,7 @@ der gespiegelten Log-Dateien im gemeinsamen DB-Ordner zu verifizieren (siehe
 
 `DatabaseLocationService` (das oben referenzierte "Datenbank an einen anderen
 Speicherort verlagern"-Feature) wurde entfernt — es gibt seit der neuen,
-event-basierten Datensynchronisation (`docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`)
+event-basierten Datensynchronisation (`docs/DATENSYNCHRONISATION_VERLAUF.md`)
 keinen Anwendungsfall mehr, bei dem die Store-Datei selbst in einem geteilten
 Ordner liegt. Die oben beschriebene Log-Spiegelung "zusätzlich im gemeinsamen
 DB-Ordner" (`DatabaseDebugLogger.geteilterWriter`/`konfiguriere(geteilterOrdner:)`)

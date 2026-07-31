@@ -144,7 +144,7 @@ final class Geschaeft {
     /// selbst schon Beiträge anderer Peers enthielt, wurde derselbe Beitrag bei
     /// jedem weiteren Hin-und-Her zwischen zwei Geräten erneut mitgezählt und
     /// wuchs dadurch unbegrenzt, ohne dass je ein echter neuer Einkauf
-    /// stattfand (Live-Test-Fund, siehe `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`
+    /// stattfand (Live-Test-Fund, siehe `docs/DATENSYNCHRONISATION_VERLAUF.md`
     /// Abschnitt 17) — als Nebeneffekt änderte sich dadurch bei praktisch jedem
     /// Sync-Zyklus der Inhalt von `export.json`. Ein G-Counter zählt jeden
     /// Beitrag an genau einer Stelle, unabhängig davon, über wie viele Geräte

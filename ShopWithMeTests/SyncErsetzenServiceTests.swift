@@ -4,7 +4,7 @@ import Testing
 @testable import ShopWithMe
 
 /// Tests für ``SyncErsetzenService`` (GitHub #63 + Korruptions-Recovery, siehe
-/// `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`).
+/// `docs/DATENSYNCHRONISATION_VERLAUF.md`).
 ///
 /// **Bewusst kein Test, der den vollen Ablauf „Store-Datei löschen, dann neu
 /// öffnen" innerhalb eines einzigen Testlaufs nachstellt:** ein erster

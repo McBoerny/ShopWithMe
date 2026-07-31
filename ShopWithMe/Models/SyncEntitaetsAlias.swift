@@ -6,7 +6,7 @@ import SwiftData
 /// nötig, weil Bereich-B-Matching (`SyncSnapshotImportService`, Phase 3) für
 /// manche Modelltypen bewusst über Namens-/Koordinatenabgleich statt über die
 /// ID läuft (zwei unabhängig angelegte "Milch"-Artikel sollen zu einem
-/// verschmelzen, siehe `docs/DATENBANK_BACKUP_RESTORE_BEWERTUNG.md` §5.1).
+/// verschmelzen, siehe `docs/DATENSYNCHRONISATION.md` Abschnitt 4.2).
 ///
 /// Ohne diese Tabelle würden künftige Bereich-A-``SyncEvent``s desselben Peers
 /// (die weiterhin dessen ursprüngliche `artikelID` referenzieren) beim

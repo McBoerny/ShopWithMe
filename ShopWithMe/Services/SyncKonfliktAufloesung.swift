@@ -1,7 +1,7 @@
 import Foundation
 
 /// Konfliktauflösung für konkurrierende Bereich-A-``SyncEvent``s zum selben
-/// (`bezugsID`, `artikelID`)-Paar (`docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`
+/// (`bezugsID`, `artikelID`)-Paar (`docs/DATENSYNCHRONISATION_VERLAUF.md`
 /// Abschnitt 4.4, aus dem #39-Vorschlag §4.1 übernommen). Definiert eine
 /// Prioritätsordnung unabhängig vom Lamport-Zähler für die drei
 /// Einkaufsvorgang-Aktionen — „Entfernen schlägt alles", „Abwählen schlägt

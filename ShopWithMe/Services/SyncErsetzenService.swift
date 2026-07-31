@@ -14,7 +14,7 @@ enum SyncErsetzenFehler: LocalizedError {
 }
 
 /// Ersetzen/Backup/Wiederherstellen für den lokalen Datenbestand (GitHub #63 +
-/// Korruptions-Recovery, siehe `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`).
+/// Korruptions-Recovery, siehe `docs/DATENSYNCHRONISATION_VERLAUF.md`).
 ///
 /// Zwei Beweggründe, ein Mechanismus:
 /// 1. **GitHub #63** — beim erstmaligen Verknüpfen eines Sync-Ordners lokale
@@ -75,7 +75,7 @@ enum SyncErsetzenService {
     }
 
     /// Vorher-/Nachher-Mengenvergleich eines „Ersetzen durch Peer"-Neuaufbaus
-    /// (Live-Test-Nachfolgefund, `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`
+    /// (Live-Test-Nachfolgefund, `docs/DATENSYNCHRONISATION_VERLAUF.md`
     /// Abschnitt 21): ein Neuaufbau, der zum Zeitpunkt der Ausführung weniger
     /// zurückbekommt als vorher vorhanden war (z.B. weil kein erreichbarer
     /// Peer den vollständigen Stand hatte), blieb bisher komplett unbemerkt —

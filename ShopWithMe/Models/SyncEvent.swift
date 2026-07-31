@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 
 /// Art eines ``SyncEvent`` — vorerst nur die „Bereich A"-Aktionen aus
-/// `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` (zeitkritische
+/// `docs/DATENSYNCHRONISATION_VERLAUF.md` (zeitkritische
 /// Einkaufslisten-/Abhak-Änderungen). Weitere Bereiche (Stammdaten, Historie,
 /// Lernen) werden nicht pro Änderung protokolliert, sondern beim Export aus dem
 /// jeweils aktuellen Modellzustand abgeleitet (siehe Plan, Abschnitt 4.2) — dafür
@@ -37,7 +37,7 @@ struct SyncEventNutzlast: Codable {
 }
 
 /// Ein einzelnes, unveränderliches Ereignis für die geplante
-/// Datensynchronisation (`docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`,
+/// Datensynchronisation (`docs/DATENSYNCHRONISATION_VERLAUF.md`,
 /// GitHub #39) — additives SwiftData-Modell, keine Ablösung der bestehenden
 /// Modelle. Events werden bei lokalen Aktionen aufgezeichnet
 /// (``SyncEventService``) und in den eigenen Peer-Ordner exportiert
@@ -137,7 +137,7 @@ extension SyncEvent {
 }
 
 /// Peer-Dateiformat für ein einzelnes exportiertes ``SyncEvent`` (siehe
-/// ``SyncExportService``, `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`
+/// ``SyncExportService``, `docs/DATENSYNCHRONISATION_VERLAUF.md`
 /// Abschnitt 5.1). Feldgleich zu ``SyncEvent``, aber als reiner Wert-Typ, den
 /// `JSONEncoder`/`JSONDecoder` direkt verarbeiten können.
 struct SyncEventExportDarstellung: Codable {

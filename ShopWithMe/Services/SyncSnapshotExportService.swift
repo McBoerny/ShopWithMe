@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 import CryptoKit
 
-/// Bereich-B/C/D-Export (`docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`
+/// Bereich-B/C/D-Export (`docs/DATENSYNCHRONISATION_VERLAUF.md`
 /// Abschnitt 5.2, Phase 1b): leitet einen vollständigen ``SyncSnapshot`` aus dem
 /// aktuellen lokalen Modellzustand ab und schreibt ihn als `export.json` in den
 /// eigenen Peer-Ordner. Anders als ``SyncExportService`` (Bereich A) kein

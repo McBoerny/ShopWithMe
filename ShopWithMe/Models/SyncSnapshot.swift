@@ -1,7 +1,7 @@
 import Foundation
 
 /// Vollständiger Stammdaten-/Historien-/Lern-Snapshot dieses Geräts für die
-/// Datensynchronisation (`docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`,
+/// Datensynchronisation (`docs/DATENSYNCHRONISATION_VERLAUF.md`,
 /// GitHub #39, Phase 1b) — Bereiche B (Stammdaten), C (Historie) und D (Lernen)
 /// aus Abschnitt 4.2 des Plans. Wird komplett aus dem aktuellen lokalen
 /// Modellzustand abgeleitet (nicht inkrementell wie ``SyncEvent``/Bereich A) und
@@ -34,7 +34,7 @@ struct SyncSnapshot: Codable {
     /// (Löschungen von Bereich-B-Entitäten, damit sie von anderen Peers nicht
     /// unwissentlich wiederbelebt werden). Keine Rückwärtskompatibilität zu
     /// Version 1 nötig (Projekt ohne feste Nutzerbasis, siehe
-    /// `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`).
+    /// `docs/DATENSYNCHRONISATION_VERLAUF.md`).
     ///
     /// **Version 3 (G-Counter-Korrektur, Abschnitt 17):**
     /// ``GeschaeftSnapshot/anzahlEinkaufsvorgaenge`` (bereits gemergter

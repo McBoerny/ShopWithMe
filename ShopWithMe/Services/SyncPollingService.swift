@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 
 /// Adaptive Synchronisation im Vordergrund
-/// (`docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` Abschnitt 5.4, Phase 4).
+/// (`docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 5.4, Phase 4).
 ///
 /// Läuft ausschließlich, während die App aktiv sichtbar ist — iOS pausiert
 /// einen zeitgesteuerten Loop wie diesen automatisch, sobald die App in den

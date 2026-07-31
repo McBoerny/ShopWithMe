@@ -110,7 +110,7 @@ struct SyncSnapshotImportServiceTests {
     }
 
     /// Prüft das grundlegende G-Counter-Verhalten (siehe
-    /// `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` Abschnitt 17): der
+    /// `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 17): der
     /// Gesamtwert ist die Summe aus dem eigenen Anteil und dem zuletzt
     /// gemeldeten EIGENEN Beitrag jedes Peers — kein additives Delta mehr
     /// gegenüber einem bereits gemergten Gesamtwert.
@@ -157,7 +157,7 @@ struct SyncSnapshotImportServiceTests {
     }
 
     /// Regressionstest für den in einem echten Zwei-Geräte-Live-Test
-    /// beobachteten Fund (`docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`
+    /// beobachteten Fund (`docs/DATENSYNCHRONISATION_VERLAUF.md`
     /// Abschnitt 17): die ursprüngliche "Delta seit zuletzt gesehenem
     /// Gesamtwert"-Regel zählte denselben Beitrag bei jedem Hin-und-Her
     /// zwischen zwei Geräten erneut mit, weil der von einem Peer gemeldete

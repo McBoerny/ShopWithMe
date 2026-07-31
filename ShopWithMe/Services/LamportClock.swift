@@ -1,7 +1,7 @@
 import Foundation
 
 /// Logische Uhr für die geplante Datensynchronisation
-/// (`docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`, GitHub #39) — liefert eine
+/// (`docs/DATENSYNCHRONISATION_VERLAUF.md`, GitHub #39) — liefert eine
 /// geräteübergreifend eindeutig ordenbare Reihenfolge von ``SyncEvent``en, ohne
 /// sich auf synchronisierte Geräteuhren zu verlassen.
 ///

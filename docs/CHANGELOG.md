@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.9 (Build 167) — Doku-Konsolidierung: Datensynchronisation
+
+- Fünf teils überlappende, teils überholte Dokumente zur Datensynchronisation
+  (`DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`, `DATENSYNCHRONISATION_BEWERTUNG.md`,
+  `DATENBANK_BACKUP_RESTORE_BEWERTUNG.md`, plus verstreute Abschnitte in
+  `DATABASE_CONCURRENCY.md`/`ARCHITECTURE.md`) zu zwei klar getrennten
+  Dokumenten konsolidiert: `docs/DATENSYNCHRONISATION.md` (neu, aktuelle
+  Architektur-Referenz — wie funktioniert es heute) und
+  `docs/DATENSYNCHRONISATION_VERLAUF.md` (umbenannt vom vormaligen
+  Umsetzungsplan, chronologisches Verlaufsprotokoll — warum ist es so, jeder
+  Live-Test-Fund/Bugfix). Zwei rein historische Bewertungsdokumente gelöscht,
+  ihr noch relevanter Inhalt (Entitäts-Matching/Merge-Reihenfolge) in die neue
+  Referenz übernommen. `docs/DATABASE_CONCURRENCY.md` bleibt fokussiert auf
+  lokale Schreibkoordination, drei thematisch fehlplatzierte Sync-Abschnitte
+  in den Verlauf verschoben. Keine Code-Änderung.
+
 ## v0.9 (Build 166) — Neuaufbau-Zusammenfassung + Erkennung listenloser Einkaufsvorgänge
 
 - „Gerät zurücksetzen und von Sync-Gerät neu aufbauen" gab bisher keine
@@ -16,7 +32,7 @@
   darauf, meldet betroffene Vorgänge als eine aggregierte Zeile (inkl. Anzahl
   real angehängter Käufe) und markiert einen ungewöhnlich schnellen Zuwachs
   seit der letzten Prüfung zusätzlich als Warnung.
-- Details: `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` Abschnitt 21.
+- Details: `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 21.
 
 ## v0.9 (Build 165) — Fix: unbegrenzt wachsende „Geister"-Einkaufsvorgänge ohne Liste/Geschäft
 
@@ -39,7 +55,7 @@
   Geister-Vorgänge auf betroffenen Geräten (Cascade-Löschung würde die real
   angehängten Käufe mitlöschen) — auf Nutzerwunsch zunächst nur der
   Root-Cause-Fix, Datenrettung folgt separat.
-- Details: `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` Abschnitt 20.
+- Details: `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 20.
 
 ## v0.9 (Build 164) — Debug: manuelle Statuskonsolidierung + unnötige Saves bei Bereich-B-Merge vermieden
 
@@ -63,7 +79,7 @@
   tatsächlich vom bisherigen Wert unterscheidet.
 - Details, inkl. der noch offenen Frage nach einer beobachteten periodischen
   4-Werte-Oszillation im `geschaeftsTypen`-Bereich des Exports:
-  `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` Abschnitt 19.
+  `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 19.
 
 ## v0.9 (Build 163) — Fix: Backup-Anzeige/-Wiederherstellung fehlte (GitHub #63), Belegscan-Vorschlag nicht antippbar (GitHub #57)
 
@@ -91,7 +107,7 @@
   garantiert wie die des äußeren Arrays.
 - Fix: alle inneren ID-/Namens-Arrays werden jetzt vor dem Vergleich
   ebenfalls sortiert.
-- Details: `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` Abschnitt 18.
+- Details: `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 18.
 
 ## v0.9 (Build 161) — Fix: Besuchszähler wuchs unbegrenzt durch Sync (G-Counter-Korrektur)
 
@@ -109,7 +125,7 @@
   bekanntem eigenen Beitrag jedes Peers). Der Snapshot exportiert nur noch
   den eigenen Anteil, nie den bereits gemergten Gesamtwert.
   `SyncSnapshot.aktuelleFormatVersion` auf 3 erhöht.
-- Details: `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` Abschnitt 17.
+- Details: `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 17.
 - Bereits vor diesem Fix aufgelaufene, überhöhte Zähler lassen sich über
   „Zähler zurücksetzen" in den Geschäfts-Stammdaten manuell bereinigen.
 
@@ -143,7 +159,7 @@
 - Fix: neu angelegte Vorgänge werden jetzt sofort in die lokale Vergleichsliste
   nachgetragen; zusätzlich verwirft eine neue Plausibilitätsprüfung jede
   `endZeit`, die vor dem eigenen `startZeit` läge.
-- Details: `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` Abschnitt 16.
+- Details: `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 16.
 
 ## v0.9 (Build 158) — Fix: Endlos-Retry für Bereich-A-Referenzen ohne Tombstone
 
@@ -157,7 +173,7 @@
   protokolliert (`sync_event_nicht_anwendbar`), ohne je zu konvergieren —
   beobachtet über mehr als sieben Minuten durchgehend. Wird jetzt nach der
   Frist aufgegeben (`sync_event_aufgegeben`) statt endlos weiterversucht.
-- Details: `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` Abschnitt 15.
+- Details: `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 15.
 
 ## v0.9 (Build 155) — Fix: Endlos-Retry-Log für Events auf gelöschte Referenzen
 
@@ -179,7 +195,7 @@
   `artikelAbgehakt`-Events kamen danach auf dem zweiten Gerät gar nicht mehr
   an. Ein sicheres Aufräumen bräuchte eine echte Peer-Lese-Bestätigung, die es
   aktuell nicht gibt; bis dahin bleibt „Offene Alt-Datei-Frage" (siehe
-  `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`) bewusst wieder offen.
+  `docs/DATENSYNCHRONISATION_VERLAUF.md`) bewusst wieder offen.
 - Die übrigen Änderungen der DB-Optimierungsrunde (gedrosselte
   Peer-Metadaten, `hasChanges`-Gate, `export.json`-Fingerabdruck-Skip,
   Reentrancy-Guard, Auto-Close, Einkaufsvorgang-Retention) bleiben unverändert
@@ -212,7 +228,7 @@
   werden — dabei zwei vorbestehende Lücken im Tombstone-Mechanismus selbst
   geschlossen (`mergeEinkaufsvorgaenge`/`mergeKaufEintraege` prüften ihren
   „neu anlegen"-Zweig bislang nicht gegen Tombstones).
-- Details: `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` Abschnitt 14,
+- Details: `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 14,
   `docs/PREISHISTORIE_BEREINIGUNG.md`.
 
 ## v0.9 (Build 151) — Suchfeld bleibt nach Artikel-Auswahl gefiltert (GitHub #64)
@@ -455,7 +471,7 @@ der einzige Erkennungsmechanismus, wie vor dieser Version. Details in
   defensiv abgesichert: `EinkaufenView` schließt abgehakte Artikel jetzt
   explizit aus der offenen Liste aus und dedupliziert die abgehakte Liste
   nach Artikel-Identität. Details in
-  `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`, Abschnitt 11b.
+  `docs/DATENSYNCHRONISATION_VERLAUF.md`, Abschnitt 11b.
 
 ## v0.8 (Build 131) — Fix: Einkaufsvorgang-Dublette beim gemeinsamen Einkaufen
 
@@ -469,7 +485,7 @@ der einzige Erkennungsmechanismus, wie vor dieser Version. Details in
   realweltlichen Einkauf (Alias-Mechanismus wie bei Einkaufsliste/Artikel).
   Bereits vor diesem Fix entstandene doppelte Kaufeinträge müssen einmalig
   manuell bereinigt werden (Geschäfts-Preisübersicht). Details in
-  `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`, Abschnitt 11a.
+  `docs/DATENSYNCHRONISATION_VERLAUF.md`, Abschnitt 11a.
 
 ## v0.8 (Build 130) — Architektur-Revision „Alternative A": Löschungen + vollständiger Einkaufslisten-Inhalt im Snapshot
 
@@ -499,7 +515,7 @@ brauchten:
   zu alten `export.json`-Dateien (Projekt ohne feste Nutzerbasis).
 
 Details und Restrisiken (unerreichbare Vorgeschichte aus der Zeit vor
-Bereich-A-Events) in `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`, Abschnitt
+Bereich-A-Events) in `docs/DATENSYNCHRONISATION_VERLAUF.md`, Abschnitt
 11/12.
 
 ## v0.8 (Build 128) — Sync-Ordner-Beobachtung (schnellere Erkennung) + Einkaufslisten-Diagnose
@@ -519,7 +535,7 @@ Bereich-A-Events) in `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`, Abschnitt
 
 - Behoben: `Einkaufsliste` wurde beim Bereich-B-Merge bislang per ID
   gematcht (bewusste, aber fehlerhafte Entscheidung, siehe
-  `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`). Da jedes Gerät beim
+  `docs/DATENSYNCHRONISATION_VERLAUF.md`). Da jedes Gerät beim
   allerersten Start automatisch eine eigene Standardliste namens
   „Einkaufsliste" anlegt, bevor je synchronisiert wurde, entstand bei jedem
   Beitritt zu einem bestehenden Sync-Ordner eine zweite, für den Nutzer
@@ -636,7 +652,7 @@ zweier identischer Kopien).
   echte Synchronisation bei gesperrtem Gerät bräuchte das
   `BackgroundTasks`-Framework und ist bewusst nicht Teil dieser Phase.
 - Kein Fehler-Backoff und keine separate Konsolidierungslogik umgesetzt
-  (Details und Begründung in `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`).
+  (Details und Begründung in `docs/DATENSYNCHRONISATION_VERLAUF.md`).
 - Damit sind alle sechs Phasen des Datensynchronisations-Umsetzungsplans
   umgesetzt (mit den oben und im Plan-Dokument genannten, bewussten
   Vereinfachungen). Offen bleibt nur noch das separate, weiterhin
@@ -719,7 +735,7 @@ zweier identischer Kopien).
   empfangenes Event stattdessen unverändert (mit ursprünglicher
   Geräte-Urheberschaft) lokal ein.
 - Bekannte Grenze dieser Phase (dokumentiert in
-  `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`): Ohne den noch ausstehenden
+  `docs/DATENSYNCHRONISATION_VERLAUF.md`): Ohne den noch ausstehenden
   Bereich-B/C/D-Import (Phase 3) funktioniert der Bereich-A-Import nur
   zuverlässig für Listen/Einkäufe/Artikel, die auf dem empfangenden Gerät
   bereits bekannt sind. Nicht anwendbare Events werden nicht als erledigt
@@ -736,7 +752,7 @@ zweier identischer Kopien).
   des aktuellen Datenbestands in den eigenen Peer-Ordner. Reines Schreiben,
   noch keine Fälligkeits-/Konsolidierungslogik (kommt mit Phase 4) und noch kein
   Import (Phase 2/3).
-- `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` um mehrere beim Entwurf
+- `docs/DATENSYNCHRONISATION_VERLAUF.md` um mehrere beim Entwurf
   getroffene/geklärte Entscheidungen ergänzt: `Geschaeft.erkennungsradius`
   synchronisiert sich als Teil des Geschäfts; die Lernzähler
   (`anzahlEinkaufsvorgaenge` u.a.) brauchen eine additive statt
@@ -750,7 +766,7 @@ zweier identischer Kopien).
   bestehenden Datenbank-Speicherort (die lokale Datenbank bleibt unverändert am
   Standardpfad). Manueller „Jetzt synchronisieren"-Button für diese Phase —
   automatisches, periodisches Auslösen folgt erst mit der in
-  `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` als Phase 4 geplanten
+  `docs/DATENSYNCHRONISATION_VERLAUF.md` als Phase 4 geplanten
   Konsolidierung/adaptivem Polling.
 - Neuer `SyncExportService` — schreibt lokale, noch nicht hochgeladene
   `SyncEvent`s als einzelne JSON-Dateien in den eigenen Peer-Ordner
@@ -761,7 +777,7 @@ zweier identischer Kopien).
 
 - Neue `LamportClock` (`Services/LamportClock.swift`) — lokale logische Uhr als
   Basis für eine geräteübergreifend eindeutige Ereignisreihenfolge, siehe
-  `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`.
+  `docs/DATENSYNCHRONISATION_VERLAUF.md`.
 - Neues additives SwiftData-Modell `SyncEvent` (`Models/SyncEvent.swift`) +
   `SyncEventService.aufzeichnen(...)` — zeichnet Artikel-Hinzufügen/-Entfernen
   auf einer Einkaufsliste sowie Abhaken/Abwählen/dauerhaftes Entfernen auf einem
