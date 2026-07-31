@@ -628,6 +628,7 @@ private struct PositionsZeile: View {
 
     @FocusState private var istFokussiert: Bool
     @State private var neuerArtikelEntwurf: Artikel?
+    @State private var zeigeVorschlaege = false
 
     private var getrimmterName: String {
         position.artikelName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -686,8 +687,8 @@ private struct PositionsZeile: View {
                     .foregroundStyle(.orange)
             }
 
-            if istFokussiert, position.effektivZugeordneterArtikel == nil, !vorschlaege.isEmpty || zeigtNeuAnlegenOption {
-                VStack(alignment: .leading, spacing: 6) {
+            if zeigeVorschlaege, position.effektivZugeordneterArtikel == nil, !vorschlaege.isEmpty || zeigtNeuAnlegenOption {
+                VStack(alignment: .leading, spacing: 10) {
                     ForEach(vorschlaege) { artikel in
                         Button {
                             artikelZuweisen(artikel)
@@ -708,9 +709,24 @@ private struct PositionsZeile: View {
                         }
                     }
                 }
-                .font(.subheadline)
+                .font(.body)
                 .foregroundStyle(Color.accentColor)
                 .padding(.top, 2)
+            }
+        }
+        .onChange(of: istFokussiert) { _, fokussiert in
+            if fokussiert {
+                zeigeVorschlaege = true
+            } else {
+                // Verzögert ausblenden statt sofort: Ein Tap auf einen
+                // Vorschlags-Button entzieht dem TextField den Fokus (Touch
+                // trifft eine andere View), wodurch `istFokussiert` schon vor
+                // der Tap-Erkennung des Buttons auf false wechselt. Ohne
+                // Verzögerung verschwindet die Liste, bevor der Tap ankommt,
+                // und die Auswahl geht verloren (GitHub #57).
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    zeigeVorschlaege = false
+                }
             }
         }
         .sheet(item: $neuerArtikelEntwurf, onDismiss: nachNeuanlageAufraeumen) { entwurf in

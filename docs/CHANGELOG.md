@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.9 (Build 163) — Fix: Backup-Anzeige/-Wiederherstellung fehlte (GitHub #63), Belegscan-Vorschlag nicht antippbar (GitHub #57)
+
+- #63: Der vorherige Fix legte zwar ein lokales Backup an, zeigte es aber nirgends
+  an. Sync-Einstellungen haben jetzt eine eigene „Lokales Backup"-Sektion mit
+  Erstellungsdatum und Größe, sowie eine eigenständige „Backup wiederherstellen"-
+  Aktion, unabhängig vom „Synchronisierung deaktivieren"-Fluss.
+- #57: Der vorherige Fix (größeres Tap-Areal) reichte nicht — der Tap kam gar
+  nicht erst an. Die Vorschlagsliste war direkt an den Fokus des TextFields
+  gebunden; ein Tap auf einen Vorschlag entzieht dem TextField sofort den Fokus
+  (Touch trifft eine andere View), wodurch die Liste verschwand, bevor der
+  Button-Tap erkannt wurde. Sichtbarkeit läuft jetzt über einen eigenen State,
+  der beim Fokusverlust erst verzögert zurückgesetzt wird. Zusätzlich
+  Schriftgröße der Vorschläge von `.subheadline` auf `.body` erhöht.
+
 ## v0.9 (Build 162) — Fix: export.json wurde trotz unverändertem Inhalt weiter neu geschrieben
 
 - Ein weiterer Live-Test zeigte: `export.json` wurde weiterhin praktisch bei
