@@ -623,6 +623,24 @@ enum SyncSnapshotImportService {
                     vorhandener = bekannter
                     umgeleitetAufNachfolger = false
                 }
+            } else if remoteListe == nil {
+                // Audit-Fund (Abschnitt 25): OHNE bereits bekannten ID-/Alias-
+                // Treffer darf ein Eintrag mit unauflösbarer `remoteListe` (auf
+                // dem sendenden Gerät baumelnd) weder gematcht noch angelegt
+                // werden — vorher griff der Guard nur im "else"-Zweig
+                // (Neuanlage), aber der `offenerTreffer`-Zweig darunter
+                // verglich `$0.einkaufsliste == remoteListe` OHNE zu prüfen, ob
+                // `remoteListe` überhaupt ein echter Wert ist. Da `nil ==
+                // nil` in Swift `true` ist, konnte das JEDEN lokal noch
+                // offenen, selbst bereits kaputten (`einkaufsliste == nil`)
+                // Vorgang als "Treffer" für einen völlig unabhängigen,
+                // ebenfalls baumelnden Fremd-Eintrag matchen — zwei zufällig
+                // gleichzeitig baumelnde Referenzen wurden dadurch fälschlich
+                // als "derselbe reale Einkauf" aliasiert. Ohne bereits
+                // bekannten ID-Treffer ist ein Eintrag ohne Liste hier
+                // grundsätzlich nicht sinnvoll verarbeitbar — überspringen,
+                // bevor überhaupt ein Matching-Versuch stattfindet.
+                continue
             } else if let offenerTreffer = alleLokalen.first(where: {
                 $0.endZeit == nil && $0.geschaeft == remoteGeschaeft && $0.einkaufsliste == remoteListe
             }) {
@@ -640,21 +658,15 @@ enum SyncSnapshotImportService {
                 // (analog ``mergeGeschaefte``/``mergeArtikel``).
                 continue
             } else {
-                // Live-Test-Fund (Abschnitt 20): ohne auflösbare
-                // `remoteListe` (die Referenz war schon auf dem sendenden
-                // Gerät baumelnd, ``sichereID`` lässt sie deshalb beim Export
-                // weg) wäre der neu angelegte Vorgang für die gesamte App
-                // unerreichbar — ``EinkaufenView/aktuellerEinkauf`` und
+                // Live-Test-Fund (Abschnitt 20): `remoteListe` ist an dieser
+                // Stelle bereits durch den Guard oben als nicht-nil
+                // garantiert — ein neu angelegter Vorgang braucht immer eine
+                // konkrete Liste, sonst wäre er für die gesamte App
+                // unerreichbar (``EinkaufenView/aktuellerEinkauf`` und
                 // ``offenerNachfolger(fuerListe:...)`` verlangen beide immer
-                // eine konkrete Liste. Ein `remoteGeschaeft == nil` bleibt
-                // dagegen legitim (Einkauf ohne gewähltes Geschäft ist
-                // Normalfall). Ohne diesen Guard erzeugte jeder weitere
-                // baumelnde Fremd-Eintrag einen weiteren, für immer
-                // unsichtbaren "Geister"-Vorgang (beobachtet: 907 von 959
-                // lokalen Vorgängen auf einem Testgerät, davon 107 mit real
-                // angehängten ``KaufEintrag``en — echte Käufe, die dadurch
-                // nirgends in der Einkaufsansicht auftauchten).
-                guard let remoteListe else { continue }
+                // eine konkrete Liste). Ein `remoteGeschaeft == nil` bleibt
+                // legitim (Einkauf ohne gewähltes Geschäft ist Normalfall).
+                let remoteListe = remoteListe!
                 // Bewusst kein `abschliessen()` (würde zusätzlich
                 // `Geschaeft.anzahlEinkaufsvorgaenge` erhöhen — das übernimmt
                 // bereits die additive Zähler-Merge-Regel in

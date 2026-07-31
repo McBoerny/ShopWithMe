@@ -760,6 +760,53 @@ struct SyncSnapshotImportServiceTests {
         #expect(vorgaenge.isEmpty)
     }
 
+    /// Regressionstest für einen Audit-Fund (Abschnitt 25): ein bereits
+    /// lokal vorhandener, selbst schon kaputter (keine Liste, keine ID-
+    /// Entsprechung bekannt) offener Vorgang darf NICHT als "derselbe reale
+    /// Einkauf" für einen völlig unabhängigen Fremd-Eintrag durchgehen, nur
+    /// weil auch dessen `einkaufslisteID` unauflösbar ist — `nil == nil` ist
+    /// in Swift `true`, der bisherige `offenerTreffer`-Vergleich
+    /// (`$0.einkaufsliste == remoteListe`) prüfte nicht, ob `remoteListe`
+    /// überhaupt ein echter Wert war, und aliaserte zwei unabhängig
+    /// baumelnde Referenzen fälschlich zusammen — sichtbar u.a. daran, dass
+    /// der lokale, eigentlich unberührte Vorgang danach eine `endZeit` vom
+    /// Fremd-Eintrag übernahm.
+    @Test
+    func bereitsBaumelnderLokalerVorgangWirdNichtMitUnabhaengigemFremdeintragOhneListeVermischt() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        // Bereits vorhandener, selbst schon kaputter lokaler Vorgang: offen,
+        // ohne Liste, ohne Geschäft — genau die Signatur, die vorher fälschlich
+        // als "Treffer" durchging.
+        let bereitsKaputt = Einkaufsvorgang(geschaeft: nil, einkaufsliste: nil)
+        context.insert(bereitsKaputt)
+        try context.save()
+
+        // Unabhängiger Fremd-Eintrag, ebenfalls ohne auflösbare Liste, mit
+        // einer eigenen, nie zuvor gesehenen ID und einer endZeit.
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        let fremdeEndZeit = Date()
+        snapshot.einkaufsvorgaenge = [
+            EinkaufsvorgangSnapshot(id: UUID(), geschaeftID: nil, einkaufslisteID: nil, startZeit: Date(), endZeit: fremdeEndZeit),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        // Der bereits vorhandene, kaputte Vorgang bleibt komplett unberührt —
+        // insbesondere OHNE die endZeit des unabhängigen Fremd-Eintrags.
+        #expect(bereitsKaputt.endZeit == nil)
+        // Und es entsteht kein zusätzlicher Vorgang für den unauflösbaren
+        // Fremd-Eintrag (Abschnitt 20 greift weiterhin).
+        let vorgaenge = try context.fetch(FetchDescriptor<Einkaufsvorgang>())
+        #expect(vorgaenge.count == 1)
+        #expect(vorgaenge.first?.id == bereitsKaputt.id)
+    }
+
     /// Regressionstest für dieselbe Live-Test-Session: die neu eingeführte
     /// Plausibilitätsprüfung verwirft eine `endZeit`, die vor dem eigenen
     /// `startZeit` läge — genau das durch den obigen Bug beobachtete Muster

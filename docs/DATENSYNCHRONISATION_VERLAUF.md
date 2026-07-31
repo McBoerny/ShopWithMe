@@ -1602,3 +1602,97 @@ Test in `SyncErsetzenServiceTests`. Der volle Ablauf (echte baumelnde
 Referenz auf einem Altbestand → Bereinigung → Neustart → repariert) ist
 mangels künstlich erzeugbarer Testreferenz nicht automatisiert verifizierbar
 und bräuchte eine manuelle Prüfung auf einem betroffenen Altgerät.
+
+## 25. Systematischer Audit aller Merge-Pfade (nach Nutzeranfrage: "könnte das wieder passieren?")
+
+Auslöser: nach dem Live-Test der Abschnitt-20/24-Fixes verlor ein bereits
+betroffener Einkaufsvorgang unerwartet seine `endZeit` (wurde von
+"geschlossen" zu "offen"), obwohl `endZeit` im gesamten Code nur an EINER
+Stelle je gesetzt wird (`Einkaufsvorgang.abschliessen(am:)`) und nirgends
+genullt — der Verdacht auf einen zusätzlichen, noch unentdeckten Merge-Bug
+lag nahe. Systematisch geprüft: jede `mergeX`-Funktion in
+`SyncSnapshotImportService` sowie die analogen Bereich-A-Auflösungspfade in
+`SyncImportService`, gegen vier Kriterien:
+
+1. Validiert der "neu anlegen"-Zweig alle strukturell erforderlichen
+   Referenzen, bevor ein neues, sonst unerreichbares Objekt entsteht
+   (Abschnitt-20-Klasse)?
+2. Überschreibt irgendein Zweig einen bereits gesetzten Wert, statt nur
+   Lücken zu füllen (verletzt "nie destruktiv")?
+3. Sind Relationship-Neuzuweisungen bedingt (vermeidet unnötiges
+   `context.hasChanges`, Abschnitt 19-Klasse)?
+4. Kann ein `nil`-Optional auf beiden Seiten eines Vergleichs fälschlich als
+   "Treffer" gewertet werden, obwohl `nil` für dieses Feld tatsächlich
+   *kaputt* statt *legitim leer* bedeutet?
+
+**Gefunden und behoben — Kriterium 4, echter Bug:**
+`mergeEinkaufsvorgaenge`s `offenerTreffer`-Zweig verglich
+`$0.einkaufsliste == remoteListe`, OHNE zu prüfen, ob `remoteListe`
+überhaupt einen echten Wert hat. Da `nil == nil` in Swift `true` ist, konnte
+ein lokal bereits offener, selbst schon kaputter (`einkaufsliste == nil`)
+Vorgang als "derselbe reale Einkauf" für einen völlig unabhängigen
+Fremd-Eintrag durchgehen, dessen `einkaufslisteID` aus demselben Grund wie in
+Abschnitt 20 unauflösbar war (baumelnd auf dem sendenden Gerät) — zwei
+voneinander unabhängige, je für sich schon kaputte Referenzen wurden dadurch
+fälschlich zusammengeführt (Alias registriert, `endZeit` vom fremden Eintrag
+übernommen). Das erklärt sehr wahrscheinlich (nicht abschließend mit Zugriff
+auf das Gerät verifiziert) den beobachteten Fall, in dem ein Vorgang nach
+einem Reparaturlauf plötzlich eine fremde `endZeit` verlor bzw. gewann.
+
+**Fix:** Der Guard „ohne auflösbare `remoteListe` nicht verarbeitbar" (bisher
+nur im „neu anlegen"-Zweig, Abschnitt 20) greift jetzt VOR jedem Matching-
+Versuch (`offenerTreffer` eingeschlossen) — nur der bereits ID-/Alias-basiert
+gefundene `bekannter`-Zweig bleibt davon unberührt, da ein expliziter
+ID-Treffer unabhängig von der aktuellen Listen-Auflösbarkeit vertrauenswürdig
+bleibt. Neuer Test
+`bereitsBaumelnderLokalerVorgangWirdNichtMitUnabhaengigemFremdeintragOhneListeVermischt`.
+
+**Geprüft und als unbedenklich eingestuft (keine Änderung nötig):**
+- `Einkaufsvorgang.offenerNachfolger(fuerListe:...)` verlangt einen
+  konkreten, nicht-optionalen `Einkaufsliste`-Parameter — kann strukturell
+  nicht auf dieselbe Art fälschlich `nil` gegen `nil` matchen.
+- `SyncImportService.aufOffenenNachfolgerUmgeleitet` (Bereich-A-Pendant)
+  entpackt `vorgang.einkaufsliste` explizit vor dem Aufruf desselben
+  `offenerNachfolger`-Helfers — dieselbe Absicherung, unabhängig geprüft.
+- `mergeWarengruppenDistanzen`s Matching auf `$0.geschaeft == geschaeft`
+  vergleicht ebenfalls zwei Optionals, aber `WarengruppenDistanz.geschaeft`
+  ist ein bewusst legitim-optionales Feld (geschäftsunabhängige,
+  „stadtweite" Distanz) — anders als bei `Einkaufsvorgang.einkaufsliste`
+  bedeutet `nil` hier keine Kaputtheit, sondern einen echten fachlichen
+  Zustand. Kein Bug.
+- `mergeGeschaefte`/`mergeArtikel`/`mergeArtikelKategorien`/
+  `mergeEinkaufslisten`: alle vier Entitätstypen sind IMMER eigenständig
+  über ihre jeweilige Verwaltungsansicht erreichbar (keine „braucht X, um
+  sichtbar zu sein"-Abhängigkeit wie bei `Einkaufsvorgang`) — ein „neu
+  anlegen" ohne vollständige Zusatzdaten erzeugt hier höchstens ein
+  unvollständiges, aber niemals ein unerreichbares Objekt.
+- `mergeKaufEintraege`: `artikel`/`geschaeft`/`kategorie`/`einkaufsvorgang`
+  dürfen alle `nil` sein (behält dafür bewusst die Schnappschuss-Namen) —
+  bleibt trotzdem in der Preishistorie sichtbar, keine Unerreichbarkeit.
+- `mergeWarengruppenDistanzen`s „neu anlegen"-Zweig validiert bereits
+  korrekt VOR dem Anlegen (`guard let kategorieA = ..., let kategorieB = ...
+  else { continue }`) — ein bereits existierendes gutes Beispiel für
+  Kriterium 1, an dem sich der Abschnitt-20-Fix orientiert hat.
+- Alle `vereinigeGeordnetFallsNoetig`-Aufrufstellen (Kriterium 3) wurden
+  bereits in Abschnitt 19 vollständig auf die bedingte Variante umgestellt,
+  keine verbliebene unbedingte Zuweisung gefunden.
+
+**Bewusst nicht abschließend geklärt:** ob dieser Fund die BEOBACHTETE
+`endZeit`-Änderung vollständig erklärt, bleibt ohne erneuten Live-Test auf
+demselben (inzwischen ohnehin für einen Neuaufbau vorgesehenen) Datenbestand
+unverifizierbar — die Vermengung aus historisch bereits kaputten Daten
+(vor Abschnitt 20/24) und aktivem Code macht eine nachträgliche Rekonstruktion
+unzuverlässig. Ein Neuaufbau ab einem sauberen Bestand schafft hierfür die
+nötige Eindeutigkeit: jede ab jetzt neu auftretende Anomalie ist dann
+zweifelsfrei ein noch aktiver Bug, keine Altlast.
+
+**Genereller Hinweis für künftige Merge-Regeln:** „vergleicht zwei Optionals
+auf Gleichheit" ist immer ein Prüfpunkt wert — die entscheidende Frage ist
+jeweils, ob `nil` für dieses konkrete Feld ein legitimer Fachzustand ist
+(dann ist ein `nil==nil`-Treffer korrekt) oder ob es „nicht auflösbar/kaputt"
+bedeutet (dann muss `nil` von jedem Matching-Versuch ausgeschlossen werden,
+siehe Abschnitt 20).
+
+**Verifikationsstand:** `xcodebuild build`/`build-for-testing` grün. Neuer
+Test in `SyncSnapshotImportServiceTests`. Noch nicht mit echten Geräten
+nachverifiziert — geplant nach dem vom Nutzer angekündigten Neuaufbau.

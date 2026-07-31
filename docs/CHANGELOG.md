@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.9 (Build 170) — Fix: zwei unabhängig baumelnde Einkaufsvorgang-Referenzen konnten fälschlich zusammengeführt werden
+
+- Systematischer Audit aller Merge-Pfade (Auslöser: ein Einkaufsvorgang
+  verlor unerwartet seine `endZeit`, obwohl der Code sie nirgends nullt)
+  fand einen echten Bug: der Abgleich für „ist das derselbe reale Einkauf"
+  verglich zwei Listen-Referenzen auf Gleichheit, ohne zu prüfen, ob eine
+  davon überhaupt einen echten Wert hat — `nil == nil` ist in Swift `true`,
+  wodurch ein bereits kaputter (listenloser) lokaler Vorgang fälschlich als
+  „Treffer" für einen völlig unabhängigen, ebenfalls listenlosen Fremd-
+  Eintrag durchgehen konnte. Der bestehende Guard aus dem vorigen Fix
+  (unauflösbare Liste → nicht verarbeiten) greift jetzt vor jedem
+  Matching-Versuch, nicht nur beim Neuanlegen.
+- Alle übrigen Merge-Funktionen wurden gegen dieselben vier Kriterien
+  geprüft (fehlende Existenz-Validierung, destruktives Überschreiben,
+  unbedingte Zuweisungen, `nil`-gegen-`nil`-Fehlmatches) — keine weiteren
+  Funde.
+- Details: `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 25.
+
 ## v0.9 (Build 169) — Reparaturweg für baumelnde Referenzen ohne SQLite-Direktzugriff
 
 - Baumelnde Referenzen (Absturzrisiko) konnten bisher nur gemeldet, nie
