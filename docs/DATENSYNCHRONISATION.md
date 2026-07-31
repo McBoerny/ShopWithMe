@@ -308,11 +308,15 @@ passiert dadurch an einer einzigen Stelle für beide Auslöser.
   tatsächlich neu schreibt — siehe `docs/LOGGING.md` für alle protokollierten
   Ereignistypen.
 - **`DatenintegritaetsService`** (immer aktiv, läuft bei jedem App-Start):
-  meldet baumelnde Referenzen (Absturzrisiko, `persistentModelID` zeigt auf
-  Gelöschtes) UND — separat, da ein anderer Fehlerklasse — `Einkaufsvorgang`e
-  ohne `Einkaufsliste` (gültiges `nil`, kein Absturzrisiko, aber für die App
-  strukturell unerreichbar), als eine aggregierte Zeile inkl. Anzahl real
-  angehängter Käufe. Ein Zuwachs über
+  löscht zuerst automatisch `Einkaufsvorgang`e ohne `Einkaufsliste` UND ohne
+  angehängte `KaufEintrag`e (`raeumeLeereListenloseVorgaengeAuf(context:)`
+  — beweisbar verlustfrei, da ein `nil`-Bezug kein Absturzrisiko ist und
+  nichts referenziert wird, das dabei verloren ginge), dann meldet `pruefe(context:)`
+  baumelnde Referenzen (Absturzrisiko, `persistentModelID` zeigt auf
+  Gelöschtes) UND — separat, da eine andere Fehlerklasse — verbleibende
+  `Einkaufsvorgang`e ohne `Einkaufsliste`, die trotzdem angehängte Käufe
+  haben (nicht automatisch gelöscht, `deleteRule: .cascade` würde die Käufe
+  mitlöschen), als eine aggregierte Zeile inkl. Anzahl. Ein Zuwachs über
   `DatenintegritaetsService.warnschwelleSchnellesWachstum` (Standard 10) seit
   der letzten Prüfung wird zusätzlich als Warnung markiert — eine reine
   Bestandszahl verrät für sich genommen nicht, ob sie über Wochen langsam

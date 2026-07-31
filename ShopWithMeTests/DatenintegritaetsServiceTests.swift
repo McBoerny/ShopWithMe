@@ -111,6 +111,44 @@ struct DatenintegritaetsServiceTests {
         #expect(beschreibung.contains("1 davon mit insgesamt 1 angehängten Käufen"))
     }
 
+    /// Regressionstest für die automatische Bereinigung (Abschnitt 22): leere
+    /// listenlose Vorgänge werden gelöscht, ein listenloser Vorgang MIT
+    /// angehängtem Kauf bleibt erhalten (Cascade-Löschung würde den echten
+    /// Kauf sonst mitlöschen) und wird stattdessen weiterhin von
+    /// ``pruefe(context:)`` gemeldet. Ein Vorgang MIT Liste bleibt so oder so
+    /// unangetastet.
+    @Test
+    func raeumtNurLeereListenloseVorgaengeAufUndBehaeltSolcheMitKaeufen() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let liste = Einkaufsliste(name: "Urlaub")
+        context.insert(liste)
+        let vorgangMitListe = Einkaufsvorgang(geschaeft: nil, einkaufsliste: liste)
+        context.insert(vorgangMitListe)
+
+        let artikel = Artikel(name: "Bananen", symbolName: "cart", farbeHex: "#000000")
+        context.insert(artikel)
+        let listenloserMitKauf = Einkaufsvorgang(geschaeft: nil, einkaufsliste: nil)
+        context.insert(listenloserMitKauf)
+        let kauf = KaufEintrag(artikel: artikel, geschaeft: nil)
+        kauf.einkaufsvorgang = listenloserMitKauf
+        context.insert(kauf)
+
+        let listenloserLeer = Einkaufsvorgang(geschaeft: nil, einkaufsliste: nil)
+        context.insert(listenloserLeer)
+        try context.save()
+
+        let anzahlBereinigt = DatenintegritaetsService.raeumeLeereListenloseVorgaengeAuf(context: context)
+
+        #expect(anzahlBereinigt == 1)
+        let verbleibende = try context.fetch(FetchDescriptor<Einkaufsvorgang>())
+        #expect(verbleibende.count == 2)
+        #expect(verbleibende.contains { $0.id == vorgangMitListe.id })
+        #expect(verbleibende.contains { $0.id == listenloserMitKauf.id })
+        #expect(try context.fetchCount(FetchDescriptor<KaufEintrag>()) == 1)
+    }
+
     /// Regressionstest für dieselbe Live-Test-Session: eine reine
     /// Bestandszahl verrät nicht, ob sie langsam über Wochen getröpfelt ist
     /// oder gerade akut wächst (beobachtet: 875 an einem einzigen Tag) — ein

@@ -1524,3 +1524,29 @@ ausreichen. Die Zyklusdauer-Protokollierung (`SyncDebugLogger`,
 Vermutungen — die DB-Optimierungsrunde in Abschnitt 14 dürfte die tatsächlich
 gemessene Zyklusdauer bereits spürbar gesenkt haben, unabhängig von diesem
 weiterhin zurückgestellten Eingriff.
+
+## 23. Sichere automatische Bereinigung der leeren Geister-Vorgänge
+
+Nachtrag zu Abschnitt 20/21: von den dort gefundenen 907 listenlosen
+Einkaufsvorgängen auf einem Testgerät waren 800 leer (keine angehängten
+`KaufEintrag`e) — deren Löschung ist beweisbar verlustfrei, anders als die
+„baumelnde Referenz"-Fälle, die `DatenintegritaetsService` seit jeher nur
+meldet, nie repariert (siehe Typ-Doku dort): ein `nil`-Bezug ist kein
+Absturzrisiko, das Löschen muss also keine bereits ungültige Gegenseite
+auffalten.
+
+`DatenintegritaetsService.raeumeLeereListenloseVorgaengeAuf(context:)` läuft
+jetzt automatisch bei jedem App-Start, direkt vor `pruefe(context:)` (siehe
+`ShopWithMeApp.init()`), löscht ausschließlich Vorgänge ohne Liste UND ohne
+Käufe, und protokolliert die Anzahl über `DatenintegritaetsLogger`. Vorgänge
+MIT angehängten Käufen (im beobachteten Fall 107) werden bewusst NICHT
+automatisch gelöscht (`Einkaufsvorgang.kaufEintraege` hat `deleteRule:
+.cascade` — ein blindes Löschen würde die echten Käufe mitlöschen) und
+bleiben Gegenstand des Berichts, bis eine gezielte Wiederherstellung
+(KaufEintraege auf einen echten Vorgang derselben Liste umhängen) separat
+entschieden ist.
+
+**Verifikationsstand:** `xcodebuild build`/`build-for-testing` grün. Neuer
+Test `raeumtNurLeereListenloseVorgaengeAufUndBehaeltSolcheMitKaeufen` in
+`DatenintegritaetsServiceTests`. Noch nicht mit echten Geräten
+nachverifiziert.

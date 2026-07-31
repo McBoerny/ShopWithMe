@@ -161,6 +161,29 @@ enum DatenintegritaetsService {
         return befunde
     }
 
+    /// Löscht ``Einkaufsvorgang``e ohne ``Einkaufsliste`` UND ohne
+    /// angehängte ``KaufEintrag``e — beweisbar verlustfrei (anders als die
+    /// „baumelnde Referenz"-Fälle oben): ein `nil`-Bezug ist kein
+    /// Absturzrisiko, das Löschen muss also keine bereits ungültige
+    /// Gegenseite auffalten. Ein solcher Vorgang ist für die App ohnehin
+    /// unerreichbar (siehe ``pruefe(context:)``) und referenziert nichts,
+    /// das dabei verloren ginge. Vorgänge MIT angehängten `KaufEintrag`en
+    /// werden bewusst NICHT gelöscht (`deleteRule: .cascade` würde echte
+    /// Käufe mitlöschen) — die bleiben Gegenstand des Berichts oben, bis
+    /// eine gezielte Wiederherstellung möglich ist. Läuft automatisch bei
+    /// jedem App-Start, vor ``pruefe(context:)`` (siehe `ShopWithMeApp`).
+    @discardableResult
+    @MainActor
+    static func raeumeLeereListenloseVorgaengeAuf(context: ModelContext) -> Int {
+        let betroffene = ((try? context.fetch(FetchDescriptor<Einkaufsvorgang>())) ?? [])
+            .filter { $0.einkaufsliste == nil && $0.kaufEintraege.isEmpty }
+        guard !betroffene.isEmpty else { return 0 }
+        for vorgang in betroffene { context.delete(vorgang) }
+        try? context.save()
+        DatenintegritaetsLogger.log("\(betroffene.count) leere, listenlose Einkaufsvorgänge automatisch bereinigt")
+        return betroffene.count
+    }
+
     /// `gueltigeIDs: nil` prüft nur, ob `objekt` überhaupt gesetzt ist, ohne
     /// gegen eine konkrete Gültigkeitsmenge abzugleichen — für
     /// ``KaufEintrag/einkaufsvorgang``, wo ein eigener Fetch für nur diese eine

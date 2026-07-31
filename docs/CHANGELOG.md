@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.9 (Build 168) — Automatische Bereinigung leerer Geister-Einkaufsvorgänge
+
+- Von den zuvor gefundenen listenlosen „Geister"-Einkaufsvorgängen (fehlende
+  Einkaufsliste, für die App unerreichbar) sind die ohne angehängte Käufe
+  beweisbar verlustfrei löschbar — anders als die seit Langem bekannten
+  „baumelnden Referenzen", die absichtlich nicht automatisch repariert
+  werden (Absturzrisiko). Läuft jetzt automatisch bei jedem App-Start, bevor
+  die übrige Datenintegritäts-Prüfung ihren Bericht erstellt. Vorgänge mit
+  echten angehängten Käufen werden weiterhin nicht automatisch gelöscht und
+  bleiben Teil des Berichts.
+- Details: `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 23.
+
 ## v0.9 (Build 167) — Doku-Konsolidierung: Datensynchronisation
 
 - Fünf teils überlappende, teils überholte Dokumente zur Datensynchronisation
