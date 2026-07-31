@@ -640,6 +640,21 @@ enum SyncSnapshotImportService {
                 // (analog ``mergeGeschaefte``/``mergeArtikel``).
                 continue
             } else {
+                // Live-Test-Fund (Abschnitt 20): ohne auflösbare
+                // `remoteListe` (die Referenz war schon auf dem sendenden
+                // Gerät baumelnd, ``sichereID`` lässt sie deshalb beim Export
+                // weg) wäre der neu angelegte Vorgang für die gesamte App
+                // unerreichbar — ``EinkaufenView/aktuellerEinkauf`` und
+                // ``offenerNachfolger(fuerListe:...)`` verlangen beide immer
+                // eine konkrete Liste. Ein `remoteGeschaeft == nil` bleibt
+                // dagegen legitim (Einkauf ohne gewähltes Geschäft ist
+                // Normalfall). Ohne diesen Guard erzeugte jeder weitere
+                // baumelnde Fremd-Eintrag einen weiteren, für immer
+                // unsichtbaren "Geister"-Vorgang (beobachtet: 907 von 959
+                // lokalen Vorgängen auf einem Testgerät, davon 107 mit real
+                // angehängten ``KaufEintrag``en — echte Käufe, die dadurch
+                // nirgends in der Einkaufsansicht auftauchten).
+                guard let remoteListe else { continue }
                 // Bewusst kein `abschliessen()` (würde zusätzlich
                 // `Geschaeft.anzahlEinkaufsvorgaenge` erhöhen — das übernimmt
                 // bereits die additive Zähler-Merge-Regel in

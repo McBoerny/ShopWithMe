@@ -731,6 +731,35 @@ struct SyncSnapshotImportServiceTests {
         #expect(vorgaenge.first?.endZeit == nil)
     }
 
+    /// Regressionstest für einen Live-Test-Nachfolgefund (Abschnitt 20): eine
+    /// Referenz ohne auflösbare `einkaufslisteID` (auf dem sendenden Gerät
+    /// bereits baumelnd, ``sichereID`` lässt sie deshalb beim Export weg) darf
+    /// keinen neuen lokalen Vorgang anlegen — ein solcher Vorgang wäre für die
+    /// gesamte App unerreichbar (``EinkaufenView/aktuellerEinkauf`` verlangt
+    /// immer eine konkrete Liste) und wuchs auf einem Testgerät unbegrenzt
+    /// (907 von 959 lokalen Vorgängen, 107 davon mit real angehängten
+    /// ``KaufEintrag``en). Ein fehlendes `geschaeftID` bleibt dagegen legitim
+    /// (Einkauf ohne gewähltes Geschäft) und darf weiterhin anlegen.
+    @Test
+    func einkaufsvorgangOhneAufloesbareListeWirdNichtAngelegt() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.einkaufsvorgaenge = [
+            EinkaufsvorgangSnapshot(id: UUID(), geschaeftID: nil, einkaufslisteID: nil, startZeit: Date(), endZeit: nil),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        let vorgaenge = try context.fetch(FetchDescriptor<Einkaufsvorgang>())
+        #expect(vorgaenge.isEmpty)
+    }
+
     /// Regressionstest für dieselbe Live-Test-Session: die neu eingeführte
     /// Plausibilitätsprüfung verwirft eine `endZeit`, die vor dem eigenen
     /// `startZeit` läge — genau das durch den obigen Bug beobachtete Muster

@@ -1227,3 +1227,67 @@ der App-eigenen Datenschicht, nicht in der Cloud-Synchronisation selbst.
 **Verifikationsstand:** `xcodebuild build`/`build-for-testing` grün. Noch
 nicht mit echten Geräten nachverifiziert; die eigentliche Oszillationsursache
 bleibt offen.
+
+### 20. Nachtrag: unbegrenzt wachsende „Geister"-Einkaufsvorgänge — die eigentliche Hauptursache
+
+Direkte Analyse zweier vom Nutzer bereitgestellter, echter `export.json`-
+Dateien (nach dem Abschnitt-19-Fix) förderte den eigentlichen Haupttreiber
+der andauernden Oszillation zutage: von 959 lokalen `Einkaufsvorgang`-
+Objekten auf einem Testgerät hatten **907 weder ein `Geschaeft` noch eine
+`Einkaufsliste`** — auf dem zweiten Testgerät waren es nur 13 von 106.
+Darunter waren 800 leer, aber **107 hatten reale, angehängte `KaufEintrag`e**
+(echte Käufe wie „Bananen", „Äpfel", „Intermezzo", „Knoppers", „Hackfleisch").
+
+**Erklärt mehrere zuvor beobachtete Symptome auf einen Schlag:**
+- Warum ein Gerät „sehr lange einen anderen Zustand bei den abgehakten
+  Artikeln" hatte, der „nicht sauber synchronisiert" hat: Abhaken landete auf
+  einem für die App unsichtbaren „Geister"-Vorgang statt auf dem geteilten,
+  sichtbaren.
+- Warum `export.json` „weiter oszillierte, obwohl keine Aktion am Gerät
+  vorgenommen wurde": der reine, automatisch laufende Sync-Zyklus reicht
+  bereits aus, um aus bereits vorhandenen baumelnden Referenzen immer neue
+  Geister-Vorgänge zu erzeugen — keine Nutzerinteraktion nötig.
+- Vermutlich (nicht abschließend bestätigt) auch die frühere Beobachtung
+  „einmal abgehakte Artikel erscheinen kurz und verschwinden wieder".
+
+**Ursache:** ``SyncSnapshotImportService/mergeEinkaufsvorgaenge`` legte im
+„else"-Zweig (kein bekannter, kein offener Treffer, kein Tombstone) auch dann
+einen neuen lokalen ``Einkaufsvorgang`` an, wenn sowohl `remoteGeschaeft` als
+auch `remoteListe` `nil` waren — d.h. die entsprechende Referenz war bereits
+auf dem SENDENDEN Gerät baumelnd (``sichereID`` ließ sie dort beim Export
+weg, das JSON-Feld fehlt komplett). Ein solcher Vorgang ist für die gesamte
+App unerreichbar: ``EinkaufenView/aktuellerEinkauf`` und
+``Einkaufsvorgang/offenerNachfolger(fuerListe:...)`` verlangen beide immer
+eine konkrete Liste. Jeder weitere baumelnde Fremd-Eintrag (unabhängig vom
+genauen Entstehungsmechanismus der ursprünglichen Baumelnd-Referenz — dazu
+siehe „Offen" unten) erzeugte dadurch einen weiteren, für immer unsichtbaren
+Geister-Vorgang.
+
+**Fix:** Der „else"-Zweig verwirft jetzt Einträge ohne auflösbare
+`remoteListe` (`continue`, kein Anlegen) — analog zum bereits bestehenden
+`geloeschteIDs`-Fall. Ein fehlendes `remoteGeschaeft` bleibt weiterhin
+legitim (Einkauf ohne gewähltes Geschäft ist Normalfall). Neuer Test
+``einkaufsvorgangOhneAufloesbareListeWirdNichtAngelegt`` in
+`SyncSnapshotImportServiceTests`.
+
+**Bewusst NICHT Teil dieses Fixes:** Bereinigung der bereits vorhandenen 907
+Geister-Vorgänge (inkl. der 107 echten, angehängten Käufe) auf betroffenen
+Geräten — `Einkaufsvorgang.kaufEintraege` hat `deleteRule: .cascade`, ein
+blindes Löschen der Vorgänge würde die 107 echten Käufe unwiderruflich
+mitlöschen. Auf Nutzerwunsch zunächst nur der Root-Cause-Fix; eine
+Datenrettung (KaufEinträge auf einen echten Vorgang derselben Liste
+umhängen) ist ein separater, noch zu planender Schritt.
+
+**Offen:** Der genaue Entstehungsmechanismus der URSPRÜNGLICHEN baumelnden
+Referenz (auf welchem Gerät, durch welche Aktion, wurde die allererste
+Einkaufsliste-Referenz eines Einkaufsvorgangs baumelnd?) ist nicht
+abschließend geklärt — einziger Konstruktor-Aufrufer mit frischer `UUID` ist
+``EinkaufenView/einkaufSicherstellen()``, der aber immer eine konkrete
+`ausgewaehlteListe` voraussetzt; die Nullness trat erst beim EXPORT auf
+(``sichereID``-Dangling-Schutz). Möglicher Zusammenhang mit der vom Nutzer
+beschriebenen Situation „auf beiden Geräten wurde Einkauf abschließen
+gewählt, obwohl der abgehakte-Artikel-Count unterschiedlich war" — noch nicht
+verifiziert.
+
+**Verifikationsstand:** `xcodebuild build`/`build-for-testing` grün. Noch
+nicht mit echten Geräten nachverifiziert.

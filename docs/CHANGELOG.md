@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.9 (Build 165) — Fix: unbegrenzt wachsende „Geister"-Einkaufsvorgänge ohne Liste/Geschäft
+
+- Direkte Analyse zweier echter `export.json`-Dateien fand die eigentliche
+  Hauptursache der andauernden Sync-Oszillation: 907 von 959 lokalen
+  Einkaufsvorgängen auf einem Testgerät hatten weder ein Geschäft noch eine
+  Einkaufsliste — für die App komplett unerreichbare „Geister"-Vorgänge, 107
+  davon mit real angehängten Käufen (Bananen, Äpfel, Intermezzo, Knoppers,
+  Hackfleisch, …), die dadurch nirgends in der Einkaufsansicht auftauchten.
+  Erklärt sowohl den „hat nicht sauber synchronisiert"-Befund bei
+  abgehakten Artikeln als auch das Oszillieren von `export.json` ganz ohne
+  Geräte-Interaktion — der reine automatische Sync-Zyklus reichte, um immer
+  weitere Geister-Vorgänge aus bereits baumelnden Referenzen zu erzeugen.
+- Ursache: `SyncSnapshotImportService.mergeEinkaufsvorgaenge` legte auch dann
+  einen neuen Vorgang an, wenn sowohl Geschäft- als auch Listen-Referenz eines
+  empfangenen Eintrags unauflösbar waren. Legt jetzt keinen neuen Vorgang mehr
+  an, wenn keine Liste auflösbar ist (ein fehlendes Geschäft bleibt weiterhin
+  legitim — Einkauf ohne gewählten Laden ist Normalfall).
+- Bewusst noch nicht Teil dieses Fixes: Bereinigung der bereits vorhandenen
+  Geister-Vorgänge auf betroffenen Geräten (Cascade-Löschung würde die real
+  angehängten Käufe mitlöschen) — auf Nutzerwunsch zunächst nur der
+  Root-Cause-Fix, Datenrettung folgt separat.
+- Details: `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` Abschnitt 20.
+
 ## v0.9 (Build 164) — Debug: manuelle Statuskonsolidierung + unnötige Saves bei Bereich-B-Merge vermieden
 
 - Live-Tests der Fingerabdruck-Normalisierung (Abschnitt 18) zeigten weiterhin
