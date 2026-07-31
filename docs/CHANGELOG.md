@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.9 (Build 166) — Neuaufbau-Zusammenfassung + Erkennung listenloser Einkaufsvorgänge
+
+- „Gerät zurücksetzen und von Sync-Gerät neu aufbauen" gab bisher keine
+  Rückmeldung darüber, was tatsächlich zurückkam — ein Neuaufbau, der weniger
+  Daten zurückbekam als vorher vorhanden war (z.B. weniger Einkaufslisten,
+  weil kein erreichbarer Peer den vollständigen Stand hatte), blieb dadurch
+  unbemerkt. Zeigt in den Debugging-Einstellungen jetzt eine Vorher-/Nachher-
+  Zusammenfassung je Bereich direkt nach dem Neuaufbau, Rückgänge rot
+  hervorgehoben — das bestehende „Backup wiederherstellen" bleibt daneben als
+  Rückgängig-Option sichtbar.
+- Die bestehende Datenintegritäts-Prüfung erkennt baumelnde Referenzen
+  (Absturzrisiko), nicht aber einen gültigen `nil`-Bezug ohne Einkaufsliste —
+  genau die Fehlerkategorie aus dem vorigen Fix. Prüft jetzt zusätzlich
+  darauf, meldet betroffene Vorgänge als eine aggregierte Zeile (inkl. Anzahl
+  real angehängter Käufe) und markiert einen ungewöhnlich schnellen Zuwachs
+  seit der letzten Prüfung zusätzlich als Warnung.
+- Details: `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` Abschnitt 21.
+
 ## v0.9 (Build 165) — Fix: unbegrenzt wachsende „Geister"-Einkaufsvorgänge ohne Liste/Geschäft
 
 - Direkte Analyse zweier echter `export.json`-Dateien fand die eigentliche

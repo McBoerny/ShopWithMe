@@ -74,6 +74,67 @@ enum SyncErsetzenService {
         var groesseBytes: Int
     }
 
+    /// Vorher-/Nachher-Mengenvergleich eines „Ersetzen durch Peer"-Neuaufbaus
+    /// (Live-Test-Nachfolgefund, `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md`
+    /// Abschnitt 21): ein Neuaufbau, der zum Zeitpunkt der Ausführung weniger
+    /// zurückbekommt als vorher vorhanden war (z.B. weil kein erreichbarer
+    /// Peer den vollständigen Stand hatte), blieb bisher komplett unbemerkt —
+    /// entdeckt wurde ein solcher Fall erst Tage später durch zufälliges
+    /// Durchsuchen roher Exportdaten. Wird direkt nach dem Neuaufbau aus dem
+    /// ohnehin vorhandenen Vorher-Backup und einem frischen Nachher-Snapshot
+    /// berechnet und bis zum expliziten Verwerfen angezeigt (``DebuggingView``).
+    struct NeuaufbauZusammenfassung: Codable {
+        var zeitpunkt: Date
+        var vorher: BereichsZaehler
+        var nachher: BereichsZaehler
+    }
+
+    /// Anzahl je Bereich eines ``SyncSnapshot`` — Grundlage für
+    /// ``NeuaufbauZusammenfassung``.
+    struct BereichsZaehler: Codable {
+        var geschaeftsTypen: Int
+        var artikelKategorien: Int
+        var geschaefte: Int
+        var artikel: Int
+        var einkaufslisten: Int
+        var einkaufsvorgaenge: Int
+        var kaufEintraege: Int
+        var warengruppenDistanzen: Int
+
+        init(snapshot: SyncSnapshot) {
+            geschaeftsTypen = snapshot.geschaeftsTypen.count
+            artikelKategorien = snapshot.artikelKategorien.count
+            geschaefte = snapshot.geschaefte.count
+            artikel = snapshot.artikel.count
+            einkaufslisten = snapshot.einkaufslisten.count
+            einkaufsvorgaenge = snapshot.einkaufsvorgaenge.count
+            kaufEintraege = snapshot.kaufEintraege.count
+            warengruppenDistanzen = snapshot.warengruppenDistanzen.count
+        }
+    }
+
+    private static let letzteZusammenfassungSchluessel = "syncErsetzenLetzteZusammenfassung"
+
+    /// Zusammenfassung des letzten „Ersetzen durch Peer"-Neuaufbaus, `nil`
+    /// falls keiner stattfand oder bereits verworfen wurde (``DebuggingView``).
+    static var letzteNeuaufbauZusammenfassung: NeuaufbauZusammenfassung? {
+        get {
+            guard let daten = UserDefaults.standard.data(forKey: letzteZusammenfassungSchluessel) else { return nil }
+            return try? JSONDecoder().decode(NeuaufbauZusammenfassung.self, from: daten)
+        }
+        set {
+            guard let neuerWert = newValue, let daten = try? JSONEncoder().encode(neuerWert) else {
+                UserDefaults.standard.removeObject(forKey: letzteZusammenfassungSchluessel)
+                return
+            }
+            UserDefaults.standard.set(daten, forKey: letzteZusammenfassungSchluessel)
+        }
+    }
+
+    static func zusammenfassungVerwerfen() {
+        letzteNeuaufbauZusammenfassung = nil
+    }
+
     // MARK: - Planen (aktueller Sitzung, vor dem Neustart)
 
     /// Sichert den aktuellen Datenbestand und merkt „Ersetzen durch Peer" für
@@ -119,7 +180,20 @@ enum SyncErsetzenService {
 
         switch aktion {
         case .ersetzenDurchPeer:
+            // Vorher-Stand aus dem ohnehin vor dem Neuaufbau erstellten
+            // Backup lesen (noch vorhanden, ``fuehreAusstehendeAktionAus``
+            // löscht es hier bewusst nicht) — Grundlage für die
+            // Vorher-/Nachher-Zusammenfassung unten.
+            let vorherSnapshot = ladeBackup()?.snapshot
             await SyncSnapshotImportService.importiereSnapshots(context: context)
+            if let vorherSnapshot {
+                let nachherSnapshot = SyncSnapshotExportService.erstelleSnapshot(context: context)
+                letzteNeuaufbauZusammenfassung = NeuaufbauZusammenfassung(
+                    zeitpunkt: Date(),
+                    vorher: BereichsZaehler(snapshot: vorherSnapshot),
+                    nachher: BereichsZaehler(snapshot: nachherSnapshot)
+                )
+            }
         case .wiederherstellenAusBackup:
             guard let daten = try? Data(contentsOf: backupURL),
                   let backup = try? JSONDecoder().decode(SyncErsetzenBackup.self, from: daten)
@@ -174,10 +248,18 @@ enum SyncErsetzenService {
         let url = backupURL
         guard let attribute = try? FileManager.default.attributesOfItem(atPath: url.path),
               let groesse = attribute[.size] as? Int,
-              let daten = try? Data(contentsOf: url),
-              let backup = try? JSONDecoder().decode(SyncErsetzenBackup.self, from: daten)
+              let backup = ladeBackup()
         else { return nil }
         return BackupInfo(erstelltAm: backup.erstelltAm, groesseBytes: groesse)
+    }
+
+    /// Lädt und dekodiert das vorhandene Backup, `nil` falls keins existiert
+    /// oder es nicht lesbar ist — gemeinsam genutzt von ``vorhandenesBackup()``
+    /// und der Vorher-/Nachher-Zusammenfassung in
+    /// ``fuehreAusstehendeAktionAus(context:)``.
+    private static func ladeBackup() -> SyncErsetzenBackup? {
+        guard let daten = try? Data(contentsOf: backupURL) else { return nil }
+        return try? JSONDecoder().decode(SyncErsetzenBackup.self, from: daten)
     }
 
     static func loescheBackup() {

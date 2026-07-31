@@ -1291,3 +1291,69 @@ verifiziert.
 
 **Verifikationsstand:** `xcodebuild build`/`build-for-testing` grün. Noch
 nicht mit echten Geräten nachverifiziert.
+
+### 21. Nachtrag: Beobachtbarkeit statt „nie destruktiv" aufgeben — zwei konkrete Bausteine
+
+Nachtrag zur Diskussion in Abschnitt 20 („DB-Sync ist korrupt — wie automatisiert
+wieder herauskommen"): die additive „nie destruktiv"-Merge-Regel bleibt bestehen
+— sie ist nicht in erster Linie eine Korruptions-Absicherung, sondern die
+laufende Korrektheits-Grundlage für gleichzeitiges Bearbeiten auf mehreren
+Geräten ohne Feld-Zeitstempel/Lamport-Uhr für Bereich B (siehe Typ-Doku
+``SyncSnapshotImportService``). Der hier untersuchte Vorfall entstand nicht,
+weil additives Mergen versagte, sondern weil ein Bug im ERZEUGEN (Abschnitt 20)
+Datenmüll produzierte, den additives Mergen anschließend korrekt replizierte.
+Die beiden einzigen Stellen, an denen dieses Projekt überhaupt Daten verlieren
+kann, sind (a) Bugs, die fälschlich erzeugen, und (b) der eine bewusst
+destruktive Pfad, ``SyncErsetzenService`` (Ersetzen/Neuaufbau) — beide jetzt
+zusätzlich abgesichert:
+
+**1. Vorher-/Nachher-Zusammenfassung beim Neuaufbau
+(``SyncErsetzenService/NeuaufbauZusammenfassung``):** Ein „Gerät zurücksetzen
+und von Sync-Gerät neu aufbauen" lieferte bisher keinerlei Rückmeldung darüber,
+was tatsächlich zurückkam — der auslösende Live-Test-Fund (3 statt 2
+Einkaufslisten nach einem Neuaufbau) blieb deshalb tagelang unbemerkt und wurde
+als „Datenfehler, hat aber nicht gestört" abgetan. Da ``erstelleBackup``
+ohnehin einen vollständigen Vorher-Snapshot sichert, kostet der Vergleich
+nichts Neues: ``fuehreAusstehendeAktionAus(context:)`` berechnet nach einem
+`.ersetzenDurchPeer`-Neuaufbau direkt einen frischen Nachher-Snapshot und
+vergleicht beide je Bereich (``BereichsZaehler``). Das Ergebnis wird
+persistiert und in ``DebuggingView`` (dort, wo der Reset auch ausgelöst wird)
+als Karte mit Zeile je verändertem Bereich angezeigt, Rückgänge rot
+hervorgehoben — bis zum expliziten Ausblenden. Das bestehende „Backup
+wiederherstellen" (Backup wird bei `.ersetzenDurchPeer` bewusst NICHT
+gelöscht) bleibt direkt daneben als Rückgängig-Option sichtbar.
+
+**2. Erkennung listenloser Einkaufsvorgänge + Wachstums-Warnung
+(``DatenintegritaetsService``):** Die bestehende Prüfung auf baumelnde
+Referenzen (``istBaumelnd``) erkennt eine baumelnde `persistentModelID`
+(Absturzrisiko), nicht aber einen gültigen `nil`-Bezug — genau das, was
+Abschnitt 20 als eigentliche Fehlerkategorie „orphaned" (semantisch
+unerreichbar, aber crash-sicher) identifiziert hat. ``pruefe(context:)``
+prüft jetzt zusätzlich auf ``Einkaufsvorgang``e ohne ``Einkaufsliste`` — als
+EINE aggregierte Zeile (nicht eine je betroffenem Vorgang, damit ein
+künftiger ähnlicher Bug den Bericht nicht selbst wieder unbrauchbar macht,
+siehe die 907 Einträge aus Abschnitt 20), inklusive der Anzahl real
+angehängter ``KaufEintrag``e. Zusätzlich wird die Anzahl zwischen zwei
+Prüfungen verglichen: eine reine Bestandszahl verrät für sich genommen nicht,
+ob sie über Wochen langsam getröpfelt ist oder gerade akut wächst
+(beobachtet: 875 an einem einzigen Tag) — ein Zuwachs über
+``DatenintegritaetsService/warnschwelleSchnellesWachstum`` (Standard: 10)
+seit der letzten Prüfung wird deshalb zusätzlich sichtbar markiert (⚠️).
+Bewusst an der bestehenden, immer aktiven „läuft bei jedem App-Start"-Stelle
+verankert statt als neue, tief in der Merge-Hot-Path verankerte Instrumentierung
+— einfacher, robuster, und misst direkt die Größe, die eigentlich interessiert
+(Anzahl unerreichbarer Objekte), statt einen Proxy dafür (Erzeugungen je
+Merge-Durchlauf).
+
+**Bewusst nicht Teil dieses Nachtrags:** eine automatische Reparatur/Bereinigung
+der bereits vorhandenen 907 Geister-Vorgänge (siehe Abschnitt 20, dort auf
+Nutzerwunsch zurückgestellt) sowie eine generische, geräteübergreifende Sperre
+gegen gleichzeitiges Zurücksetzen mehrerer Geräte — bei nur zwei real
+genutzten Geräten wird das als unverhältnismäßig eingeschätzt; ein deutlicherer
+Warnhinweis im bestehenden Bestätigungsdialog wäre die proportionale Antwort,
+sofern gewünscht.
+
+**Verifikationsstand:** `xcodebuild build`/`build-for-testing` grün. Neue
+Tests in `SyncErsetzenServiceTests` (Vorher-/Nachher-Zusammenfassung) und
+`DatenintegritaetsServiceTests` (aggregierte Meldung, Wachstums-Warnung). Noch
+nicht mit echten Geräten nachverifiziert.

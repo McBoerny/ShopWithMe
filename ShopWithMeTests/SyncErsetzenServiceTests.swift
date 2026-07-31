@@ -203,6 +203,46 @@ struct SyncErsetzenServiceTests {
         #expect(SyncErsetzenService.ausstehendeAktion == nil)
     }
 
+    /// Regressionstest für einen Live-Test-Nachfolgefund (Abschnitt 21): ein
+    /// Neuaufbau, der weniger zurückbekommt als vorher vorhanden war (hier:
+    /// nur 1 von 2 vorherigen Geschäften, weil der erreichbare Peer nicht den
+    /// vollständigen Stand hatte), muss das jetzt sichtbar als
+    /// ``SyncErsetzenService/letzteNeuaufbauZusammenfassung`` festhalten,
+    /// statt unbemerkt zu bleiben.
+    @Test
+    func fuehreAusstehendeAktionAusErstelltNeuaufbauZusammenfassungMitVorherNachherVergleich() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+        defer { raeumeAusstehendeAktionAuf() }
+        defer { SyncErsetzenService.loescheBackup() }
+        defer { SyncErsetzenService.zusammenfassungVerwerfen() }
+
+        // Vorher-Backup: 2 Geschäfte.
+        context.insert(Geschaeft(name: "Rewe", typen: []))
+        context.insert(Geschaeft(name: "Edeka", typen: []))
+        try context.save()
+        try SyncErsetzenService.erstelleBackup(context: context)
+
+        // Neuaufbau läuft (wie im echten Ablauf) auf einem frischen, leeren
+        // Context — der erreichbare Peer bringt nur 1 der 2 vorherigen
+        // Geschäfte zurück.
+        let (leererContainer, leererContext) = try machtLeerenContainer()
+        _ = leererContainer
+        var snapshot = leererSnapshot(geraeteID: "peer-a")
+        snapshot.geschaefte = [leerenGeschaeftSnapshot(name: "Rewe")]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "peer-a", in: syncOrdner)
+        setzeAusstehendeAktion(.ersetzenDurchPeer)
+
+        await SyncErsetzenService.fuehreAusstehendeAktionAus(context: leererContext)
+
+        let zusammenfassung = try #require(SyncErsetzenService.letzteNeuaufbauZusammenfassung)
+        #expect(zusammenfassung.vorher.geschaefte == 2)
+        #expect(zusammenfassung.nachher.geschaefte == 1)
+    }
+
     @Test
     func fuehreAusstehendeAktionAusStelltGesichertenStandWiederHer() async throws {
         let (container, context) = try machtLeerenContainer()

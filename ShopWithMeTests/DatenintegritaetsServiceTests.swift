@@ -79,4 +79,70 @@ struct DatenintegritaetsServiceTests {
         #expect(befunde.isEmpty)
         #expect((try? context.fetchCount(FetchDescriptor<WarengruppenDistanz>())) == 1)
     }
+
+    /// Regressionstest für einen Live-Test-Nachfolgefund (Abschnitt 20/21):
+    /// ein ``Einkaufsvorgang`` ohne Einkaufsliste ist kein Absturzrisiko
+    /// (``istBaumelnd`` erfasst ihn deshalb nicht, `nil` ist für SwiftData
+    /// gültig), aber für die App komplett unerreichbar — eine eigene
+    /// Fehlerkategorie, die ``pruefe(context:)`` jetzt zusätzlich als EINE
+    /// aggregierte Zeile meldet, inklusive der Anzahl real angehängter Käufe.
+    @Test
+    func einkaufsvorgangOhneListeWirdAlsUnerreichbarGemeldetMitKaufAnzahl() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        DatenintegritaetsService.wachstumsUeberwachungZuruecksetzen()
+
+        let artikel = Artikel(name: "Bananen", symbolName: "cart", farbeHex: "#000000")
+        context.insert(artikel)
+        let listenloserVorgangMitKauf = Einkaufsvorgang(geschaeft: nil, einkaufsliste: nil)
+        context.insert(listenloserVorgangMitKauf)
+        let kauf = KaufEintrag(artikel: artikel, geschaeft: nil)
+        kauf.einkaufsvorgang = listenloserVorgangMitKauf
+        context.insert(kauf)
+        let listenloserVorgangLeer = Einkaufsvorgang(geschaeft: nil, einkaufsliste: nil)
+        context.insert(listenloserVorgangLeer)
+        try context.save()
+
+        let befunde = DatenintegritaetsService.pruefe(context: context)
+
+        #expect(befunde.count == 1)
+        let beschreibung = try #require(befunde.first?.beschreibung)
+        #expect(beschreibung.contains("2 Einkaufsvorgänge ohne Einkaufsliste"))
+        #expect(beschreibung.contains("1 davon mit insgesamt 1 angehängten Käufen"))
+    }
+
+    /// Regressionstest für dieselbe Live-Test-Session: eine reine
+    /// Bestandszahl verrät nicht, ob sie langsam über Wochen getröpfelt ist
+    /// oder gerade akut wächst (beobachtet: 875 an einem einzigen Tag) — ein
+    /// Zuwachs über ``DatenintegritaetsService/warnschwelleSchnellesWachstum``
+    /// seit der letzten Prüfung muss deshalb zusätzlich als Warnung markiert
+    /// werden.
+    @Test
+    func schnellesWachstumListenloserVorgaengeWirdAlsWarnungMarkiert() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        DatenintegritaetsService.wachstumsUeberwachungZuruecksetzen()
+        let vorherigeSchwelle = DatenintegritaetsService.warnschwelleSchnellesWachstum
+        DatenintegritaetsService.warnschwelleSchnellesWachstum = 3
+        defer { DatenintegritaetsService.warnschwelleSchnellesWachstum = vorherigeSchwelle }
+
+        func fuegeListenloseVorgaengeHinzu(_ anzahl: Int) {
+            for _ in 0..<anzahl {
+                context.insert(Einkaufsvorgang(geschaeft: nil, einkaufsliste: nil))
+            }
+            try? context.save()
+        }
+
+        // Erste Prüfung: 2 (unter der Schwelle) — noch keine Warnung, nur die
+        // Basis-Zeile, merkt sich aber die Anzahl für den nächsten Vergleich.
+        fuegeListenloseVorgaengeHinzu(2)
+        let ersterBefund = try #require(DatenintegritaetsService.pruefe(context: context).first)
+        #expect(!ersterBefund.beschreibung.contains("⚠️"))
+
+        // Zweite Prüfung: 5 weitere (Zuwachs 5 ≥ Schwelle 3) — jetzt mit Warnung.
+        fuegeListenloseVorgaengeHinzu(5)
+        let zweiterBefund = try #require(DatenintegritaetsService.pruefe(context: context).first)
+        #expect(zweiterBefund.beschreibung.contains("7 Einkaufsvorgänge ohne Einkaufsliste"))
+        #expect(zweiterBefund.beschreibung.contains("⚠️ +5"))
+    }
 }

@@ -239,9 +239,17 @@ private struct DatenintegritaetSection: View {
     @State private var zeigeResetBestaetigung = false
     @State private var zeigeNeustartHinweis = false
     @State private var resetFehlermeldung: String?
+    @State private var neuaufbauZusammenfassung = SyncErsetzenService.letzteNeuaufbauZusammenfassung
 
     var body: some View {
         Section {
+            if let neuaufbauZusammenfassung {
+                NeuaufbauZusammenfassungView(zusammenfassung: neuaufbauZusammenfassung)
+                Button("Zusammenfassung ausblenden") {
+                    SyncErsetzenService.zusammenfassungVerwerfen()
+                    self.neuaufbauZusammenfassung = nil
+                }
+            }
             if bericht.isEmpty {
                 Text("Beim letzten Start keine baumelnden Referenzen gefunden.")
                     .foregroundStyle(.secondary)
@@ -277,13 +285,14 @@ private struct DatenintegritaetSection: View {
         } header: {
             Text("Datenintegrität")
         } footer: {
-            Text("Zeigt bei jedem App-Start erkannte baumelnde Referenzen auf bereits gelöschte Objekte (z.B. nach einer fehlerhaften Synchronisation) — rein informativ, keine automatische Reparatur. Das vollständige Protokoll lässt sich über „Protokoll teilen…“ exportieren. „Gerät zurücksetzen“ sichert den aktuellen Bestand lokal und baut die Datenbank anschließend ausschließlich aus dem Stand eines erreichbaren Sync-Geräts neu auf — setzt eine aktive Datensynchronisation mit mindestens einem erreichbaren Gerät voraus.")
+            Text("Zeigt bei jedem App-Start erkannte baumelnde Referenzen auf bereits gelöschte Objekte sowie Einkaufsvorgänge ohne Einkaufsliste, die dadurch für die App unerreichbar sind (z.B. nach einer fehlerhaften Synchronisation) — rein informativ, keine automatische Reparatur. Das vollständige Protokoll lässt sich über „Protokoll teilen…“ exportieren. „Gerät zurücksetzen“ sichert den aktuellen Bestand lokal und baut die Datenbank anschließend ausschließlich aus dem Stand eines erreichbaren Sync-Geräts neu auf — setzt eine aktive Datensynchronisation mit mindestens einem erreichbaren Gerät voraus.")
         }
         .sheet(isPresented: $zeigeTeilen) {
             DebugLogTeilenView(urls: DatenintegritaetsLogger.exportURLs)
         }
         .onAppear {
             logGroesse = DatenintegritaetsLogger.gesamtGroesse()
+            neuaufbauZusammenfassung = SyncErsetzenService.letzteNeuaufbauZusammenfassung
         }
         .confirmationDialog("Gerät zurücksetzen", isPresented: $zeigeResetBestaetigung, titleVisibility: .visible) {
             Button("Zurücksetzen und neu aufbauen", role: .destructive) {
@@ -312,6 +321,53 @@ private struct DatenintegritaetSection: View {
         } catch {
             resetFehlermeldung = error.localizedDescription
         }
+    }
+}
+
+/// Vorher-/Nachher-Mengenvergleich eines „Ersetzen durch Peer"-Neuaufbaus
+/// (``SyncErsetzenService/NeuaufbauZusammenfassung``, Abschnitt 21) — zeigt
+/// jeden Bereich nur, wenn sich seine Anzahl tatsächlich geändert hat, damit
+/// bei einer sauberen Zusammenführung nicht acht identische „±0"-Zeilen den
+/// eigentlich interessanten Rückgang überdecken. Ein Rückgang ist rot
+/// hervorgehoben — genau das Signal, das beim auslösenden Live-Test-Fund
+/// (3 statt 2 Einkaufslisten nach einem Neuaufbau) gefehlt hat.
+private struct NeuaufbauZusammenfassungView: View {
+    let zusammenfassung: SyncErsetzenService.NeuaufbauZusammenfassung
+
+    private var zeilen: [(name: String, vorher: Int, nachher: Int)] {
+        let v = zusammenfassung.vorher
+        let n = zusammenfassung.nachher
+        return [
+            ("Geschäftstypen", v.geschaeftsTypen, n.geschaeftsTypen),
+            ("Kategorien", v.artikelKategorien, n.artikelKategorien),
+            ("Geschäfte", v.geschaefte, n.geschaefte),
+            ("Artikel", v.artikel, n.artikel),
+            ("Einkaufslisten", v.einkaufslisten, n.einkaufslisten),
+            ("Einkaufsvorgänge", v.einkaufsvorgaenge, n.einkaufsvorgaenge),
+            ("Käufe", v.kaufEintraege, n.kaufEintraege),
+            ("Warengruppen-Distanzen", v.warengruppenDistanzen, n.warengruppenDistanzen),
+        ].filter { $0.vorher != $0.nachher }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Letzter Neuaufbau: \(zusammenfassung.zeitpunkt.formatted(date: .abbreviated, time: .shortened))")
+                .font(.subheadline)
+                .bold()
+            if zeilen.isEmpty {
+                Text("Alle Bereiche unverändert.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(zeilen, id: \.name) { zeile in
+                    let delta = zeile.nachher - zeile.vorher
+                    Text("\(zeile.name): \(zeile.vorher) → \(zeile.nachher) (\(delta > 0 ? "+" : "")\(delta))")
+                        .font(.caption)
+                        .foregroundStyle(delta < 0 ? .red : .secondary)
+                }
+            }
+        }
+        .padding(.vertical, 2)
     }
 }
 

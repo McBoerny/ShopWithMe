@@ -33,6 +33,18 @@ enum DatenintegritaetsService {
     }
 
     private static let letzterBerichtSchluessel = "datenintegritaetLetzterBericht"
+    private static let anzahlOhneListeSchluessel = "datenintegritaetAnzahlOhneListe"
+    private static let anzahlOhneListeZeitpunktSchluessel = "datenintegritaetAnzahlOhneListeZeitpunkt"
+
+    /// Ab diesem Zuwachs seit der letzten Prüfung gilt die Anzahl
+    /// listenloser Einkaufsvorgänge (siehe ``pruefe(context:)``) als
+    /// ungewöhnlich schnell wachsend statt als gewöhnlicher, seltener
+    /// Einzelfall — Live-Test-Fund (Abschnitt 20/21): eine reine
+    /// Bestandszahl („907 insgesamt") verrät für sich genommen nicht, ob sie
+    /// über Wochen langsam getröpfelt ist oder gerade akut explodiert (im
+    /// beobachteten Fall: 875 an einem einzigen Tag). `static var` statt
+    /// Konstante, damit Tests sie verkürzen können.
+    @MainActor static var warnschwelleSchnellesWachstum = 10
 
     /// Bericht des letzten Aufrufs von ``pruefe(context:)`` — persistiert,
     /// damit ``DebuggingView`` ihn auch nach einem App-Neustart noch anzeigen
@@ -40,6 +52,14 @@ enum DatenintegritaetsService {
     static var letzterBericht: [String] {
         get { UserDefaults.standard.stringArray(forKey: letzterBerichtSchluessel) ?? [] }
         set { UserDefaults.standard.set(newValue, forKey: letzterBerichtSchluessel) }
+    }
+
+    /// Test-Hilfsmittel: setzt die zwischen Aufrufen persistierte Vorher-
+    /// Anzahl für die Wachstums-Warnung zurück, damit Tests unabhängig von
+    /// zuvor im selben Prozess gelaufenen Prüfungen sind.
+    static func wachstumsUeberwachungZuruecksetzen() {
+        UserDefaults.standard.removeObject(forKey: anzahlOhneListeSchluessel)
+        UserDefaults.standard.removeObject(forKey: anzahlOhneListeZeitpunktSchluessel)
     }
 
     /// Rein lesende Bestandsaufnahme baumelnder Referenzen — verändert nichts
@@ -90,6 +110,38 @@ enum DatenintegritaetsService {
             if istBaumelnd(vorgang.einkaufsliste, gueltigeIDs: gueltigeEinkaufslistenIDs) {
                 befunde.append(Befund(beschreibung: "Einkaufsvorgang vom \(datum): Einkaufslistenbezug zeigt auf nicht mehr Existierendes"))
             }
+        }
+
+        // Live-Test-Fund (Abschnitt 20): eine fehlende Einkaufsliste ist
+        // hier bewusst NICHT über ``istBaumelnd`` erfasst — ein `nil`-Bezug
+        // ist für SwiftData ein gültiger, nicht-abstürzender Zustand, anders
+        // als eine baumelnde `persistentModelID`. Trotzdem ist ein
+        // ``Einkaufsvorgang`` ohne Liste für die gesamte App unerreichbar
+        // (``EinkaufenView/aktuellerEinkauf`` verlangt immer eine konkrete
+        // Liste) — eine eigene, andere Fehlerkategorie („orphaned" statt
+        // „dangling"), die ohne diese Prüfung monatelang unbemerkt
+        // akkumulieren kann. Als EINE aggregierte Zeile statt einer je
+        // betroffenem Vorgang, damit ein künftiger ähnlicher Bug den Bericht
+        // nicht selbst wieder unbrauchbar macht (siehe Fund: 907 Einträge).
+        let listenloseVorgaenge = ((try? context.fetch(FetchDescriptor<Einkaufsvorgang>())) ?? []).filter { $0.einkaufsliste == nil }
+        if !listenloseVorgaenge.isEmpty {
+            let mitKaeufen = listenloseVorgaenge.filter { !$0.kaufEintraege.isEmpty }
+            let kaeufeGesamt = mitKaeufen.reduce(0) { $0 + $1.kaufEintraege.count }
+            let kaeufeZusatz = mitKaeufen.isEmpty ? "" : " (\(mitKaeufen.count) davon mit insgesamt \(kaeufeGesamt) angehängten Käufen)"
+
+            let vorherigeAnzahl = UserDefaults.standard.object(forKey: anzahlOhneListeSchluessel) as? Int
+            var wachstumsZusatz = ""
+            if let vorherigeAnzahl, listenloseVorgaenge.count - vorherigeAnzahl >= warnschwelleSchnellesWachstum {
+                let vorherigerZeitpunkt = UserDefaults.standard.object(forKey: anzahlOhneListeZeitpunktSchluessel) as? Date
+                let seit = vorherigerZeitpunkt.map { " seit \($0.formatted(date: .abbreviated, time: .shortened))" } ?? ""
+                wachstumsZusatz = " ⚠️ +\(listenloseVorgaenge.count - vorherigeAnzahl)\(seit) — ungewöhnlich schnelles Wachstum, deutet auf einen aktiven Fehler statt auf Einzelfälle hin"
+            }
+
+            befunde.append(Befund(
+                beschreibung: "\(listenloseVorgaenge.count) Einkaufsvorgänge ohne Einkaufsliste — für die App unerreichbar\(kaeufeZusatz)\(wachstumsZusatz)"
+            ))
+            UserDefaults.standard.set(listenloseVorgaenge.count, forKey: anzahlOhneListeSchluessel)
+            UserDefaults.standard.set(Date(), forKey: anzahlOhneListeZeitpunktSchluessel)
         }
 
         for distanz in (try? context.fetch(FetchDescriptor<WarengruppenDistanz>())) ?? [] {
