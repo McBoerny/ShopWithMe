@@ -107,3 +107,11 @@ vollständig umgesetzt; weitere Ideen siehe „Zukünftig“ unten.
 - **Nutzungs-Tracking/Analytics**: anonymisiertes Tracking-Framework zur Analyse der
   App-Nutzung — erfassen, welche Funktionen wie häufig genutzt werden, um die Roadmap
   datengestützt priorisieren zu können.
+- **Modell-unabhängige Sync-Architektur** ([#75](https://github.com/McBoerny/ShopWithMe/issues/75)):
+  die Datensynchronisation (`docs/DATENSYNCHRONISATION.md`) ist als Architektur-Muster
+  bereits solide, aber die Implementierung eng an ShopWithMes konkretes Datenmodell
+  gekoppelt (jede Entität hat eine eigene handgeschriebene Merge-Funktion). Ein
+  `SyncableModel`-Protokoll + generischer Merge-Engine würde sowohl künftige
+  Erweiterungen innerhalb ShopWithMes vereinfachen als auch Wiederverwendung in
+  anderen Apps ermöglichen — größerer, eigenständiger Umbau, nicht Teil des
+  laufenden Betriebs.
