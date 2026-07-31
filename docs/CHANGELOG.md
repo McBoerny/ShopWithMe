@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.9 (Build 162) — Fix: export.json wurde trotz unverändertem Inhalt weiter neu geschrieben
+
+- Ein weiterer Live-Test zeigte: `export.json` wurde weiterhin praktisch bei
+  jedem Sync-Zyklus neu geschrieben, obwohl sich fachlich nichts änderte.
+  Ursache: der Inhalts-Fingerabdruck sortierte nur die äußeren Snapshot-Arrays
+  (ein Eintrag je Geschäft/Artikel/…), nicht aber die ID-Arrays INNERHALB
+  eines Eintrags (`typIDs`, `kategorieIDs`, `ausgeschlosseneKategorieIDs`,
+  `alternativeNamen`, `ignorierteArtikelNamen`, `geschaeftsTypIDs`) — deren
+  Reihenfolge ist bei einem erneuten Fetch aus SwiftData ebenso wenig
+  garantiert wie die des äußeren Arrays.
+- Fix: alle inneren ID-/Namens-Arrays werden jetzt vor dem Vergleich
+  ebenfalls sortiert.
+- Details: `docs/DATENSYNCHRONISATION_UMSETZUNGSPLAN.md` Abschnitt 18.
+
 ## v0.9 (Build 161) — Fix: Besuchszähler wuchs unbegrenzt durch Sync (G-Counter-Korrektur)
 
 - Der neue Diagnose-Log zeigte: `export.json` wurde praktisch bei jedem

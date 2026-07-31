@@ -107,15 +107,59 @@ enum SyncSnapshotExportService {
     /// garantiert keine stabile Reihenfolge für einen unsortierten
     /// `FetchDescriptor`) nicht fälschlich als inhaltliche Änderung erkannt
     /// wird.
-    private static func normalisiertFuerVergleich(_ snapshot: SyncSnapshot) -> SyncSnapshot {
+    ///
+    /// **Live-Test-Nachfolgefund:** Dieselbe Instabilität gilt nicht nur für
+    /// die äußeren Arrays (ein Snapshot-Eintrag je Entität), sondern auch für
+    /// die ID-Arrays INNERHALB eines einzelnen Eintrags, die aus einer
+    /// SwiftData-`@Relationship`-Sammlung abgeleitet sind (z.B.
+    /// `GeschaeftSnapshot/typIDs`/`kategorieIDs` aus `Geschaeft.typen`/
+    /// `.kategorien`) — deren Reihenfolge ist beim erneuten Fetch ebenso
+    /// wenig garantiert wie die des äußeren `FetchDescriptor`. Ohne
+    /// zusätzliche Sortierung dieser inneren Arrays erschien praktisch jeder
+    /// Zyklus als inhaltliche Änderung, obwohl sich nur die Reihenfolge (nie
+    /// die Menge) der zugeordneten IDs unterschied — beobachtet als
+    /// durchgehend `sync_snapshot_geschrieben` statt
+    /// `sync_snapshot_unveraendert_uebersprungen`, obwohl Anzahl und
+    /// Fach-Inhalt über viele Zyklen stabil blieben.
+    /// Bewusst `internal` statt `private` (kein `private` vor `static func`) —
+    /// damit Tests direkt prüfen können, dass zwei Snapshots, die sich nur in
+    /// der Reihenfolge ihrer ID-Arrays unterscheiden, denselben normalisierten
+    /// Inhalt ergeben, ohne auf tatsächlich instabile SwiftData-Fetch-Reihenfolge
+    /// angewiesen zu sein (die sich in einem kleinen In-Memory-Testcontainer
+    /// nicht zuverlässig erzwingen lässt).
+    static func normalisiertFuerVergleich(_ snapshot: SyncSnapshot) -> SyncSnapshot {
         var normalisiert = snapshot
         normalisiert.erzeugtAm = .distantPast
         normalisiert.geraeteID = ""
         normalisiert.geraeteName = ""
+
         normalisiert.geschaeftsTypen.sort { $0.id.uuidString < $1.id.uuidString }
+
+        normalisiert.artikelKategorien = normalisiert.artikelKategorien.map { kategorie in
+            var kategorie = kategorie
+            kategorie.geschaeftsTypIDs.sort { $0.uuidString < $1.uuidString }
+            return kategorie
+        }
         normalisiert.artikelKategorien.sort { $0.id.uuidString < $1.id.uuidString }
+
+        normalisiert.geschaefte = normalisiert.geschaefte.map { geschaeft in
+            var geschaeft = geschaeft
+            geschaeft.typIDs.sort { $0.uuidString < $1.uuidString }
+            geschaeft.kategorieIDs.sort { $0.uuidString < $1.uuidString }
+            geschaeft.ausgeschlosseneKategorieIDs.sort { $0.uuidString < $1.uuidString }
+            geschaeft.alternativeNamen.sort()
+            geschaeft.ignorierteArtikelNamen.sort()
+            return geschaeft
+        }
         normalisiert.geschaefte.sort { $0.id.uuidString < $1.id.uuidString }
+
+        normalisiert.artikel = normalisiert.artikel.map { artikel in
+            var artikel = artikel
+            artikel.kategorieIDs.sort { $0.uuidString < $1.uuidString }
+            return artikel
+        }
         normalisiert.artikel.sort { $0.id.uuidString < $1.id.uuidString }
+
         normalisiert.einkaufslisten.sort { $0.id.uuidString < $1.id.uuidString }
         normalisiert.einkaufslistenEintraege.sort {
             "\($0.einkaufslisteID)_\($0.artikelID)" < "\($1.einkaufslisteID)_\($1.artikelID)"
@@ -130,7 +174,7 @@ enum SyncSnapshotExportService {
     /// SHA256-Fingerabdruck eines bereits ``normalisiertFuerVergleich(_:)``-ten
     /// Snapshots. `nil` nur bei einem (praktisch nie auftretenden)
     /// Encoding-Fehler.
-    private static func inhaltsFingerabdruck(of normalisiert: SyncSnapshot) -> String? {
+    static func inhaltsFingerabdruck(of normalisiert: SyncSnapshot) -> String? {
         guard let daten = try? JSONEncoder().encode(normalisiert) else { return nil }
         let digest = SHA256.hash(data: daten)
         return digest.map { String(format: "%02x", $0) }.joined()

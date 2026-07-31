@@ -1101,3 +1101,42 @@ Geräten nachverifiziert; bereits vor diesem Fix aufgelaufene, überhöhte
 Zähler-Werte werden nicht rückwirkend korrigiert (über den bereits
 bestehenden „Zähler zurücksetzen"-Button in den Geschäfts-Stammdaten bei
 Bedarf manuell behebbar).
+
+### 18. Nachtrag: Fingerabdruck-Normalisierung hatte innere Arrays übersehen
+
+Ein weiterer Live-Test nach den Abschnitten 16/17 zeigte: `export.json`
+wurde weiterhin praktisch bei jedem Zyklus neu geschrieben
+(`sync_snapshot_geschrieben` statt `sync_snapshot_unveraendert_uebersprungen`),
+obwohl `einkaufsvorgaenge`/`artikel`/`kaufEintraege`-Anzahlen über viele
+Zyklen hinweg stabil blieben — nur `geschaefte` (und `artikelKategorien`,
+`artikel`) zeigten bei jedem Zyklus einen anderen Kurz-Fingerabdruck.
+
+**Ursache:** ``SyncSnapshotExportService/normalisiertFuerVergleich(_:)``
+(Abschnitt 14) sortierte bisher nur die ÄUSSEREN Arrays (ein Eintrag je
+Entität) nach ihrer `UUID`. Die ID-Arrays INNERHALB eines einzelnen
+Eintrags — `GeschaeftSnapshot/typIDs`/`kategorieIDs`/
+`ausgeschlosseneKategorieIDs`/`alternativeNamen`/`ignorierteArtikelNamen`,
+``ArtikelKategorieSnapshot/geschaeftsTypIDs``,
+``ArtikelSnapshot/kategorieIDs`` — sind ebenfalls aus SwiftData-
+`@Relationship`-Sammlungen abgeleitet und unterliegen derselben fehlenden
+Fetch-Reihenfolgen-Garantie wie der äußere `FetchDescriptor`. Ohne
+Sortierung dieser inneren Arrays erschien praktisch jeder Zyklus fälschlich
+als inhaltliche Änderung, sobald sich nur die Reihenfolge (nie die Menge)
+der zugeordneten IDs zwischen zwei Fetches unterschied.
+
+**Fix:** `normalisiertFuerVergleich` sortiert jetzt zusätzlich alle inneren
+ID-/Namens-Arrays vor dem äußeren Sortieren nach Entitäts-ID.
+``inhaltsFingerabdruck(of:)``/``normalisiertFuerVergleich(_:)`` sind dafür
+von `private` auf `internal` herabgestuft (kein Zugriff von außerhalb des
+Moduls, aber testbar via `@testable import`) — SwiftDatas Fetch-Reihenfolgen-
+Instabilität lässt sich in einem kleinen In-Memory-Testcontainer nicht
+zuverlässig erzwingen, ein direkter Test auf Reihenfolge-Unabhängigkeit ist
+daher aussagekräftiger als ein Versuch, das reale Nichtdeterminismus-Verhalten
+nachzustellen.
+
+**Verifikationsstand:** `xcodebuild build`/`build-for-testing` grün. Neuer
+Test in `SyncSnapshotExportServiceTests` — zwei Snapshots mit identischem
+fachlichen Inhalt, aber unterschiedlicher Reihenfolge sowohl der äußeren
+Geschäfte-Liste als auch der inneren `typIDs`/`kategorieIDs`/
+`alternativeNamen`/`ignorierteArtikelNamen` ergeben denselben Fingerabdruck.
+Noch nicht mit echten Geräten nachverifiziert.

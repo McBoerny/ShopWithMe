@@ -121,4 +121,48 @@ struct SyncSnapshotExportServiceTests {
         // Kein Absturz, keine Datei — nichts weiter zu prüfen ohne einen
         // konfigurierten Ordner, dessen Inhalt man einsehen könnte.
     }
+
+    /// Regressionstest für einen Live-Test-Nachfolgefund (2026-07-31): nicht
+    /// nur die äußeren Snapshot-Arrays (ein Eintrag je Entität), auch die
+    /// ID-Arrays INNERHALB eines Eintrags (z.B. `GeschaeftSnapshot/typIDs`,
+    /// aus einer SwiftData-`@Relationship`-Sammlung abgeleitet) haben keine
+    /// garantierte Fetch-Reihenfolge — ohne Sortierung dieser inneren Arrays
+    /// erschien praktisch jeder Sync-Zyklus fälschlich als inhaltliche
+    /// Änderung. Zwei Snapshots mit identischem Inhalt, aber unterschiedlicher
+    /// Reihenfolge sowohl der äußeren Geschäfte-Liste als auch der inneren
+    /// `typIDs`/`kategorieIDs`/`alternativeNamen`/`ignorierteArtikelNamen`
+    /// müssen denselben Fingerabdruck ergeben.
+    @Test
+    func fingerabdruckIstUnabhaengigVonReihenfolgeAeussererUndInnererArrays() {
+        let geschaeftID = UUID()
+        let typA = UUID()
+        let typB = UUID()
+        let kategorieA = UUID()
+        let kategorieB = UUID()
+
+        func snapshot(typIDs: [UUID], kategorieIDs: [UUID], namen: [String]) -> SyncSnapshot {
+            SyncSnapshot(
+                formatVersion: SyncSnapshot.aktuelleFormatVersion, erzeugtAm: Date(), geraeteID: "geraet", geraeteName: "Gerät",
+                geschaeftsTypen: [], artikelKategorien: [],
+                geschaefte: [
+                    GeschaeftSnapshot(
+                        id: geschaeftID, name: "Rewe", typIDs: typIDs, adresse: nil, breitengrad: nil, laengengrad: nil,
+                        erkennungsradius: nil, kategorieIDs: kategorieIDs, ausgeschlosseneKategorieIDs: [],
+                        alternativeNamen: namen, ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 0,
+                        umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
+                    ),
+                ],
+                artikel: [], einkaufslisten: [], einkaufslistenEintraege: [], einkaufsvorgaenge: [], kaufEintraege: [],
+                warengruppenDistanzen: [], tombstones: []
+            )
+        }
+
+        let a = snapshot(typIDs: [typA, typB], kategorieIDs: [kategorieA, kategorieB], namen: ["Rewe Center", "Rewe City"])
+        let b = snapshot(typIDs: [typB, typA], kategorieIDs: [kategorieB, kategorieA], namen: ["Rewe City", "Rewe Center"])
+
+        let fingerabdruckA = SyncSnapshotExportService.inhaltsFingerabdruck(of: SyncSnapshotExportService.normalisiertFuerVergleich(a))
+        let fingerabdruckB = SyncSnapshotExportService.inhaltsFingerabdruck(of: SyncSnapshotExportService.normalisiertFuerVergleich(b))
+
+        #expect(fingerabdruckA == fingerabdruckB)
+    }
 }
