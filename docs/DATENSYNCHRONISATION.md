@@ -345,8 +345,13 @@ passiert dadurch an einer einzigen Stelle für beide Auslöser.
   (statt die 48h-Frist aus Abschnitt 3 abzuwarten); „Export.json aufräumen"
   erzwingt einen frischen eigenen Voll-Export und löscht verwaiste
   `export.json`-Dateien von Peers jenseits der 30-Tage-Altersgrenze (Abschnitt
-  8). Beide rühren bewusst nicht an eigenen, noch nicht abgeholten
-  ausgehenden Event-Dateien.
+  8); „KaufEintraege jetzt bereinigen" ruft
+  `KaufEintragBereinigungService.bereinigen(context:)` direkt auf (statt über
+  die 24h-Sperre von `automatischBereinigenFallsFaellig`) — z.B. um einen Fix
+  an dieser Bereinigung sofort zu verifizieren, ohne bis zum nächsten
+  automatischen Zeitpunkt zu warten (`docs/DATENSYNCHRONISATION_VERLAUF.md`
+  Abschnitt 27/28). Alle drei rühren bewusst nicht an eigenen, noch nicht
+  abgeholten ausgehenden Event-Dateien.
 
 ## 8. Korruptions-Recovery (`SyncErsetzenService`)
 

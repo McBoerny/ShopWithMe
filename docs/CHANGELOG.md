@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.10 (Build 178) — Nicht-deterministischer Sync-Fingerabdruck (GitHub #78) + manuelle KaufEintrag-Bereinigung
+
+- **GitHub #78.** `SyncSnapshotExportService` nutzte drei eigene
+  `JSONEncoder()`-Instanzen ohne `.sortedKeys` — Foundation garantiert die
+  Top-Level-Schlüsselreihenfolge nur mit dieser Option, ohne sie ergaben
+  zwei inhaltlich identische Snapshots unterschiedliche SHA256-Fingerabdrücke.
+  Der „nur bei echter Änderung schreiben"-Vergleich (GitHub #70/#71) hielt
+  das fälschlich für „geändert" und schrieb `export.json` dadurch bei
+  praktisch jedem Sync-Zyklus neu, unabhängig vom tatsächlichen Bestand.
+  Jetzt ein einziger geteilter, `.sortedKeys`-konfigurierter Encoder für
+  Datei-Schreiben, Fingerabdruck und Diagnose-Text.
+- Neuer Debug-Button „KaufEintraege jetzt bereinigen" (Einstellungen →
+  Debugging → Statuskonsolidierung erzwingen): löst
+  `KaufEintragBereinigungService.bereinigen(context:)` direkt aus, ohne auf
+  die 24h-Sperre der automatischen Terminierung zu warten — u.a. um den
+  Fix aus der vorigen Version sofort zu verifizieren.
+  Details: `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 28.
+
 ## v0.10 (Build 177) — Verwaiste KaufEintraege verhindert und aufgeräumt
 
 - **Analyse-Fund** (export.json wuchs trotz aktiver Bereinigung): über die

@@ -211,6 +211,29 @@ private struct StatuskonsolidierungSection: View {
                 }
                 .disabled(wirdAusgefuehrt)
 
+                // Ruft `bereinigen(context:)` bewusst DIREKT auf, nicht über
+                // `automatischBereinigenFallsFaellig` — Letzteres würde durch
+                // dessen 24h-Sperre (`KaufEintragBereinigungService.automatischesIntervall`)
+                // einen bereits heute gelaufenen automatischen Durchlauf erneut
+                // überspringen, obwohl der Anwender hier ausdrücklich SOFORT einen
+                // neuen Lauf auslösen will (z.B. um einen frisch behobenen Bug wie
+                // in `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 27 sofort zu
+                // verifizieren, statt bis zum nächsten automatischen Zeitpunkt zu
+                // warten). Lässt `letzteBereinigung` bewusst unangetastet — rein
+                // additiv zur automatischen Terminierung, nicht deren Ersatz.
+                Button("KaufEintraege jetzt bereinigen") {
+                    meldung = nil
+                    wirdAusgefuehrt = true
+                    Task {
+                        let anzahl = await KaufEintragBereinigungService.bereinigen(context: modelContext)
+                        wirdAusgefuehrt = false
+                        meldung = anzahl == 0
+                            ? "Keine abgelaufenen oder verwaisten KaufEintraege gefunden."
+                            : "\(anzahl) KaufEintrag\(anzahl == 1 ? "" : "e") bereinigt."
+                    }
+                }
+                .disabled(wirdAusgefuehrt)
+
                 if wirdAusgefuehrt {
                     ProgressView()
                 } else if let meldung {
@@ -220,7 +243,7 @@ private struct StatuskonsolidierungSection: View {
             } header: {
                 Text("Statuskonsolidierung erzwingen")
             } footer: {
-                Text("„Events aufräumen“ gibt aktuell nicht anwendbare empfangene Events sofort auf, statt die automatische 48h-Frist abzuwarten. „Export.json aufräumen“ erzwingt einen frischen eigenen Export und löscht verwaiste export.json-Dateien von Peers, die die 30-Tage-Altersgrenze überschritten haben.")
+                Text("„Events aufräumen“ gibt aktuell nicht anwendbare empfangene Events sofort auf, statt die automatische 48h-Frist abzuwarten. „Export.json aufräumen“ erzwingt einen frischen eigenen Export und löscht verwaiste export.json-Dateien von Peers, die die 30-Tage-Altersgrenze überschritten haben. „KaufEintraege jetzt bereinigen“ löst die sonst höchstens einmal täglich automatisch laufende Bereinigung abgeschlossener und verwaister KaufEintraege sofort aus.")
             }
         }
     }

@@ -123,6 +123,45 @@ struct SyncSnapshotExportServiceTests {
         #expect(snapshot.geraeteID == DatabaseLeaseService.geraeteID)
     }
 
+    /// Regressionstest für GitHub #78 (Fingerabdruck/Datei nicht deterministisch,
+    /// da `JSONEncoder` ohne `.sortedKeys` keine stabile Top-Level-Schlüssel-
+    /// reihenfolge garantiert — bestätigt anhand zweier realer, zeitnah
+    /// aufeinanderfolgender `export.json`, die trotz inhaltlich identischem
+    /// Bestand mit unterschiedlichen Schlüsseln begannen). `JSONDecoder`/
+    /// `JSONSerialization` verwerfen die geschriebene Reihenfolge beim Parsen
+    /// (landen in einem ungeordneten Dictionary) — deshalb hier direkt im
+    /// rohen JSON-Text die erste Fundstelle jedes Top-Level-Schlüssels
+    /// vergleichen, statt über einen Decoder zu gehen.
+    @Test
+    func exportiertesJsonHatAlphabetischSortierteTopLevelSchluessel() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let geschaeft = Geschaeft(name: "Rewe", typen: [])
+        context.insert(geschaeft)
+        try context.save()
+
+        await SyncSnapshotExportService.exportiereSnapshot(context: context)
+
+        let exportURL = SyncSnapshotExportService.eigeneExportURL(in: syncOrdner)
+        let text = try String(contentsOf: exportURL, encoding: .utf8)
+
+        let topLevelSchluessel = [
+            "artikel", "artikelAliase", "artikelKategorien", "einkaufslisten", "einkaufslistenEintraege",
+            "einkaufsvorgaenge", "erzeugtAm", "formatVersion", "geraeteID", "geraeteName", "geschaefte",
+            "geschaeftsTypen", "kaufEintraege", "preispunkte", "tombstones", "warengruppenDistanzen",
+        ]
+        let gefundenInReihenfolge = try topLevelSchluessel
+            .map { schluessel in (schluessel: schluessel, position: try #require(text.range(of: "\"\(schluessel)\":"))) }
+            .sorted { $0.position.lowerBound < $1.position.lowerBound }
+            .map(\.schluessel)
+
+        #expect(gefundenInReihenfolge == topLevelSchluessel.sorted())
+    }
+
     @Test
     func exportiereSnapshotOhneSyncOrdnerTutNichts() async throws {
         let (container, context) = try machtLeerenContainer()

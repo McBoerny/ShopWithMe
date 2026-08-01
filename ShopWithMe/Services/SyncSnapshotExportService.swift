@@ -29,6 +29,25 @@ enum SyncSnapshotExportService {
     private static let dateiName = "export.json"
     private static let letzterFingerabdruckSchluessel = "syncSnapshotLetzterFingerabdruck"
 
+    /// **GitHub #78:** `JSONEncoder` garantiert eine stabile Schlüsselreihenfolge
+    /// nur mit `.sortedKeys` — ohne diese Option kann Foundation zwei inhaltlich
+    /// identische Werte mit unterschiedlicher Top-Level-Schlüsselreihenfolge
+    /// kodieren (empirisch bestätigt: zwei zeitnah nacheinander geschriebene
+    /// `export.json` desselben, unveränderten Bestands begannen mit
+    /// unterschiedlichen Schlüsseln). Ohne diese Option ergab
+    /// ``inhaltsFingerabdruck(of:)`` für inhaltlich identische Snapshots
+    /// unterschiedliche SHA256-Hashes, wodurch der „nur bei echter Änderung
+    /// schreiben"-Vergleich (GitHub #70/#71, s.o.) fälschlich JEDEN Zyklus als
+    /// geändert erkannte und `export.json` trotz unverändertem Bestand
+    /// kontinuierlich neu schrieb. Ein einziger geteilter, deterministisch
+    /// konfigurierter Encoder für alle drei Verwendungsstellen (Datei-Schreiben,
+    /// Fingerabdruck, Diagnose-Text) statt dreier eigener `JSONEncoder()`-Instanzen.
+    private static let encoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return encoder
+    }()
+
     /// Fingerabdruck des zuletzt tatsächlich geschriebenen Snapshot-Inhalts,
     /// `static var` statt Konstante, damit Tests den Zustand zurücksetzen
     /// können.
@@ -88,7 +107,7 @@ enum SyncSnapshotExportService {
             }
             return true
         }
-        guard let daten = try? JSONEncoder().encode(snapshot) else { return true }
+        guard let daten = try? encoder.encode(snapshot) else { return true }
 
         guard syncOrdner.startAccessingSecurityScopedResource() else {
             SyncDebugLogger.log(.ordnerZugriffFehlgeschlagen, details: "exportiereSnapshot")
@@ -194,7 +213,7 @@ enum SyncSnapshotExportService {
     /// Snapshots. `nil` nur bei einem (praktisch nie auftretenden)
     /// Encoding-Fehler.
     static func inhaltsFingerabdruck(of normalisiert: SyncSnapshot) -> String? {
-        guard let daten = try? JSONEncoder().encode(normalisiert) else { return nil }
+        guard let daten = try? encoder.encode(normalisiert) else { return nil }
         let digest = SHA256.hash(data: daten)
         return digest.map { String(format: "%02x", $0) }.joined()
     }
@@ -211,7 +230,7 @@ enum SyncSnapshotExportService {
     /// ist bewusst nicht Teil des normalen (nicht-debuggenden) Pfads.
     private static func diagnoseText(of normalisiert: SyncSnapshot) -> String {
         func teil<T: Encodable>(_ name: String, _ werte: [T]) -> String {
-            guard let daten = try? JSONEncoder().encode(werte) else { return "\(name)=\(werte.count)/?" }
+            guard let daten = try? encoder.encode(werte) else { return "\(name)=\(werte.count)/?" }
             let kurz = SHA256.hash(data: daten).prefix(4).map { String(format: "%02x", $0) }.joined()
             return "\(name)=\(werte.count)/\(kurz)"
         }

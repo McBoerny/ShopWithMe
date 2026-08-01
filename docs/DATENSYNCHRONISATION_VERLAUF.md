@@ -1818,3 +1818,60 @@ Kein eigenständiger `xcodebuild test`-Lauf durch Claude (Projektkonvention).
 Der bestehende Datenbestand in den beiden analysierten `export.json`-Dateien
 wird durch den Fix NICHT rückwirkend bereinigt, bevor die App auf den
 Geräten neu gestartet wird und `KaufEintragBereinigungService` erneut läuft.
+
+## 28. Nicht-deterministischer Sync-Fingerabdruck (GitHub #78) + manueller Sofort-Bereinigungs-Button
+
+**Anlass:** Nutzer-Nachfrage, nachdem drei zeitnah hintereinander erzeugte
+`export.json`-Kopien desselben Geräts trotz Abschnitt-27-Fix weiterhin groß
+blieben und sich die Datei bei jedem Zyklus änderte. Vergleich der drei
+Dateien nach ID-Sortierung: **inhaltlich zu 100% identisch** (einzige
+Differenz `erzeugtAm`) — trotzdem unterschied sich die Top-Level-
+Schlüsselreihenfolge zwischen den Dateien.
+
+**Zwei getrennte Befunde:**
+
+1. **Größe unverändert (278 KaufEintraege, 147 verwaist):** kein neuer Bug —
+   der Abschnitt-27-Fix war bereits im Code, aber `bereinigen(context:)` läuft
+   ausschließlich über `automatischBereinigenFallsFaellig`, dessen 24h-Sperre
+   (`letzteBereinigung` in `UserDefaults`) durch einen bereits VOR dem Fix
+   ausgelösten Lauf desselben Tages blockiert war. Ein Neustart der App am
+   selben Tag löst dadurch keinen erneuten automatischen Lauf aus, unabhängig
+   vom Codestand.
+2. **Datei wird trotzdem bei jedem Zyklus neu geschrieben (GitHub #78):**
+   `SyncSnapshotExportService` nutzte an drei Stellen (Datei-Schreiben,
+   `inhaltsFingerabdruck(of:)`, `diagnoseText(of:)`) jeweils eine eigene
+   `JSONEncoder()`-Instanz ohne `.sortedKeys`. Die *inneren* Arrays werden
+   zwar bereits vor dem Encoding deterministisch sortiert
+   (`normalisiertFuerVergleich`, siehe Abschnitt 22-Nachfolgefund oben), aber
+   Foundations `JSONEncoder` garantiert die *äußere* (Top-Level-)
+   Schlüsselreihenfolge nur mit `.sortedKeys` — bestätigt am realen
+   Datenmaterial: zwei der drei Kopien begannen mit unterschiedlichen
+   Schlüsseln trotz identischem Inhalt. Der Fingerabdruck-Vergleich
+   (GitHub #70/#71) erkannte dadurch praktisch jeden Zyklus fälschlich als
+   „geändert" und schrieb `export.json` neu, obwohl sich am Bestand nichts
+   geändert hatte.
+
+**Fix:**
+- `SyncSnapshotExportService`: ein einziger `private static let encoder`
+  (`JSONEncoder` mit `.outputFormatting = [.sortedKeys]`) ersetzt alle drei
+  bisherigen `JSONEncoder()`-Instanzen — Single-Source-of-Truth für die
+  Encoding-Konfiguration statt dreifacher Duplikation.
+- Neuer Debug-Button „KaufEintraege jetzt bereinigen"
+  (`StatuskonsolidierungSection` in `DebuggingView`, neben „Events aufräumen"/
+  „Export.json aufräumen"): ruft `KaufEintragBereinigungService.bereinigen(context:)`
+  **direkt** auf, nicht über `automatischBereinigenFallsFaellig` — umgeht
+  bewusst dessen 24h-Sperre, damit ein frisch behobener Bug in der
+  Bereinigung selbst sofort verifizierbar ist, ohne auf den nächsten
+  automatischen Zeitpunkt zu warten. Lässt `letzteBereinigung` unangetastet
+  (rein additiv zur automatischen Terminierung, kein Ersatz dafür).
+
+**Verifikationsstand:** `xcodegen generate` + `xcodebuild build-for-testing`
+grün, keine neuen Warnungen. Neuer Regressionstest
+`SyncSnapshotExportServiceTests.exportiertesJsonHatAlphabetischSortierteTopLevelSchluessel`
+prüft direkt im rohen JSON-Text (nicht über `JSONDecoder`/`JSONSerialization`,
+die die geschriebene Reihenfolge beim Parsen verwerfen), dass die
+Top-Level-Schlüssel alphabetisch sortiert geschrieben werden. Kein
+eigenständiger `xcodebuild test`-Lauf durch Claude (Projektkonvention). Der
+Debug-Button selbst (reine SwiftUI-Verdrahtung eines bereits getesteten
+Service-Aufrufs) wurde nicht mit dem Simulator nachverifiziert — dafür wäre
+gemäß Projektregel vorab eine explizite Freigabe nötig.
