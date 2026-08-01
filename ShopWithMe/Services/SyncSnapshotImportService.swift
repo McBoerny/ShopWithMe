@@ -749,6 +749,21 @@ enum SyncSnapshotImportService {
             // selbst noch führt — Tombstone verhindert die Wiederbelebung
             // (analog Bereich-B-Merges).
             guard !geloeschteIDs.contains(eintrag.id) else { continue }
+            // Referenziert der Remote-Eintrag einen Einkaufsvorgang, der hier
+            // nicht auflösbar ist (z.B. weil dieser Vorgang lokal bereits per
+            // Tombstone gelöscht wurde, siehe `mergeEinkaufsvorgaenge` oben —
+            // ein `nil` in `einkaufsvorgangZuordnung` bedeutet hier immer
+            // "unauflösbar", nie "Vorgang absichtlich leer", da `remote`
+            // ausschließlich echte, nicht-optionale Fremd-IDs enthält), würde
+            // der `KaufEintrag` sonst verwaist (`einkaufsvorgang == nil`)
+            // angelegt — und wäre danach dauerhaft unlöschbar, da
+            // `KaufEintragBereinigungService.bereinigen` verwaiste Einträge nie
+            // erfasst (Analyse-Fund: 53–59% aller `KaufEintrag`e in einem
+            // Live-Export waren genau auf diesem Weg verwaist). Stattdessen wie
+            // seinen Vorgang überspringen statt orphaned anzulegen.
+            if let einkaufsvorgangID = eintrag.einkaufsvorgangID, einkaufsvorgangZuordnung[einkaufsvorgangID] == nil {
+                continue
+            }
             let neuer = KaufEintrag(
                 artikel: eintrag.artikelID.flatMap { artikelZuordnung[$0] },
                 geschaeft: eintrag.geschaeftID.flatMap { geschaeftZuordnung[$0] },

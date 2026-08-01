@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.10 (Build 177) — Verwaiste KaufEintraege verhindert und aufgeräumt
+
+- **Analyse-Fund** (export.json wuchs trotz aktiver Bereinigung): über die
+  Hälfte aller `KaufEintrag`e in einem Live-Export trugen `einkaufsvorgang ==
+  nil` — entstanden durch `SyncSnapshotImportService.mergeKaufEintraege`, das
+  einen Remote-Eintrag trotz nicht auflösbarem `Einkaufsvorgang` (z.B. lokal
+  bereits per Tombstone gelöscht) mit `einkaufsvorgang = nil` statt gar nicht
+  anlegte. `KaufEintragBereinigungService.bereinigen` erfasste solche Einträge
+  wegen ihres fehlenden `einkaufsvorgang?.endZeit` nie — ein struktureller
+  Ratschen-Effekt, der die Datei bei jedem Sync-Zyklus weiter wachsen ließ.
+  Fix in zwei Teilen: `mergeKaufEintraege` überspringt einen unauflösbar
+  referenzierten Eintrag jetzt wie seinen Vorgang; `bereinigen` löscht
+  bereits bestehende verwaiste Einträge sofort (keine Karenzzeit — sie hatten
+  nie eine fachliche Funktion). Details: `docs/DATENSYNCHRONISATION_VERLAUF.md`
+  Abschnitt 27.
+
 ## v0.10 (Build 176) — Lesbare Peer-Ordnernamen (GitHub #81)
 
 - Peer-Ordner unter `peers/` im geteilten Sync-Ordner tragen jetzt den vom

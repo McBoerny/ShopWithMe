@@ -155,4 +155,28 @@ struct KaufEintragBereinigungServiceTests {
         #expect(verbleibendeVorgaenge.count == 1)
         #expect(verbleibendeVorgaenge.first?.id == laufenderVorgang.id)
     }
+
+    /// Regressionstest für einen Analyse-Fund (export.json wuchs trotz aktiver
+    /// Bereinigung, weil verwaiste `KaufEintrag`e — `einkaufsvorgang == nil`,
+    /// entstanden durch einen Bug in `SyncSnapshotImportService.mergeKaufEintraege`
+    /// — vom bisherigen Filter (`einkaufsvorgang?.endZeit`) nie erfasst wurden.
+    /// Löschung erfolgt sofort, ohne Karenzzeit (`jetzt` == Erstellungszeitpunkt).
+    @Test
+    func bereinigenLoeschtVerwaisteEintraegeOhneEinkaufsvorgangSofortMitTombstone() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let geschaeft = Geschaeft(name: "Testladen", typen: [lebensmittelTyp()])
+        context.insert(geschaeft)
+        let verwaisterEintrag = KaufEintrag(artikel: nil, geschaeft: geschaeft)
+        context.insert(verwaisterEintrag)
+        let eintragID = verwaisterEintrag.id
+        try context.save()
+
+        let anzahl = await KaufEintragBereinigungService.bereinigen(context: context)
+
+        #expect(anzahl == 1)
+        #expect(try context.fetch(FetchDescriptor<KaufEintrag>()).isEmpty)
+        #expect(SyncTombstoneService.istGeloescht(art: SyncEntitaetsArt.kaufEintrag, id: eintragID, context: context))
+    }
 }

@@ -39,6 +39,8 @@ enum KaufEintragBereinigungService {
 
     /// Löscht `KaufEintrag`e, deren `Einkaufsvorgang` abgeschlossen ist und dessen
     /// `endZeit` länger als ``karenzzeit`` vor `jetzt` zurückliegt, sowie
+    /// (sofort, ohne Karenzzeit — siehe Begründung an der Stelle des Filters)
+    /// bereits verwaiste Einträge ohne jeden `Einkaufsvorgang`, sowie
     /// anschließend Vorgänge, die dadurch leer geworden sind (unabhängig von einer
     /// weiterhin bestehenden `Einkaufsliste`-Zuordnung — anders als
     /// ``DatenintegritaetsService/raeumeLeereListenloseVorgaengeAuf(context:)``).
@@ -58,8 +60,20 @@ enum KaufEintragBereinigungService {
     static func bereinigen(context: ModelContext, jetzt: Date = Date()) async -> Int {
         let stichtag = jetzt.addingTimeInterval(-karenzzeit)
 
+        // Verwaiste Einträge (`einkaufsvorgang == nil`) entstehen ausschließlich
+        // durch einen (mittlerweile behobenen) Bug im Sync-Snapshot-Merge
+        // (`SyncSnapshotImportService.mergeKaufEintraege`): kein aktueller
+        // Code-Pfad legt einen `KaufEintrag` absichtlich ohne Vorgang an. Ein
+        // solcher Eintrag hat damit nie eine fachliche Funktion gehabt und wird
+        // NIE nachträglich einem Vorgang zugeordnet — anders als ein noch
+        // laufender Vorgang (`endZeit == nil`) gibt es hier keinen Grund, auf
+        // Ablauf der ``karenzzeit`` zu warten, bevor gelöscht wird (Analyse-Fund:
+        // machte in einem Live-Export über die Hälfte aller `KaufEintrag`e aus).
         let kaufEintragKandidaten = ((try? context.fetch(FetchDescriptor<KaufEintrag>())) ?? [])
-            .filter { ($0.einkaufsvorgang?.endZeit).map { $0 < stichtag } ?? false }
+            .filter { eintrag in
+                guard let vorgang = eintrag.einkaufsvorgang else { return true }
+                return vorgang.endZeit.map { $0 < stichtag } ?? false
+            }
         let kaufEintragKandidatenIDs = Set(kaufEintragKandidaten.map(\.persistentModelID))
 
         // Bewusst ein ungefilterter Fetch + Swift-seitiger `.filter` statt eines

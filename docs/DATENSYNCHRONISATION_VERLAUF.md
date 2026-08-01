@@ -1769,3 +1769,52 @@ Tests `PeerOrdnerNameTests`, `SyncOrdnerServiceTests` (Umbenennung ohne
 Datenverlust, `hatVorhandenePeers` erkennt neues und altes Schema). Kein
 eigenständiger `xcodebuild test`-Lauf durch Claude (Projektkonvention). Noch
 nicht mit echten Geräten live nachverifiziert.
+
+## 27. Verwaiste KaufEintraege durch unauflösbare Vorgangs-Referenz im Snapshot-Merge
+
+**Anlass:** Nutzer-Analyse zweier realer `export.json`-Dateien (Peers
+„Bernhard"/„Backup"), nachdem trotz ausgelöster `KaufEintragBereinigungService`-
+und Event-Auflösungs-Läufe die Datei weiter wuchs statt zu schrumpfen. `kaufEintraege`
+machte 56% der Dateigröße aus; davon hatten 53% (Peer „Bernhard") bzw. 59%
+(Peer „Backup") `einkaufsvorgangID == nil` — konsistent auf beiden Geräten, und
+nicht auf alte Daten beschränkt (die meisten verwaisten Einträge waren wenige
+Tage alt).
+
+**Root Cause (zwei Teile, siehe auch Audit-Checkliste in dieser Session unter
+„Merge-/Abgleichslogik: `nil` gegen `nil` niemals blind als Treffer werten" im
+Skill `ios-swift-engineering`):**
+
+1. `KaufEintragBereinigungService.bereinigen` filterte bisher ausschließlich
+   über `($0.einkaufsvorgang?.endZeit).map { $0 < stichtag } ?? false` — für
+   `einkaufsvorgang == nil` liefert das immer `false`. Ein einmal verwaister
+   Eintrag war dadurch **strukturell unlöschbar**, unabhängig vom Alter.
+2. Die eigentliche Entstehung: `SyncSnapshotImportService.mergeKaufEintraege`
+   setzte `neuer.einkaufsvorgang = eintrag.einkaufsvorgangID.flatMap {
+   einkaufsvorgangZuordnung[$0] }` bedingungslos. War der referenzierte
+   `Einkaufsvorgang` auf diesem Gerät nicht auflösbar (z.B. bereits per
+   Tombstone gelöscht — `mergeEinkaufsvorgaenge` überspringt einen solchen
+   Vorgang bewusst, siehe Abschnitt 20, nimmt ihn aber dadurch auch nicht in
+   die zurückgegebene `einkaufsvorgangZuordnung` auf), wurde der `KaufEintrag`
+   trotzdem angelegt — nur eben verwaist. Bei geteilten Listen/Vorgängen
+   zwischen zwei Geräten mit unterschiedlich schneller Aufräum-Karenzzeit
+   entstehen dadurch laufend neue Waisen, nicht nur einmalig historische.
+
+**Fix:**
+- `mergeKaufEintraege`: überspringt einen Remote-Eintrag jetzt vollständig,
+  wenn er einen `einkaufsvorgangID` referenziert, der in
+  `einkaufsvorgangZuordnung` fehlt — analog dazu, wie sein Vorgang selbst
+  übersprungen wird, statt ihn wie seinen Vorgang orphaned anzulegen.
+- `KaufEintragBereinigungService.bereinigen`: der Filter erfasst jetzt
+  zusätzlich jeden Eintrag mit `einkaufsvorgang == nil` — sofort, ohne
+  Karenzzeit, da ein solcher Eintrag nie eine fachliche Funktion hatte (anders
+  als ein gerade erst abgeschlossener Vorgang, bei dem die Karenzzeit einem
+  nachträglichen Belegscan Zeit gibt).
+
+**Verifikationsstand:** `xcodegen generate` + `xcodebuild build-for-testing`
+grün, keine neuen Warnungen. Neue Regressionstests:
+`KaufEintragBereinigungServiceTests.bereinigenLoeschtVerwaisteEintraegeOhneEinkaufsvorgangSofortMitTombstone`,
+`SyncSnapshotImportServiceTests.kaufEintragMitUnaufloesbaremEinkaufsvorgangWirdNichtVerwaistAngelegt`.
+Kein eigenständiger `xcodebuild test`-Lauf durch Claude (Projektkonvention).
+Der bestehende Datenbestand in den beiden analysierten `export.json`-Dateien
+wird durch den Fix NICHT rückwirkend bereinigt, bevor die App auf den
+Geräten neu gestartet wird und `KaufEintragBereinigungService` erneut läuft.

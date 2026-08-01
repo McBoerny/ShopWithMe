@@ -1062,6 +1062,51 @@ struct SyncSnapshotImportServiceTests {
         #expect(eintrag.kategorieBesuchsIndex == nil)
     }
 
+    /// Regressionstest für einen Analyse-Fund (export.json wuchs trotz aktiver
+    /// `KaufEintragBereinigungService`-Läufe, weil verwaiste `KaufEintrag`e —
+    /// `einkaufsvorgang == nil` — von deren Filter nie erfasst wurden, siehe
+    /// dortige Typ-Doku). Referenziert ein Remote-`KaufEintrag` einen
+    /// `Einkaufsvorgang`, der hier nicht auflösbar ist (z.B. bereits gelöscht/
+    /// tombstoned), darf `mergeKaufEintraege` ihn NICHT trotzdem mit
+    /// `einkaufsvorgang == nil` anlegen (bisheriges Verhalten), sondern muss ihn
+    /// wie seinen Vorgang überspringen.
+    @Test
+    func kaufEintragMitUnaufloesbaremEinkaufsvorgangWirdNichtVerwaistAngelegt() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759")
+        context.insert(apfel)
+        try context.save()
+
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.artikel = [
+            ArtikelSnapshot(
+                id: apfel.id, name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759",
+                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+            ),
+        ]
+        // Bewusst KEIN passender Eintrag in `snapshot.einkaufsvorgaenge` — simuliert
+        // einen `Einkaufsvorgang`, der auf diesem Gerät nicht auflösbar ist (z.B.
+        // bereits per Tombstone gelöscht), während der Absender ihn selbst noch
+        // führt und seine `KaufEintrag`e weiterhin referenziert.
+        snapshot.kaufEintraege = [
+            KaufEintragSnapshot(
+                id: UUID(), artikelID: apfel.id, einkaufsvorgangID: UUID(), geschaeftID: nil, kategorieID: nil,
+                artikelNameSnapshot: "Apfel", geschaeftNameSnapshot: "",
+                datum: Date(), menge: 1, kategorieBesuchsIndex: nil
+            ),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        #expect(try context.fetch(FetchDescriptor<KaufEintrag>()).isEmpty)
+    }
+
     @Test
     func warengruppenDistanzWirdGemitteltBeiVorhandenemEintragSonstUebernommen() async throws {
         let (container, context) = try machtLeerenContainer()
