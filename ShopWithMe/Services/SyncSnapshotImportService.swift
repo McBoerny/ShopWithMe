@@ -339,11 +339,20 @@ enum SyncSnapshotImportService {
             var deskriptor = FetchDescriptor<KaufEintrag>(predicate: #Predicate { $0.id == id })
             deskriptor.fetchLimit = 1
             if let objekt = try? context.fetch(deskriptor).first { context.delete(objekt) }
-            // GitHub #82: räumt zusätzlich die eigene `kaeufe/{id}.json` auf,
-            // falls dieses Gerät den jetzt fremd-tombstoneten Eintrag selbst
-            // schon einmal exportiert hatte — reine Platzersparnis, siehe
-            // ``SyncKaeufeExportService/entferneDatei(fuerKaufEintragID:)``.
-            SyncKaeufeExportService.entferneDatei(fuerKaufEintragID: id)
+            // Bewusst KEIN `kaeufe/{id}.json`-Aufräumen hier (Live-Test-Fund,
+            // GitHub #82): diese Funktion läuft pro Tombstone innerhalb von
+            // `mergeTombstones`, das wiederum verschachtelt im bereits offen
+            // gehaltenen Security-Scope von `importiereSnapshots` läuft — bei
+            // einem realen Peer-Bestand potenziell drei- bis vierstellig oft
+            // pro Zyklus. Ein zusätzliches, hier verschachteltes
+            // `startAccessingSecurityScopedResource()`/`stop…()` je Aufruf
+            // destabilisierte den Zugriff auf echten Geräten binnen Minuten
+            // dauerhaft (kompletter Sync-Stillstand). Eine ggf. verwaist
+            // liegenbleibende eigene `kaeufe/`-Datei ist rein Platzersparnis —
+            // der bereits übernommene Tombstone schützt unabhängig davon vor
+            // Wiederbelebung. Siehe ``SyncKaeufeExportService/entferneDateien(fuerKaufEintragIDs:)``
+            // für den (gebündelten, unverschachtelten) Aufräumpfad des eigenen,
+            // lokal verursachten Löschens.
         case SyncEntitaetsArt.preispunkt:
             var deskriptor = FetchDescriptor<Preispunkt>(predicate: #Predicate { $0.id == id })
             deskriptor.fetchLimit = 1

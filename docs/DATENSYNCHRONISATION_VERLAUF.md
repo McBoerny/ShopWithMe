@@ -1931,3 +1931,75 @@ Neue Tests: `nurGeaenderterTeilWirdNeuGeschrieben`, `stammNormalisierungIstUnabh
 (`KaufEintragBereinigungServiceTests`). Kein eigenständiger `xcodebuild test`-Lauf
 durch Claude (Projektkonvention) — noch nicht mit echten Geräten/realem
 Mehrgeräte-Sync nachverifiziert.
+
+## 30. Live-Test-Fund: kompletter Sync-Stillstand durch verschachtelte Security-Scope-Zugriffe
+
+**Erster echter Mehrgeräte-Test nach Abschnitt 29** (zwei reale Geräte
+„Bernhard"/„Backup"): nach einem `Ersetzen`-Neuaufbau auf Bernhard stimmte der
+Stand zunächst — aber danach lösten weder ein Abhaken auf Backup noch auf
+Bernhard, noch ein neuer Artikel auf einer neuen Liste, irgendein Update auf
+dem jeweils anderen Gerät aus. Kompletter, beidseitiger Stillstand, nicht nur
+für die neuen Paket-Teile, sondern auch für das unveränderte Bereich-A-Eventlog
+(`SyncEvent`/`SyncExportService`/`SyncImportService`) — ein Hinweis, dass der
+gesamte Sync-Zyklus scheiterte, nicht eine einzelne Merge-Funktion.
+
+**Diagnose per `Sync-Debug-Modus`-Protokoll** (vom Nutzer bereitgestellt):
+durchgehend `sync_ordner_zugriff_fehlgeschlagen` für JEDEN Teilschritt
+(`importiereSnapshots`, `importiereNeueEvents`, `exportiereNeueEvents`,
+`exportierePaket`, `exportiereNeueKaeufe`) — `startAccessingSecurityScopedResource()`
+lieferte `false`. Zunächst funktionierten einzelne Zyklen noch (ein
+`sync_snapshot_empfangen`/`sync_einkaufslisten_stand`-Paar um 13:16-13:19 Uhr),
+danach dauerhaft nicht mehr.
+
+**Root Cause:** Die in Abschnitt 29 (Pruning bei Löschung) beschriebene
+`kaeufe/`-Datei-Aufräumung wurde ursprünglich auch aus
+`SyncSnapshotImportService.loescheFallsVorhanden` aufgerufen — einmal PRO
+empfangenem Tombstone, innerhalb der Schleife von `mergeTombstones`, die
+selbst wieder VERSCHACHTELT im bereits offen gehaltenen Security-Scope von
+`importiereSnapshots` läuft (dieser hält den Scope über mehrere `await`-Punkte
+je Peer offen, siehe `importiereSnapshots`). Jeder dieser
+`entferneDatei`-Aufrufe öffnete/schloss den Security-Scope zusätzlich selbst.
+Backups `tombstones.json` enthielt ~190 Einträge — ein einziger Sync-Zyklus
+löste damit ~190 verschachtelte Öffnen/Schließen-Zyklen auf demselben
+Security-Scoped-Bookmark aus. Wiederholtes/verschachteltes Öffnen und
+Schließen desselben Bookmarks destabilisiert dessen Zugriffsberechtigung auf
+echten Geräten nachweisbar dauerhaft — nicht nur für den auslösenden Aufruf,
+sondern für JEDEN nachfolgenden Zugriffsversuch in der App-Sitzung, exakt das
+beobachtete Muster.
+
+**Fix:**
+- `SyncKaeufeExportService.entferneDatei(fuerKaufEintragID:)` (Einzelaufruf,
+  eigener Security-Scope pro Datei) ersetzt durch
+  `entferneDateien(fuerKaufEintragIDs:)` (Batch, EIN Security-Scope für die
+  gesamte Liste).
+- `KaufEintragBereinigungService.bereinigen` ruft den Batch-Aufräumer jetzt
+  einmal nach seiner Löschschleife auf (unverändert bündelnd, jetzt zusätzlich
+  ohne verschachtelten Scope-Zugriff).
+- Der Aufruf aus `loescheFallsVorhanden` wurde vollständig entfernt, nicht nur
+  gebündelt — dieser Pfad läuft strukturell immer verschachtelt in einem
+  fremden, bereits offenen Scope und sollte grundsätzlich keinen eigenen
+  Scope-Zugriff mehr versuchen. Eine dadurch verwaist liegenbleibende eigene
+  `kaeufe/`-Datei eines fremd-tombstoneten Eintrags ist weiterhin nur
+  Platzersparnis (der Tombstone selbst schützt bereits vor Wiederbelebung),
+  keine Korrektheitsfrage — bewusst in Kauf genommen statt das Risiko erneut
+  einzugehen.
+
+**Allgemeinere Lehre (auch für künftigen Code):** Jede neue Stelle, die
+`SyncOrdnerService.gewaehlterOrdner()` + `startAccessingSecurityScopedResource()`
+verwendet, muss geprüft werden, ob sie potenziell verschachtelt in einem
+bereits von einer aufrufenden Funktion offen gehaltenen Scope läuft (alle
+bestehenden Top-Level-Sync-Funktionen — `exportiereSnapshot`/`exportierePaket`,
+`importiereSnapshots`, `exportiereNeueEvents`, `importiereNeueEvents` — halten
+ihren Scope über den gesamten Funktionskörper, teils über mehrere `await`-Punkte
+hinweg, offen). Neue Low-Level-Helfer, die von TIEF innerhalb dieser
+Funktionen aufgerufen werden (wie `loescheFallsVorhanden`, selbst mehrfach
+verschachtelt über `mergeTombstones`/`merge`/`mergePaket`), dürfen keinen
+eigenen Scope öffnen — entweder den bereits offenen Scope voraussetzen, oder
+(wie hier gelöst) die Datei-I/O ganz an eine Stelle verschieben, die
+nachweislich NICHT verschachtelt läuft.
+
+**Verifikationsstand:** `xcodegen generate` + `xcodebuild build-for-testing`
+grün, keine neuen Warnungen. Test `SyncKaeufeExportServiceTests.entferneDateienLoeschtVorhandeneKaeufeDateien`
+an den Batch-Aufruf angepasst. Noch nicht erneut auf den beiden betroffenen
+echten Geräten nachverifiziert — dafür muss die App dort neu gebaut/installiert
+werden.

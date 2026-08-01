@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.10 (Build 181) — Fix: kompletter Sync-Stillstand durch verschachtelte Security-Scope-Zugriffe
+
+- **Live-Test-Fund, direkt nach der export.json-Paket-Umstellung.** Das neue
+  `kaeufe/`-Aufräumen rief bei jedem per Tombstone empfangenen gelöschten
+  `KaufEintrag` ein eigenes `startAccessingSecurityScopedResource()`/
+  `stop…()` auf `SyncSnapshotImportService.loescheFallsVorhanden` auf —
+  verschachtelt im bereits offen gehaltenen Security-Scope von
+  `importiereSnapshots`. Bei einem realen Peer-Bestand (~190 Tombstones) ~190
+  verschachtelte Zyklen in einem einzigen Sync-Durchlauf — destabilisierte den
+  Zugriff auf echten Geräten binnen Minuten dauerhaft: kompletter,
+  bleibender Sync-Stillstand in beide Richtungen, auch für unabhängige
+  Bereich-A-Aktionen (abhaken/hinzufügen). Fix: Aufräumen nur noch gebündelt
+  aus `KaufEintragBereinigungService` (ein Zugriff für die ganze Liste), nicht
+  mehr aus der Tombstone-Schleife. Details: `docs/EXPORT_PAKET_UMBAU.md`.
+
 ## v0.10 (Build 180) — Sync-Paket statt export.json-Monolith (GitHub #82)
 
 - **GitHub #82.** `export.json` (ein Monolith, bei jedem Sync-Zyklus komplett

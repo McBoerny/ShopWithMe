@@ -84,23 +84,35 @@ struct SyncKaeufeExportServiceTests {
     }
 
     @Test
-    func entferneDateiLoeschtVorhandeneKaeufeDatei() async throws {
+    func entferneDateienLoeschtVorhandeneKaeufeDateien() async throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
         let syncOrdner = macheTempSyncOrdner()
         try SyncOrdnerService.ordnerFestlegen(syncOrdner)
         defer { SyncOrdnerService.ordnerEntfernen() }
 
-        let eintrag = KaufEintrag(artikel: nil, geschaeft: nil)
-        context.insert(eintrag)
+        let eintragEins = KaufEintrag(artikel: nil, geschaeft: nil)
+        let eintragZwei = KaufEintrag(artikel: nil, geschaeft: nil)
+        context.insert(eintragEins)
+        context.insert(eintragZwei)
         try context.save()
         await SyncKaeufeExportService.exportiereNeueKaeufe(context: context)
-        let url = SyncSnapshotExportService.eigenerKaeufeOrdner(in: syncOrdner).appendingPathComponent("\(eintrag.id.uuidString).json")
-        #expect(FileManager.default.fileExists(atPath: url.path))
+        let ordner = SyncSnapshotExportService.eigenerKaeufeOrdner(in: syncOrdner)
+        let urlEins = ordner.appendingPathComponent("\(eintragEins.id.uuidString).json")
+        let urlZwei = ordner.appendingPathComponent("\(eintragZwei.id.uuidString).json")
+        #expect(FileManager.default.fileExists(atPath: urlEins.path))
+        #expect(FileManager.default.fileExists(atPath: urlZwei.path))
 
-        SyncKaeufeExportService.entferneDatei(fuerKaufEintragID: eintrag.id)
+        // Bewusst EIN gebündelter Aufruf für beide IDs statt zweier
+        // Einzelaufrufe — siehe Typ-Doku „Bewusst EIN
+        // startAccessingSecurityScopedResource()-Aufruf für die gesamte
+        // Liste" (Live-Test-Fund: verschachteltes/wiederholtes Öffnen und
+        // Schließen desselben Security-Scoped-Bookmarks destabilisierte den
+        // Zugriff auf echten Geräten).
+        SyncKaeufeExportService.entferneDateien(fuerKaufEintragIDs: [eintragEins.id, eintragZwei.id])
 
-        #expect(!FileManager.default.fileExists(atPath: url.path))
+        #expect(!FileManager.default.fileExists(atPath: urlEins.path))
+        #expect(!FileManager.default.fileExists(atPath: urlZwei.path))
     }
 
     @Test

@@ -72,20 +72,42 @@ enum SyncKaeufeExportService {
         return true
     }
 
-    /// Löscht die `kaeufe/`-Datei eines einzelnen `KaufEintrag` im EIGENEN
-    /// Peer-Ordner, falls vorhanden — aufgerufen, sobald der lokale Eintrag
-    /// selbst gelöscht wird (``KaufEintragBereinigungService``, oder
-    /// Tombstone-getrieben über ``SyncSnapshotImportService``). Rein
-    /// Platzersparnis: der bereits gesetzte ``SyncTombstone`` schützt
-    /// unabhängig davon vor Wiederbelebung durch einen Peer, der die Datei
-    /// noch führt — deshalb best-effort, ohne Fehler nach außen zu melden.
-    /// Ohne hinterlegten Sync-Ordner ohne Wirkung.
+    /// Löscht die `kaeufe/`-Dateien mehrerer `KaufEintrag`e im EIGENEN
+    /// Peer-Ordner in einem einzigen Zugriff, falls vorhanden — aufgerufen,
+    /// sobald die lokalen Einträge selbst gelöscht werden
+    /// (``KaufEintragBereinigungService``). Rein Platzersparnis: der bereits
+    /// gesetzte ``SyncTombstone`` schützt unabhängig davon vor Wiederbelebung
+    /// durch einen Peer, der die Datei noch führt — deshalb best-effort, ohne
+    /// Fehler nach außen zu melden. Ohne hinterlegten Sync-Ordner ohne Wirkung.
+    ///
+    /// **Bewusst EIN `startAccessingSecurityScopedResource()`-Aufruf für die
+    /// gesamte Liste, nicht einer pro Datei** (Live-Test-Fund): eine frühere
+    /// Fassung öffnete/schloss den Sicherheits-Scope einzeln pro gelöschtem
+    /// Eintrag — bei ``SyncSnapshotImportService/loescheFallsVorhanden(art:id:context:)``
+    /// zusätzlich VERSCHACHTELT innerhalb des bereits von
+    /// ``SyncSnapshotImportService/importiereSnapshots(context:)`` offen
+    /// gehaltenen Scopes (dort einmal pro empfangenem Tombstone, bei einem
+    /// realen Peer-Bestand schnell drei- bis vierstellig). Wiederholtes/
+    /// verschachteltes Öffnen und Schließen desselben Security-Scoped-
+    /// Bookmarks destabilisierte den Zugriff auf echten Geräten binnen
+    /// Minuten dauerhaft (`startAccessingSecurityScopedResource` lieferte
+    /// danach für JEDEN weiteren Sync-Schritt `false`, protokolliert als
+    /// `sync_ordner_zugriff_fehlgeschlagen`) — beobachtet als kompletter,
+    /// bleibender Sync-Stillstand in beide Richtungen. Deshalb erstens hier
+    /// als Batch statt Einzelaufruf, und zweitens NICHT mehr aus
+    /// `loescheFallsVorhanden` aufgerufen (das liefe verschachtelt in einer
+    /// potenziell sehr langen Tombstone-Schleife) — nur noch aus
+    /// ``KaufEintragBereinigungService``, das den eigenen, lokal verursachten
+    /// Löschvorgang bereits ohnehin bündelt.
     @MainActor
-    static func entferneDatei(fuerKaufEintragID id: UUID) {
+    static func entferneDateien(fuerKaufEintragIDs ids: [UUID]) {
+        guard !ids.isEmpty else { return }
         guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return }
         guard syncOrdner.startAccessingSecurityScopedResource() else { return }
         defer { syncOrdner.stopAccessingSecurityScopedResource() }
-        let url = SyncSnapshotExportService.eigenerKaeufeOrdner(in: syncOrdner).appendingPathComponent("\(id.uuidString).json")
-        try? FileManager.default.removeItem(at: url)
+        let ordner = SyncSnapshotExportService.eigenerKaeufeOrdner(in: syncOrdner)
+        for id in ids {
+            try? FileManager.default.removeItem(at: ordner.appendingPathComponent("\(id.uuidString).json"))
+        }
     }
 }

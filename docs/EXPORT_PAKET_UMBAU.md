@@ -81,13 +81,30 @@ Einträgen) wäre ein Flag (analog `SyncEvent.hochgeladen`) die schnellere
 Lösung — mögliche künftige Verfeinerung, falls der Datei-Existenz-Check
 jemals messbar ins Gewicht fällt.
 
-**Pruning bei Löschung:** `KaufEintragBereinigungService.bereinigen` und die
-Tombstone-getriebene lokale Löschung (`SyncSnapshotImportService.loescheFallsVorhanden`)
-löschen die eigene `kaeufe/{id}.json` zusätzlich zum lokalen `KaufEintrag`
-(`SyncKaeufeExportService.entferneDatei(fuerKaufEintragID:)`). Rein
+**Pruning bei Löschung:** `KaufEintragBereinigungService.bereinigen` löscht die
+eigenen `kaeufe/{id}.json` der gelöschten Einträge zusätzlich zum lokalen
+`KaufEintrag`, gebündelt in einem Aufruf
+(`SyncKaeufeExportService.entferneDateien(fuerKaufEintragIDs:)`). Rein
 Platzersparnis — der beim Löschen bereits gesetzte `SyncTombstone` schützt
-unabhängig davon vor Wiederbelebung durch einen Peer, der die Datei noch
-führt.
+unabhängig davon vor Wiederbelebung durch einen Peer, der die Datei noch führt.
+
+**Live-Test-Fund (2026-08-01): NICHT bei der Tombstone-getriebenen lokalen
+Löschung.** Ein erster Versuch rief dasselbe Aufräumen zusätzlich aus
+`SyncSnapshotImportService.loescheFallsVorhanden` auf — einmal pro
+empfangenem Tombstone, innerhalb der Tombstone-Schleife von `mergeTombstones`,
+die selbst wieder verschachtelt im bereits offen gehaltenen Security-Scope von
+`importiereSnapshots` läuft. Bei einem realen Peer-Bestand (~190 Tombstones)
+bedeutete das ~190 verschachtelte `startAccessingSecurityScopedResource()`/
+`stop…()`-Zyklen auf demselben Bookmark **innerhalb eines einzigen
+Zyklus** — destabilisierte den Zugriff auf echten Geräten binnen Minuten
+dauerhaft: `startAccessingSecurityScopedResource()` lieferte danach für
+**jeden** weiteren Sync-Schritt (Import UND Export, beide Geräte) `false`,
+beobachtet als kompletter, bleibender Sync-Stillstand in beide Richtungen,
+selbst für unabhängige Bereich-A-Aktionen (Artikel abhaken/hinzufügen). Fix:
+Aufräumen ausschließlich aus `KaufEintragBereinigungService` (bündelt bereits
+selbst, kein verschachtelter Aufruf), NICHT mehr aus `loescheFallsVorhanden`
+— eine dadurch verwaist liegenbleibende `kaeufe/`-Datei ist weiterhin nur
+Platzersparnis, keine Korrektheitsfrage.
 
 ## Harter Formatschnitt — kein Dual-Read
 

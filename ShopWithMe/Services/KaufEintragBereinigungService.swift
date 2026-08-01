@@ -121,12 +121,11 @@ enum KaufEintragBereinigungService {
             }
         }
         // GitHub #82: außerhalb der Micro-Lease (reine Datei-I/O, keine
-        // ModelContext-Mutation) — räumt die eigene `kaeufe/{id}.json` je
-        // gelöschtem Eintrag auf, siehe
-        // ``SyncKaeufeExportService/entferneDatei(fuerKaufEintragID:)``.
-        for id in geloeschteKaufEintragIDs {
-            SyncKaeufeExportService.entferneDatei(fuerKaufEintragID: id)
-        }
+        // ModelContext-Mutation) — räumt die eigenen `kaeufe/{id}.json` der
+        // gelöschten Einträge in EINEM gebündelten Zugriff auf, siehe
+        // ``SyncKaeufeExportService/entferneDateien(fuerKaufEintragIDs:)``
+        // (bewusst nicht einzeln pro Eintrag — siehe dortige Begründung).
+        SyncKaeufeExportService.entferneDateien(fuerKaufEintragIDs: geloeschteKaufEintragIDs)
         return geloeschteKaufEintraegeAnzahl
     }
 
