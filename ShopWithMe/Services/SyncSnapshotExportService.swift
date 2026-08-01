@@ -3,252 +3,52 @@ import SwiftData
 import CryptoKit
 
 /// Bereich-B/C/D-Export (`docs/DATENSYNCHRONISATION_VERLAUF.md`
-/// Abschnitt 5.2, Phase 1b): leitet einen vollständigen ``SyncSnapshot`` aus dem
-/// aktuellen lokalen Modellzustand ab und schreibt ihn als `export.json` in den
-/// eigenen Peer-Ordner. Anders als ``SyncExportService`` (Bereich A) kein
-/// inkrementelles Mitschreiben, sondern bei jedem Aufruf ein vollständiger
-/// Neuaufbau. Reines Schreiben — Lesen fremder Snapshots ist Phase 3.
+/// Abschnitt 5.2, Phase 1b, seit GitHub #82 Abschnitt 29): leitet aus dem
+/// aktuellen lokalen Modellzustand mehrere Sync-Paket-Teile ab und schreibt
+/// sie in den eigenen Peer-Ordner — siehe `docs/EXPORT_PAKET_UMBAU.md` für das
+/// vollständige Layout (`manifest.json`/`tombstones.json`/`stamm.json`/
+/// `lernen.json`/`vorgaenge.json`/`preise.json`; die Kaufhistorie liegt
+/// separat in `kaeufe/`, siehe ``SyncKaeufeExportService``). Anders als
+/// ``SyncExportService`` (Bereich A) kein inkrementelles Mitschreiben, sondern
+/// bei jedem Aufruf ein vollständiger Neuaufbau JE TEIL. Reines Schreiben —
+/// Lesen fremder Pakete ist ``SyncSnapshotImportService``.
 ///
-/// **Schreibt nur bei tatsächlich geändertem Inhalt** (GitHub #70/#71): jeder
-/// Sync-Zyklus (5s/60s) rief bisher unbedingt einen vollständigen Neuaufbau
-/// samt Datei-Schreiben auf, selbst wenn sich am lokalen Bestand seit dem
-/// letzten Zyklus nichts geändert hatte — jedes Gerät schrieb dadurch
-/// dauerhaft alle paar Sekunden ein neues `export.json` mit frischem
-/// ``SyncSnapshot/erzeugtAm``, was auf Peer-Seite wiederum jeden Zyklus eine
-/// echte Store-Änderung erzwang (siehe ``SyncPeerInfo``). ``exportiereSnapshot(context:)``
-/// vergleicht deshalb einen Inhalts-Fingerabdruck (``inhaltsFingerabdruck(of:)``,
-/// ohne die reinen Metafelder `erzeugtAm`/`geraeteID`/`geraeteName`) mit dem
-/// zuletzt tatsächlich geschriebenen und überspringt Encoding *und*
-/// Datei-Schreiben, wenn identisch. Der Peer-Alters-Check
+/// **Schreibt nur bei tatsächlich geändertem Inhalt, pro Teil** (GitHub
+/// #70/#71/#78/#82): ohne diesen Mechanismus würde jeder Sync-Zyklus (5s/60s)
+/// einen vollständigen Neuaufbau samt Datei-Schreiben erzwingen, selbst wenn
+/// sich am lokalen Bestand seit dem letzten Zyklus nichts geändert hatte —
+/// jedes Gerät schriebe dadurch dauerhaft alle paar Sekunden neue Dateien mit
+/// frischem Zeitstempel, was auf Peer-Seite wiederum jeden Zyklus eine echte
+/// Store-Änderung erzwänge (siehe ``SyncPeerInfo``). ``exportierePaket(context:)``
+/// vergleicht deshalb je Teil einen Inhalts-Fingerabdruck mit dem zuletzt
+/// tatsächlich geschriebenen und überspringt Encoding *und* Datei-Schreiben,
+/// wenn identisch — `manifest.json` selbst bildet die einzige Ausnahme (immer
+/// geschrieben, siehe ``SyncPeerManifest``). Der Peer-Alters-Check
 /// (``SyncSnapshotImportService/maximalesSnapshotAlter``) bleibt davon
-/// unberührt: eine über Tage unveränderte, aber weiterhin gültige `export.json`
-/// ist kein „verwaister Peer-Ordner" — genau die 30-Tage-Schwelle dafür bleibt
+/// unberührt: ein seit Tagen unverändertes, aber weiterhin aktives Gerät ist
+/// kein „verwaister Peer-Ordner" — genau die 30-Tage-Schwelle dafür bleibt
 /// grob genug, dass ein nicht mehr aktualisiertes `erzeugtAm` bei echter
 /// Inaktivität kein Problem ist.
 enum SyncSnapshotExportService {
-    private static let dateiName = "export.json"
-    private static let letzterFingerabdruckSchluessel = "syncSnapshotLetzterFingerabdruck"
-
     /// **GitHub #78:** `JSONEncoder` garantiert eine stabile Schlüsselreihenfolge
     /// nur mit `.sortedKeys` — ohne diese Option kann Foundation zwei inhaltlich
     /// identische Werte mit unterschiedlicher Top-Level-Schlüsselreihenfolge
     /// kodieren (empirisch bestätigt: zwei zeitnah nacheinander geschriebene
     /// `export.json` desselben, unveränderten Bestands begannen mit
-    /// unterschiedlichen Schlüsseln). Ohne diese Option ergab
-    /// ``inhaltsFingerabdruck(of:)`` für inhaltlich identische Snapshots
+    /// unterschiedlichen Schlüsseln). Ohne diese Option ergaben die
+    /// Fingerabdruck-Vergleiche unten für inhaltlich identische Werte
     /// unterschiedliche SHA256-Hashes, wodurch der „nur bei echter Änderung
-    /// schreiben"-Vergleich (GitHub #70/#71, s.o.) fälschlich JEDEN Zyklus als
-    /// geändert erkannte und `export.json` trotz unverändertem Bestand
-    /// kontinuierlich neu schrieb. Ein einziger geteilter, deterministisch
-    /// konfigurierter Encoder für alle drei Verwendungsstellen (Datei-Schreiben,
-    /// Fingerabdruck, Diagnose-Text) statt dreier eigener `JSONEncoder()`-Instanzen.
-    private static let encoder: JSONEncoder = {
+    /// schreiben"-Vergleich (GitHub #70/#71) fälschlich JEDEN Zyklus als
+    /// geändert erkannte. Ein einziger geteilter, deterministisch
+    /// konfigurierter Encoder für alle Verwendungsstellen (auch
+    /// ``SyncKaeufeExportService``) statt mehrerer eigener `JSONEncoder()`-
+    /// Instanzen. Bewusst nicht `private` — von ``SyncKaeufeExportService``
+    /// mitgenutzt.
+    static let encoder: JSONEncoder = {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         return encoder
     }()
-
-    /// Fingerabdruck des zuletzt tatsächlich geschriebenen Snapshot-Inhalts,
-    /// `static var` statt Konstante, damit Tests den Zustand zurücksetzen
-    /// können.
-    private static var letzterGeschriebenerFingerabdruck: String? {
-        get { UserDefaults.standard.string(forKey: letzterFingerabdruckSchluessel) }
-        set { UserDefaults.standard.set(newValue, forKey: letzterFingerabdruckSchluessel) }
-    }
-
-    /// Die `export.json`-URL eines beliebigen Geräts (eigenes oder fremdes)
-    /// innerhalb des Sync-Ordners — siehe ``SyncSnapshotImportService`` für das
-    /// Lesen fremder Snapshots.
-    static func exportURL(fuerPeer geraeteID: String, in syncOrdner: URL) -> URL {
-        syncOrdner
-            .appendingPathComponent("peers", isDirectory: true)
-            .appendingPathComponent(geraeteID, isDirectory: true)
-            .appendingPathComponent(dateiName)
-    }
-
-    /// Die `export.json`-URL dieses Geräts innerhalb des Sync-Ordners —
-    /// Ordnername trägt seit GitHub #81 den Gerätenamen
-    /// (``SyncOrdnerService/eigenerPeerOrdnerName(in:)``), nicht mehr die
-    /// rohe `geraeteID`.
-    @MainActor
-    static func eigeneExportURL(in syncOrdner: URL) -> URL {
-        exportURL(fuerPeer: SyncOrdnerService.eigenerPeerOrdnerName(in: syncOrdner), in: syncOrdner)
-    }
-
-    /// Debug-Werkzeug für manuelle Statuskonsolidierung
-    /// (``SyncOrdnerSettingsView``): verwirft den gespeicherten
-    /// Fingerabdruck-Cache und erzwingt dadurch einen sofortigen, garantiert
-    /// frischen Voll-Export — unabhängig vom sonstigen Skip-Mechanismus. Rein
-    /// additiv/sicher: schreibt nur die eigene `export.json` neu, rührt keine
-    /// fremden Dateien an.
-    @discardableResult
-    @MainActor
-    static func erzwingeFrischenExport(context: ModelContext) async -> Bool {
-        letzterGeschriebenerFingerabdruck = nil
-        return await exportiereSnapshot(context: context)
-    }
-
-    /// Baut den ``SyncSnapshot`` aus dem aktuellen Modellzustand und schreibt ihn
-    /// nach `peers/{geraeteID}/export.json`. Ohne hinterlegten Sync-Ordner
-    /// (``SyncOrdnerService/gewaehlterOrdner()`` liefert `nil`) ohne Wirkung.
-    /// Rückgabewert meldet ausschließlich, ob der Ordnerzugriff (Berechtigung)
-    /// geklappt hat, analog ``SyncSnapshotImportService/importiereSnapshots(context:)``.
-    @discardableResult
-    @MainActor
-    static func exportiereSnapshot(context: ModelContext) async -> Bool {
-        guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return true }
-
-        let snapshot = erstelleSnapshot(context: context)
-        let normalisiert = normalisiertFuerVergleich(snapshot)
-        guard let fingerabdruck = inhaltsFingerabdruck(of: normalisiert) else { return true }
-        guard fingerabdruck != letzterGeschriebenerFingerabdruck else {
-            if SyncDebugLogger.istAktiv {
-                SyncDebugLogger.log(.snapshotUnveraendertUebersprungen, details: diagnoseText(of: normalisiert))
-            }
-            return true
-        }
-        guard let daten = try? encoder.encode(snapshot) else { return true }
-
-        guard syncOrdner.startAccessingSecurityScopedResource() else {
-            SyncDebugLogger.log(.ordnerZugriffFehlgeschlagen, details: "exportiereSnapshot")
-            return false
-        }
-        defer { syncOrdner.stopAccessingSecurityScopedResource() }
-
-        let zielURL = eigeneExportURL(in: syncOrdner)
-        guard (try? FileManager.default.createDirectory(
-            at: zielURL.deletingLastPathComponent(), withIntermediateDirectories: true
-        )) != nil else { return true }
-
-        guard schreibeBlocking(daten, nach: zielURL) else { return true }
-        let vorherigerFingerabdruck = letzterGeschriebenerFingerabdruck
-        letzterGeschriebenerFingerabdruck = fingerabdruck
-        if SyncDebugLogger.istAktiv {
-            // vorher=nil beim allerersten Schreiben dieses Geräts — sonst die
-            // ersten 8 Zeichen des vorherigen Fingerabdrucks, damit sich ein
-            // Schreiben im Protokoll eindeutig einem vorherigen Übersprungen-
-            // Eintrag zuordnen lässt.
-            let vorherKurz = vorherigerFingerabdruck.map { String($0.prefix(8)) } ?? "nil"
-            SyncDebugLogger.log(.snapshotGeschrieben, details: "vorher=\(vorherKurz) \(diagnoseText(of: normalisiert))")
-        }
-        return true
-    }
-
-    /// Normalisiert `snapshot` für den Inhalts-Vergleich (Fingerabdruck +
-    /// Diagnose-Text): entfernt die reinen Metafelder `erzeugtAm`/`geraeteID`/
-    /// `geraeteName`, die sich unabhängig vom eigentlichen Datenbestand jeden
-    /// Zyklus ändern (würden) und damit jeden Vergleich wertlos machen
-    /// würden, und sortiert alle Teil-Arrays nach ihrer `UUID`, damit eine
-    /// bloß andere Fetch-Reihenfolge zwischen zwei Zyklen (SwiftData
-    /// garantiert keine stabile Reihenfolge für einen unsortierten
-    /// `FetchDescriptor`) nicht fälschlich als inhaltliche Änderung erkannt
-    /// wird.
-    ///
-    /// **Live-Test-Nachfolgefund:** Dieselbe Instabilität gilt nicht nur für
-    /// die äußeren Arrays (ein Snapshot-Eintrag je Entität), sondern auch für
-    /// die ID-Arrays INNERHALB eines einzelnen Eintrags, die aus einer
-    /// SwiftData-`@Relationship`-Sammlung abgeleitet sind (z.B.
-    /// `GeschaeftSnapshot/typIDs`/`kategorieIDs` aus `Geschaeft.typen`/
-    /// `.kategorien`) — deren Reihenfolge ist beim erneuten Fetch ebenso
-    /// wenig garantiert wie die des äußeren `FetchDescriptor`. Ohne
-    /// zusätzliche Sortierung dieser inneren Arrays erschien praktisch jeder
-    /// Zyklus als inhaltliche Änderung, obwohl sich nur die Reihenfolge (nie
-    /// die Menge) der zugeordneten IDs unterschied — beobachtet als
-    /// durchgehend `sync_snapshot_geschrieben` statt
-    /// `sync_snapshot_unveraendert_uebersprungen`, obwohl Anzahl und
-    /// Fach-Inhalt über viele Zyklen stabil blieben.
-    /// Bewusst `internal` statt `private` (kein `private` vor `static func`) —
-    /// damit Tests direkt prüfen können, dass zwei Snapshots, die sich nur in
-    /// der Reihenfolge ihrer ID-Arrays unterscheiden, denselben normalisierten
-    /// Inhalt ergeben, ohne auf tatsächlich instabile SwiftData-Fetch-Reihenfolge
-    /// angewiesen zu sein (die sich in einem kleinen In-Memory-Testcontainer
-    /// nicht zuverlässig erzwingen lässt).
-    static func normalisiertFuerVergleich(_ snapshot: SyncSnapshot) -> SyncSnapshot {
-        var normalisiert = snapshot
-        normalisiert.erzeugtAm = .distantPast
-        normalisiert.geraeteID = ""
-        normalisiert.geraeteName = ""
-
-        normalisiert.geschaeftsTypen.sort { $0.id.uuidString < $1.id.uuidString }
-
-        normalisiert.artikelKategorien = normalisiert.artikelKategorien.map { kategorie in
-            var kategorie = kategorie
-            kategorie.geschaeftsTypIDs.sort { $0.uuidString < $1.uuidString }
-            return kategorie
-        }
-        normalisiert.artikelKategorien.sort { $0.id.uuidString < $1.id.uuidString }
-
-        normalisiert.geschaefte = normalisiert.geschaefte.map { geschaeft in
-            var geschaeft = geschaeft
-            geschaeft.typIDs.sort { $0.uuidString < $1.uuidString }
-            geschaeft.kategorieIDs.sort { $0.uuidString < $1.uuidString }
-            geschaeft.ausgeschlosseneKategorieIDs.sort { $0.uuidString < $1.uuidString }
-            geschaeft.alternativeNamen.sort()
-            geschaeft.ignorierteArtikelNamen.sort()
-            return geschaeft
-        }
-        normalisiert.geschaefte.sort { $0.id.uuidString < $1.id.uuidString }
-
-        normalisiert.artikel = normalisiert.artikel.map { artikel in
-            var artikel = artikel
-            artikel.kategorieIDs.sort { $0.uuidString < $1.uuidString }
-            return artikel
-        }
-        normalisiert.artikel.sort { $0.id.uuidString < $1.id.uuidString }
-
-        normalisiert.einkaufslisten.sort { $0.id.uuidString < $1.id.uuidString }
-        normalisiert.einkaufslistenEintraege.sort {
-            "\($0.einkaufslisteID)_\($0.artikelID)" < "\($1.einkaufslisteID)_\($1.artikelID)"
-        }
-        normalisiert.einkaufsvorgaenge.sort { $0.id.uuidString < $1.id.uuidString }
-        normalisiert.kaufEintraege.sort { $0.id.uuidString < $1.id.uuidString }
-        normalisiert.preispunkte.sort { $0.id.uuidString < $1.id.uuidString }
-        normalisiert.artikelAliase.sort { $0.id.uuidString < $1.id.uuidString }
-        normalisiert.warengruppenDistanzen.sort { $0.id.uuidString < $1.id.uuidString }
-        normalisiert.tombstones.sort { "\($0.entitaetsArt)_\($0.geloeschteID)" < "\($1.entitaetsArt)_\($1.geloeschteID)" }
-        return normalisiert
-    }
-
-    /// SHA256-Fingerabdruck eines bereits ``normalisiertFuerVergleich(_:)``-ten
-    /// Snapshots. `nil` nur bei einem (praktisch nie auftretenden)
-    /// Encoding-Fehler.
-    static func inhaltsFingerabdruck(of normalisiert: SyncSnapshot) -> String? {
-        guard let daten = try? encoder.encode(normalisiert) else { return nil }
-        let digest = SHA256.hash(data: daten)
-        return digest.map { String(format: "%02x", $0) }.joined()
-    }
-
-    /// Diagnose-Hilfsmittel für GitHub #70-Nachfolgefragen („welches Bereich
-    /// löst tatsächlich einen Schreibvorgang aus, wie oft"): Anzahl UND ein
-    /// kurzer Inhalts-Fingerabdruck je Teil-Bereich, damit sich zwei
-    /// aufeinanderfolgende Protokollzeilen im Sync-Debug-Modus direkt
-    /// vergleichen lassen — ändert sich nur die Anzahl, wuchs/schrumpfte der
-    /// Bereich; ändert sich nur der Fingerabdruck bei gleicher Anzahl, hat
-    /// sich ein Feld eines bestehenden Eintrags geändert (z.B. `endZeit`
-    /// gesetzt, ein additiver Zähler erhöht). Nur aufrufen, wenn
-    /// ``SyncDebugLogger/istAktiv`` ist — Encoding+Hashing pro Teil-Bereich
-    /// ist bewusst nicht Teil des normalen (nicht-debuggenden) Pfads.
-    private static func diagnoseText(of normalisiert: SyncSnapshot) -> String {
-        func teil<T: Encodable>(_ name: String, _ werte: [T]) -> String {
-            guard let daten = try? encoder.encode(werte) else { return "\(name)=\(werte.count)/?" }
-            let kurz = SHA256.hash(data: daten).prefix(4).map { String(format: "%02x", $0) }.joined()
-            return "\(name)=\(werte.count)/\(kurz)"
-        }
-        return [
-            teil("geschaeftsTypen", normalisiert.geschaeftsTypen),
-            teil("artikelKategorien", normalisiert.artikelKategorien),
-            teil("geschaefte", normalisiert.geschaefte),
-            teil("artikel", normalisiert.artikel),
-            teil("einkaufslisten", normalisiert.einkaufslisten),
-            teil("einkaufslistenEintraege", normalisiert.einkaufslistenEintraege),
-            teil("einkaufsvorgaenge", normalisiert.einkaufsvorgaenge),
-            teil("kaufEintraege", normalisiert.kaufEintraege),
-            teil("preispunkte", normalisiert.preispunkte),
-            teil("artikelAliase", normalisiert.artikelAliase),
-            teil("warengruppenDistanzen", normalisiert.warengruppenDistanzen),
-            teil("tombstones", normalisiert.tombstones),
-        ].joined(separator: " ")
-    }
 
     @MainActor
     static func erstelleSnapshot(context: ModelContext) -> SyncSnapshot {
@@ -423,7 +223,8 @@ enum SyncSnapshotExportService {
     /// reines Identitäts-Metadatum und daher auch auf einer baumelnden
     /// Referenz sicher lesbar, während der Zugriff auf `id` (oder jede andere
     /// Eigenschaft) in diesem Fall mit einem SwiftData-Fatal-Error abstürzt.
-    private static func sichereID<T: IdentifizierbaresModell>(_ objekt: T?, gueltigeIDs: Set<PersistentIdentifier>) -> UUID? {
+    /// Bewusst nicht `private` — von ``SyncKaeufeExportService`` mitgenutzt.
+    static func sichereID<T: IdentifizierbaresModell>(_ objekt: T?, gueltigeIDs: Set<PersistentIdentifier>) -> UUID? {
         guard let objekt else { return nil }
         guard gueltigeIDs.contains(objekt.persistentModelID) else {
             SyncDebugLogger.log(.baumelndeReferenzGefunden, details: "typ=\(T.self) referenz=\(objekt.persistentModelID)")
@@ -434,14 +235,15 @@ enum SyncSnapshotExportService {
 
     /// Wie ``sichereID(_:gueltigeIDs:)``, für Arrays — verwaiste Einträge
     /// werden stillschweigend herausgefiltert statt die App abstürzen zu lassen.
-    private static func sichereIDs<T: IdentifizierbaresModell>(_ objekte: [T], gueltigeIDs: Set<PersistentIdentifier>) -> [UUID] {
+    static func sichereIDs<T: IdentifizierbaresModell>(_ objekte: [T], gueltigeIDs: Set<PersistentIdentifier>) -> [UUID] {
         objekte.compactMap { sichereID($0, gueltigeIDs: gueltigeIDs) }
     }
 
     /// Schreibt über `NSFileCoordinator`, damit File-Provider-Erweiterungen von
     /// der Änderung erfahren — analog zum bestehenden Muster in
-    /// ``DatabaseLeaseService``/``SyncExportService``.
-    nonisolated private static func schreibeBlocking(_ daten: Data, nach url: URL) -> Bool {
+    /// ``DatabaseLeaseService``/``SyncExportService``. Bewusst nicht `private`
+    /// — von ``SyncKaeufeExportService`` mitgenutzt.
+    nonisolated static func schreibeBlocking(_ daten: Data, nach url: URL) -> Bool {
         let coordinator = NSFileCoordinator()
         var coordinatorFehler: NSError?
         var erfolgreich = false
@@ -454,5 +256,247 @@ enum SyncSnapshotExportService {
             }
         }
         return coordinatorFehler == nil && erfolgreich
+    }
+
+    // MARK: - Paket-Format (GitHub #82)
+
+    /// Pfad-Bausteine für alle Peer-Paket-Dateien — Muster wie das bisherige
+    /// `exportURL(fuerPeer:in:)`, jetzt mehrere benannte Dateien statt einer.
+    private static func peerOrdner(fuer geraeteID: String, in syncOrdner: URL) -> URL {
+        syncOrdner
+            .appendingPathComponent("peers", isDirectory: true)
+            .appendingPathComponent(geraeteID, isDirectory: true)
+    }
+    static func manifestURL(fuerPeer geraeteID: String, in syncOrdner: URL) -> URL {
+        peerOrdner(fuer: geraeteID, in: syncOrdner).appendingPathComponent("manifest.json")
+    }
+    static func tombstonesURL(fuerPeer geraeteID: String, in syncOrdner: URL) -> URL {
+        peerOrdner(fuer: geraeteID, in: syncOrdner).appendingPathComponent("tombstones.json")
+    }
+    static func stammURL(fuerPeer geraeteID: String, in syncOrdner: URL) -> URL {
+        peerOrdner(fuer: geraeteID, in: syncOrdner).appendingPathComponent("stamm.json")
+    }
+    static func lernenURL(fuerPeer geraeteID: String, in syncOrdner: URL) -> URL {
+        peerOrdner(fuer: geraeteID, in: syncOrdner).appendingPathComponent("lernen.json")
+    }
+    static func vorgaengeURL(fuerPeer geraeteID: String, in syncOrdner: URL) -> URL {
+        peerOrdner(fuer: geraeteID, in: syncOrdner).appendingPathComponent("vorgaenge.json")
+    }
+    static func preiseURL(fuerPeer geraeteID: String, in syncOrdner: URL) -> URL {
+        peerOrdner(fuer: geraeteID, in: syncOrdner).appendingPathComponent("preise.json")
+    }
+    /// Bewusst nicht `private` — von ``SyncKaeufeExportService``/
+    /// ``SyncSnapshotImportService`` mitgenutzt.
+    static func kaeufeOrdner(fuerPeer geraeteID: String, in syncOrdner: URL) -> URL {
+        peerOrdner(fuer: geraeteID, in: syncOrdner).appendingPathComponent("kaeufe", isDirectory: true)
+    }
+
+    @MainActor static func eigenerManifestURL(in syncOrdner: URL) -> URL {
+        manifestURL(fuerPeer: SyncOrdnerService.eigenerPeerOrdnerName(in: syncOrdner), in: syncOrdner)
+    }
+    @MainActor static func eigeneTombstonesURL(in syncOrdner: URL) -> URL {
+        tombstonesURL(fuerPeer: SyncOrdnerService.eigenerPeerOrdnerName(in: syncOrdner), in: syncOrdner)
+    }
+    @MainActor static func eigeneStammURL(in syncOrdner: URL) -> URL {
+        stammURL(fuerPeer: SyncOrdnerService.eigenerPeerOrdnerName(in: syncOrdner), in: syncOrdner)
+    }
+    @MainActor static func eigeneLernenURL(in syncOrdner: URL) -> URL {
+        lernenURL(fuerPeer: SyncOrdnerService.eigenerPeerOrdnerName(in: syncOrdner), in: syncOrdner)
+    }
+    @MainActor static func eigeneVorgaengeURL(in syncOrdner: URL) -> URL {
+        vorgaengeURL(fuerPeer: SyncOrdnerService.eigenerPeerOrdnerName(in: syncOrdner), in: syncOrdner)
+    }
+    @MainActor static func eigenePreiseURL(in syncOrdner: URL) -> URL {
+        preiseURL(fuerPeer: SyncOrdnerService.eigenerPeerOrdnerName(in: syncOrdner), in: syncOrdner)
+    }
+    /// Bewusst nicht `private` — von ``SyncKaeufeExportService`` mitgenutzt.
+    @MainActor static func eigenerKaeufeOrdner(in syncOrdner: URL) -> URL {
+        kaeufeOrdner(fuerPeer: SyncOrdnerService.eigenerPeerOrdnerName(in: syncOrdner), in: syncOrdner)
+    }
+
+    /// Je ein `UserDefaults`-Schlüssel für den zuletzt geschriebenen
+    /// Fingerabdruck jedes unabhängig geprüften Teils — ersetzt den einen
+    /// `letzterFingerabdruckSchluessel` des bisherigen Monolithen.
+    private static let fingerabdruckSchluesselTombstones = "syncPaketFingerabdruckTombstones"
+    private static let fingerabdruckSchluesselStamm = "syncPaketFingerabdruckStamm"
+    private static let fingerabdruckSchluesselLernen = "syncPaketFingerabdruckLernen"
+    private static let fingerabdruckSchluesselVorgaenge = "syncPaketFingerabdruckVorgaenge"
+    private static let fingerabdruckSchluesselPreise = "syncPaketFingerabdruckPreise"
+
+    /// Debug-Werkzeug für manuelle Statuskonsolidierung: verwirft alle fünf
+    /// gespeicherten Fingerabdruck-Caches und erzwingt dadurch ein sofortiges,
+    /// garantiert frisches Neuschreiben aller Teile — unabhängig vom
+    /// sonstigen Skip-Mechanismus. Rein additiv/sicher: schreibt nur die
+    /// eigenen Paket-Dateien neu, rührt keine fremden an.
+    @discardableResult
+    @MainActor
+    static func erzwingeFrischesPaket(context: ModelContext) async -> Bool {
+        for schluessel in [
+            fingerabdruckSchluesselTombstones, fingerabdruckSchluesselStamm, fingerabdruckSchluesselLernen,
+            fingerabdruckSchluesselVorgaenge, fingerabdruckSchluesselPreise,
+        ] {
+            UserDefaults.standard.removeObject(forKey: schluessel)
+        }
+        return await exportierePaket(context: context)
+    }
+
+    /// Baut die fünf Paket-Teile aus dem aktuellen Modellzustand und schreibt
+    /// jeden nur dann neu, wenn sich sein Inhalt seit dem letzten Schreiben
+    /// tatsächlich geändert hat — Nachfolger von `exportiereSnapshot(context:)`
+    /// (siehe `docs/EXPORT_PAKET_UMBAU.md`). `manifest.json` wird davon
+    /// unabhängig **immer** neu geschrieben (siehe ``SyncPeerManifest``).
+    /// Ohne hinterlegten Sync-Ordner ohne Wirkung. Rückgabewert meldet
+    /// ausschließlich, ob der Ordnerzugriff (Berechtigung) geklappt hat.
+    @discardableResult
+    @MainActor
+    static func exportierePaket(context: ModelContext) async -> Bool {
+        guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return true }
+        let teile = erstellePaketTeile(context: context)
+
+        guard syncOrdner.startAccessingSecurityScopedResource() else {
+            SyncDebugLogger.log(.ordnerZugriffFehlgeschlagen, details: "exportierePaket")
+            return false
+        }
+        defer { syncOrdner.stopAccessingSecurityScopedResource() }
+
+        let eigenerOrdner = peerOrdner(fuer: SyncOrdnerService.eigenerPeerOrdnerName(in: syncOrdner), in: syncOrdner)
+        guard (try? FileManager.default.createDirectory(at: eigenerOrdner, withIntermediateDirectories: true)) != nil else {
+            return true
+        }
+
+        if let manifestDaten = try? encoder.encode(teile.manifest) {
+            _ = schreibeBlocking(manifestDaten, nach: eigenerOrdner.appendingPathComponent("manifest.json"))
+        }
+
+        schreibeTeilFallsGeaendert(
+            normalisiereTombstones(teile.tombstones), url: eigenerOrdner.appendingPathComponent("tombstones.json"),
+            fingerabdruckSchluessel: fingerabdruckSchluesselTombstones
+        )
+        schreibeTeilFallsGeaendert(
+            normalisiereStamm(teile.stamm), url: eigenerOrdner.appendingPathComponent("stamm.json"),
+            fingerabdruckSchluessel: fingerabdruckSchluesselStamm
+        )
+        schreibeTeilFallsGeaendert(
+            normalisiereLernen(teile.lernen), url: eigenerOrdner.appendingPathComponent("lernen.json"),
+            fingerabdruckSchluessel: fingerabdruckSchluesselLernen
+        )
+        schreibeTeilFallsGeaendert(
+            normalisiereVorgaenge(teile.vorgaenge), url: eigenerOrdner.appendingPathComponent("vorgaenge.json"),
+            fingerabdruckSchluessel: fingerabdruckSchluesselVorgaenge
+        )
+        schreibeTeilFallsGeaendert(
+            normalisierePreise(teile.preise), url: eigenerOrdner.appendingPathComponent("preise.json"),
+            fingerabdruckSchluessel: fingerabdruckSchluesselPreise
+        )
+        return true
+    }
+
+    /// Schreibt `wert` nur, wenn sein SHA256-Fingerabdruck vom zuletzt unter
+    /// `fingerabdruckSchluessel` gespeicherten abweicht — Kern des „nur bei
+    /// echter Änderung schreiben"-Verhaltens (GitHub #70/#71/#78), jetzt pro
+    /// Teil statt einmal für den gesamten Monolithen. `wert` wird zuvor per
+    /// `normalisiere*`-Funktion sortiert, damit eine bloß andere SwiftData-
+    /// Fetch-Reihenfolge nicht fälschlich als Änderung erkannt wird — die
+    /// GESCHRIEBENEN Bytes selbst müssen dafür nicht sortiert sein (Werte
+    /// werden hier bereits normalisiert übergeben, siehe Aufrufer).
+    @discardableResult
+    private static func schreibeTeilFallsGeaendert<T: Encodable>(_ wert: T, url: URL, fingerabdruckSchluessel: String) -> Bool {
+        guard let daten = try? encoder.encode(wert) else { return true }
+        let fingerabdruck = SHA256.hash(data: daten).map { String(format: "%02x", $0) }.joined()
+        guard fingerabdruck != UserDefaults.standard.string(forKey: fingerabdruckSchluessel) else { return true }
+        guard schreibeBlocking(daten, nach: url) else { return true }
+        UserDefaults.standard.set(fingerabdruck, forKey: fingerabdruckSchluessel)
+        return true
+    }
+
+    private static func normalisiereTombstones(_ tombstones: [SyncTombstoneSnapshot]) -> [SyncTombstoneSnapshot] {
+        tombstones.sorted { "\($0.entitaetsArt)_\($0.geloeschteID)" < "\($1.entitaetsArt)_\($1.geloeschteID)" }
+    }
+
+    /// Bewusst nicht `private` (analog dem bisherigen `normalisiertFuerVergleich`)
+    /// — damit Tests direkt prüfen können, dass zwei `SyncStammSnapshot`, die
+    /// sich nur in der Reihenfolge ihrer äußeren/inneren Arrays unterscheiden,
+    /// denselben normalisierten Inhalt ergeben.
+    static func normalisiereStamm(_ stamm: SyncStammSnapshot) -> SyncStammSnapshot {
+        var stamm = stamm
+        stamm.geschaeftsTypen.sort { $0.id.uuidString < $1.id.uuidString }
+        stamm.artikelKategorien = stamm.artikelKategorien.map { kategorie in
+            var kategorie = kategorie
+            kategorie.geschaeftsTypIDs.sort { $0.uuidString < $1.uuidString }
+            return kategorie
+        }
+        stamm.artikelKategorien.sort { $0.id.uuidString < $1.id.uuidString }
+        stamm.geschaefte = stamm.geschaefte.map { geschaeft in
+            var geschaeft = geschaeft
+            geschaeft.typIDs.sort { $0.uuidString < $1.uuidString }
+            geschaeft.kategorieIDs.sort { $0.uuidString < $1.uuidString }
+            geschaeft.ausgeschlosseneKategorieIDs.sort { $0.uuidString < $1.uuidString }
+            geschaeft.alternativeNamen.sort()
+            geschaeft.ignorierteArtikelNamen.sort()
+            return geschaeft
+        }
+        stamm.geschaefte.sort { $0.id.uuidString < $1.id.uuidString }
+        stamm.artikel = stamm.artikel.map { artikel in
+            var artikel = artikel
+            artikel.kategorieIDs.sort { $0.uuidString < $1.uuidString }
+            return artikel
+        }
+        stamm.artikel.sort { $0.id.uuidString < $1.id.uuidString }
+        stamm.einkaufslisten.sort { $0.id.uuidString < $1.id.uuidString }
+        stamm.einkaufslistenEintraege.sort { "\($0.einkaufslisteID)_\($0.artikelID)" < "\($1.einkaufslisteID)_\($1.artikelID)" }
+        stamm.artikelAliase.sort { $0.id.uuidString < $1.id.uuidString }
+        return stamm
+    }
+
+    private static func normalisiereLernen(_ lernen: SyncLernenSnapshot) -> SyncLernenSnapshot {
+        var lernen = lernen
+        lernen.warengruppenDistanzen.sort { $0.id.uuidString < $1.id.uuidString }
+        return lernen
+    }
+
+    private static func normalisiereVorgaenge(_ vorgaenge: SyncVorgaengeSnapshot) -> SyncVorgaengeSnapshot {
+        var vorgaenge = vorgaenge
+        vorgaenge.einkaufsvorgaenge.sort { $0.id.uuidString < $1.id.uuidString }
+        return vorgaenge
+    }
+
+    private static func normalisierePreise(_ preise: SyncPreisSnapshot) -> SyncPreisSnapshot {
+        var preise = preise
+        preise.preispunkte.sort { $0.id.uuidString < $1.id.uuidString }
+        return preise
+    }
+
+    /// Zerlegt einen frisch gebauten ``erstelleSnapshot(context:)`` in die
+    /// fünf unabhängig fingerabdruck-geprüften Paket-Teile — **bewusst kein
+    /// eigener, sparsamerer Fetch je Teil**: `stamm`/`lernen`/`vorgaenge`/
+    /// `preise`/`tombstones` sind klein und ihr Fetch war nie das Problem
+    /// (Analyse-Fund: `kaufEintraege` allein machte 56% der Dateigröße aus,
+    /// alles andere zusammen nur 44%). Der eigentliche Performance-Gewinn
+    /// entsteht dadurch, dass `kaufEintraege` HIER NICHT enthalten ist —
+    /// dieser Bereich wird separat und inkrementell über
+    /// ``SyncKaeufeExportService`` geschrieben, ohne die wachsende Historie
+    /// bei jedem Zyklus erneut zu kodieren. Wiederverwendung von
+    /// ``erstelleSnapshot(context:)`` hält diesen Code kurz und beweisbar
+    /// konsistent mit dem weiterhin unveränderten Backup-Pfad
+    /// (``SyncErsetzenService``).
+    @MainActor
+    static func erstellePaketTeile(context: ModelContext) -> (
+        manifest: SyncPeerManifest, tombstones: [SyncTombstoneSnapshot], stamm: SyncStammSnapshot,
+        lernen: SyncLernenSnapshot, vorgaenge: SyncVorgaengeSnapshot, preise: SyncPreisSnapshot
+    ) {
+        let snapshot = erstelleSnapshot(context: context)
+        let manifest = SyncPeerManifest(
+            formatVersion: SyncPeerManifest.aktuelleFormatVersion, erzeugtAm: snapshot.erzeugtAm,
+            geraeteID: snapshot.geraeteID, geraeteName: snapshot.geraeteName
+        )
+        let stamm = SyncStammSnapshot(
+            geschaeftsTypen: snapshot.geschaeftsTypen, artikelKategorien: snapshot.artikelKategorien,
+            geschaefte: snapshot.geschaefte, artikel: snapshot.artikel, einkaufslisten: snapshot.einkaufslisten,
+            einkaufslistenEintraege: snapshot.einkaufslistenEintraege, artikelAliase: snapshot.artikelAliase
+        )
+        let lernen = SyncLernenSnapshot(warengruppenDistanzen: snapshot.warengruppenDistanzen)
+        let vorgaenge = SyncVorgaengeSnapshot(einkaufsvorgaenge: snapshot.einkaufsvorgaenge)
+        let preise = SyncPreisSnapshot(preispunkte: snapshot.preispunkte)
+        return (manifest, snapshot.tombstones, stamm, lernen, vorgaenge, preise)
     }
 }

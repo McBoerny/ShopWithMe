@@ -102,8 +102,12 @@ struct SyncSnapshotExportServiceTests {
         #expect(distanzSnapshot.kategorieBID == kategorie2.id)
     }
 
+    /// GitHub #82: `exportiereSnapshot`/`export.json` (ein Monolith) ersetzt
+    /// durch `exportierePaket` — mehrere Dateien im eigenen Peer-Ordner,
+    /// `manifest.json` unbedingt, die Teile (`stamm.json` etc.) nur bei
+    /// tatsächlicher Änderung.
     @Test
-    func exportiereSnapshotSchreibtExportJsonNachEigenemPeerOrdner() async throws {
+    func exportierePaketSchreibtManifestUndStammJsonNachEigenemPeerOrdner() async throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
         let syncOrdner = macheTempSyncOrdner()
@@ -114,26 +118,30 @@ struct SyncSnapshotExportServiceTests {
         context.insert(geschaeft)
         try context.save()
 
-        await SyncSnapshotExportService.exportiereSnapshot(context: context)
+        await SyncSnapshotExportService.exportierePaket(context: context)
 
-        let exportURL = SyncSnapshotExportService.eigeneExportURL(in: syncOrdner)
-        let daten = try Data(contentsOf: exportURL)
-        let snapshot = try JSONDecoder().decode(SyncSnapshot.self, from: daten)
-        #expect(snapshot.geschaefte.map(\.id) == [geschaeft.id])
-        #expect(snapshot.geraeteID == DatabaseLeaseService.geraeteID)
+        let manifestDaten = try Data(contentsOf: SyncSnapshotExportService.eigenerManifestURL(in: syncOrdner))
+        let manifest = try JSONDecoder().decode(SyncPeerManifest.self, from: manifestDaten)
+        #expect(manifest.geraeteID == DatabaseLeaseService.geraeteID)
+        #expect(manifest.formatVersion == SyncPeerManifest.aktuelleFormatVersion)
+
+        let stammDaten = try Data(contentsOf: SyncSnapshotExportService.eigeneStammURL(in: syncOrdner))
+        let stamm = try JSONDecoder().decode(SyncStammSnapshot.self, from: stammDaten)
+        #expect(stamm.geschaefte.map(\.id) == [geschaeft.id])
     }
 
     /// Regressionstest für GitHub #78 (Fingerabdruck/Datei nicht deterministisch,
     /// da `JSONEncoder` ohne `.sortedKeys` keine stabile Top-Level-Schlüssel-
     /// reihenfolge garantiert — bestätigt anhand zweier realer, zeitnah
     /// aufeinanderfolgender `export.json`, die trotz inhaltlich identischem
-    /// Bestand mit unterschiedlichen Schlüsseln begannen). `JSONDecoder`/
+    /// Bestand mit unterschiedlichen Schlüsseln begannen), jetzt gegen eine der
+    /// Paket-Dateien statt des ehemaligen Monolithen. `JSONDecoder`/
     /// `JSONSerialization` verwerfen die geschriebene Reihenfolge beim Parsen
     /// (landen in einem ungeordneten Dictionary) — deshalb hier direkt im
     /// rohen JSON-Text die erste Fundstelle jedes Top-Level-Schlüssels
     /// vergleichen, statt über einen Decoder zu gehen.
     @Test
-    func exportiertesJsonHatAlphabetischSortierteTopLevelSchluessel() async throws {
+    func stammJsonHatAlphabetischSortierteTopLevelSchluessel() async throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
         let syncOrdner = macheTempSyncOrdner()
@@ -144,15 +152,13 @@ struct SyncSnapshotExportServiceTests {
         context.insert(geschaeft)
         try context.save()
 
-        await SyncSnapshotExportService.exportiereSnapshot(context: context)
+        await SyncSnapshotExportService.exportierePaket(context: context)
 
-        let exportURL = SyncSnapshotExportService.eigeneExportURL(in: syncOrdner)
-        let text = try String(contentsOf: exportURL, encoding: .utf8)
+        let text = try String(contentsOf: SyncSnapshotExportService.eigeneStammURL(in: syncOrdner), encoding: .utf8)
 
         let topLevelSchluessel = [
             "artikel", "artikelAliase", "artikelKategorien", "einkaufslisten", "einkaufslistenEintraege",
-            "einkaufsvorgaenge", "erzeugtAm", "formatVersion", "geraeteID", "geraeteName", "geschaefte",
-            "geschaeftsTypen", "kaufEintraege", "preispunkte", "tombstones", "warengruppenDistanzen",
+            "geschaefte", "geschaeftsTypen",
         ]
         let gefundenInReihenfolge = try topLevelSchluessel
             .map { schluessel in (schluessel: schluessel, position: try #require(text.range(of: "\"\(schluessel)\":"))) }
@@ -163,14 +169,48 @@ struct SyncSnapshotExportServiceTests {
     }
 
     @Test
-    func exportiereSnapshotOhneSyncOrdnerTutNichts() async throws {
+    func exportierePaketOhneSyncOrdnerTutNichts() async throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
         SyncOrdnerService.ordnerEntfernen()
 
-        await SyncSnapshotExportService.exportiereSnapshot(context: context)
+        await SyncSnapshotExportService.exportierePaket(context: context)
         // Kein Absturz, keine Datei — nichts weiter zu prüfen ohne einen
         // konfigurierten Ordner, dessen Inhalt man einsehen könnte.
+    }
+
+    /// Kernaussage von GitHub #82 testbar gemacht: ändert sich nur
+    /// `Einkaufsvorgang`-Historie, muss `vorgaenge.json` neu geschrieben
+    /// werden, `stamm.json` (unverändertes Geschäft) aber NICHT — anders als
+    /// beim bisherigen Monolithen, der bei jeder Änderung irgendeines
+    /// Bereichs komplett neu kodiert und geschrieben wurde.
+    @Test
+    func nurGeaenderterTeilWirdNeuGeschrieben() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let geschaeft = Geschaeft(name: "Rewe", typen: [])
+        context.insert(geschaeft)
+        let liste = Einkaufsliste(name: "Wocheneinkauf")
+        context.insert(liste)
+        try context.save()
+
+        await SyncSnapshotExportService.exportierePaket(context: context)
+        let stammVorher = try Data(contentsOf: SyncSnapshotExportService.eigeneStammURL(in: syncOrdner))
+        let vorgaengeURL = SyncSnapshotExportService.eigeneVorgaengeURL(in: syncOrdner)
+        #expect(!FileManager.default.fileExists(atPath: vorgaengeURL.path))
+
+        // Nur ein neuer Einkaufsvorgang — Stammdaten bleiben unverändert.
+        context.insert(Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste))
+        try context.save()
+        await SyncSnapshotExportService.exportierePaket(context: context)
+
+        let stammNachher = try Data(contentsOf: SyncSnapshotExportService.eigeneStammURL(in: syncOrdner))
+        #expect(stammVorher == stammNachher)
+        #expect(FileManager.default.fileExists(atPath: vorgaengeURL.path))
     }
 
     /// Regressionstest für einen Live-Test-Nachfolgefund (2026-07-31): nicht
@@ -179,21 +219,21 @@ struct SyncSnapshotExportServiceTests {
     /// aus einer SwiftData-`@Relationship`-Sammlung abgeleitet) haben keine
     /// garantierte Fetch-Reihenfolge — ohne Sortierung dieser inneren Arrays
     /// erschien praktisch jeder Sync-Zyklus fälschlich als inhaltliche
-    /// Änderung. Zwei Snapshots mit identischem Inhalt, aber unterschiedlicher
+    /// Änderung. Zwei Stamm-Teile mit identischem Inhalt, aber unterschiedlicher
     /// Reihenfolge sowohl der äußeren Geschäfte-Liste als auch der inneren
     /// `typIDs`/`kategorieIDs`/`alternativeNamen`/`ignorierteArtikelNamen`
-    /// müssen denselben Fingerabdruck ergeben.
+    /// müssen nach der Normalisierung identisch kodiert werden (== derselbe
+    /// Fingerabdruck).
     @Test
-    func fingerabdruckIstUnabhaengigVonReihenfolgeAeussererUndInnererArrays() {
+    func stammNormalisierungIstUnabhaengigVonReihenfolgeAeussererUndInnererArrays() throws {
         let geschaeftID = UUID()
         let typA = UUID()
         let typB = UUID()
         let kategorieA = UUID()
         let kategorieB = UUID()
 
-        func snapshot(typIDs: [UUID], kategorieIDs: [UUID], namen: [String]) -> SyncSnapshot {
-            SyncSnapshot(
-                formatVersion: SyncSnapshot.aktuelleFormatVersion, erzeugtAm: Date(), geraeteID: "geraet", geraeteName: "Gerät",
+        func stamm(typIDs: [UUID], kategorieIDs: [UUID], namen: [String]) -> SyncStammSnapshot {
+            SyncStammSnapshot(
                 geschaeftsTypen: [], artikelKategorien: [],
                 geschaefte: [
                     GeschaeftSnapshot(
@@ -203,18 +243,16 @@ struct SyncSnapshotExportServiceTests {
                         umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
                     ),
                 ],
-                artikel: [], einkaufslisten: [], einkaufslistenEintraege: [], einkaufsvorgaenge: [], kaufEintraege: [],
-                preispunkte: [], artikelAliase: [],
-                warengruppenDistanzen: [], tombstones: []
+                artikel: [], einkaufslisten: [], einkaufslistenEintraege: [], artikelAliase: []
             )
         }
 
-        let a = snapshot(typIDs: [typA, typB], kategorieIDs: [kategorieA, kategorieB], namen: ["Rewe Center", "Rewe City"])
-        let b = snapshot(typIDs: [typB, typA], kategorieIDs: [kategorieB, kategorieA], namen: ["Rewe City", "Rewe Center"])
+        let a = stamm(typIDs: [typA, typB], kategorieIDs: [kategorieA, kategorieB], namen: ["Rewe Center", "Rewe City"])
+        let b = stamm(typIDs: [typB, typA], kategorieIDs: [kategorieB, kategorieA], namen: ["Rewe City", "Rewe Center"])
 
-        let fingerabdruckA = SyncSnapshotExportService.inhaltsFingerabdruck(of: SyncSnapshotExportService.normalisiertFuerVergleich(a))
-        let fingerabdruckB = SyncSnapshotExportService.inhaltsFingerabdruck(of: SyncSnapshotExportService.normalisiertFuerVergleich(b))
+        let datenA = try SyncSnapshotExportService.encoder.encode(SyncSnapshotExportService.normalisiereStamm(a))
+        let datenB = try SyncSnapshotExportService.encoder.encode(SyncSnapshotExportService.normalisiereStamm(b))
 
-        #expect(fingerabdruckA == fingerabdruckB)
+        #expect(datenA == datenB)
     }
 }

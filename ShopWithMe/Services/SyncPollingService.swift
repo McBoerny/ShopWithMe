@@ -78,7 +78,7 @@ final class SyncPollingService: ObservableObject {
         schleife = nil
     }
 
-    /// Rückgabewert meldet, ob der Ordnerzugriff in allen vier Teilschritten
+    /// Rückgabewert meldet, ob der Ordnerzugriff in allen fünf Teilschritten
     /// geklappt hat — die einzige Fehlerart, die den Zyklus insgesamt als
     /// fehlgeschlagen ausweist (siehe Doku der einzelnen Services). Vom
     /// automatischen Polling-Loop bewusst ignoriert (der versucht es beim
@@ -94,11 +94,18 @@ final class SyncPollingService: ObservableObject {
         let snapshotImportErfolgreich = await SyncSnapshotImportService.importiereSnapshots(context: context)
         let eventImportErfolgreich = await SyncImportService.importiereNeueEvents(context: context)
         let eventExportErfolgreich = await SyncExportService.exportiereNeueEvents(context: context)
-        let snapshotExportErfolgreich = await SyncSnapshotExportService.exportiereSnapshot(context: context)
+        // GitHub #82: `exportierePaket` (Stammdaten/Lernen/Vorgänge/Preise/
+        // Tombstones, je unabhängig fingerabdruck-geprüft) ersetzt das
+        // bisherige `exportiereSnapshot` (ein monolithisches `export.json`);
+        // `exportiereNeueKaeufe` schreibt die Kaufhistorie separat als
+        // Append-Log, statt sie bei jedem Zyklus erneut zu kodieren.
+        let paketExportErfolgreich = await SyncSnapshotExportService.exportierePaket(context: context)
+        let kaeufeExportErfolgreich = await SyncKaeufeExportService.exportiereNeueKaeufe(context: context)
 
         let dauer = start.duration(to: .now)
         SyncDebugLogger.log(.zyklusEnde, details: "dauer=\(dauer)")
 
-        return snapshotImportErfolgreich && eventImportErfolgreich && eventExportErfolgreich && snapshotExportErfolgreich
+        return snapshotImportErfolgreich && eventImportErfolgreich && eventExportErfolgreich
+            && paketExportErfolgreich && kaeufeExportErfolgreich
     }
 }

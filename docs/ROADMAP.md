@@ -115,27 +115,5 @@ vollständig umgesetzt; weitere Ideen siehe „Zukünftig“ unten.
   Erweiterungen innerhalb ShopWithMes vereinfachen als auch Wiederverwendung in
   anderen Apps ermöglichen — größerer, eigenständiger Umbau, nicht Teil des
   laufenden Betriebs.
-- **`export.json` als Paket statt Monolith** ([#82](https://github.com/McBoerny/ShopWithMe/issues/82);
-  der zugehörige Modellvorschlag `Preispunkt`/`ArtikelAlias` aus
-  [#76](https://github.com/McBoerny/ShopWithMe/issues/76)
-  ist umgesetzt und geschlossen — Preishistorie ist jetzt bereits ein eigenständiges,
-  vom `Einkaufsvorgang` unabhängiges Model, was diese Paket-Idee erleichtert, aber
-  selbst noch nicht umsetzt): `SyncSnapshotExportService.erstelleSnapshot` baut bei jedem
-  Sync-Zyklus (alle 5s während aktiv eingekauft wird) die **komplette**
-  Bereich-B/C/D-Historie neu auf und kodiert sie komplett als JSON, auch wenn
-  sich nichts geändert hat — der Fingerabdruck-Skip verhindert nur das
-  Schreiben, nicht diesen Aufbau. `SyncSnapshotImportService.mergeKaufEintraege`
-  fetcht dabei zusätzlich bei jedem Zyklus alle lokalen `KaufEintrag`e und
-  gleicht sie linear gegen alle remote Einträge ab — mit wachsender Historie
-  quadratischer Aufwand pro Zyklus, nicht nur pro tatsächlich neuem Eintrag.
-  Idee: `export.json` in mehrere unabhängig fingerabdruck-geprüfte Teile
-  aufteilen (`stamm.json`/`lernen.json`/`vorgaenge.json` wie bisher voll
-  neu aufgebaut, aber `kaeufe/` als reines Append-Log analog zum bereits
-  bestehenden Bereich-A-Eventlog `events/`, da `KaufEintrag` laut
-  `docs/DATENSYNCHRONISATION.md` Abschnitt 4.2 ohnehin „nie gemergt, nur
-  ergänzt“ ist) — spart wiederholten Voll-Rebuild/-Re-Parse der wachsenden
-  Kaufhistorie bei jedem Zyklus sowie wiederholte Voll-Neuschreibung in der
-  Cloud-Ablage. Noch nicht bewertet: Migrationspfad für bestehende
-  `export.json`-Dateien im Feld, Anpassung von „Export.json aufräumen“
-  (Abschnitt 7/8) auf mehrere Dateien. Größerer, eigenständiger Umbau,
-  passt inhaltlich zur modell-unabhängigen Sync-Architektur oben.
+- ~~**`export.json` als Paket statt Monolith**~~ ([#82](https://github.com/McBoerny/ShopWithMe/issues/82))
+  — umgesetzt, siehe `docs/EXPORT_PAKET_UMBAU.md`.

@@ -50,14 +50,15 @@ struct SyncPollingServiceTests {
         defer { service.stoppen() }
 
         // Der erste Sync-Zyklus läuft synchron-ähnlich sofort beim Start (vor
-        // dem ersten Intervall) — kurz warten, bis die eigene export.json
-        // geschrieben wurde.
-        let exportURL = SyncSnapshotExportService.eigeneExportURL(in: syncOrdner)
+        // dem ersten Intervall) — kurz warten, bis das eigene manifest.json
+        // geschrieben wurde (wird jeden Zyklus unbedingt geschrieben, siehe
+        // ``SyncPeerManifest``).
+        let manifestURL = SyncSnapshotExportService.eigenerManifestURL(in: syncOrdner)
         for _ in 0..<20 {
-            if FileManager.default.fileExists(atPath: exportURL.path) { break }
+            if FileManager.default.fileExists(atPath: manifestURL.path) { break }
             try await Task.sleep(for: .milliseconds(20))
         }
-        #expect(FileManager.default.fileExists(atPath: exportURL.path))
+        #expect(FileManager.default.fileExists(atPath: manifestURL.path))
     }
 
     @Test

@@ -104,10 +104,12 @@ enum KaufEintragBereinigungService {
         let vorgangReferenzen = vorgaengeDieLeerWerden.map { ModelReference($0) }
 
         var geloeschteKaufEintraegeAnzahl = 0
+        var geloeschteKaufEintragIDs: [UUID] = []
         await DatabaseLeaseService.performMicroLease(context: context) {
             for referenz in kaufEintragReferenzen {
                 guard let eintrag = referenz.resolved(in: context) else { continue }
                 SyncTombstoneService.markiereGeloescht(art: SyncEntitaetsArt.kaufEintrag, id: eintrag.id, context: context)
+                geloeschteKaufEintragIDs.append(eintrag.id)
                 context.delete(eintrag)
             }
             geloeschteKaufEintraegeAnzahl = kaufEintragReferenzen.count
@@ -117,6 +119,13 @@ enum KaufEintragBereinigungService {
                 SyncTombstoneService.markiereGeloescht(art: SyncEntitaetsArt.einkaufsvorgang, id: vorgang.id, context: context)
                 context.delete(vorgang)
             }
+        }
+        // GitHub #82: außerhalb der Micro-Lease (reine Datei-I/O, keine
+        // ModelContext-Mutation) — räumt die eigene `kaeufe/{id}.json` je
+        // gelöschtem Eintrag auf, siehe
+        // ``SyncKaeufeExportService/entferneDatei(fuerKaufEintragID:)``.
+        for id in geloeschteKaufEintragIDs {
+            SyncKaeufeExportService.entferneDatei(fuerKaufEintragID: id)
         }
         return geloeschteKaufEintraegeAnzahl
     }

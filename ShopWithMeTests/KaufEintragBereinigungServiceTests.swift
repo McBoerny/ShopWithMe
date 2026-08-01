@@ -179,4 +179,41 @@ struct KaufEintragBereinigungServiceTests {
         #expect(try context.fetch(FetchDescriptor<KaufEintrag>()).isEmpty)
         #expect(SyncTombstoneService.istGeloescht(art: SyncEntitaetsArt.kaufEintrag, id: eintragID, context: context))
     }
+
+    /// Regressionstest für GitHub #82: löscht `bereinigen` einen `KaufEintrag`,
+    /// muss auch dessen eigene `kaeufe/{id}.json`-Datei (falls dieses Gerät
+    /// ihn zuvor per ``SyncKaeufeExportService`` exportiert hatte) im eigenen
+    /// Peer-Ordner verschwinden — reine Platzersparnis, der bereits gesetzte
+    /// Tombstone schützt unabhängig davon vor Wiederbelebung durch einen Peer.
+    @Test
+    func bereinigenLoeschtAuchDieEigeneKaeufeDateiDesGeloeschtenEintrags() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: syncOrdner, withIntermediateDirectories: true)
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let jetzt = Date()
+        let geschaeft = Geschaeft(name: "Testladen", typen: [lebensmittelTyp()])
+        context.insert(geschaeft)
+        let vorgang = Einkaufsvorgang(geschaeft: geschaeft, startZeit: jetzt.addingTimeInterval(-3 * 24 * 60 * 60))
+        vorgang.abschliessen(am: jetzt.addingTimeInterval(-3 * 24 * 60 * 60))
+        context.insert(vorgang)
+        let eintrag = KaufEintrag(artikel: nil, geschaeft: geschaeft)
+        context.insert(eintrag)
+        eintrag.einkaufsvorgang = vorgang
+        try context.save()
+
+        // Simuliert einen vorherigen Sync-Zyklus, der diesen Eintrag bereits
+        // als eigene kaeufe/-Datei exportiert hatte.
+        await SyncKaeufeExportService.exportiereNeueKaeufe(context: context)
+        let kaeufeURL = SyncSnapshotExportService.eigenerKaeufeOrdner(in: syncOrdner)
+            .appendingPathComponent("\(eintrag.id.uuidString).json")
+        #expect(FileManager.default.fileExists(atPath: kaeufeURL.path))
+
+        await KaufEintragBereinigungService.bereinigen(context: context, jetzt: jetzt)
+
+        #expect(!FileManager.default.fileExists(atPath: kaeufeURL.path))
+    }
 }

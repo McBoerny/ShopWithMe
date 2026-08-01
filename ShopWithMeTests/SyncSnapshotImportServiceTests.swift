@@ -34,10 +34,42 @@ struct SyncSnapshotImportServiceTests {
         )
     }
 
+    /// Schreibt `snapshot` als Peer-**Paket** (GitHub #82) statt als
+    /// Monolith-`export.json` — `SyncSnapshotImportService.importiereSnapshots`
+    /// liest seither ausschließlich das neue Paket-Format. `SyncSnapshot`
+    /// bleibt als bequemer Test-Baustein (ein Feld je Bereich statt sechs
+    /// Einzel-Parametern für alle unten stehenden Tests) — wird hier nur beim
+    /// Schreiben in die Paket-Teile zerlegt, analog
+    /// ``SyncSnapshotExportService/erstellePaketTeile(context:)``.
     private func schreibeFremdenSnapshot(_ snapshot: SyncSnapshot, fremdeGeraeteID: String, in syncOrdner: URL) throws {
-        let url = SyncSnapshotExportService.exportURL(fuerPeer: fremdeGeraeteID, in: syncOrdner)
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try JSONEncoder().encode(snapshot).write(to: url)
+        let manifest = SyncPeerManifest(
+            formatVersion: SyncPeerManifest.aktuelleFormatVersion, erzeugtAm: snapshot.erzeugtAm,
+            geraeteID: snapshot.geraeteID, geraeteName: snapshot.geraeteName
+        )
+        let stamm = SyncStammSnapshot(
+            geschaeftsTypen: snapshot.geschaeftsTypen, artikelKategorien: snapshot.artikelKategorien,
+            geschaefte: snapshot.geschaefte, artikel: snapshot.artikel, einkaufslisten: snapshot.einkaufslisten,
+            einkaufslistenEintraege: snapshot.einkaufslistenEintraege, artikelAliase: snapshot.artikelAliase
+        )
+        let lernen = SyncLernenSnapshot(warengruppenDistanzen: snapshot.warengruppenDistanzen)
+        let vorgaenge = SyncVorgaengeSnapshot(einkaufsvorgaenge: snapshot.einkaufsvorgaenge)
+        let preise = SyncPreisSnapshot(preispunkte: snapshot.preispunkte)
+
+        let manifestURL = SyncSnapshotExportService.manifestURL(fuerPeer: fremdeGeraeteID, in: syncOrdner)
+        try FileManager.default.createDirectory(at: manifestURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try JSONEncoder().encode(manifest).write(to: manifestURL)
+        try JSONEncoder().encode(snapshot.tombstones)
+            .write(to: SyncSnapshotExportService.tombstonesURL(fuerPeer: fremdeGeraeteID, in: syncOrdner))
+        try JSONEncoder().encode(stamm).write(to: SyncSnapshotExportService.stammURL(fuerPeer: fremdeGeraeteID, in: syncOrdner))
+        try JSONEncoder().encode(lernen).write(to: SyncSnapshotExportService.lernenURL(fuerPeer: fremdeGeraeteID, in: syncOrdner))
+        try JSONEncoder().encode(vorgaenge).write(to: SyncSnapshotExportService.vorgaengeURL(fuerPeer: fremdeGeraeteID, in: syncOrdner))
+        try JSONEncoder().encode(preise).write(to: SyncSnapshotExportService.preiseURL(fuerPeer: fremdeGeraeteID, in: syncOrdner))
+        guard !snapshot.kaufEintraege.isEmpty else { return }
+        let kaeufeOrdner = SyncSnapshotExportService.kaeufeOrdner(fuerPeer: fremdeGeraeteID, in: syncOrdner)
+        try FileManager.default.createDirectory(at: kaeufeOrdner, withIntermediateDirectories: true)
+        for eintrag in snapshot.kaufEintraege {
+            try JSONEncoder().encode(eintrag).write(to: kaeufeOrdner.appendingPathComponent("\(eintrag.id.uuidString).json"))
+        }
     }
 
     @Test
@@ -193,10 +225,15 @@ struct SyncSnapshotImportServiceTests {
         try contextB.save()
 
         func exportiere(_ context: ModelContext, nach ordner: URL) throws {
-            let snapshot = SyncSnapshotExportService.erstelleSnapshot(context: context)
-            let url = SyncSnapshotExportService.exportURL(fuerPeer: "peer", in: ordner)
-            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try JSONEncoder().encode(snapshot).write(to: url)
+            let teile = SyncSnapshotExportService.erstellePaketTeile(context: context)
+            let manifestURL = SyncSnapshotExportService.manifestURL(fuerPeer: "peer", in: ordner)
+            try FileManager.default.createDirectory(at: manifestURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try JSONEncoder().encode(teile.manifest).write(to: manifestURL)
+            try JSONEncoder().encode(teile.tombstones).write(to: SyncSnapshotExportService.tombstonesURL(fuerPeer: "peer", in: ordner))
+            try JSONEncoder().encode(teile.stamm).write(to: SyncSnapshotExportService.stammURL(fuerPeer: "peer", in: ordner))
+            try JSONEncoder().encode(teile.lernen).write(to: SyncSnapshotExportService.lernenURL(fuerPeer: "peer", in: ordner))
+            try JSONEncoder().encode(teile.vorgaenge).write(to: SyncSnapshotExportService.vorgaengeURL(fuerPeer: "peer", in: ordner))
+            try JSONEncoder().encode(teile.preise).write(to: SyncSnapshotExportService.preiseURL(fuerPeer: "peer", in: ordner))
         }
 
         for _ in 0..<4 {
@@ -1175,5 +1212,161 @@ struct SyncSnapshotImportServiceTests {
         await SyncSnapshotImportService.importiereSnapshots(context: context)
         #expect(SyncPeerInfo.geraeteName(fuer: "fremdes-geraet", context: context) == "Annas neues iPhone")
         #expect(try context.fetch(FetchDescriptor<SyncPeerInfo>()).count == 1)
+    }
+
+    /// Regressionstest für GitHub #82 (Analyse-Fund: O(n·m)-Merge-Scan) —
+    /// `mergeKaufEintraege` fetchte bisher bei jedem Zyklus ALLE lokalen
+    /// Einträge und verglich linear gegen jeden Remote-Eintrag. Dieser Test
+    /// prüft nur das beobachtbare Verhalten (bereits bekannte Einträge bleiben
+    /// unverändert, nur der genuin neue wird übernommen) — der eigentliche
+    /// Umbau auf einen indexierten Existenz-Check (``kaufEintragExistiertLokal(id:context:)``)
+    /// ist implementierungsintern nicht per Black-Box-Test nachweisbar.
+    @Test
+    func kaufEintragMergeUebersprintBereitsBekannteEintraege() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let geschaeft = Geschaeft(name: "Rewe", typen: [])
+        context.insert(geschaeft)
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759")
+        context.insert(apfel)
+
+        var bekannteIDs: [UUID] = []
+        for _ in 0..<20 {
+            let eintrag = KaufEintrag(artikel: apfel, geschaeft: geschaeft)
+            context.insert(eintrag)
+            bekannteIDs.append(eintrag.id)
+        }
+        try context.save()
+
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.artikel = [
+            ArtikelSnapshot(
+                id: apfel.id, name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759",
+                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+            ),
+        ]
+        let neueID = UUID()
+        snapshot.kaufEintraege = (bekannteIDs.map {
+            KaufEintragSnapshot(
+                id: $0, artikelID: apfel.id, einkaufsvorgangID: nil, geschaeftID: nil, kategorieID: nil,
+                artikelNameSnapshot: "Apfel (fremd, darf nicht übernommen werden)", geschaeftNameSnapshot: "",
+                datum: Date(), menge: 1, kategorieBesuchsIndex: nil
+            )
+        }) + [
+            KaufEintragSnapshot(
+                id: neueID, artikelID: apfel.id, einkaufsvorgangID: nil, geschaeftID: nil, kategorieID: nil,
+                artikelNameSnapshot: "Apfel", geschaeftNameSnapshot: "",
+                datum: Date(), menge: 1, kategorieBesuchsIndex: nil
+            ),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        let alle = try context.fetch(FetchDescriptor<KaufEintrag>())
+        #expect(alle.count == 21)
+        #expect(alle.filter { bekannteIDs.contains($0.id) }.allSatisfy { $0.artikelNameSnapshot != "Apfel (fremd, darf nicht übernommen werden)" })
+        #expect(alle.contains { $0.id == neueID })
+    }
+
+    /// Wie ``kaufEintragMergeUebersprintBereitsBekannteEintraege``, für
+    /// ``mergePreispunkte``.
+    @Test
+    func preispunktMergeUebersprintBereitsBekannteEintraege() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759")
+        context.insert(apfel)
+
+        var bekannteIDs: [UUID] = []
+        for _ in 0..<20 {
+            let punkt = Preispunkt(artikel: apfel, geschaeft: nil, preis: 1.49)
+            context.insert(punkt)
+            bekannteIDs.append(punkt.id)
+        }
+        try context.save()
+
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.artikel = [
+            ArtikelSnapshot(
+                id: apfel.id, name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759",
+                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+            ),
+        ]
+        let neueID = UUID()
+        snapshot.preispunkte = (bekannteIDs.map {
+            PreispunktSnapshot(
+                id: $0, artikelID: apfel.id, geschaeftID: nil, preis: 9.99, datum: Date(),
+                produktName: nil, alternativerName: nil, artikelNameSnapshot: "Apfel", geschaeftNameSnapshot: ""
+            )
+        }) + [
+            PreispunktSnapshot(
+                id: neueID, artikelID: apfel.id, geschaeftID: nil, preis: 1.49, datum: Date(),
+                produktName: nil, alternativerName: nil, artikelNameSnapshot: "Apfel", geschaeftNameSnapshot: ""
+            ),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        let alle = try context.fetch(FetchDescriptor<Preispunkt>())
+        #expect(alle.count == 21)
+        #expect(alle.filter { bekannteIDs.contains($0.id) }.allSatisfy { $0.preis == 1.49 })
+        #expect(alle.contains { $0.id == neueID })
+    }
+
+    /// Vorher ungetestet — GitHub #82 macht dies zum ersten Mal ein
+    /// Mehrdatei-/Mehrverzeichnis-Löschvorgang statt eines Einzeldatei-Löschens.
+    /// Prüft, dass bei einem über ``SyncSnapshotImportService/maximalesSnapshotAlter``
+    /// hinaus veralteten Peer ALLE Paket-Dateien (`manifest.json`,
+    /// `tombstones.json`, `stamm.json`, `lernen.json`, `vorgaenge.json`,
+    /// `preise.json`) sowie der komplette `kaeufe/`-Ordner entfernt werden —
+    /// und dass ein `events/`-Ordner (Bereich A) davon unberührt bleibt, wie
+    /// von der Typ-Doku versprochen.
+    @Test
+    func raeumeVerwaisteFremdeExportsAufLoeschtAllePaketDateien() async throws {
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let vorherigeAltersgrenze = SyncSnapshotImportService.maximalesSnapshotAlter
+        SyncSnapshotImportService.maximalesSnapshotAlter = 60
+        defer { SyncSnapshotImportService.maximalesSnapshotAlter = vorherigeAltersgrenze }
+
+        var snapshot = leererSnapshot(geraeteID: "altes-geraet")
+        snapshot.erzeugtAm = Date().addingTimeInterval(-120)
+        snapshot.kaufEintraege = [
+            KaufEintragSnapshot(
+                id: UUID(), artikelID: nil, einkaufsvorgangID: nil, geschaeftID: nil, kategorieID: nil,
+                artikelNameSnapshot: "Apfel", geschaeftNameSnapshot: "", datum: Date(), menge: 1, kategorieBesuchsIndex: nil
+            ),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "altes-geraet", in: syncOrdner)
+
+        // Bereich-A-Eventordner desselben (fremden) Peers — darf nicht
+        // angetastet werden.
+        let eventsOrdner = SyncExportService.eventsOrdner(fuerPeer: "altes-geraet", in: syncOrdner)
+        try FileManager.default.createDirectory(at: eventsOrdner, withIntermediateDirectories: true)
+        let eventDatei = eventsOrdner.appendingPathComponent("0000000001_\(UUID().uuidString).json")
+        try Data("{}".utf8).write(to: eventDatei)
+
+        await SyncSnapshotImportService.raeumeVerwaisteFremdeExportsAuf()
+
+        #expect(!FileManager.default.fileExists(atPath: SyncSnapshotExportService.manifestURL(fuerPeer: "altes-geraet", in: syncOrdner).path))
+        #expect(!FileManager.default.fileExists(atPath: SyncSnapshotExportService.tombstonesURL(fuerPeer: "altes-geraet", in: syncOrdner).path))
+        #expect(!FileManager.default.fileExists(atPath: SyncSnapshotExportService.stammURL(fuerPeer: "altes-geraet", in: syncOrdner).path))
+        #expect(!FileManager.default.fileExists(atPath: SyncSnapshotExportService.lernenURL(fuerPeer: "altes-geraet", in: syncOrdner).path))
+        #expect(!FileManager.default.fileExists(atPath: SyncSnapshotExportService.vorgaengeURL(fuerPeer: "altes-geraet", in: syncOrdner).path))
+        #expect(!FileManager.default.fileExists(atPath: SyncSnapshotExportService.preiseURL(fuerPeer: "altes-geraet", in: syncOrdner).path))
+        #expect(!FileManager.default.fileExists(atPath: SyncSnapshotExportService.kaeufeOrdner(fuerPeer: "altes-geraet", in: syncOrdner).path))
+        #expect(FileManager.default.fileExists(atPath: eventDatei.path))
     }
 }

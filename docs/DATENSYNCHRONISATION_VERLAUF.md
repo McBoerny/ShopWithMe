@@ -1875,3 +1875,59 @@ eigenständiger `xcodebuild test`-Lauf durch Claude (Projektkonvention). Der
 Debug-Button selbst (reine SwiftUI-Verdrahtung eines bereits getesteten
 Service-Aufrufs) wurde nicht mit dem Simulator nachverifiziert — dafür wäre
 gemäß Projektregel vorab eine explizite Freigabe nötig.
+
+## 29. Sync-Paket statt export.json-Monolith (GitHub #82)
+
+**Umsetzungsplan zuerst erstellt** (siehe Anforderung des Nutzers, Issue #82
+per Roadmap-Eintrag angelegt, dann Umsetzungsplan im Plan-Modus erarbeitet und
+bestätigt) — vollständiges Layout, Begründung und Detailentscheidungen stehen
+in der neuen `docs/EXPORT_PAKET_UMBAU.md`, hier nur die Kurzfassung samt
+während der Umsetzung gefundener Korrektur.
+
+**Layout:** `manifest.json` (immer geschrieben, Peer-Alters-Gate),
+`tombstones.json`, `stamm.json`, `lernen.json`, `vorgaenge.json`, `preise.json`
+(je unabhängig fingerabdruck-geprüft) sowie `kaeufe/` als Append-Log (ein
+`<uuid>.json` pro `KaufEintrag`, neuer `SyncKaeufeExportService`) statt einer
+einzigen `export.json`.
+
+**Korrektur während der Umsetzung:** Der ursprünglich geplante Plan bündelte
+Tombstones mit `vorgaenge.json`. Erneute Durchsicht von
+`SyncSnapshotImportService.merge` zeigte: `mergeTombstones` muss laut
+bestehendem Kommentar „bewusst zuerst" laufen, VOR jedem Stammdaten-Merge —
+Tombstones gelten aber nicht nur für Bereich C (Einkaufsvorgang/KaufEintrag/
+Preispunkt), sondern auch für Geschäft/Artikel/ArtikelKategorie/Einkaufsliste
+(Stammdaten). In `vorgaenge.json` gebündelt wären sie erst NACH `stamm.json`
+gelesen worden — zu spät. Fix: eigene, immer zuerst gelesene `tombstones.json`.
+Dem Nutzer vor der weiteren Umsetzung vorgelegt und bestätigt, statt still
+korrigiert.
+
+**Bestehender `SyncSnapshot`-Monolith bleibt erhalten** — dient seither
+ausschließlich dem lokalen Backup-/Wiederherstellungs-Pfad
+(`SyncErsetzenService`, GitHub #63, Abschnitt 8 oben), der weiterhin einen
+einzelnen vollständigen In-Memory-Snapshot braucht. Alle `mergeX`-Funktionen
+(`mergeGeschaeftsTypen` … `mergeWarengruppenDistanzen`, `loescheFallsVorhanden`)
+unverändert und von beiden Pfaden (`mergePaket`, neu, und `merge`, Backup-Pfad)
+gemeinsam genutzt — nur die Herkunft der Teil-Arrays unterscheidet sich.
+
+**Im selben Zug** (Analyse-Fund, unabhängig vom Datei-Layout): `mergeKaufEintraege`/
+`mergePreispunkte` nutzten bislang einen vollen Fetch + linearen Scan
+(`alleLokalen.first(where: { $0.id == eintrag.id })`) statt eines indexierten
+Existenz-Checks (Muster wie `SyncEventService.istBereitsBekannt`) — O(n·m)
+statt O(n) pro Merge-Zyklus, wachsend mit der Gesamthistorie statt nur mit
+tatsächlich neuen Einträgen. `mergeEinkaufsvorgaenge` bewusst nicht angefasst
+(`alleLokalen` dort zusätzlich für den `offenerTreffer`-Scan gebraucht, kein
+mit der Historie wachsendes Problem).
+
+**Verifikationsstand:** `xcodegen generate` + `xcodebuild build`/`build-for-testing`
+grün, keine neuen Warnungen. Bestehende Tests (`SyncSnapshotImportServiceTests`,
+~40 Funktionen) unverändert lauffähig — der gemeinsame Test-Helper
+`schreibeFremdenSnapshot` wurde intern auf das neue Paket-Format umgestellt,
+ohne dass einzelne Testkörper angepasst werden mussten (`SyncSnapshot` bleibt
+als bequemer Test-Baustein, wird nur beim Schreiben in Paket-Teile zerlegt).
+Neue Tests: `nurGeaenderterTeilWirdNeuGeschrieben`, `stammNormalisierungIstUnabhaengigVonReihenfolgeAeussererUndInnererArrays`
+(`SyncSnapshotExportServiceTests`), `raeumeVerwaisteFremdeExportsAufLoeschtAllePaketDateien`
+(`SyncSnapshotImportServiceTests`), neue `SyncKaeufeExportServiceTests`,
+`bereinigenLoeschtAuchDieEigeneKaeufeDateiDesGeloeschtenEintrags`
+(`KaufEintragBereinigungServiceTests`). Kein eigenständiger `xcodebuild test`-Lauf
+durch Claude (Projektkonvention) — noch nicht mit echten Geräten/realem
+Mehrgeräte-Sync nachverifiziert.

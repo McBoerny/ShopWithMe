@@ -53,10 +53,42 @@ struct SyncErsetzenServiceTests {
         )
     }
 
+    /// Schreibt `snapshot` als Peer-**Paket** (GitHub #82) statt als
+    /// Monolith-`export.json` — `SyncSnapshotImportService.importiereSnapshots`
+    /// (von ``SyncErsetzenService/fuehreAusstehendeAktionAus(context:)`` im
+    /// `.ersetzenDurchPeer`-Fall aufgerufen) liest seither ausschließlich das
+    /// neue Paket-Format. `SyncSnapshot` bleibt als bequemer Test-Baustein
+    /// (Felder statt sechs Einzel-Parametern) — wird hier nur beim Schreiben
+    /// in die Paket-Teile zerlegt.
     private func schreibeFremdenSnapshot(_ snapshot: SyncSnapshot, fremdeGeraeteID: String, in syncOrdner: URL) throws {
-        let url = SyncSnapshotExportService.exportURL(fuerPeer: fremdeGeraeteID, in: syncOrdner)
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try JSONEncoder().encode(snapshot).write(to: url)
+        let manifest = SyncPeerManifest(
+            formatVersion: SyncPeerManifest.aktuelleFormatVersion, erzeugtAm: snapshot.erzeugtAm,
+            geraeteID: snapshot.geraeteID, geraeteName: snapshot.geraeteName
+        )
+        let stamm = SyncStammSnapshot(
+            geschaeftsTypen: snapshot.geschaeftsTypen, artikelKategorien: snapshot.artikelKategorien,
+            geschaefte: snapshot.geschaefte, artikel: snapshot.artikel, einkaufslisten: snapshot.einkaufslisten,
+            einkaufslistenEintraege: snapshot.einkaufslistenEintraege, artikelAliase: snapshot.artikelAliase
+        )
+        let lernen = SyncLernenSnapshot(warengruppenDistanzen: snapshot.warengruppenDistanzen)
+        let vorgaenge = SyncVorgaengeSnapshot(einkaufsvorgaenge: snapshot.einkaufsvorgaenge)
+        let preise = SyncPreisSnapshot(preispunkte: snapshot.preispunkte)
+
+        let manifestURL = SyncSnapshotExportService.manifestURL(fuerPeer: fremdeGeraeteID, in: syncOrdner)
+        try FileManager.default.createDirectory(at: manifestURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try JSONEncoder().encode(manifest).write(to: manifestURL)
+        try JSONEncoder().encode(snapshot.tombstones)
+            .write(to: SyncSnapshotExportService.tombstonesURL(fuerPeer: fremdeGeraeteID, in: syncOrdner))
+        try JSONEncoder().encode(stamm).write(to: SyncSnapshotExportService.stammURL(fuerPeer: fremdeGeraeteID, in: syncOrdner))
+        try JSONEncoder().encode(lernen).write(to: SyncSnapshotExportService.lernenURL(fuerPeer: fremdeGeraeteID, in: syncOrdner))
+        try JSONEncoder().encode(vorgaenge).write(to: SyncSnapshotExportService.vorgaengeURL(fuerPeer: fremdeGeraeteID, in: syncOrdner))
+        try JSONEncoder().encode(preise).write(to: SyncSnapshotExportService.preiseURL(fuerPeer: fremdeGeraeteID, in: syncOrdner))
+        guard !snapshot.kaufEintraege.isEmpty else { return }
+        let kaeufeOrdner = SyncSnapshotExportService.kaeufeOrdner(fuerPeer: fremdeGeraeteID, in: syncOrdner)
+        try FileManager.default.createDirectory(at: kaeufeOrdner, withIntermediateDirectories: true)
+        for eintrag in snapshot.kaufEintraege {
+            try JSONEncoder().encode(eintrag).write(to: kaeufeOrdner.appendingPathComponent("\(eintrag.id.uuidString).json"))
+        }
     }
 
     private func leerenGeschaeftSnapshot(name: String) -> GeschaeftSnapshot {

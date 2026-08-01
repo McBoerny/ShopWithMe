@@ -235,3 +235,89 @@ struct ArtikelAliasSnapshot: Codable {
     var alternativerName: String?
     var artikelID: UUID?
 }
+
+// MARK: - Paket-Format für den laufenden Peer-Sync-Zyklus (GitHub #82)
+
+/// **`SyncSnapshot` bleibt unverändert bestehen**, dient aber seit GitHub #82
+/// nur noch dem lokalen Backup/Wiederherstellungs-Pfad (``SyncErsetzenService``,
+/// GitHub #63) — dort ist ein einzelner, vollständiger In-Memory-Snapshot
+/// weiterhin die richtige Form (ein Backup vor Ort, keine Datei-Größen-/
+/// Wiederholungsprobleme wie beim laufenden Peer-Sync-Zyklus).
+///
+/// Für den eigentlichen Peer-zu-Peer-Datenaustausch (bisher eine einzige,
+/// monolithische `export.json`, bei jedem Sync-Zyklus komplett neu geschrieben
+/// — Analyse-Fund: 56% Dateigröße allein durch `kaufEintraege`, plus
+/// unnötiges Neuschreiben unveränderter Teile) ersetzen diese Typen das
+/// Monolith-Format durch mehrere unabhängig fingerabdruck-geprüfte Teile
+/// (``SyncSnapshotExportService/erstellePaketTeile(context:)``) plus ein
+/// Append-Log für `KaufEintrag` (``SyncKaeufeExportService``, analog dem
+/// bereits bestehenden Bereich-A-Eventlog `events/`). **Harter Formatschnitt**
+/// (siehe `docs/EXPORT_PAKET_UMBAU.md`): kein Dual-Read, dieselbe
+/// „keine Rückwärtskompatibilität nötig"-Haltung wie bei den bisherigen
+/// `SyncSnapshot.formatVersion`-Sprüngen.
+
+/// Kleine, immer (jeden Zyklus, unabhängig vom Fingerabdruck-Skip der übrigen
+/// Teile) geschriebene Datei — ersetzt das bisherige `erzeugtAm`/`formatVersion`
+/// auf dem Monolithen als Peer-Alters-Gate
+/// (``SyncSnapshotImportService/maximalesSnapshotAlter``). Muss unbedingt bei
+/// jedem Zyklus aktualisiert werden, auch wenn kein Teil sich inhaltlich
+/// geändert hat — sonst würde ein seit Tagen inhaltlich unverändertes, aber
+/// weiterhin aktives Gerät fälschlich als verwaist gelten (siehe
+/// `SyncSnapshotExportService`, Abschnitt „Schreibt nur bei tatsächlich
+/// geändertem Inhalt").
+struct SyncPeerManifest: Codable {
+    /// Eigene, vom Bereich-B/C/D-`SyncSnapshot.formatVersion` unabhängige
+    /// Versionierung des Paket-Layouts selbst.
+    static let aktuelleFormatVersion = 1
+    var formatVersion: Int
+    var erzeugtAm: Date
+    var geraeteID: String
+    var geraeteName: String
+}
+
+/// Bereich B (Stammdaten) — ändert sich selten, klein, immer als Ganzes
+/// neu aufgebaut wie bisher der komplette Monolith, aber unabhängig von den
+/// anderen Teilen fingerabdruck-geprüft.
+struct SyncStammSnapshot: Codable {
+    var geschaeftsTypen: [GeschaeftTypSnapshot]
+    var artikelKategorien: [ArtikelKategorieSnapshot]
+    var geschaefte: [GeschaeftSnapshot]
+    var artikel: [ArtikelSnapshot]
+    var einkaufslisten: [EinkaufslisteSnapshot]
+    var einkaufslistenEintraege: [EinkaufslistenEintragSnapshot]
+    var artikelAliase: [ArtikelAliasSnapshot]
+}
+
+/// Bereich D (Lernen) — eigene Datei statt Bündelung mit Stammdaten, da
+/// ``WarengruppenDistanz`` bei jedem abgeschlossenen Einkauf potenziell
+/// aktualisiert wird, Stammdaten aber nur selten.
+struct SyncLernenSnapshot: Codable {
+    var warengruppenDistanzen: [WarengruppenDistanzSnapshot]
+}
+
+/// Bereich C, Einkaufsvorgänge — eigene Datei, da `Einkaufsvorgang.endZeit`
+/// bei praktisch jedem Kaufabschluss wechselt, `Preispunkt` (``SyncPreisSnapshot``)
+/// aber nur bei einer echten Preisänderung; eine gemeinsame Datei würde
+/// unnötig oft neu geschrieben.
+struct SyncVorgaengeSnapshot: Codable {
+    var einkaufsvorgaenge: [EinkaufsvorgangSnapshot]
+}
+
+/// Bereich C, Preishistorie (GitHub #76) — siehe ``SyncVorgaengeSnapshot``
+/// für die Begründung der eigenen Datei.
+struct SyncPreisSnapshot: Codable {
+    var preispunkte: [PreispunktSnapshot]
+}
+
+/// `KaufEintrag` (Bereich C, Kaufhistorie) ist **nicht** Teil eines der
+/// fünf obigen Teile — dieser Bereich wächst unbeschränkt (kein Kompaktierungs-
+/// Mechanismus wie bei `Preispunkt`, siehe `PreispunktVerdichtungService`) und
+/// war mit 56% der Dateigröße in einer realen `export.json` der dominante
+/// Anteil. Statt bei jedem Zyklus die komplette, wachsende Historie neu zu
+/// kodieren, schreibt ``SyncKaeufeExportService`` ein `<uuid>.json` pro
+/// `KaufEintrag` in `peers/{peer}/kaeufe/` — analog dem bereits bestehenden
+/// Bereich-A-Eventlog `events/`, aber ohne Zähler-Präfix im Dateinamen: anders
+/// als `SyncEvent` (Konfliktauflösung braucht Lamport-Reihenfolge) ist
+/// `KaufEintrag`-Merge bereits heute reine Union nach `id`, ohne
+/// Reihenfolgeabhängigkeit. `KaufEintragSnapshot` (oben) ist unverändert die
+/// richtige Pro-Datei-Form.

@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.10 (Build 180) — Sync-Paket statt export.json-Monolith (GitHub #82)
+
+- **GitHub #82.** `export.json` (ein Monolith, bei jedem Sync-Zyklus komplett
+  neu aufgebaut und kodiert — `kaufEintraege` allein 56% der Dateigröße in
+  einem realen Export) ersetzt durch mehrere unabhängig fingerabdruck-geprüfte
+  Dateien (`manifest.json`, `tombstones.json`, `stamm.json`, `lernen.json`,
+  `vorgaenge.json`, `preise.json`) plus ein Append-Log für die Kaufhistorie
+  (`kaeufe/`, ein `<uuid>.json` pro `KaufEintrag`, analog dem bestehenden
+  Bereich-A-Eventlog `events/`) — neuer `SyncKaeufeExportService`. Harter
+  Formatschnitt, kein Dual-Read.
+- Zusätzlich: `SyncSnapshotImportService.mergeKaufEintraege`/`mergePreispunkte`
+  nutzen jetzt einen indexierten Existenz-Check statt vollem Fetch + linearem
+  Scan (O(n) statt O(n·m) pro Merge-Zyklus).
+- Der bisherige `SyncSnapshot`-Monolith-Typ bleibt für den lokalen
+  Backup-/Wiederherstellungs-Pfad (`SyncErsetzenService`, GitHub #63)
+  unverändert bestehen.
+  Details: `docs/EXPORT_PAKET_UMBAU.md`.
+
 ## v0.10 (Build 178) — Nicht-deterministischer Sync-Fingerabdruck (GitHub #78) + manuelle KaufEintrag-Bereinigung
 
 - **GitHub #78.** `SyncSnapshotExportService` nutzte drei eigene

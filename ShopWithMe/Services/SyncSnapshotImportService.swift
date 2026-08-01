@@ -2,13 +2,21 @@ import Foundation
 import SwiftData
 
 /// Bereich-B/C/D-Import (`docs/DATENSYNCHRONISATION_VERLAUF.md`
-/// Abschnitt 5.3, Phase 3): liest `export.json`-Snapshots aus allen fremden
-/// Peer-Ordnern und merged Stammdaten (``GeschaeftTyp``, ``ArtikelKategorie``,
-/// ``Geschaeft``, ``Artikel``, ``Einkaufsliste``, Bereich B), Historie
-/// (``Einkaufsvorgang``, ``KaufEintrag``, Bereich C) und Lernen
-/// (``WarengruppenDistanz``, Bereich D) dependency-geordnet in den lokalen
-/// Bestand — Matching-Bausteine für Bereich B wiederverwendet aus
-/// `docs/DATENSYNCHRONISATION.md` Abschnitt 4.2.
+/// Abschnitt 5.3, Phase 3): liest Peer-Pakete (seit GitHub #82 mehrere
+/// unabhängig fingerabdruck-geprüfte Dateien statt eines `export.json`-
+/// Monolithen, siehe `docs/EXPORT_PAKET_UMBAU.md` und
+/// ``mergePaket(tombstones:stamm:lernen:vorgaenge:preise:kaeufe:geraeteName:peerGeraeteID:erzeugtAm:context:)``)
+/// aus allen fremden Peer-Ordnern und merged Stammdaten (``GeschaeftTyp``,
+/// ``ArtikelKategorie``, ``Geschaeft``, ``Artikel``, ``Einkaufsliste``,
+/// Bereich B), Historie (``Einkaufsvorgang``, ``KaufEintrag``, Bereich C) und
+/// Lernen (``WarengruppenDistanz``, Bereich D) dependency-geordnet in den
+/// lokalen Bestand — Matching-Bausteine für Bereich B wiederverwendet aus
+/// `docs/DATENSYNCHRONISATION.md` Abschnitt 4.2. Die einzelnen `mergeX`-
+/// Funktionen sind unverändert gegenüber dem bisherigen Monolith-Format
+/// (sie operieren bereits vorher auf denselben Teil-Arrays) und werden auch
+/// vom weiterhin bestehenden lokalen Backup-/Wiederherstellungs-Pfad
+/// (``merge(_:peerGeraeteID:context:)``, ``SyncErsetzenService``, GitHub #63)
+/// mitgenutzt.
 ///
 /// **Grundprinzip aller Bereich-B-Merge-Regeln: nie destruktiv.** Ein bereits
 /// lokal gesetzter Wert wird nie durch einen abweichenden Remote-Wert
@@ -76,21 +84,44 @@ enum SyncSnapshotImportService {
         ) else { return true }
 
         for peerOrdner in peerVerzeichnisse where !PeerOrdnerName.gehoertZu(peerOrdner.lastPathComponent, geraeteID: eigeneGeraeteID) {
-            let exportURL = SyncSnapshotExportService.exportURL(fuerPeer: peerOrdner.lastPathComponent, in: syncOrdner)
-            guard let snapshot = await ladeSnapshot(von: exportURL) else { continue }
-            guard Date().timeIntervalSince(snapshot.erzeugtAm) <= maximalesSnapshotAlter else {
-                SyncDebugLogger.log(.peerVerworfenAltersgrenze, details: "peer=\(peerOrdner.lastPathComponent.prefix(8))")
+            let peerName = peerOrdner.lastPathComponent
+            guard let manifest = await ladeManifest(von: SyncSnapshotExportService.manifestURL(fuerPeer: peerName, in: syncOrdner)) else { continue }
+            guard Date().timeIntervalSince(manifest.erzeugtAm) <= maximalesSnapshotAlter else {
+                SyncDebugLogger.log(.peerVerworfenAltersgrenze, details: "peer=\(peerName.prefix(8))")
                 continue
             }
-            SyncDebugLogger.protokolliereAlter(.snapshotEmpfangen, erzeugtAm: snapshot.erzeugtAm, zusatz: "peer=\(peerOrdner.lastPathComponent.prefix(8))")
-            // `snapshot.geraeteID` statt des Ordnernamens (GitHub #81): der
-            // Ordnername ist seither eine reine Lesehilfe (Gerätename +
-            // Kurz-Suffix) und keine verlässliche Kennung mehr — die interne
-            // Peer-Identität (`SyncPeerInfo.peerGeraeteID`,
-            // `SyncPeerZaehlerStand.peerGeraeteID`) muss exakt der
-            // `SyncEvent.autorGeraeteID` desselben Geräts entsprechen, sonst
-            // bricht u.a. der Cross-Device-Zähler-Abgleich.
-            merge(snapshot, peerGeraeteID: snapshot.geraeteID, context: context)
+            SyncDebugLogger.protokolliereAlter(.snapshotEmpfangen, erzeugtAm: manifest.erzeugtAm, zusatz: "peer=\(peerName.prefix(8))")
+
+            let tombstones = await ladeTeil(
+                [SyncTombstoneSnapshot].self, von: SyncSnapshotExportService.tombstonesURL(fuerPeer: peerName, in: syncOrdner)
+            ) ?? []
+            let stamm = await ladeTeil(
+                SyncStammSnapshot.self, von: SyncSnapshotExportService.stammURL(fuerPeer: peerName, in: syncOrdner)
+            ) ?? SyncStammSnapshot(
+                geschaeftsTypen: [], artikelKategorien: [], geschaefte: [], artikel: [],
+                einkaufslisten: [], einkaufslistenEintraege: [], artikelAliase: []
+            )
+            let lernen = await ladeTeil(
+                SyncLernenSnapshot.self, von: SyncSnapshotExportService.lernenURL(fuerPeer: peerName, in: syncOrdner)
+            ) ?? SyncLernenSnapshot(warengruppenDistanzen: [])
+            let vorgaenge = await ladeTeil(
+                SyncVorgaengeSnapshot.self, von: SyncSnapshotExportService.vorgaengeURL(fuerPeer: peerName, in: syncOrdner)
+            ) ?? SyncVorgaengeSnapshot(einkaufsvorgaenge: [])
+            let preise = await ladeTeil(
+                SyncPreisSnapshot.self, von: SyncSnapshotExportService.preiseURL(fuerPeer: peerName, in: syncOrdner)
+            ) ?? SyncPreisSnapshot(preispunkte: [])
+            let kaeufe = await ladeKaeufe(ausOrdner: SyncSnapshotExportService.kaeufeOrdner(fuerPeer: peerName, in: syncOrdner))
+
+            // `manifest.geraeteID` statt des Ordnernamens (GitHub #81): der
+            // Ordnername ist eine reine Lesehilfe (Gerätename + Kurz-Suffix)
+            // und keine verlässliche Kennung — die interne Peer-Identität
+            // (`SyncPeerInfo.peerGeraeteID`, `SyncPeerZaehlerStand.peerGeraeteID`)
+            // muss exakt der `SyncEvent.autorGeraeteID` desselben Geräts
+            // entsprechen, sonst bricht u.a. der Cross-Device-Zähler-Abgleich.
+            mergePaket(
+                tombstones: tombstones, stamm: stamm, lernen: lernen, vorgaenge: vorgaenge, preise: preise, kaeufe: kaeufe,
+                geraeteName: manifest.geraeteName, peerGeraeteID: manifest.geraeteID, erzeugtAm: manifest.erzeugtAm, context: context
+            )
         }
 
         protokolliereEinkaufslistenStand(context: context)
@@ -135,16 +166,100 @@ enum SyncSnapshotImportService {
         SyncDebugLogger.log(.einkaufslistenStand, details: "anzahl=\(alle.count) [\(beschreibung)]")
     }
 
-    /// Lädt und dekodiert einen fremden Snapshot über einen koordinierten
-    /// Lesezugriff (``SyncDateiZugriff``, GitHub #52) — in einem `Task.detached`,
-    /// damit ein bei Bedarf ausgelöster Download nicht den `MainActor` blockiert.
-    nonisolated private static func ladeSnapshot(von url: URL) async -> SyncSnapshot? {
+    /// Lädt und dekodiert das Manifest eines Peer-Pakets (GitHub #82) über
+    /// einen koordinierten Lesezugriff (``SyncDateiZugriff``, GitHub #52) — in
+    /// einem `Task.detached`, damit ein bei Bedarf ausgelöster Download nicht
+    /// den `MainActor` blockiert. `nil` sowohl bei fehlender Datei (Peer hat
+    /// noch nie exportiert) als auch bei jedem Decoding-Fehler.
+    nonisolated private static func ladeManifest(von url: URL) async -> SyncPeerManifest? {
         await Task.detached(priority: .utility) {
             guard let daten = SyncDateiZugriff.leseKoordiniert(url) else { return nil }
-            return try? JSONDecoder().decode(SyncSnapshot.self, from: daten)
+            return try? JSONDecoder().decode(SyncPeerManifest.self, from: daten)
         }.value
     }
 
+    /// Wie ``ladeManifest(von:)``, generisch für die übrigen Paket-Teile
+    /// (``SyncStammSnapshot``, ``SyncLernenSnapshot``, ``SyncVorgaengeSnapshot``,
+    /// ``SyncPreisSnapshot``, `[SyncTombstoneSnapshot]`). `nil` bedeutet hier
+    /// immer „noch nicht geschrieben, seit dieser Teil zuletzt beim Absender
+    /// unverändert war" oder „Peer noch nicht auf das neue Format
+    /// aktualisiert" — der Aufrufer setzt in beiden Fällen einen leeren
+    /// Standardwert ein, nie einen Fehler.
+    nonisolated private static func ladeTeil<T: Decodable & Sendable>(_ typ: T.Type, von url: URL) async -> T? {
+        await Task.detached(priority: .utility) {
+            guard let daten = SyncDateiZugriff.leseKoordiniert(url) else { return nil }
+            return try? JSONDecoder().decode(T.self, from: daten)
+        }.value
+    }
+
+    /// Liest alle `<uuid>.json`-Dateien aus dem `kaeufe/`-Ordner eines Peers
+    /// (``SyncKaeufeExportService``) — fehlende Datei/leerer Ordner ergibt
+    /// bewusst eine leere Liste statt eines Fehlers (ein Peer ohne jeden
+    /// `KaufEintrag` hat schlicht (noch) keinen `kaeufe/`-Ordner angelegt).
+    nonisolated private static func ladeKaeufe(ausOrdner ordner: URL) async -> [KaufEintragSnapshot] {
+        await Task.detached(priority: .utility) {
+            guard let dateien = try? FileManager.default.contentsOfDirectory(
+                at: ordner, includingPropertiesForKeys: nil
+            ) else { return [] }
+            return dateien.filter { $0.pathExtension == "json" }.compactMap { url -> KaufEintragSnapshot? in
+                guard let daten = SyncDateiZugriff.leseKoordiniert(url) else { return nil }
+                return try? JSONDecoder().decode(KaufEintragSnapshot.self, from: daten)
+            }
+        }.value
+    }
+
+    /// Paket-Pendant zu ``merge(_:peerGeraeteID:context:)`` (GitHub #82) —
+    /// identische Reihenfolge/Merge-Logik, nur aus den fünf unabhängig
+    /// gelesenen Paket-Teilen zusammengesetzt statt aus einem einzelnen
+    /// ``SyncSnapshot``. Ruft dieselben, unverändert wiederverwendeten
+    /// `mergeX`-Funktionen auf — insbesondere bleibt die Reihenfolge
+    /// „Tombstones zuerst" erhalten (siehe Typ-Doku „Architektur-Revision
+    /// Alternative A"): `tombstones.json` gilt bewusst nicht nur für Bereich C
+    /// (Einkaufsvorgang/KaufEintrag/Preispunkt), sondern auch für
+    /// Stammdaten-Tombstones (Geschäft/Artikel/ArtikelKategorie/Einkaufsliste)
+    /// — deshalb eine eigene, immer zuerst gelesene Datei statt Bündelung mit
+    /// `vorgaenge.json`.
+    @MainActor
+    private static func mergePaket(
+        tombstones: [SyncTombstoneSnapshot], stamm: SyncStammSnapshot, lernen: SyncLernenSnapshot,
+        vorgaenge: SyncVorgaengeSnapshot, preise: SyncPreisSnapshot, kaeufe: [KaufEintragSnapshot],
+        geraeteName: String, peerGeraeteID: String, erzeugtAm: Date, context: ModelContext
+    ) {
+        SyncPeerInfo.aktualisiere(peerGeraeteID: peerGeraeteID, geraeteName: geraeteName, zuletztGesehen: erzeugtAm, context: context)
+
+        mergeTombstones(tombstones, context: context)
+
+        let typZuordnung = mergeGeschaeftsTypen(stamm.geschaeftsTypen, context: context)
+        let kategorieZuordnung = mergeArtikelKategorien(stamm.artikelKategorien, typZuordnung: typZuordnung, context: context)
+        let geschaeftZuordnung = mergeGeschaefte(
+            stamm.geschaefte, typZuordnung: typZuordnung, kategorieZuordnung: kategorieZuordnung,
+            peerGeraeteID: peerGeraeteID, context: context
+        )
+        let artikelZuordnung = mergeArtikel(stamm.artikel, kategorieZuordnung: kategorieZuordnung, context: context)
+        let listeZuordnung = mergeEinkaufslisten(stamm.einkaufslisten, context: context)
+        mergeEinkaufslistenEintraege(
+            stamm.einkaufslistenEintraege, listeZuordnung: listeZuordnung, artikelZuordnung: artikelZuordnung, context: context
+        )
+        let einkaufsvorgangZuordnung = mergeEinkaufsvorgaenge(
+            vorgaenge.einkaufsvorgaenge, geschaeftZuordnung: geschaeftZuordnung, listeZuordnung: listeZuordnung, context: context
+        )
+        mergeKaufEintraege(
+            kaeufe, artikelZuordnung: artikelZuordnung, einkaufsvorgangZuordnung: einkaufsvorgangZuordnung,
+            geschaeftZuordnung: geschaeftZuordnung, kategorieZuordnung: kategorieZuordnung, context: context
+        )
+        mergePreispunkte(preise.preispunkte, artikelZuordnung: artikelZuordnung, geschaeftZuordnung: geschaeftZuordnung, context: context)
+        mergeArtikelAliase(stamm.artikelAliase, artikelZuordnung: artikelZuordnung, context: context)
+        mergeWarengruppenDistanzen(
+            lernen.warengruppenDistanzen, geschaeftZuordnung: geschaeftZuordnung, kategorieZuordnung: kategorieZuordnung, context: context
+        )
+    }
+
+    /// **Nur noch für den lokalen Backup-/Wiederherstellungs-Pfad**
+    /// (``SyncErsetzenService``, GitHub #63) — der laufende Peer-Sync-Zyklus
+    /// nutzt seit GitHub #82 ``mergePaket(tombstones:stamm:lernen:vorgaenge:preise:kaeufe:geraeteName:peerGeraeteID:erzeugtAm:context:)``.
+    /// Unverändert, da ein lokales Backup weiterhin sinnvoll ein einzelner,
+    /// vollständiger In-Memory-``SyncSnapshot`` ist (kein Datei-Größen-/
+    /// Wiederholungsproblem wie beim laufenden Sync-Zyklus).
     @MainActor
     private static func merge(_ snapshot: SyncSnapshot, peerGeraeteID: String, context: ModelContext) {
         SyncPeerInfo.aktualisiere(
@@ -224,6 +339,11 @@ enum SyncSnapshotImportService {
             var deskriptor = FetchDescriptor<KaufEintrag>(predicate: #Predicate { $0.id == id })
             deskriptor.fetchLimit = 1
             if let objekt = try? context.fetch(deskriptor).first { context.delete(objekt) }
+            // GitHub #82: räumt zusätzlich die eigene `kaeufe/{id}.json` auf,
+            // falls dieses Gerät den jetzt fremd-tombstoneten Eintrag selbst
+            // schon einmal exportiert hatte — reine Platzersparnis, siehe
+            // ``SyncKaeufeExportService/entferneDatei(fuerKaufEintragID:)``.
+            SyncKaeufeExportService.entferneDatei(fuerKaufEintragID: id)
         case SyncEntitaetsArt.preispunkt:
             var deskriptor = FetchDescriptor<Preispunkt>(predicate: #Predicate { $0.id == id })
             deskriptor.fetchLimit = 1
@@ -736,15 +856,35 @@ enum SyncSnapshotImportService {
     /// — nur die Reihenfolge-Analyse ignoriert ihn (siehe
     /// ``WarengruppenDistanzService/besuchsreihenfolge(fuer:)``, überspringt
     /// `nil`-Indizes bereits bewusst).
+    /// Indexierter Existenz-Check statt vollem Fetch + linearem Scan (Analyse-
+    /// Fund: `mergeKaufEintraege`/`mergePreispunkte` holten bisher bei jedem
+    /// Zyklus ALLE lokalen Einträge und verglichen linear gegen jeden
+    /// Remote-Eintrag — O(n·m), wächst mit der Gesamthistorie statt nur mit
+    /// tatsächlich neuen Einträgen). Muster wie
+    /// ``SyncEventService/istBereitsBekannt(_:context:)``.
+    @MainActor
+    private static func kaufEintragExistiertLokal(id: UUID, context: ModelContext) -> Bool {
+        var deskriptor = FetchDescriptor<KaufEintrag>(predicate: #Predicate { $0.id == id })
+        deskriptor.fetchLimit = 1
+        return ((try? context.fetchCount(deskriptor)) ?? 0) > 0
+    }
+
+    /// Wie ``kaufEintragExistiertLokal(id:context:)``, für ``Preispunkt``.
+    @MainActor
+    private static func preispunktExistiertLokal(id: UUID, context: ModelContext) -> Bool {
+        var deskriptor = FetchDescriptor<Preispunkt>(predicate: #Predicate { $0.id == id })
+        deskriptor.fetchLimit = 1
+        return ((try? context.fetchCount(deskriptor)) ?? 0) > 0
+    }
+
     @MainActor
     private static func mergeKaufEintraege(
         _ remote: [KaufEintragSnapshot], artikelZuordnung: [UUID: Artikel], einkaufsvorgangZuordnung: [UUID: Einkaufsvorgang],
         geschaeftZuordnung: [UUID: Geschaeft], kategorieZuordnung: [UUID: ArtikelKategorie], context: ModelContext
     ) {
-        let alleLokalen = (try? context.fetch(FetchDescriptor<KaufEintrag>())) ?? []
         let geloeschteIDs = SyncTombstoneService.geloeschteIDs(art: SyncEntitaetsArt.kaufEintrag, context: context)
         for eintrag in remote {
-            guard alleLokalen.first(where: { $0.id == eintrag.id }) == nil else { continue }
+            guard !kaufEintragExistiertLokal(id: eintrag.id, context: context) else { continue }
             // Retention- oder manuell gelöschter Eintrag eines Peers, der ihn
             // selbst noch führt — Tombstone verhindert die Wiederbelebung
             // (analog Bereich-B-Merges).
@@ -793,10 +933,9 @@ enum SyncSnapshotImportService {
     private static func mergePreispunkte(
         _ remote: [PreispunktSnapshot], artikelZuordnung: [UUID: Artikel], geschaeftZuordnung: [UUID: Geschaeft], context: ModelContext
     ) {
-        let alleLokalen = (try? context.fetch(FetchDescriptor<Preispunkt>())) ?? []
         let geloeschteIDs = SyncTombstoneService.geloeschteIDs(art: SyncEntitaetsArt.preispunkt, context: context)
         for eintrag in remote {
-            guard alleLokalen.first(where: { $0.id == eintrag.id }) == nil else { continue }
+            guard !preispunktExistiertLokal(id: eintrag.id, context: context) else { continue }
             guard !geloeschteIDs.contains(eintrag.id) else { continue }
             let neuer = Preispunkt(
                 artikel: eintrag.artikelID.flatMap { artikelZuordnung[$0] },
@@ -864,15 +1003,17 @@ enum SyncSnapshotImportService {
     // MARK: - Debug: verwaiste fremde Exports aufräumen
 
     /// Debug-Werkzeug für manuelle Statuskonsolidierung
-    /// (``SyncOrdnerSettingsView``): löscht `export.json`-Dateien fremder
-    /// Peer-Ordner, deren `erzeugtAm` bereits über ``maximalesSnapshotAlter``
-    /// hinaus ist — dieselbe Schwelle, die ``importiereSnapshots(context:)``
-    /// ohnehin verwendet, um solche Snapshots beim Import zu ignorieren
-    /// (siehe dort); hier wird die verwaiste Datei zusätzlich sichtbar aus dem
-    /// geteilten Ordner entfernt, statt nur beim Import stillschweigend
-    /// übersprungen zu werden. Rührt weder den eigenen Export noch fremde
-    /// Event-Ordner an. Rückgabewert meldet ausschließlich, ob der
-    /// Ordnerzugriff (Berechtigung) geklappt hat.
+    /// (``SyncOrdnerSettingsView``): löscht alle Paket-Dateien (GitHub #82:
+    /// `manifest.json`, `tombstones.json`, `stamm.json`, `lernen.json`,
+    /// `vorgaenge.json`, `preise.json`, den kompletten `kaeufe/`-Ordner)
+    /// fremder Peer-Ordner, deren `manifest.erzeugtAm` bereits über
+    /// ``maximalesSnapshotAlter`` hinaus ist — dieselbe Schwelle, die
+    /// ``importiereSnapshots(context:)`` ohnehin verwendet, um solche Peers
+    /// beim Import zu ignorieren (siehe dort); hier werden die verwaisten
+    /// Dateien zusätzlich sichtbar aus dem geteilten Ordner entfernt, statt
+    /// nur beim Import stillschweigend übersprungen zu werden. Rührt weder
+    /// den eigenen Export noch fremde Event-Ordner an. Rückgabewert meldet
+    /// ausschließlich, ob der Ordnerzugriff (Berechtigung) geklappt hat.
     @discardableResult
     @MainActor
     static func raeumeVerwaisteFremdeExportsAuf() async -> Bool {
@@ -890,10 +1031,23 @@ enum SyncSnapshotImportService {
         ) else { return true }
 
         for peerOrdner in peerVerzeichnisse where !PeerOrdnerName.gehoertZu(peerOrdner.lastPathComponent, geraeteID: eigeneGeraeteID) {
-            let exportURL = SyncSnapshotExportService.exportURL(fuerPeer: peerOrdner.lastPathComponent, in: syncOrdner)
-            guard let snapshot = await ladeSnapshot(von: exportURL) else { continue }
-            guard Date().timeIntervalSince(snapshot.erzeugtAm) > maximalesSnapshotAlter else { continue }
-            loescheKoordiniert(exportURL)
+            let peerName = peerOrdner.lastPathComponent
+            guard let manifest = await ladeManifest(von: SyncSnapshotExportService.manifestURL(fuerPeer: peerName, in: syncOrdner)) else { continue }
+            guard Date().timeIntervalSince(manifest.erzeugtAm) > maximalesSnapshotAlter else { continue }
+            for url in [
+                SyncSnapshotExportService.manifestURL(fuerPeer: peerName, in: syncOrdner),
+                SyncSnapshotExportService.tombstonesURL(fuerPeer: peerName, in: syncOrdner),
+                SyncSnapshotExportService.stammURL(fuerPeer: peerName, in: syncOrdner),
+                SyncSnapshotExportService.lernenURL(fuerPeer: peerName, in: syncOrdner),
+                SyncSnapshotExportService.vorgaengeURL(fuerPeer: peerName, in: syncOrdner),
+                SyncSnapshotExportService.preiseURL(fuerPeer: peerName, in: syncOrdner),
+            ] {
+                loescheKoordiniert(url)
+            }
+            // `loescheKoordiniert` entfernt via `FileManager.removeItem`, das
+            // auch einen kompletten (Unter-)Ordner rekursiv löscht — kein
+            // separates Verzeichnis-Löschwerkzeug nötig.
+            loescheKoordiniert(SyncSnapshotExportService.kaeufeOrdner(fuerPeer: peerName, in: syncOrdner))
         }
         return true
     }

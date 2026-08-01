@@ -126,12 +126,16 @@ eine der beiden Ausnahmen greift:
    wurde, bevor ihre ID je Teil eines Snapshots wurde) — nach Ablauf der Frist
    wird das Event aufgegeben statt endlos weiterversucht.
 
-## 4. Bereich B/C/D — Snapshot
+## 4. Bereich B/C/D — Sync-Paket
 
-`SyncSnapshot` (JSON, `SyncSnapshotExportService.erstelleSnapshot(context:)`)
-— vollständiger Stammdaten-/Historien-/Lern-Stand, bei jedem Sync-Zyklus aus
-dem aktuellen lokalen Modellzustand neu abgeleitet (nicht inkrementell wie
-Bereich A) und nach `peers/{eigeneGeraeteID}/export.json` geschrieben.
+**Seit GitHub #82 mehrere Dateien statt einer `export.json`** — Layout,
+Fingerabdruck-pro-Teil und Begründung (Append-Log für die Kaufhistorie statt
+Voll-Rebuild, harter Formatschnitt) stehen vollständig in
+`docs/EXPORT_PAKET_UMBAU.md`. Der bisherige `SyncSnapshot`-Monolith-Typ bleibt
+nur noch für den lokalen Backup-Pfad (`SyncErsetzenService`, GitHub #63)
+bestehen. Die folgenden Unterabschnitte (Matching-Regeln, „nie destruktiv",
+G-Counter, baumelnde Referenzen, Fingerabdruck-Prinzip) gelten unverändert für
+beide Pfade — sie sind unabhängig vom Datei-Layout.
 
 ### 4.1 Grundprinzip: nie destruktiv
 
@@ -342,9 +346,9 @@ passiert dadurch an einer einzigen Stelle für beide Auslöser.
   getröpfelt ist oder gerade akut wächst.
 - **Manuelle Statuskonsolidierung** (Einstellungen → Debugging): „Events
   aufräumen" gibt aktuell nicht anwendbare empfangene Events sofort auf
-  (statt die 48h-Frist aus Abschnitt 3 abzuwarten); „Export.json aufräumen"
-  erzwingt einen frischen eigenen Voll-Export und löscht verwaiste
-  `export.json`-Dateien von Peers jenseits der 30-Tage-Altersgrenze (Abschnitt
+  (statt die 48h-Frist aus Abschnitt 3 abzuwarten); „Sync-Paket aufräumen"
+  erzwingt ein frisches eigenes Paket (`docs/EXPORT_PAKET_UMBAU.md`) und löscht
+  verwaiste Paket-Dateien von Peers jenseits der 30-Tage-Altersgrenze (Abschnitt
   8); „KaufEintraege jetzt bereinigen" ruft
   `KaufEintragBereinigungService.bereinigen(context:)` direkt auf (statt über
   die 24h-Sperre von `automatischBereinigenFallsFaellig`) — z.B. um einen Fix
@@ -389,12 +393,13 @@ zeigt ihn in `DebuggingView` an, Rückgänge rot markiert — das bestehende
 „Backup wiederherstellen" bleibt direkt daneben als Rückgängig-Option
 sichtbar.
 
-**Verwaiste Peer-Exports:** `export.json`-Dateien von Peers, deren `erzeugtAm`
-über `SyncSnapshotImportService.maximalesSnapshotAlter` (30 Tage) hinaus ist,
-werden beim Import ignoriert (verwaister Peer-Ordner aus einer früheren
-Testinstallation, jede Neuinstallation erzeugt eine neue Geräte-ID) und
-lassen sich über „Export.json aufräumen" (Abschnitt 7) zusätzlich sichtbar
-aus dem geteilten Ordner entfernen.
+**Verwaiste Peer-Exports:** Sync-Pakete (`docs/EXPORT_PAKET_UMBAU.md`) von
+Peers, deren `manifest.erzeugtAm` über `SyncSnapshotImportService.maximalesSnapshotAlter`
+(30 Tage) hinaus ist, werden beim Import ignoriert (verwaister Peer-Ordner aus
+einer früheren Testinstallation, jede Neuinstallation erzeugt eine neue
+Geräte-ID) und lassen sich über „Sync-Paket aufräumen" (Abschnitt 7)
+zusätzlich sichtbar aus dem geteilten Ordner entfernen — inklusive des
+kompletten `kaeufe/`-Ordners, aber ohne `events/` anzutasten.
 
 ## 9. Bekannte Grenzen
 

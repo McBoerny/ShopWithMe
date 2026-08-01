@@ -203,9 +203,10 @@ private struct StatuskonsolidierungSection: View {
                 }
                 .disabled(wirdAusgefuehrt)
 
-                Button("Export.json aufräumen") {
-                    fuehreAus("Export.json aufgeräumt.") {
-                        await SyncSnapshotExportService.erzwingeFrischenExport(context: modelContext)
+                Button("Sync-Paket aufräumen") {
+                    fuehreAus("Sync-Paket aufgeräumt.") {
+                        await SyncSnapshotExportService.erzwingeFrischesPaket(context: modelContext)
+                        await SyncKaeufeExportService.exportiereNeueKaeufe(context: modelContext)
                         await SyncSnapshotImportService.raeumeVerwaisteFremdeExportsAuf()
                     }
                 }
@@ -243,7 +244,7 @@ private struct StatuskonsolidierungSection: View {
             } header: {
                 Text("Statuskonsolidierung erzwingen")
             } footer: {
-                Text("„Events aufräumen“ gibt aktuell nicht anwendbare empfangene Events sofort auf, statt die automatische 48h-Frist abzuwarten. „Export.json aufräumen“ erzwingt einen frischen eigenen Export und löscht verwaiste export.json-Dateien von Peers, die die 30-Tage-Altersgrenze überschritten haben. „KaufEintraege jetzt bereinigen“ löst die sonst höchstens einmal täglich automatisch laufende Bereinigung abgeschlossener und verwaister KaufEintraege sofort aus.")
+                Text("„Events aufräumen“ gibt aktuell nicht anwendbare empfangene Events sofort auf, statt die automatische 48h-Frist abzuwarten. „Sync-Paket aufräumen“ erzwingt ein frisches eigenes Paket (Stammdaten/Lernen/Vorgänge/Preise/Tombstones sowie die Kaufhistorie) und löscht verwaiste Paket-Dateien von Peers, die die 30-Tage-Altersgrenze überschritten haben. „KaufEintraege jetzt bereinigen“ löst die sonst höchstens einmal täglich automatisch laufende Bereinigung abgeschlossener und verwaister KaufEintraege sofort aus.")
             }
         }
     }
