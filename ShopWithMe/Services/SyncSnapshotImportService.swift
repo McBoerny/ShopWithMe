@@ -227,21 +227,34 @@ enum SyncSnapshotImportService {
     ) {
         SyncPeerInfo.aktualisiere(peerGeraeteID: peerGeraeteID, geraeteName: geraeteName, zuletztGesehen: erzeugtAm, context: context)
 
-        mergeTombstones(tombstones, context: context)
+        // Einmal für den gesamten Peer-Merge-Durchlauf geladen statt pro
+        // Remote-Eintrag einzeln gefetcht (Performance-Fund, Muster wie
+        // ``SyncTombstoneService/geloeschteIDs(art:context:)``) — sicher, weil
+        // innerhalb eines einzelnen Durchlaufs keine der unten aufgerufenen
+        // `mergeX`-Funktionen einen Alias auflöst, den eine ANDERE Funktion
+        // (oder ein früherer Schleifendurchlauf derselben Funktion) gerade erst
+        // in diesem selben Durchlauf registriert hat (jede Art wird nur von
+        // genau einer `mergeX`-Funktion aufgelöst, jeder Eintrag hat eine
+        // eigene `fremdeID`). Der nächste Peer in der äußeren Schleife
+        // (``importiereSnapshots``) bekommt wieder eine frische Map inklusive
+        // aller inzwischen registrierten Aliase.
+        let aliase = SyncEntitaetsAliasService.alleAliaseNachArt(context: context)
+
+        mergeTombstones(tombstones, aliase: aliase, context: context)
 
         let typZuordnung = mergeGeschaeftsTypen(stamm.geschaeftsTypen, context: context)
-        let kategorieZuordnung = mergeArtikelKategorien(stamm.artikelKategorien, typZuordnung: typZuordnung, context: context)
+        let kategorieZuordnung = mergeArtikelKategorien(stamm.artikelKategorien, typZuordnung: typZuordnung, aliase: aliase, context: context)
         let geschaeftZuordnung = mergeGeschaefte(
             stamm.geschaefte, typZuordnung: typZuordnung, kategorieZuordnung: kategorieZuordnung,
-            peerGeraeteID: peerGeraeteID, context: context
+            peerGeraeteID: peerGeraeteID, aliase: aliase, context: context
         )
-        let artikelZuordnung = mergeArtikel(stamm.artikel, kategorieZuordnung: kategorieZuordnung, context: context)
-        let listeZuordnung = mergeEinkaufslisten(stamm.einkaufslisten, context: context)
+        let artikelZuordnung = mergeArtikel(stamm.artikel, kategorieZuordnung: kategorieZuordnung, aliase: aliase, context: context)
+        let listeZuordnung = mergeEinkaufslisten(stamm.einkaufslisten, aliase: aliase, context: context)
         mergeEinkaufslistenEintraege(
             stamm.einkaufslistenEintraege, listeZuordnung: listeZuordnung, artikelZuordnung: artikelZuordnung, context: context
         )
         let einkaufsvorgangZuordnung = mergeEinkaufsvorgaenge(
-            vorgaenge.einkaufsvorgaenge, geschaeftZuordnung: geschaeftZuordnung, listeZuordnung: listeZuordnung, context: context
+            vorgaenge.einkaufsvorgaenge, geschaeftZuordnung: geschaeftZuordnung, listeZuordnung: listeZuordnung, aliase: aliase, context: context
         )
         mergeKaufEintraege(
             kaeufe, artikelZuordnung: artikelZuordnung, einkaufsvorgangZuordnung: einkaufsvorgangZuordnung,
@@ -269,21 +282,24 @@ enum SyncSnapshotImportService {
         // Läuft bewusst zuerst — siehe Typ-Doku „Architektur-Revision
         // Alternative A": ein frisch gelerntes Tombstone soll die
         // nachfolgenden „create new"-Zweige direkt greifen.
-        mergeTombstones(snapshot.tombstones, context: context)
+        // Alias-Map einmal geladen statt pro Eintrag gefetcht — siehe
+        // ausführliche Begründung in ``mergePaket(tombstones:stamm:lernen:vorgaenge:preise:kaeufe:geraeteName:peerGeraeteID:erzeugtAm:context:)``.
+        let aliase = SyncEntitaetsAliasService.alleAliaseNachArt(context: context)
+        mergeTombstones(snapshot.tombstones, aliase: aliase, context: context)
 
         let typZuordnung = mergeGeschaeftsTypen(snapshot.geschaeftsTypen, context: context)
-        let kategorieZuordnung = mergeArtikelKategorien(snapshot.artikelKategorien, typZuordnung: typZuordnung, context: context)
+        let kategorieZuordnung = mergeArtikelKategorien(snapshot.artikelKategorien, typZuordnung: typZuordnung, aliase: aliase, context: context)
         let geschaeftZuordnung = mergeGeschaefte(
             snapshot.geschaefte, typZuordnung: typZuordnung, kategorieZuordnung: kategorieZuordnung,
-            peerGeraeteID: peerGeraeteID, context: context
+            peerGeraeteID: peerGeraeteID, aliase: aliase, context: context
         )
-        let artikelZuordnung = mergeArtikel(snapshot.artikel, kategorieZuordnung: kategorieZuordnung, context: context)
-        let listeZuordnung = mergeEinkaufslisten(snapshot.einkaufslisten, context: context)
+        let artikelZuordnung = mergeArtikel(snapshot.artikel, kategorieZuordnung: kategorieZuordnung, aliase: aliase, context: context)
+        let listeZuordnung = mergeEinkaufslisten(snapshot.einkaufslisten, aliase: aliase, context: context)
         mergeEinkaufslistenEintraege(
             snapshot.einkaufslistenEintraege, listeZuordnung: listeZuordnung, artikelZuordnung: artikelZuordnung, context: context
         )
         let einkaufsvorgangZuordnung = mergeEinkaufsvorgaenge(
-            snapshot.einkaufsvorgaenge, geschaeftZuordnung: geschaeftZuordnung, listeZuordnung: listeZuordnung, context: context
+            snapshot.einkaufsvorgaenge, geschaeftZuordnung: geschaeftZuordnung, listeZuordnung: listeZuordnung, aliase: aliase, context: context
         )
         mergeKaufEintraege(
             snapshot.kaufEintraege, artikelZuordnung: artikelZuordnung, einkaufsvorgangZuordnung: einkaufsvorgangZuordnung,
@@ -303,11 +319,9 @@ enum SyncSnapshotImportService {
     /// Übernimmt fremde Tombstones und löscht ein dadurch als entfernt
     /// markiertes, lokal noch vorhandenes Objekt — siehe ``SyncTombstone``.
     @MainActor
-    private static func mergeTombstones(_ remote: [SyncTombstoneSnapshot], context: ModelContext) {
+    private static func mergeTombstones(_ remote: [SyncTombstoneSnapshot], aliase: [String: [UUID: UUID]], context: ModelContext) {
         for tombstone in remote {
-            let lokaleID = SyncEntitaetsAliasService.aufgeloesteID(
-                fuer: tombstone.geloeschteID, art: tombstone.entitaetsArt, context: context
-            )
+            let lokaleID = SyncEntitaetsAliasService.aufgeloesteID(fuer: tombstone.geloeschteID, art: tombstone.entitaetsArt, in: aliase)
             SyncTombstoneService.markiereGeloescht(art: tombstone.entitaetsArt, id: lokaleID, context: context)
             loescheFallsVorhanden(art: tombstone.entitaetsArt, id: lokaleID, context: context)
         }
@@ -403,17 +417,23 @@ enum SyncSnapshotImportService {
 
     @MainActor
     private static func mergeArtikelKategorien(
-        _ remote: [ArtikelKategorieSnapshot], typZuordnung: [UUID: GeschaeftTyp], context: ModelContext
+        _ remote: [ArtikelKategorieSnapshot], typZuordnung: [UUID: GeschaeftTyp], aliase: [String: [UUID: UUID]], context: ModelContext
     ) -> [UUID: ArtikelKategorie] {
         var zuordnung: [UUID: ArtikelKategorie] = [:]
         let alleLokalen = (try? context.fetch(FetchDescriptor<ArtikelKategorie>())) ?? []
+        // O(1) ID-Treffer statt linearem `first(where:)` pro Remote-Eintrag
+        // (Performance-Fund) — der Namens-Fallback direkt darunter bleibt ein
+        // linearer Scan: `localizedCaseInsensitiveCompare` ist locale-abhängig
+        // und ließe sich nicht verlustfrei in einen Dictionary-Schlüssel
+        // (z.B. `.lowercased()`) übersetzen, ohne das Matching-Verhalten in
+        // Rand-Locales zu verändern — dieser Zweig greift zudem nur für
+        // tatsächlich neue, noch nicht per ID/Alias bekannte Einträge.
+        let alleLokalenNachID = Dictionary(alleLokalen.map { ($0.id, $0) }, uniquingKeysWith: { erster, _ in erster })
         let geloeschteIDs = SyncTombstoneService.geloeschteIDs(art: SyncEntitaetsArt.artikelKategorie, context: context)
         for eintrag in remote {
-            let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(
-                fuer: eintrag.id, art: SyncEntitaetsArt.artikelKategorie, context: context
-            )
+            let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(fuer: eintrag.id, art: SyncEntitaetsArt.artikelKategorie, in: aliase)
             let lokal: ArtikelKategorie
-            if let bekannte = alleLokalen.first(where: { $0.id == aufgeloesteID }) {
+            if let bekannte = alleLokalenNachID[aufgeloesteID] {
                 lokal = bekannte
             } else if let namensTreffer = alleLokalen.first(where: { $0.name.localizedCaseInsensitiveCompare(eintrag.name) == .orderedSame }) {
                 if namensTreffer.id != eintrag.id {
@@ -443,22 +463,26 @@ enum SyncSnapshotImportService {
     @MainActor
     private static func mergeGeschaefte(
         _ remote: [GeschaeftSnapshot], typZuordnung: [UUID: GeschaeftTyp], kategorieZuordnung: [UUID: ArtikelKategorie],
-        peerGeraeteID: String, context: ModelContext
+        peerGeraeteID: String, aliase: [String: [UUID: UUID]], context: ModelContext
     ) -> [UUID: Geschaeft] {
         var zuordnung: [UUID: Geschaeft] = [:]
         let alleLokalen = (try? context.fetch(FetchDescriptor<Geschaeft>())) ?? []
+        // O(1) ID-Treffer statt linearem Scan — siehe Begründung in
+        // ``mergeArtikelKategorien(_:typZuordnung:aliase:context:)`` (der
+        // Orts-Fallback direkt darunter bleibt linear, da
+        // ``GeschaeftErkennungService/istGleicherOrt(nameA:koordinatenA:nameB:koordinatenB:)``
+        // keine dictionary-taugliche Gleichheit ist).
+        let alleLokalenNachID = Dictionary(alleLokalen.map { ($0.id, $0) }, uniquingKeysWith: { erster, _ in erster })
         let geloeschteIDs = SyncTombstoneService.geloeschteIDs(art: SyncEntitaetsArt.geschaeft, context: context)
         for eintrag in remote {
             let remoteKoordinaten: (breitengrad: Double, laengengrad: Double)? = {
                 guard let b = eintrag.breitengrad, let l = eintrag.laengengrad else { return nil }
                 return (b, l)
             }()
-            let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(
-                fuer: eintrag.id, art: SyncEntitaetsArt.geschaeft, context: context
-            )
+            let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(fuer: eintrag.id, art: SyncEntitaetsArt.geschaeft, in: aliase)
 
             let lokal: Geschaeft
-            if let bekanntes = alleLokalen.first(where: { $0.id == aufgeloesteID }) {
+            if let bekanntes = alleLokalenNachID[aufgeloesteID] {
                 lokal = bekanntes
             } else if let vorhandenes = alleLokalen.first(where: {
                 GeschaeftErkennungService.istGleicherOrt(
@@ -524,16 +548,17 @@ enum SyncSnapshotImportService {
 
     @MainActor
     private static func mergeArtikel(
-        _ remote: [ArtikelSnapshot], kategorieZuordnung: [UUID: ArtikelKategorie], context: ModelContext
+        _ remote: [ArtikelSnapshot], kategorieZuordnung: [UUID: ArtikelKategorie], aliase: [String: [UUID: UUID]], context: ModelContext
     ) -> [UUID: Artikel] {
         var zuordnung: [UUID: Artikel] = [:]
         let alleLokalen = (try? context.fetch(FetchDescriptor<Artikel>())) ?? []
+        // O(1) ID-Treffer statt linearem Scan — siehe Begründung in
+        // ``mergeArtikelKategorien(_:typZuordnung:aliase:context:)``.
+        let alleLokalenNachID = Dictionary(alleLokalen.map { ($0.id, $0) }, uniquingKeysWith: { erster, _ in erster })
         let geloeschteIDs = SyncTombstoneService.geloeschteIDs(art: SyncEntitaetsArt.artikel, context: context)
         for eintrag in remote {
-            let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(
-                fuer: eintrag.id, art: SyncEntitaetsArt.artikel, context: context
-            )
-            if let bekannter = alleLokalen.first(where: { $0.id == aufgeloesteID }) {
+            let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(fuer: eintrag.id, art: SyncEntitaetsArt.artikel, in: aliase)
+            if let bekannter = alleLokalenNachID[aufgeloesteID] {
                 vervollstaendige(bekannter, mit: eintrag, kategorieZuordnung: kategorieZuordnung)
                 zuordnung[eintrag.id] = bekannter
                 continue
@@ -581,15 +606,18 @@ enum SyncSnapshotImportService {
     /// weiterhin die eigene (fast leere) Liste zeigte (GitHub #52-Nachfolgefund).
     /// Das war kein Rand-, sondern der Standardfall bei jedem Gerätebeitritt.
     @MainActor
-    private static func mergeEinkaufslisten(_ remote: [EinkaufslisteSnapshot], context: ModelContext) -> [UUID: Einkaufsliste] {
+    private static func mergeEinkaufslisten(
+        _ remote: [EinkaufslisteSnapshot], aliase: [String: [UUID: UUID]], context: ModelContext
+    ) -> [UUID: Einkaufsliste] {
         var zuordnung: [UUID: Einkaufsliste] = [:]
         let alleLokalen = (try? context.fetch(FetchDescriptor<Einkaufsliste>())) ?? []
+        // O(1) ID-Treffer statt linearem Scan — siehe Begründung in
+        // ``mergeArtikelKategorien(_:typZuordnung:aliase:context:)``.
+        let alleLokalenNachID = Dictionary(alleLokalen.map { ($0.id, $0) }, uniquingKeysWith: { erster, _ in erster })
         let geloeschteIDs = SyncTombstoneService.geloeschteIDs(art: SyncEntitaetsArt.einkaufsliste, context: context)
         for eintrag in remote {
-            let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(
-                fuer: eintrag.id, art: SyncEntitaetsArt.einkaufsliste, context: context
-            )
-            if let bekannte = alleLokalen.first(where: { $0.id == aufgeloesteID }) {
+            let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(fuer: eintrag.id, art: SyncEntitaetsArt.einkaufsliste, in: aliase)
+            if let bekannte = alleLokalenNachID[aufgeloesteID] {
                 zuordnung[eintrag.id] = bekannte
                 continue
             }
@@ -636,11 +664,17 @@ enum SyncSnapshotImportService {
         _ remote: [EinkaufslistenEintragSnapshot], listeZuordnung: [UUID: Einkaufsliste], artikelZuordnung: [UUID: Artikel],
         context: ModelContext
     ) {
+        guard !remote.isEmpty else { return }
+        // Einmal vor der Schleife geladen statt pro Remote-Eintrag neu gefetcht
+        // (Performance-Fund): `mergeEinkaufsvorgaenge` legt neue Vorgänge erst
+        // NACH dieser Funktion an (siehe Aufrufreihenfolge in `mergePaket`), der
+        // Bestand ist während dieses gesamten Durchlaufs also bereits vollständig.
+        let alleVorgaenge = (try? context.fetch(FetchDescriptor<Einkaufsvorgang>())) ?? []
         for eintrag in remote {
             guard let liste = listeZuordnung[eintrag.einkaufslisteID],
                   let artikel = artikelZuordnung[eintrag.artikelID],
                   !liste.enthaelt(artikel),
-                  !istBereitsAbgehakt(artikel, aufListe: liste, context: context)
+                  !istBereitsAbgehakt(artikel, aufListe: liste, alleVorgaenge: alleVorgaenge, context: context)
             else { continue }
             context.insert(EinkaufslistenEintrag(einkaufsliste: liste, artikel: artikel, menge: eintrag.menge, notiz: eintrag.notiz))
         }
@@ -665,9 +699,10 @@ enum SyncSnapshotImportService {
     /// legitim neu zur Liste hinzugefügt wurde, nie wieder über dieses
     /// Sicherheitsnetz zurückkommen.
     @MainActor
-    private static func istBereitsAbgehakt(_ artikel: Artikel, aufListe liste: Einkaufsliste, context: ModelContext) -> Bool {
-        let vorgaengeFuerListe = (((try? context.fetch(FetchDescriptor<Einkaufsvorgang>())) ?? []) as [Einkaufsvorgang])
-            .filter { $0.einkaufsliste == liste }
+    private static func istBereitsAbgehakt(
+        _ artikel: Artikel, aufListe liste: Einkaufsliste, alleVorgaenge: [Einkaufsvorgang], context: ModelContext
+    ) -> Bool {
+        let vorgaengeFuerListe = alleVorgaenge.filter { $0.einkaufsliste == liste }
         return vorgaengeFuerListe.contains { vorgang in
             guard vorgang.kaufEintraege.contains(where: { $0.artikel == artikel }) else { return false }
             guard vorgang.endZeit != nil else { return true }
@@ -734,7 +769,7 @@ enum SyncSnapshotImportService {
     @MainActor
     private static func mergeEinkaufsvorgaenge(
         _ remote: [EinkaufsvorgangSnapshot], geschaeftZuordnung: [UUID: Geschaeft], listeZuordnung: [UUID: Einkaufsliste],
-        context: ModelContext
+        aliase: [String: [UUID: UUID]], context: ModelContext
     ) -> [UUID: Einkaufsvorgang] {
         var zuordnung: [UUID: Einkaufsvorgang] = [:]
         // `var` statt `let`: neu angelegte Vorgänge werden unten sofort
@@ -743,17 +778,23 @@ enum SyncSnapshotImportService {
         // aktuellen Live-Zustand, nur neu eingefügte Objekte fehlen der
         // beim Funktionsstart einmalig gefetchten Liste sonst.
         var alleLokalen = (try? context.fetch(FetchDescriptor<Einkaufsvorgang>())) ?? []
+        // O(1) ID-Treffer statt linearem Scan (Performance-Fund) — muss analog
+        // zu `alleLokalen` bei jeder Neuanlage unten mitgeführt werden, sonst
+        // fände ein späterer `eintrag` derselben Schleife einen gerade erst
+        // angelegten Vorgang über den `bekannter`-Zweig nicht (der
+        // `offenerTreffer`-Zweig bleibt bewusst ein linearer Scan über
+        // `alleLokalen`, da er einen zusammengesetzten, nicht dictionary-
+        // tauglichen Schlüssel aus `endZeit`/`geschaeft`/`einkaufsliste` prüft).
+        var alleLokalenNachID = Dictionary(alleLokalen.map { ($0.id, $0) }, uniquingKeysWith: { erster, _ in erster })
         let geloeschteIDs = SyncTombstoneService.geloeschteIDs(art: SyncEntitaetsArt.einkaufsvorgang, context: context)
         for eintrag in remote {
-            let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(
-                fuer: eintrag.id, art: SyncEntitaetsArt.einkaufsvorgang, context: context
-            )
+            let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(fuer: eintrag.id, art: SyncEntitaetsArt.einkaufsvorgang, in: aliase)
             let remoteGeschaeft = eintrag.geschaeftID.flatMap { geschaeftZuordnung[$0] }
             let remoteListe = eintrag.einkaufslisteID.flatMap { listeZuordnung[$0] }
 
             let vorhandener: Einkaufsvorgang
             let umgeleitetAufNachfolger: Bool
-            if let bekannter = alleLokalen.first(where: { $0.id == aufgeloesteID }) {
+            if let bekannter = alleLokalenNachID[aufgeloesteID] {
                 if bekannter.istAbgeschlossen, let liste = bekannter.einkaufsliste,
                    let offenerNachfolger = Einkaufsvorgang.offenerNachfolger(
                        fuerListe: liste, bevorzugtesGeschaeft: bekannter.geschaeft, context: context
@@ -824,6 +865,7 @@ enum SyncSnapshotImportService {
                 // `offenerTreffer`-Zweig und legt für dieselbe Liste
                 // fälschlich einen weiteren, eigenständig offenen Vorgang an.
                 alleLokalen.append(neuer)
+                alleLokalenNachID[neuer.id] = neuer
                 vorhandener = neuer
                 umgeleitetAufNachfolger = false
             }

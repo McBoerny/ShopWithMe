@@ -50,8 +50,18 @@ enum SyncSnapshotExportService {
         return encoder
     }()
 
+    /// `mitKaufEintraegen: false` überspringt Fetch und Mapping der (laut
+    /// Analyse-Fund oft größten) `KaufEintrag`-Historie — für
+    /// ``erstellePaketTeile(context:)`` (Peer-Zyklus-Pfad), der
+    /// `snapshot.kaufEintraege` nie verwendet (seit GitHub #82 läuft die
+    /// Kaufhistorie separat über ``SyncKaeufeExportService``). Ohne diesen
+    /// Parameter lud jeder 5s/60s-Zyklus die komplette lokale Kaufhistorie aus
+    /// SwiftData und kodierte sie in Snapshot-Structs, nur um das Ergebnis
+    /// sofort zu verwerfen. Der Backup-Pfad (``SyncErsetzenService``) braucht
+    /// weiterhin die volle Historie und lässt den Parameter auf seinem
+    /// Default `true`.
     @MainActor
-    static func erstelleSnapshot(context: ModelContext) -> SyncSnapshot {
+    static func erstelleSnapshot(context: ModelContext, mitKaufEintraegen: Bool = true) -> SyncSnapshot {
         let alleGeschaeftsTypen = (try? context.fetch(FetchDescriptor<GeschaeftTyp>())) ?? []
         let gueltigeGeschaeftsTypIDs = Set(alleGeschaeftsTypen.map(\.persistentModelID))
         let geschaeftsTypen = alleGeschaeftsTypen.map {
@@ -111,10 +121,11 @@ enum SyncSnapshotExportService {
             )
         }
 
-        let einkaufslisten = ((try? context.fetch(FetchDescriptor<Einkaufsliste>())) ?? []).map {
+        let alleEinkaufslisten = (try? context.fetch(FetchDescriptor<Einkaufsliste>())) ?? []
+        let gueltigeEinkaufslistenIDs = Set(alleEinkaufslisten.map(\.persistentModelID))
+        let einkaufslisten = alleEinkaufslisten.map {
             EinkaufslisteSnapshot(id: $0.id, name: $0.name, erstelltAm: $0.erstelltAm)
         }
-        let gueltigeEinkaufslistenIDs = Set((try? context.fetch(FetchDescriptor<Einkaufsliste>()))?.map(\.persistentModelID) ?? [])
 
         // Vollständiger Einkaufslisten-Inhalt (Architektur-Revision „Alternative
         // A") — additives Sicherheitsnetz neben den Bereich-A-Events, siehe
@@ -129,7 +140,9 @@ enum SyncSnapshotExportService {
                 )
             }
 
-        let einkaufsvorgaenge = ((try? context.fetch(FetchDescriptor<Einkaufsvorgang>())) ?? []).map {
+        let alleEinkaufsvorgaenge = (try? context.fetch(FetchDescriptor<Einkaufsvorgang>())) ?? []
+        let gueltigeEinkaufsvorgangIDs = Set(alleEinkaufsvorgaenge.map(\.persistentModelID))
+        let einkaufsvorgaenge = alleEinkaufsvorgaenge.map {
             EinkaufsvorgangSnapshot(
                 id: $0.id,
                 geschaeftID: sichereID($0.geschaeft, gueltigeIDs: gueltigeGeschaeftIDs),
@@ -138,22 +151,23 @@ enum SyncSnapshotExportService {
                 endZeit: $0.endZeit
             )
         }
-        let gueltigeEinkaufsvorgangIDs = Set((try? context.fetch(FetchDescriptor<Einkaufsvorgang>()))?.map(\.persistentModelID) ?? [])
 
-        let kaufEintraege = ((try? context.fetch(FetchDescriptor<KaufEintrag>())) ?? []).map {
-            KaufEintragSnapshot(
-                id: $0.id,
-                artikelID: sichereID($0.artikel, gueltigeIDs: gueltigeArtikelIDs),
-                einkaufsvorgangID: sichereID($0.einkaufsvorgang, gueltigeIDs: gueltigeEinkaufsvorgangIDs),
-                geschaeftID: sichereID($0.geschaeft, gueltigeIDs: gueltigeGeschaeftIDs),
-                kategorieID: sichereID($0.kategorie, gueltigeIDs: gueltigeKategorieIDs),
-                artikelNameSnapshot: $0.artikelNameSnapshot,
-                geschaeftNameSnapshot: $0.geschaeftNameSnapshot,
-                datum: $0.datum,
-                menge: $0.menge,
-                kategorieBesuchsIndex: $0.kategorieBesuchsIndex
-            )
-        }
+        let kaufEintraege = mitKaufEintraegen
+            ? ((try? context.fetch(FetchDescriptor<KaufEintrag>())) ?? []).map {
+                KaufEintragSnapshot(
+                    id: $0.id,
+                    artikelID: sichereID($0.artikel, gueltigeIDs: gueltigeArtikelIDs),
+                    einkaufsvorgangID: sichereID($0.einkaufsvorgang, gueltigeIDs: gueltigeEinkaufsvorgangIDs),
+                    geschaeftID: sichereID($0.geschaeft, gueltigeIDs: gueltigeGeschaeftIDs),
+                    kategorieID: sichereID($0.kategorie, gueltigeIDs: gueltigeKategorieIDs),
+                    artikelNameSnapshot: $0.artikelNameSnapshot,
+                    geschaeftNameSnapshot: $0.geschaeftNameSnapshot,
+                    datum: $0.datum,
+                    menge: $0.menge,
+                    kategorieBesuchsIndex: $0.kategorieBesuchsIndex
+                )
+            }
+            : []
 
         let preispunkte = ((try? context.fetch(FetchDescriptor<Preispunkt>())) ?? []).map {
             PreispunktSnapshot(
@@ -502,25 +516,25 @@ enum SyncSnapshotExportService {
         return preise
     }
 
-    /// Zerlegt einen frisch gebauten ``erstelleSnapshot(context:)`` in die
-    /// fünf unabhängig fingerabdruck-geprüften Paket-Teile — **bewusst kein
-    /// eigener, sparsamerer Fetch je Teil**: `stamm`/`lernen`/`vorgaenge`/
+    /// Zerlegt einen frisch gebauten ``erstelleSnapshot(context:mitKaufEintraegen:)``
+    /// in die fünf unabhängig fingerabdruck-geprüften Paket-Teile — **bewusst
+    /// kein eigener, sparsamerer Fetch je Teil**: `stamm`/`lernen`/`vorgaenge`/
     /// `preise`/`tombstones` sind klein und ihr Fetch war nie das Problem
     /// (Analyse-Fund: `kaufEintraege` allein machte 56% der Dateigröße aus,
     /// alles andere zusammen nur 44%). Der eigentliche Performance-Gewinn
-    /// entsteht dadurch, dass `kaufEintraege` HIER NICHT enthalten ist —
-    /// dieser Bereich wird separat und inkrementell über
-    /// ``SyncKaeufeExportService`` geschrieben, ohne die wachsende Historie
-    /// bei jedem Zyklus erneut zu kodieren. Wiederverwendung von
-    /// ``erstelleSnapshot(context:)`` hält diesen Code kurz und beweisbar
-    /// konsistent mit dem weiterhin unveränderten Backup-Pfad
-    /// (``SyncErsetzenService``).
+    /// entsteht durch `mitKaufEintraegen: false` — dieser Bereich wird separat
+    /// und inkrementell über ``SyncKaeufeExportService`` geschrieben, ohne die
+    /// wachsende Historie bei jedem Zyklus erneut aus SwiftData zu laden und
+    /// zu kodieren. Wiederverwendung von ``erstelleSnapshot(context:mitKaufEintraegen:)``
+    /// hält diesen Code kurz und beweisbar konsistent mit dem weiterhin
+    /// unveränderten Backup-Pfad (``SyncErsetzenService``, der die volle
+    /// Historie über den Default `mitKaufEintraegen: true` weiterhin bekommt).
     @MainActor
     static func erstellePaketTeile(context: ModelContext) -> (
         manifest: SyncPeerManifest, tombstones: [SyncTombstoneSnapshot], stamm: SyncStammSnapshot,
         lernen: SyncLernenSnapshot, vorgaenge: SyncVorgaengeSnapshot, preise: SyncPreisSnapshot
     ) {
-        let snapshot = erstelleSnapshot(context: context)
+        let snapshot = erstelleSnapshot(context: context, mitKaufEintraegen: false)
         let manifest = SyncPeerManifest(
             formatVersion: SyncPeerManifest.aktuelleFormatVersion, erzeugtAm: snapshot.erzeugtAm,
             geraeteID: snapshot.geraeteID, geraeteName: snapshot.geraeteName

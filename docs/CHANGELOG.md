@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.10 (Build 184) — Sync-Performance: redundante Fetches/lineare Scans in den Merge-Pfaden entfernt
+
+- **Analyse-Fund.** `erstelleSnapshot` fetchte `Einkaufsliste`/`Einkaufsvorgang`
+  je zweimal für die "gültige IDs"-Sets, obwohl die Objekte kurz zuvor bereits
+  geladen waren — jetzt aus dem vorhandenen Array abgeleitet statt neu gefetcht.
+- `mergeEinkaufslistenEintraege`/`istBereitsAbgehakt` fetchten bislang bei
+  JEDEM Remote-Eintrag erneut alle lokalen `Einkaufsvorgang`e — jetzt einmal
+  vor der Schleife geladen.
+- `erstellePaketTeile` (Peer-Zyklus-Pfad) baute bei jedem Sync-Zyklus die
+  komplette `KaufEintrag`-Historie (laut Analyse oft der größte Anteil), obwohl
+  das Ergebnis nie verwendet wurde (die Historie läuft seit GitHub #82 separat
+  über `SyncKaeufeExportService`) — `erstelleSnapshot(context:mitKaufEintraegen:)`
+  überspringt diesen Fetch jetzt für diesen Pfad.
+- Bereich-B-Merges (`mergeArtikelKategorien`/`mergeGeschaefte`/`mergeArtikel`/
+  `mergeEinkaufslisten`/`mergeEinkaufsvorgaenge`) suchten den ID-Treffer bisher
+  linear (`first(where:)`) über alle lokalen Objekte — jetzt per vorab
+  gebautem Dictionary in O(1). `SyncEntitaetsAliasService.aufgeloesteID`
+  fetchte zudem pro Remote-Eintrag einzeln; die fünf Merge-Funktionen nutzen
+  jetzt eine einmal pro Peer geladene Alias-Map (`alleAliaseNachArt`), analog
+  dem bestehenden `SyncTombstoneService.geloeschteIDs`-Muster. Reine
+  Performance-Änderung ohne Verhaltensänderung; für die heutige Datenmenge
+  nicht spürbar, aber ein Fund bei wachsendem Bestand.
+
 ## v0.10 (Build 183) — Fix: Paket-Teile fehlten dauerhaft nach Reaktivieren der Synchronisierung
 
 - **Live-Test-Fund.** Der in `UserDefaults` gespeicherte Fingerabdruck je

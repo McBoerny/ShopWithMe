@@ -15,10 +15,10 @@ import SwiftData
 /// lokalen Objekt zusammengeführt statt selbst angelegt zu werden).
 ///
 /// Bewusst generisch über `entitaetsArt` gehalten (nicht ein eigener Typ pro
-/// Modell) — aktuell nur für ``Artikel`` befüllt (der einzige Bereich-B-Typ,
-/// der sowohl namensbasiert gematcht wird als auch von Bereich-A-Events
-/// referenziert wird), aber ohne Mehraufwand auf weitere Typen erweiterbar,
-/// falls das künftig nötig wird.
+/// Modell) — befüllt für jeden namensbasiert gematchten Bereich-B-Typ
+/// (``ArtikelKategorie``, ``Geschaeft``, ``Artikel``, ``Einkaufsliste``,
+/// ``Einkaufsvorgang``, siehe `docs/DATENSYNCHRONISATION.md` Abschnitt 4.2),
+/// nicht nur für ``Artikel``.
 @Model
 final class SyncEntitaetsAlias {
     var id: UUID
@@ -54,6 +54,28 @@ enum SyncEntitaetsAliasService {
         )
         deskriptor.fetchLimit = 1
         return (try? context.fetch(deskriptor).first?.lokaleID) ?? fremdeID
+    }
+
+    /// Alle lokal bekannten Aliase, gruppiert nach `entitaetsArt` und je Art als
+    /// Fremd-ID→Lokale-ID-Dictionary — lädt die komplette Alias-Tabelle EINMAL,
+    /// statt für jede Auflösung einzeln zu fetchen (Muster wie
+    /// ``SyncTombstoneService/geloeschteIDs(art:context:)``, hier über alle
+    /// Arten gleichzeitig, weil z.B. `mergeTombstones` `entitaetsArt` pro
+    /// Eintrag wechselt). Für wiederholte Auflösungen innerhalb eines
+    /// Merge-Durchlaufs mit ``aufgeloesteID(fuer:art:in:)`` zu verwenden.
+    static func alleAliaseNachArt(context: ModelContext) -> [String: [UUID: UUID]] {
+        let alle = (try? context.fetch(FetchDescriptor<SyncEntitaetsAlias>())) ?? []
+        return Dictionary(grouping: alle, by: \.entitaetsArt)
+            .mapValues { eintraege in
+                Dictionary(eintraege.map { ($0.fremdeID, $0.lokaleID) }, uniquingKeysWith: { erster, _ in erster })
+            }
+    }
+
+    /// Wie ``aufgeloesteID(fuer:art:context:)``, aber gegen eine vorab per
+    /// ``alleAliaseNachArt(context:)`` geladene Map statt eines einzelnen
+    /// Fetches — für Merge-Schleifen, die dieselbe Art wiederholt auflösen.
+    static func aufgeloesteID(fuer fremdeID: UUID, art: String, in aliase: [String: [UUID: UUID]]) -> UUID {
+        aliase[art]?[fremdeID] ?? fremdeID
     }
 
     /// Registriert, dass `fremdeID` künftig als `lokaleID` aufzulösen ist — ohne

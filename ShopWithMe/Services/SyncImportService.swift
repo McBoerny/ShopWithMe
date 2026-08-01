@@ -336,7 +336,7 @@ enum SyncImportService {
     /// geschlossenen, für die aktuelle Einkaufsansicht unsichtbaren
     /// ``Einkaufsvorgang`` zurück — sichtbar als: abgehakte Artikel erscheinen
     /// auf dem anderen Gerät nicht, UND landen (weil
-    /// ``SyncSnapshotImportService/istBereitsAbgehakt(_:aufListe:context:)``
+    /// ``SyncSnapshotImportService/istBereitsAbgehakt(_:aufListe:alleVorgaenge:context:)``
     /// nur offene Vorgänge prüft) beim nächsten Snapshot-Merge wieder
     /// fälschlich auf der offenen Liste.
     ///
