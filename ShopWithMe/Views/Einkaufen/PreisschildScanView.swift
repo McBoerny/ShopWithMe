@@ -108,11 +108,21 @@ struct PreisschildScanView: View {
                     fuerErkannterName: ergebnis.artikelName,
                     in: bekannteAliase
                 )
+                // Tages-Kollisionsprüfung (GitHub #76-Folgearbeit), siehe
+                // ``BelegScanView`` für dasselbe Muster.
+                var bestehenderPreisHeute: Decimal?
+                if let artikel = gelernt?.artikel {
+                    bestehenderPreisHeute = PreispunktService.vorhandenerPunktHeute(
+                        artikel: artikel, geschaeft: geschaeft, amDatum: .now, context: modelContext
+                    )?.preis
+                    if bestehenderPreisHeute == ergebnis.preis { bestehenderPreisHeute = nil }
+                }
                 bearbeitbarePosition = BearbeitbarePreisschildPosition(
                     erkannterName: ergebnis.artikelName,
                     artikelName: gelernt?.alias ?? ergebnis.artikelName,
                     preisText: "\(ergebnis.preis.aufCentGerundet)",
-                    gelernterArtikel: gelernt?.artikel
+                    gelernterArtikel: gelernt?.artikel,
+                    bestehenderPreisHeute: bestehenderPreisHeute
                 )
             } catch {
                 fehlermeldung = error.localizedDescription
@@ -155,10 +165,21 @@ struct PreisschildScanView: View {
                 let artikel = gelernterArtikelReferenz?.resolved(in: modelContext) ?? passendesArtikel(fuer: name)
                 let produktName: String? = erkannterName.isEmpty ? nil : erkannterName
                 let alternativerName = leiteAlternativenNamenAb(eingegeben: name, erkannt: erkannterName)
-                PreispunktService.erfassen(
-                    preis: preis, artikel: artikel, geschaeft: geschaeftFrisch, datum: .now,
-                    produktName: produktName, alternativerName: alternativerName, nameFallback: name, context: modelContext
-                )
+
+                let behalteBestehenden = bearbeitbarePosition.bestehenderPreisHeute != nil
+                    && bearbeitbarePosition.behalteBestehendenPreisHeute
+                if bearbeitbarePosition.bestehenderPreisHeute != nil, !behalteBestehenden,
+                   let vorhandenerPunkt = PreispunktService.vorhandenerPunktHeute(
+                       artikel: artikel, geschaeft: geschaeftFrisch, amDatum: .now, context: modelContext
+                   ) {
+                    PreispunktService.ersetzeVorhandenenPunkt(vorhandenerPunkt, context: modelContext)
+                }
+                if !behalteBestehenden {
+                    PreispunktService.erfassen(
+                        preis: preis, artikel: artikel, geschaeft: geschaeftFrisch, datum: .now,
+                        produktName: produktName, alternativerName: alternativerName, nameFallback: name, context: modelContext
+                    )
+                }
                 ArtikelAlias.lernen(erkannterName: erkannterName, alternativerName: alternativerName, artikel: artikel, context: modelContext)
             }
             dismiss()
@@ -191,6 +212,10 @@ private struct BearbeitbarePreisschildPosition {
     var artikelName: String
     var preisText: String
     var gelernterArtikel: Artikel?
+    /// Siehe ``BearbeitbarePosition/bestehenderPreisHeute`` in ``BelegScanView``.
+    var bestehenderPreisHeute: Decimal? = nil
+    /// Siehe ``BearbeitbarePosition/behalteBestehendenPreisHeute`` in ``BelegScanView``.
+    var behalteBestehendenPreisHeute = false
 }
 
 /// Aufforderung, ein Preisschild-Foto aufzunehmen oder aus der Mediathek zu wählen.
@@ -282,6 +307,12 @@ private struct ErgebnisAnsicht: View {
                     Label("Wird verknüpft mit „\(artikel.name)“", systemImage: "checkmark.circle")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+                if let bestehenderPreisHeute = position.bestehenderPreisHeute {
+                    TagesKollisionZeile(
+                        bestehenderPreis: bestehenderPreisHeute,
+                        behalteBestehenden: $position.behalteBestehendenPreisHeute
+                    )
                 }
             } header: {
                 Text("Erkanntes Preisschild")

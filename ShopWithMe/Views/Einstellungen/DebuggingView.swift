@@ -63,6 +63,8 @@ struct DebuggingView: View {
 
             DatenintegritaetSection()
 
+            PreispunktVerdichtungSection()
+
             #if DEBUG
             SuchradiusUeberschreibungSection()
             #endif
@@ -354,6 +356,67 @@ private struct DatenintegritaetSection: View {
         } catch {
             resetFehlermeldung = error.localizedDescription
         }
+    }
+}
+
+/// Einstellbare Schwellwerte für ``PreispunktVerdichtungService`` (GitHub
+/// #76-Folgearbeit) — läuft automatisch für alle Nutzer, diese Sektion dient nur
+/// zum Nachjustieren/Testen der drei Stufen, nicht zum Ein-/Ausschalten des
+/// Features selbst. Gilt global für alle Geschäfte einheitlich.
+private struct PreispunktVerdichtungSection: View {
+    @Environment(\.modelContext) private var modelContext
+    @State private var maxProTag = PreispunktVerdichtungService.maxPunkteProTag
+    @State private var tageBisWoche = PreispunktVerdichtungService.tageBisWochenVerdichtung
+    @State private var tageBisMonat = PreispunktVerdichtungService.tageBisMonatsVerdichtung
+    @State private var letzteVerdichtung = PreispunktVerdichtungService.letzteVerdichtung
+    @State private var laeuft = false
+    @State private var letztesErgebnis: Int?
+
+    var body: some View {
+        Section {
+            Stepper("Max. Preispunkte pro Tag: \(maxProTag)", value: $maxProTag, in: 1...10)
+                .onChange(of: maxProTag) { _, neuerWert in
+                    PreispunktVerdichtungService.maxPunkteProTag = neuerWert
+                }
+            Stepper("Wochenverdichtung nach \(tageBisWoche) Tagen", value: $tageBisWoche, in: 1...90)
+                .onChange(of: tageBisWoche) { _, neuerWert in
+                    PreispunktVerdichtungService.tageBisWochenVerdichtung = neuerWert
+                }
+            Stepper("Monatsverdichtung nach \(tageBisMonat) Tagen", value: $tageBisMonat, in: 30...1095)
+                .onChange(of: tageBisMonat) { _, neuerWert in
+                    PreispunktVerdichtungService.tageBisMonatsVerdichtung = neuerWert
+                }
+
+            if let letzteVerdichtung {
+                LabeledContent("Letzte Verdichtung", value: letzteVerdichtung.formatted(date: .abbreviated, time: .shortened))
+            }
+            Button {
+                Task { await jetztVerdichten() }
+            } label: {
+                if laeuft {
+                    ProgressView()
+                } else {
+                    Text("Jetzt verdichten")
+                }
+            }
+            .disabled(laeuft)
+
+            if let letztesErgebnis {
+                Text(letztesErgebnis == 0 ? "Nichts zu verdichten gefunden." : "\(letztesErgebnis) Preispunkte verdichtet.")
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("Preishistorie-Verdichtung")
+        } footer: {
+            Text("Läuft automatisch für alle Nutzer im Hintergrund (kein Ein-/Ausschalter, nur die drei Schwellwerte hier). Pro Artikel/Geschäft und Tag bleiben höchstens so viele Preispunkte wie oben eingestellt (überzählige: nur die zuletzt beobachteten bleiben). Nach der Wochen-Frist werden ältere Tagespunkte pro Kalenderwoche auf den höchsten Preis reduziert, nach der Monats-Frist entsprechend pro Kalendermonat.")
+        }
+    }
+
+    private func jetztVerdichten() async {
+        laeuft = true
+        defer { laeuft = false }
+        letztesErgebnis = await PreispunktVerdichtungService.jetztVerdichten(context: modelContext)
+        letzteVerdichtung = PreispunktVerdichtungService.letzteVerdichtung
     }
 }
 

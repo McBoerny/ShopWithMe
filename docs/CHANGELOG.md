@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.10 (Build 175) — Preishistorie-Verdichtung (täglich → wöchentlich → monatlich)
+
+- **GitHub #76-Folgearbeit.** Neuer `PreispunktVerdichtungService`: reduziert alte
+  `Preispunkt`e stufenweise statt sie zu löschen — pro Tag höchstens ein Punkt
+  (überzählige: nur der zuletzt beobachtete bleibt), nach 7 Tagen pro Kalenderwoche
+  auf den höchsten Preis reduziert, nach 365 Tagen zusätzlich pro Kalendermonat.
+  Alle drei Schwellwerte im Debug-Menü einstellbar, läuft automatisch für alle
+  Nutzer (kein Ein-/Ausschalter). Details: `docs/PREISHISTORIE_VERDICHTUNG.md`.
+- Neue interaktive Tages-Kollisionsabfrage beim Scannen (`BelegScanView`/
+  `PreisschildScanView`, `TagesKollisionZeile`): existiert für Artikel+Geschäft
+  bereits heute ein abweichender Preis, zeigt die Prüf-Ansicht einen Hinweis mit
+  Umschalt-Button — Vorbelegung „wird ersetzt", der Anwender kann stattdessen den
+  bestehenden Preis behalten (z.B. bei einem offensichtlichen Scan-Fehler).
+
 ## v0.10 (Build 173) — Automatische Bereinigung verarbeiteter KaufEintraege (Phase 2)
 
 - **GitHub #76, Phase 2.** `PreisHistorieBereinigungService` zielt jetzt

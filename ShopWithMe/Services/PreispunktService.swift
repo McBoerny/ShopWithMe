@@ -59,4 +59,27 @@ enum PreispunktService {
             .filter { $0.geschaeft?.persistentModelID == geschaeftID }
             .max { $0.datum < $1.datum }
     }
+
+    /// Der aktuell bekannte Preispunkt für (`artikel`, `geschaeft`), falls sein
+    /// `datum` auf denselben Kalendertag wie `amDatum` fällt — Grundlage für die
+    /// interaktive Tages-Kollisionsabfrage beim Scannen (siehe `BelegScanView`/
+    /// `PreisschildScanView`, GitHub #76-Folgearbeit). `nil` ohne `artikel` (kein
+    /// sinnvoller Vergleichsschlüssel) oder ohne Treffer am selben Tag.
+    @MainActor
+    static func vorhandenerPunktHeute(artikel: Artikel?, geschaeft: Geschaeft?, amDatum: Date, context: ModelContext) -> Preispunkt? {
+        guard let artikel, let letzter = letzterPreispunkt(fuerArtikel: artikel, geschaeft: geschaeft, context: context)
+        else { return nil }
+        return Calendar.current.isDate(letzter.datum, inSameDayAs: amDatum) ? letzter : nil
+    }
+
+    /// Löscht `punkt` mit Tombstone — für den Fall, dass der Anwender bei einer
+    /// Tages-Kollision „neuen übernehmen" wählt (Standard) und der bestehende
+    /// Punkt vor dem Anlegen des neuen entfernt werden muss, statt beide
+    /// nebeneinander bestehen zu lassen (das würde erst die nächste
+    /// ``PreispunktVerdichtungService``-Verdichtung aufräumen).
+    @MainActor
+    static func ersetzeVorhandenenPunkt(_ punkt: Preispunkt, context: ModelContext) {
+        SyncTombstoneService.markiereGeloescht(art: SyncEntitaetsArt.preispunkt, id: punkt.id, context: context)
+        context.delete(punkt)
+    }
 }

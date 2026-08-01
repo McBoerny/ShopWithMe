@@ -21,7 +21,11 @@ Belegscans hinweg.
 - `ShopWithMe/Models/ArtikelAlias.swift` — gelernte Beleg-/Preisschild-Aliase
   (GitHub #76, vormals `KaufEintrag.gelernteZuordnung`), `passend(fuerErkannterName:in:)`.
 - `ShopWithMe/Services/PreispunktService.swift` — zentrale Schreiblogik: legt nur bei
-  tatsächlicher Preisänderung einen neuen `Preispunkt` an.
+  tatsächlicher Preisänderung einen neuen `Preispunkt` an; `vorhandenerPunktHeute(...)`/
+  `ersetzeVorhandenenPunkt(...)` für die Tages-Kollisionsabfrage (siehe
+  `docs/PREISHISTORIE_VERDICHTUNG.md`).
+- `ShopWithMe/DesignSystem/TagesKollisionZeile.swift` — Inline-Hinweis samt
+  Umschalt-Button, wenn für heute bereits ein abweichender Preis erfasst ist.
 - `ShopWithMe/Models/KaufEintrag.swift` — operative Buchungszeile eines laufenden
   Einkaufsvorgangs (Dedupe, `kategorieBesuchsIndex`), seit GitHub #76 ohne Preisrolle.
 - `ShopWithMe/Models/Geschaeft.swift` — `alternativeNamen`,
@@ -121,6 +125,10 @@ Belegscans hinweg.
      (`leiteAlternativenNamenAb`) und zusätzlich als `ArtikelAlias` gelernt — das ist
      die Quelle für das Mitlernen beim nächsten Scan (siehe „Mitlernen zwischen
      Belegscans“ unten).
+   - Existiert für Artikel+Geschäft bereits **heute** ein `Preispunkt` mit
+     abweichendem Preis, zeigt die Prüf-Ansicht dafür einen Hinweis mit
+     Umschalt-Button („wird ersetzt" ↔ „Bisherigen behalten") — siehe
+     `docs/PREISHISTORIE_VERDICHTUNG.md` → „Interaktive Tages-Kollisionsabfrage".
 
 ## Originalbeleg anzeigen
 

@@ -236,12 +236,26 @@ struct BelegScanView: View {
                         bekannteAliase: bekannteAliase,
                         alleArtikel: alleArtikel
                     )
+                    // Tages-Kollisionsprüfung (GitHub #76-Folgearbeit): existiert für
+                    // den zugeordneten Artikel bereits ein Preispunkt vom selben
+                    // Kalendertag mit abweichendem Preis, bekommt der Anwender die
+                    // Wahl, ihn zu ersetzen (Standard) oder zu behalten — siehe
+                    // ``PositionsZeile``/``uebernehmen()``. Nur möglich, wenn bereits
+                    // eine Artikel-Zuordnung UND ein Geschäft feststehen.
+                    var bestehenderPreisHeute: Decimal?
+                    if let artikel = zuordnung.artikel {
+                        bestehenderPreisHeute = PreispunktService.vorhandenerPunktHeute(
+                            artikel: artikel, geschaeft: erkanntesGeschaeft, amDatum: belegDatum, context: modelContext
+                        )?.preis
+                        if bestehenderPreisHeute == position.einzelpreis { bestehenderPreisHeute = nil }
+                    }
                     neuePositionen.append(BearbeitbarePosition(
                         erkannterName: position.artikelName,
                         artikelName: zuordnung.alias ?? zuordnung.artikel.flatMap { modelContext.existiertNochImStore($0) ? $0.name : nil } ?? position.artikelName,
                         preisText: "\(position.einzelpreis.aufCentGerundet)",
                         zugeordneterArtikel: zuordnung.artikel,
-                        boundingBox: scanErgebnis.ocrZeilen.boundingBox(fuerArtikelName: position.artikelName)
+                        boundingBox: scanErgebnis.ocrZeilen.boundingBox(fuerArtikelName: position.artikelName),
+                        bestehenderPreisHeute: bestehenderPreisHeute
                     ))
                 }
                 bearbeitbarePositionen = neuePositionen
@@ -368,10 +382,23 @@ struct BelegScanView: View {
                         geschaeftFuerPreispunkt = erkanntesGeschaeftFrisch
                     }
 
-                    PreispunktService.erfassen(
-                        preis: preis, artikel: artikel, geschaeft: geschaeftFuerPreispunkt, datum: belegDatum,
-                        produktName: produktName, alternativerName: neuerAlternativerName, nameFallback: name, context: modelContext
-                    )
+                    // Tages-Kollision (GitHub #76-Folgearbeit): Anwender hat „Bisherigen
+                    // behalten" gewählt → kein neuer Preispunkt für diese Position.
+                    // Sonst (Standard „wird ersetzt") den bestehenden Tagespunkt zuerst
+                    // entfernen, statt beide nebeneinander bestehen zu lassen.
+                    let behalteBestehenden = position.bestehenderPreisHeute != nil && position.behalteBestehendenPreisHeute
+                    if position.bestehenderPreisHeute != nil, !behalteBestehenden,
+                       let vorhandenerPunkt = PreispunktService.vorhandenerPunktHeute(
+                           artikel: artikel, geschaeft: geschaeftFuerPreispunkt, amDatum: belegDatum, context: modelContext
+                       ) {
+                        PreispunktService.ersetzeVorhandenenPunkt(vorhandenerPunkt, context: modelContext)
+                    }
+                    if !behalteBestehenden {
+                        PreispunktService.erfassen(
+                            preis: preis, artikel: artikel, geschaeft: geschaeftFuerPreispunkt, datum: belegDatum,
+                            produktName: produktName, alternativerName: neuerAlternativerName, nameFallback: name, context: modelContext
+                        )
+                    }
                     // Lernt sowohl einen expliziten Alias (falls der Anwender den
                     // Namen zwecks Zuordnung geändert hat) als auch eine reine
                     // Artikel-Zuordnung ohne Alias — ohne Wirkung, wenn keins von
@@ -458,6 +485,16 @@ private struct BearbeitbarePosition: Identifiable {
     /// — `nil`, wenn sich keine OCR-Zeile eindeutig zuordnen ließ (dann bietet
     /// ``ErgebnisListe`` für diese Zeile keinen „im Beleg zeigen“-Button an).
     var boundingBox: CGRect?
+    /// Preis eines bereits am selben Kalendertag für diesen Artikel/dieses Geschäft
+    /// erfassten ``Preispunkt``s, falls vorhanden und abweichend vom neu erkannten
+    /// Preis — Grundlage für die Tages-Kollisionsabfrage (GitHub #76-Folgearbeit).
+    /// `nil`, wenn keine Kollision vorliegt oder noch kein Artikel/Geschäft feststeht.
+    var bestehenderPreisHeute: Decimal? = nil
+    /// Nutzerentscheidung bei einer Tages-Kollision: `true` behält den bestehenden
+    /// Preispunkt unverändert (der neu erkannte Preis wird verworfen), `false`
+    /// (Standard) ersetzt ihn durch den neu erkannten. Ohne Wirkung, solange
+    /// ``bestehenderPreisHeute`` `nil` ist.
+    var behalteBestehendenPreisHeute = false
 
     /// ``zugeordneterArtikel``, aber nur solange ``artikelName`` noch exakt zu
     /// dessen Namen passt. Bearbeitet der Anwender das Textfeld frei weiter, ohne
@@ -693,6 +730,13 @@ private struct PositionsZeile: View {
                 Label("Neu erkannt", systemImage: "sparkles")
                     .font(.caption)
                     .foregroundStyle(.orange)
+            }
+
+            if let bestehenderPreisHeute = position.bestehenderPreisHeute {
+                TagesKollisionZeile(
+                    bestehenderPreis: bestehenderPreisHeute,
+                    behalteBestehenden: $position.behalteBestehendenPreisHeute
+                )
             }
 
             if zeigeVorschlaege, position.effektivZugeordneterArtikel == nil, !vorschlaege.isEmpty || zeigtNeuAnlegenOption {

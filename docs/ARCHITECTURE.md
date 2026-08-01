@@ -204,6 +204,13 @@ Abschnitt (Belegscan, Preisschild-Scan, Sync-Import).
   `KaufEintrag` nach Abschluss seines Einkaufsvorgangs fachlich keine Funktion mehr
   hat. Lässt Einträge eines laufenden `Einkaufsvorgang`s dabei immer unangetastet.
   Details zu beiden Services in `docs/PREISHISTORIE_BEREINIGUNG.md`.
+- **PreispunktVerdichtungService** (GitHub #76-Folgearbeit): verdichtet statt zu
+  löschen — reduziert alte `Preispunkt`e stufenweise auf gröbere Auflösung
+  (täglich → wöchentlich → monatlich, jeweils den höchsten Preis behaltend), läuft
+  automatisch für alle Nutzer, Schwellwerte im Debug-Menü einstellbar. Ergänzt um
+  eine interaktive Tages-Kollisionsabfrage direkt beim Scannen
+  (`BelegScanView`/`PreisschildScanView`, `TagesKollisionZeile`). Details in
+  `docs/PREISHISTORIE_VERDICHTUNG.md`.
 
 ## Liquid Glass
 
