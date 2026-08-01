@@ -85,4 +85,45 @@ enum SyncEventService {
             return gewinntKandidat ? kandidat : bisher
         }
     }
+
+    /// Schlüssel für den Gewinner-Index (``alleAktuellenGewinner(context:)``).
+    struct PaarSchluessel: Hashable {
+        var bezugsID: UUID
+        var artikelID: UUID
+    }
+
+    /// Baut den aktuell gewinnenden ``SyncEvent`` je (`bezugsID`,`artikelID`)-Paar
+    /// für ALLE lokal bekannten Events in EINEM Durchlauf (Performance-Fund) —
+    /// für ``SyncImportService``, das sonst pro eingehendem Event erneut per
+    /// ``aktuellerGewinner(bezugsID:artikelID:context:)`` die komplette Tabelle
+    /// fetchen und jede Nutzlast erneut dekodieren müsste (O(n²) bei n
+    /// eingehenden Events in einem Zyklus statt O(n) für den Indexaufbau).
+    /// **Nur für diesen Batch-Anwendungsfall** — die einmalige Einzelabfrage
+    /// (z.B. der Überkauf-Hinweis in ``Einkaufsvorgang``) bleibt bei
+    /// ``aktuellerGewinner(bezugsID:artikelID:context:)``, ein voller
+    /// Indexaufbau lohnt sich dort nicht.
+    ///
+    /// Der Aufrufer muss den zurückgegebenen Index während der Verarbeitung
+    /// selbst aktuell halten (siehe ``SyncImportService/wendeAn(_:gewinner:context:)``):
+    /// ein innerhalb desselben Zyklus neu übernommenes Event kann den
+    /// Gewinner für sein eigenes Paar sofort ändern, dieser Index ist nur eine
+    /// Momentaufnahme zum Zeitpunkt des Aufrufs.
+    static func alleAktuellenGewinner(context: ModelContext) -> [PaarSchluessel: SyncEvent] {
+        let alle = (try? context.fetch(FetchDescriptor<SyncEvent>())) ?? []
+        var gewinner: [PaarSchluessel: SyncEvent] = [:]
+        for event in alle {
+            guard let nutzlast = event.nutzlastDekodiert, let art = event.art else { continue }
+            let schluessel = PaarSchluessel(bezugsID: nutzlast.bezugsID, artikelID: nutzlast.artikelID)
+            guard let bisheriger = gewinner[schluessel], let bisherigeArt = bisheriger.art else {
+                gewinner[schluessel] = event
+                continue
+            }
+            let kandidatGewinnt = SyncKonfliktAufloesung.gewinnt(
+                SyncKonfliktAufloesung.Kandidat(art: art, lamportZaehler: event.lamportZaehler),
+                ueber: SyncKonfliktAufloesung.Kandidat(art: bisherigeArt, lamportZaehler: bisheriger.lamportZaehler)
+            )
+            if kandidatGewinnt { gewinner[schluessel] = event }
+        }
+        return gewinner
+    }
 }

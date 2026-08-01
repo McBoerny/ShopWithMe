@@ -16,13 +16,30 @@ import SwiftData
 /// Datei-Schreibvorgang wurde übersprungen).
 enum SyncKaeufeExportService {
     /// Schreibt eine Datei für jeden lokalen `KaufEintrag`, der unter
-    /// `kaeufe/` noch keine Datei hat. **Existenz-Check per Datei statt eines
-    /// persistierten `bereitsExportiert`-Flags auf `KaufEintrag`** — bewusste
-    /// Vereinfachung, um für dieses Issue keine SwiftData-Modell-Migration
-    /// einzuführen. Bei sehr großen lokalen Historien (deutlich über den in
-    /// dieser App typischen wenigen hundert Einträgen) wäre ein Flag
-    /// (analog `SyncEvent.hochgeladen`) die schnellere Lösung — siehe
-    /// `docs/EXPORT_PAKET_UMBAU.md`, „Mögliche künftige Verfeinerung".
+    /// `kaeufe/` noch keine Datei hat.
+    ///
+    /// **Existenz-Check per EINER Ordner-Auflistung statt N Einzel-`fileExists`-
+    /// Aufrufen** (Performance-Fund): eine frühere Fassung prüfte pro lokalem
+    /// Eintrag einzeln `FileManager.fileExists` — bei größerer Historie
+    /// bedeutete das N Datei-Stat-Aufrufe gegen einen ggf. Cloud-gestützten
+    /// Ordner (iCloud Drive/Synology Drive) bei JEDEM Sync-Zyklus (alle 5s
+    /// beim aktiven Einkaufen), selbst wenn nichts Neues hinzugekommen war.
+    /// Jetzt EIN `contentsOfDirectory`-Aufruf, die vorhandenen Dateinamen als
+    /// In-Memory-`Set`, dann ein günstiger Set-Lookup pro Eintrag — dieselbe
+    /// Grundidee wie `SyncImportService`/`SyncSnapshotImportService.ladeKaeufe`,
+    /// die Peer-Ordner ebenfalls per einmaliger Auflistung statt Einzelzugriffen
+    /// lesen.
+    ///
+    /// **Bewusst KEIN persistiertes `bereitsExportiert`-Flag auf `KaufEintrag`**
+    /// (ursprünglich erwogen, siehe `docs/EXPORT_PAKET_UMBAU.md`, „Mögliche
+    /// künftige Verfeinerung"): ein reines Flag hätte dieselbe Bug-Klasse
+    /// zurückgebracht, die für die übrigen Paket-Teile bereits gefunden und
+    /// gefixt wurde (Fingerabdruck/Flag sagt „schon geschrieben", die Datei
+    /// existiert aber nach einem Ordnerwechsel/einer Reaktivierung der
+    /// Synchronisierung tatsächlich nicht mehr — siehe
+    /// `schreibeTeilFallsGeaendert` in ``SyncSnapshotExportService``). Die
+    /// Ordner-Auflistung hier prüft dagegen jedes Mal den TATSÄCHLICHEN
+    /// Ordnerinhalt, kann also nicht auf demselben Weg veralten.
     /// Ohne hinterlegten Sync-Ordner ohne Wirkung. Rückgabewert meldet
     /// ausschließlich, ob der Ordnerzugriff (Berechtigung) geklappt hat.
     @discardableResult
@@ -43,6 +60,12 @@ enum SyncKaeufeExportService {
             return true
         }
 
+        let vorhandeneDateinamen = Set(
+            (try? FileManager.default.contentsOfDirectory(at: ordner, includingPropertiesForKeys: nil))?.map(\.lastPathComponent) ?? []
+        )
+        let fehlende = alleLokalen.filter { !vorhandeneDateinamen.contains("\($0.id.uuidString).json") }
+        guard !fehlende.isEmpty else { return true }
+
         // Dieselben "gültige-IDs"-Sets wie `SyncSnapshotExportService.erstelleSnapshot`
         // (baumelnde Referenzen sollen genauso stillschweigend als `nil`
         // exportiert werden, nicht die App zum Absturz bringen).
@@ -51,9 +74,8 @@ enum SyncKaeufeExportService {
         let gueltigeEinkaufsvorgangIDs = Set((try? context.fetch(FetchDescriptor<Einkaufsvorgang>()))?.map(\.persistentModelID) ?? [])
         let gueltigeKategorieIDs = Set((try? context.fetch(FetchDescriptor<ArtikelKategorie>()))?.map(\.persistentModelID) ?? [])
 
-        for eintrag in alleLokalen {
+        for eintrag in fehlende {
             let zielURL = ordner.appendingPathComponent("\(eintrag.id.uuidString).json")
-            guard !FileManager.default.fileExists(atPath: zielURL.path) else { continue }
             let snapshot = KaufEintragSnapshot(
                 id: eintrag.id,
                 artikelID: SyncSnapshotExportService.sichereID(eintrag.artikel, gueltigeIDs: gueltigeArtikelIDs),

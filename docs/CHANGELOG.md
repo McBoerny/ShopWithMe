@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.10 (Build 185) — Sync-Performance: Kaufhistorie-Export und Event-Konfliktcheck gebatcht
+
+- `SyncKaeufeExportService.exportiereNeueKaeufe` prüfte bisher pro lokalem
+  `KaufEintrag` einzeln per `FileManager.fileExists`, ob dessen `kaeufe/`-Datei
+  schon existiert (N Datei-Stat-Aufrufe pro Zyklus gegen einen ggf.
+  Cloud-gestützten Ordner). Jetzt EIN `contentsOfDirectory`-Aufruf, Abgleich
+  gegen ein In-Memory-`Set`. Bewusst kein persistiertes Export-Flag auf
+  `KaufEintrag` erwogen — das hätte dieselbe Bug-Klasse zurückgebracht, die für
+  die übrigen Paket-Teile bereits gefunden/gefixt wurde (Flag sagt „schon
+  geschrieben", Datei existiert nach Ordnerwechsel/Reaktivierung aber
+  tatsächlich nicht mehr).
+- `SyncEventService.aktuellerGewinner` (Bereich-A-Konfliktauflösung) fetchte
+  bislang bei JEDEM eingehenden Event erneut die komplette `SyncEvent`-Tabelle
+  und dekodierte jede Nutzlast neu — O(n²) bei n eingehenden Events in einem
+  Zyklus. Neu: `SyncEventService.alleAktuellenGewinner` baut den
+  Gewinner-Index einmal pro Zyklus, `SyncImportService` hält ihn während der
+  Verarbeitung selbst aktuell. Die einmalige Einzelabfrage (Überkauf-Hinweis in
+  `Einkaufsvorgang`) bleibt unverändert bei der bisherigen Funktion. Keine
+  SwiftData-Migration nötig (reiner In-Memory-Index statt Schema-Änderung).
+
 ## v0.10 (Build 184) — Sync-Performance: redundante Fetches/lineare Scans in den Merge-Pfaden entfernt
 
 - **Analyse-Fund.** `erstelleSnapshot` fetchte `Einkaufsliste`/`Einkaufsvorgang`

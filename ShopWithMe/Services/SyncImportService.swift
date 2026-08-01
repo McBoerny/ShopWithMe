@@ -14,7 +14,7 @@ import SwiftData
 /// B/C-Import ist erst Phase 3), wird das Event bewusst NICHT als bekannt
 /// markiert, sondern beim nächsten Sync-Zyklus automatisch erneut versucht —
 /// die Peer-Event-Datei bleibt dafür unverändert liegen (siehe
-/// ``wendeAn(_:context:)``). Ein konkurrierendes, aber bereits anwendbares
+/// ``wendeAn(_:gewinner:context:)``). Ein konkurrierendes, aber bereits anwendbares
 /// schwächeres Event kann dadurch übergangsweise vor einem noch nicht
 /// anwendbaren stärkeren Event materialisiert werden — das System konvergiert
 /// aber selbstständig auf den korrekten Endzustand, sobald auch das stärkere
@@ -87,6 +87,13 @@ enum SyncImportService {
             at: peersOrdner, includingPropertiesForKeys: nil
         ) else { return true }
 
+        // Einmal für den gesamten Zyklus aufgebaut statt pro eingehendem Event
+        // per ``SyncEventService/aktuellerGewinner(bezugsID:artikelID:context:)``
+        // neu gefetcht+dekodiert (Performance-Fund, O(n) statt O(n²) bei n
+        // eingehenden Events) — ``wendeAn(_:gewinner:context:)`` hält den Index
+        // während der Verarbeitung selbst aktuell, siehe dort.
+        var gewinner = SyncEventService.alleAktuellenGewinner(context: context)
+
         for peerOrdner in peerVerzeichnisse where !PeerOrdnerName.gehoertZu(peerOrdner.lastPathComponent, geraeteID: eigeneGeraeteID) {
             let eventsOrdner = SyncExportService.eventsOrdner(fuerPeer: peerOrdner.lastPathComponent, in: syncOrdner)
             guard let dateien = try? FileManager.default.contentsOfDirectory(
@@ -98,7 +105,7 @@ enum SyncImportService {
                 .sorted { $0.lamportZaehler < $1.lamportZaehler }
 
             for empfangen in empfangeneEvents {
-                wendeAn(empfangen, context: context)
+                wendeAn(empfangen, gewinner: &gewinner, context: context)
             }
         }
 
@@ -124,22 +131,28 @@ enum SyncImportService {
     }
 
     @MainActor
-    private static func wendeAn(_ empfangen: SyncEventExportDarstellung, context: ModelContext) {
+    private static func wendeAn(
+        _ empfangen: SyncEventExportDarstellung, gewinner: inout [SyncEventService.PaarSchluessel: SyncEvent], context: ModelContext
+    ) {
         guard !SyncEventService.istBereitsBekannt(empfangen.id, context: context) else { return }
 
         guard let art = SyncEventArt(rawValue: empfangen.art),
               let nutzlast = try? JSONDecoder().decode(SyncEventNutzlast.self, from: empfangen.nutzlast)
         else {
             // Unbekannte Art (neuere Peer-App-Version) oder korrupte Nutzlast —
-            // niemals interpretierbar, ein Retry würde nichts ändern.
+            // niemals interpretierbar, ein Retry würde nichts ändern. Keine
+            // gültige Nutzlast → kein Gewinner-Index-Eintrag möglich/nötig.
             SyncEventService.uebernehmen(empfangen, context: context)
             return
         }
+        let schluessel = SyncEventService.PaarSchluessel(bezugsID: nutzlast.bezugsID, artikelID: nutzlast.artikelID)
 
-        guard darfAngewendetWerden(art: art, lamportZaehler: empfangen.lamportZaehler, bezugsID: nutzlast.bezugsID, artikelID: nutzlast.artikelID, context: context) else {
+        guard darfAngewendetWerden(art: art, lamportZaehler: empfangen.lamportZaehler, schluessel: schluessel, gewinner: gewinner) else {
             // Ein bereits bekanntes, stärkeres Event hat dieses Paar schon
             // entschieden (siehe SyncKonfliktAufloesung) — das gilt dauerhaft,
             // ein Retry ist hier (anders als bei fehlender Referenz) nie nötig.
+            // Der Gewinner für dieses Paar ändert sich durch einen Verlierer
+            // nicht, der Index bleibt unverändert.
             SyncEventService.uebernehmen(empfangen, context: context)
             return
         }
@@ -150,26 +163,31 @@ enum SyncImportService {
                 // wird deshalb NIE mehr lokal entstehen — anders als bei einer
                 // bloß noch nicht eingetroffenen Referenz ist ein Retry hier
                 // sinnlos und würde das Event jeden Zyklus erneut protokollieren.
-                SyncEventService.uebernehmen(empfangen, context: context)
+                // Es hat den Konfliktcheck oben bereits gewonnen, ist also der
+                // neue Gewinner für sein Paar, auch wenn es lokal nicht
+                // materialisierbar ist.
+                gewinner[schluessel] = SyncEventService.uebernehmen(empfangen, context: context)
                 return
             }
             guard Date().timeIntervalSince(empfangen.wallClock) <= maximalesEventAlterFuerRetry else {
                 // Seit ``maximalesEventAlterFuerRetry`` unauflösbar, ohne dass
                 // ein Tombstone existiert (siehe Typ-Doku, zweite Ausnahme) —
                 // weiteres Retrying würde nur noch endlos denselben Fehlschlag
-                // protokollieren, ohne je zu konvergieren.
+                // protokollieren, ohne je zu konvergieren. Wie beim
+                // Tombstone-Fall bereits der neue Gewinner für sein Paar.
                 SyncDebugLogger.log(
                     .eventAufgegeben,
                     details: "art=\(art.rawValue) bezugsID=\(nutzlast.bezugsID) artikelID=\(nutzlast.artikelID)"
                 )
-                SyncEventService.uebernehmen(empfangen, context: context)
+                gewinner[schluessel] = SyncEventService.uebernehmen(empfangen, context: context)
                 return
             }
             // Referenzierte Liste/Einkauf/Artikel noch nicht lokal bekannt.
             // Bewusst NICHT als bekannt markieren, siehe Typ-Dokumentation —
             // wird also bei jedem weiteren Zyklus erneut protokolliert, bis
             // die Referenz auflösbar wird (z.B. durch einen künftigen
-            // Bereich-B-Namens-Alias, siehe GitHub #52-Nachfolgefund).
+            // Bereich-B-Namens-Alias, siehe GitHub #52-Nachfolgefund). Nicht
+            // übernommen → kein Gewinner-Index-Eintrag.
             SyncDebugLogger.log(
                 .eventNichtAnwendbar,
                 details: "art=\(art.rawValue) bezugsID=\(nutzlast.bezugsID) artikelID=\(nutzlast.artikelID)"
@@ -177,7 +195,7 @@ enum SyncImportService {
             return
         }
 
-        SyncEventService.uebernehmen(empfangen, context: context)
+        gewinner[schluessel] = SyncEventService.uebernehmen(empfangen, context: context)
         // Beobachtete Latenz dieses Updates (siehe SyncDebugLogger-Typ-Doku) —
         // nur für tatsächlich neu angewendete Events, nicht für Verlierer im
         // Konfliktfall oder unbekannte Arten (dort fand keine reale
@@ -185,16 +203,17 @@ enum SyncImportService {
         SyncDebugLogger.protokolliereAlter(.eventEmpfangen, erzeugtAm: empfangen.wallClock, zusatz: "art=\(art.rawValue)")
     }
 
-    /// Prüft per ``SyncEventService/aktuellerGewinner(bezugsID:artikelID:context:)``,
-    /// ob das neue Event gegen den bisher bekannten Gewinner für dasselbe
-    /// (`bezugsID`, `artikelID`)-Paar besteht. Ohne konkurrierende Events
-    /// gewinnt das neue Event automatisch.
+    /// Prüft gegen den vorab per ``SyncEventService/alleAktuellenGewinner(context:)``
+    /// aufgebauten und vom Aufrufer aktuell gehaltenen Index, ob das neue Event
+    /// gegen den bisher bekannten Gewinner für dasselbe (`bezugsID`,
+    /// `artikelID`)-Paar besteht. Ohne konkurrierende Events gewinnt das neue
+    /// Event automatisch.
     @MainActor
     private static func darfAngewendetWerden(
-        art: SyncEventArt, lamportZaehler: UInt64, bezugsID: UUID, artikelID: UUID, context: ModelContext
+        art: SyncEventArt, lamportZaehler: UInt64, schluessel: SyncEventService.PaarSchluessel,
+        gewinner: [SyncEventService.PaarSchluessel: SyncEvent]
     ) -> Bool {
-        guard let bisherigerGewinner = SyncEventService.aktuellerGewinner(bezugsID: bezugsID, artikelID: artikelID, context: context),
-              let bisherigeArt = bisherigerGewinner.art
+        guard let bisherigerGewinner = gewinner[schluessel], let bisherigeArt = bisherigerGewinner.art
         else { return true }
 
         let neuerKandidat = SyncKonfliktAufloesung.Kandidat(art: art, lamportZaehler: lamportZaehler)
