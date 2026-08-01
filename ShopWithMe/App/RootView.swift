@@ -12,8 +12,11 @@ import SwiftData
 /// `docs/BELEGSCAN.md`.
 ///
 /// Stößt außerdem bei jedem App-Start und Rückkehr aus dem Hintergrund die
-/// automatische Preishistorie-Bereinigung an (siehe
-/// ``PreisHistorieBereinigungService/automatischBereinigenFallsFaellig(context:)``).
+/// automatische Preishistorie-Bereinigung (nutzerkonfigurierbar, Standard "Nie",
+/// siehe ``PreisHistorieBereinigungService/automatischBereinigenFallsFaellig(context:)``)
+/// sowie die automatische Bereinigung bereits verarbeiteter, operativer
+/// `KaufEintrag`e (immer aktiv, kurze feste Frist, siehe
+/// ``KaufEintragBereinigungService/automatischBereinigenFallsFaellig(context:)``) an.
 ///
 /// Reagiert außerdem auf `shopwithme://milkforus-import`, geöffnet von der
 /// ``ShopWithMeShareExtension`` nachdem sie eine geteilte MilkForUs-Datei über
@@ -38,11 +41,13 @@ struct RootView: View {
         }
         .task {
             await PreisHistorieBereinigungService.automatischBereinigenFallsFaellig(context: modelContext)
+            await KaufEintragBereinigungService.automatischBereinigenFallsFaellig(context: modelContext)
         }
         .onChange(of: scenePhase) { _, neuePhase in
             guard neuePhase == .active else { return }
             Task {
                 await PreisHistorieBereinigungService.automatischBereinigenFallsFaellig(context: modelContext)
+                await KaufEintragBereinigungService.automatischBereinigenFallsFaellig(context: modelContext)
             }
         }
         .onOpenURL { url in

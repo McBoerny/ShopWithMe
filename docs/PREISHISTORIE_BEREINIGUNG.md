@@ -1,53 +1,26 @@
-# ShopWithMe — Automatische Bereinigung der Preishistorie
+# ShopWithMe — Automatische Bereinigung: Preishistorie und KaufEintrag
 
-Status: **Umgesetzt** (`Services/PreisHistorieBereinigungService.swift`,
-`Views/Einstellungen/PreisHistorieSettingsView.swift`).
+Status: **Umgesetzt**, seit GitHub #76 aufgeteilt in zwei unabhängige Services mit
+unterschiedlicher Philosophie:
 
-**Update GitHub #76:** Die Preishistorie-Rolle ist von `KaufEintrag` nach
-`Preispunkt` verschoben (eigenständiges Model, siehe `docs/BELEGSCAN.md` →
-„Datenmodell"). Diese Datei/der beschriebene Bereinigungsmechanismus bezieht sich
-weiterhin auf `KaufEintrag`, das jetzt nur noch die operative Buchungszeile eines
-laufenden Einkaufsvorgangs ist — die Löschung alter `KaufEintrag`e ist dadurch nicht
-mehr direkt gleichbedeutend mit „alte Preise löschen". Eine eigene
-Aufbewahrungsfrist für `Preispunkt` existiert noch nicht (offene Frage in Issue #76).
+| | `PreisHistorieBereinigungService` | `KaufEintragBereinigungService` |
+| --- | --- | --- |
+| Zielmodell | `Preispunkt` (echte Preishistorie) | `KaufEintrag` (operative Buchungszeile, seit #76 ohne Preisrolle) + leer gewordene `Einkaufsvorgang`e |
+| Frist | nutzerkonfigurierbar, Standard „Nie“ | fest, kurz (`karenzzeit`, Standard 48h), nicht einstellbar |
+| Sichtbar für Nutzer | ja (Einstellungen → „Preishistorie“) | nein, rein technisch |
+| Warum überhaupt aufbewahren | der Nutzer will seine Preishistorie ggf. behalten | ein `KaufEintrag` hat nach Abschluss seines Einkaufsvorgangs **keine fachliche Funktion mehr** (siehe unten) — es gibt fachlich keinen Grund, ihn lange zu behalten |
 
-## Ausgangslage
+## `PreisHistorieBereinigungService` (`Preispunkt`)
 
-Jeder Belegscan und jedes Abhaken auf der Einkaufsliste erzeugt einen dauerhaften
-`KaufEintrag` (siehe `docs/BELEGSCAN.md`). Ohne Aufräummechanismus wächst diese
-Preishistorie unbegrenzt — für Nutzer, die keinen Wert auf eine unbegrenzte Historie
-legen, bietet die App deshalb eine automatische, konfigurierbare Löschung alter
-Einträge an.
-
-## Verhalten
+Jeder Belegscan/Preisschild-Scan mit erfasstem Preis erzeugt einen `Preispunkt`
+(siehe `docs/BELEGSCAN.md`). Ohne Aufräummechanismus wächst diese Preishistorie
+unbegrenzt — für Nutzer, die keinen Wert auf eine unbegrenzte Historie legen, bietet
+die App deshalb eine automatische, konfigurierbare Löschung alter Einträge an.
 
 - **Aufbewahrungsfrist** (`PreisHistorieAufbewahrung`): 30 Tage / 3 Monate / 6 Monate /
   1 Jahr / Nie / eigene Anzahl Tage. Wird über `UserDefaults` persistiert
   (`PreisHistorieBereinigungService.aktuelleAufbewahrung`), einstellbar in
   `PreisHistorieSettingsView` (Einstellungen → „Preishistorie“).
-- **Seit der DB-Optimierungsrunde (GitHub #71) zusätzlich: Bereinigung alter
-  `Einkaufsvorgang`e.** `Einkaufsvorgang` hatte bis dahin überhaupt keine
-  Aufräumlogik — jeder jemals angelegte Vorgang blieb für immer im Bestand und
-  wurde bei jedem Sync-Zyklus vollständig mitexportiert. `bereinigen(context:
-  aufbewahrung:jetzt:)` löscht jetzt zusätzlich abgeschlossene Vorgänge, deren
-  `endZeit` ebenfalls vor dem Stichtag liegt UND die (nach der
-  KaufEintrag-Bereinigung im selben Durchlauf) keine verbleibenden
-  `KaufEintrag`e mehr haben — dieselbe Frist, kein eigener Regler
-  (Nutzerentscheidung: ein zweiter Regler hätte keinen erkennbaren Zusatznutzen
-  gegenüber mehr UI-Fläche). Voraussetzung dafür, dass ein Vorgang je diesen
-  Zustand erreicht: siehe „Auto-Close bei Inaktivität" in
-  `docs/DATENSYNCHRONISATION_VERLAUF.md` — ohne das würde praktisch kein
-  `Einkaufsvorgang` je als abgeschlossen gelten, da bislang nur der manuelle
-  „Einkauf abschließen"-Button `endZeit` setzte.
-- **Beide Löschungen (KaufEintrag und Einkaufsvorgang) hinterlassen jetzt einen
-  `SyncTombstone`.** Ursprünglich bewusst unterlassen (siehe
-  `docs/DATENSYNCHRONISATION_VERLAUF.md`, Abschnitt 11 „Bewusst nicht
-  enthalten") — das machte die Bereinigung im Mehrgeräte-Fall aber faktisch
-  wirkungslos: der additive Bereich-C-Merge (Union nach `id`, nie destruktiv)
-  brachte einen lokal gelöschten Eintrag beim nächsten Sync von jedem Peer
-  zurück, der ihn noch führte. Mit Tombstone bleibt eine Löschung dauerhaft
-  über alle Geräte hinweg wirksam, analog zu Bereich-B-Löschungen
-  (Geschäft/Artikel/…).
 - **Standard: „Nie“** — bewusste Entscheidung, damit ein App-Update bei bestehenden
   Nutzern nicht ungefragt Preishistorie löscht. Der Nutzer muss die automatische
   Bereinigung aktiv einschalten.
@@ -58,23 +31,74 @@ Einträge an.
   Vordergrund-Wechsel erneut gefetcht wird.
 - **Manueller Trigger**: Button „Jetzt bereinigen“ in `PreisHistorieSettingsView`, zeigt
   Zeitpunkt der letzten Bereinigung sowie die Anzahl zuletzt gelöschter Einträge.
-- **Schutz laufender Einkäufe**: `PreisHistorieBereinigungService.bereinigen(context:
-  aufbewahrung:jetzt:)` lässt `KaufEintrag`e eines noch nicht abgeschlossenen
-  `Einkaufsvorgang`s (`istAbgeschlossen == false`) immer unangetastet, unabhängig vom
-  Alter — ein noch laufender Einkauf darf dadurch nie kaputtgehen.
-- Löschungen laufen über `DatabaseLeaseService.performMicroLease`, wie jeder andere
-  Schreibzugriff auch (siehe `docs/DATABASE_CONCURRENCY.md`).
+- Löschungen hinterlassen einen `SyncTombstone` (siehe unten) und laufen über
+  `DatabaseLeaseService.performMicroLease`, wie jeder andere Schreibzugriff auch
+  (siehe `docs/DATABASE_CONCURRENCY.md`).
+- Kein Schutz für „laufenden Einkauf“ nötig — `Preispunkt` hat keinen Bezug zu einem
+  `Einkaufsvorgang`.
 
 Es entsteht bewusst **kein separater Store/keine Archivierung** — gelöschte Einträge
 sind endgültig weg. Für Nutzer, die die volle Historie behalten möchten, bleibt „Nie“
 die Standardeinstellung.
 
+## `KaufEintragBereinigungService` (`KaufEintrag` + leer gewordene `Einkaufsvorgang`e)
+
+**Seit GitHub #76:** ein `KaufEintrag` verliert nach Abschluss seines
+`Einkaufsvorgang`s jede fachliche Funktion — `WarengruppenDistanzService` hat seinen
+Beitrag bereits synchron beim Abschluss verarbeitet
+(`WarengruppenDistanzService.verarbeiteEinkauf(_:context:)`), die Preisrolle liegt
+vollständig bei `Preispunkt`, und die Einkaufslisten-Mitgliedschaft wurde bereits beim
+Abhaken entfernt. Es gibt deshalb fachlich keinen Grund für eine lange, gar
+nutzerkonfigurierbare Aufbewahrung wie bei der Preishistorie — die Bereinigung läuft
+**immer aktiv, ohne Einstellung**, mit einer festen, kurzen Karenzzeit
+(`karenzzeit`, Standard 48h).
+
+- **Warum überhaupt eine Karenzzeit statt sofortiger Löschung nach Abschluss:**
+  ein nachträglicher Belegscan (`BelegScanView` im `.einkaufsvorgang`-Kontext,
+  `passtZu`-Namensabgleich gegen `einkaufsvorgang.kaufEintraege`) muss den gerade
+  abgeschlossenen Einkauf noch finden können, sonst legt er fälschlich neue,
+  eigenständige `Preispunkt`e statt die bestehenden Buchungszeilen zu nutzen.
+  48h ist dieselbe Größenordnung wie `SyncImportService.maximalesEventAlterFuerRetry`.
+- **Verallgemeinerung gegenüber der früheren KaufEintrag-basierten Fassung dieses
+  Services (vor GitHub #76, siehe Git-Historie):** löscht abgeschlossene Vorgänge
+  unabhängig davon, ob sie (noch) eine `Einkaufsliste`-Zuordnung haben — anders als
+  `DatenintegritaetsService.raeumeLeereListenloseVorgaengeAuf(context:)`, das nur den
+  engeren, strukturellen Fall (listenlos UND leer) automatisch bei jedem App-Start
+  bereinigt.
+- **Beide Löschungen (KaufEintrag und Einkaufsvorgang) hinterlassen einen
+  `SyncTombstone`** — ursprünglich bewusst unterlassen (siehe
+  `docs/DATENSYNCHRONISATION_VERLAUF.md`, Abschnitt 11 „Bewusst nicht enthalten"),
+  das machte die Bereinigung im Mehrgeräte-Fall aber faktisch wirkungslos: der
+  additive Bereich-C-Merge (Union nach `id`, nie destruktiv) brachte einen lokal
+  gelöschten Eintrag beim nächsten Sync von jedem Peer zurück, der ihn noch führte.
+- **Schutz laufender Einkäufe**: `KaufEintragBereinigungService.bereinigen(context:jetzt:)`
+  lässt `KaufEintrag`e eines noch nicht abgeschlossenen `Einkaufsvorgang`s
+  (`istAbgeschlossen == false`) immer unangetastet, unabhängig vom Alter.
+- **Bekannter, gefixter Stolperstein (GitHub #77):** ein `#Predicate` mit
+  Force-Unwrap (`$0.endZeit! < stichtag`) lieferte in einem gezielten
+  Isolationstest nachweislich keine Treffer, obwohl derselbe Vergleich in reinem
+  Swift auf denselben Objekten korrekt `true` ergab — die Vorgang-Kandidaten werden
+  deshalb über einen ungefilterten Fetch + Swift-seitigen `.filter` bestimmt, nicht
+  über ein `#Predicate`. Außerdem wird „wird dieser Vorgang durch diesen Durchlauf
+  leer" bewusst **vor** jeder Löschung berechnet (über die noch unveränderte
+  `kaufEintraege`-Relationship), nicht danach — SwiftData aktualisiert diese inverse
+  Relationship nachweislich erst bei/nach `context.save()`, nicht sofort bei
+  `context.delete(...)`.
+- Automatischer Trigger analog `PreisHistorieBereinigungService`, eigenes
+  `UserDefaults`-Intervall (`kaufEintragBereinigungLetzteBereinigung`), aufgerufen in
+  `RootView` direkt neben dem Preishistorie-Aufruf.
+
 ## Design-Entscheidung: kein separater DB-Store für die Preishistorie
+
+**Historisch (vor GitHub #76) — die eigentliche Rollentrennung ist seitdem über
+`Preispunkt` gelöst, siehe oben.** Der Abschnitt bleibt als Begründung stehen, warum
+die Lösung ein **eigenständiges Model im selben Store** war, statt eines separaten
+`.sqlite`-Stores (der bewusst verworfene Weg unten).
 
 Ursprünglich angefragt war, die Preishistorie in eine **eigene, vom Hauptstore
 getrennte Datenbank** auszulagern (eigene `.sqlite`-Datei), damit Aufbewahrung/Löschung
 unabhängig vom übrigen Datenmodell verwaltet werden kann. Das wurde bewusst **nicht**
-umgesetzt — nur die Lösch-Logik oben.
+umgesetzt — nur die Lösch-Logik oben (damals noch auf `KaufEintrag`).
 
 **Grund:** `KaufEintrag` hat zwei Rollen gleichzeitig:
 

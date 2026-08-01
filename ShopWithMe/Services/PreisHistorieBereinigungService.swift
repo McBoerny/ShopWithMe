@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-/// Wie lange ``KaufEintrag``e mit erfasstem Preis aufbewahrt werden, bevor
+/// Wie lange ``Preispunkt``e aufbewahrt werden, bevor
 /// ``PreisHistorieBereinigungService`` sie automatisch löscht.
 enum PreisHistorieAufbewahrung: Equatable {
     case tage30
@@ -65,14 +65,17 @@ enum PreisHistorieAufbewahrung: Equatable {
     }
 }
 
-/// Löscht alte ``KaufEintrag``e (Preishistorie) anhand einer vom Anwender in den
-/// Einstellungen gewählten Aufbewahrungsfrist (siehe ``PreisHistorieSettingsView``).
+/// Löscht alte ``Preispunkt``e anhand einer vom Anwender in den Einstellungen
+/// gewählten Aufbewahrungsfrist (siehe ``PreisHistorieSettingsView``).
 ///
-/// Es entsteht bewusst keine separate Datenbank/kein separater Store dafür —
-/// ``KaufEintrag`` bleibt im Hauptstore, da es zugleich Grundlage für den aktuell
-/// laufenden Einkaufsvorgang ist. Um laufende Einkäufe nicht versehentlich zu
-/// zerstören, lässt ``bereinigen(context:aufbewahrung:jetzt:)`` Einträge eines noch
-/// nicht abgeschlossenen ``Einkaufsvorgang`` immer unangetastet, unabhängig vom Alter.
+/// **Seit GitHub #76 zielt diese Bereinigung auf ``Preispunkt``, nicht mehr auf
+/// ``KaufEintrag``** — die Preishistorie-Rolle ist dorthin verschoben (siehe
+/// `docs/BELEGSCAN.md`). Bereinigung von bereits verarbeiteten `KaufEintrag`en
+/// (operative Buchungszeilen ohne Preisrolle) läuft seitdem automatisch und ohne
+/// Nutzer-Einstellung über ``KaufEintragBereinigungService`` — anders als hier keine
+/// lange, standardmäßig deaktivierte Frist, weil ein `KaufEintrag` nach Abschluss
+/// seines Einkaufsvorgangs keine fachliche Funktion mehr hat, die eine Aufbewahrung
+/// rechtfertigen würde.
 enum PreisHistorieBereinigungService {
     private static let aufbewahrungSchluessel = "preisHistorieAufbewahrung"
     private static let letzteBereinigungSchluessel = "preisHistorieLetzteBereinigung"
@@ -101,25 +104,14 @@ enum PreisHistorieBereinigungService {
         set { UserDefaults.standard.set(newValue, forKey: letzteBereinigungSchluessel) }
     }
 
-    /// Löscht alle ``KaufEintrag``e, deren ``KaufEintrag/datum`` mehr als
-    /// `aufbewahrung.tage` Tage vor `jetzt` liegt — außer solchen, die zu einem noch
-    /// nicht abgeschlossenen ``Einkaufsvorgang`` gehören. Räumt zusätzlich
-    /// abgeschlossene ``Einkaufsvorgang``e auf, deren ``Einkaufsvorgang/endZeit``
-    /// ebenfalls vor `stichtag` liegt und die (nach der KaufEintrag-Bereinigung
-    /// oben) keine verbleibenden ``KaufEintrag``e mehr haben — ein alter,
-    /// leerer Vorgang wäre sonst für immer im Bestand geblieben (siehe GitHub
-    /// #71: `Einkaufsvorgang` hatte bislang gar keine Aufräumlogik). Beide
-    /// Löschungen hinterlassen einen ``SyncTombstone``, damit sie im
-    /// Mehrgeräte-Fall nicht von einem Peer, der die Einträge noch führt,
-    /// unwissentlich wiederbelebt werden — vorher bewusst unterlassen (siehe
-    /// `docs/DATENSYNCHRONISATION_VERLAUF.md`, Abschnitt 11 „Bewusst
-    /// nicht enthalten"), was die Bereinigung im Mehrgeräte-Fall faktisch
-    /// wirkungslos machte, sobald mindestens ein Peer die Einträge noch hatte.
+    /// Löscht alle ``Preispunkt``e, deren ``Preispunkt/datum`` mehr als
+    /// `aufbewahrung.tage` Tage vor `jetzt` liegt. Anders als die frühere,
+    /// KaufEintrag-basierte Fassung kein Schutz für „laufenden Einkauf" nötig —
+    /// ``Preispunkt`` hat keinen Bezug zu einem ``Einkaufsvorgang``. Löschungen
+    /// hinterlassen einen ``SyncTombstone``, damit sie im Mehrgeräte-Fall nicht von
+    /// einem Peer, der den Preispunkt noch führt, unwissentlich wiederbelebt werden.
     ///
-    /// Liefert `0` für ``PreisHistorieAufbewahrung/nie`` sofort ohne Fetch
-    /// zurück. Liefert die Anzahl gelöschter ``KaufEintrag``e (unverändertes
-    /// Rückgabewert-Verhalten — die Anzahl mitgelöschter Einkaufsvorgänge wird
-    /// nicht mitgezählt).
+    /// Liefert `0` für ``PreisHistorieAufbewahrung/nie`` sofort ohne Fetch zurück.
     @MainActor
     @discardableResult
     static func bereinigen(
@@ -131,44 +123,25 @@ enum PreisHistorieBereinigungService {
               let stichtag = Calendar.current.date(byAdding: .day, value: -tage, to: jetzt)
         else { return 0 }
 
-        let kaufEintragDeskriptor = FetchDescriptor<KaufEintrag>(predicate: #Predicate { $0.datum < stichtag })
-        let kaufEintragKandidaten = (try? context.fetch(kaufEintragDeskriptor)) ?? []
-        let zuLoeschendeKaufEintraege = kaufEintragKandidaten.filter { $0.einkaufsvorgang?.istAbgeschlossen ?? true }
-
-        let vorgangDeskriptor = FetchDescriptor<Einkaufsvorgang>(
-            predicate: #Predicate { $0.endZeit != nil && $0.endZeit! < stichtag }
-        )
-        let vorgangKandidaten = (try? context.fetch(vorgangDeskriptor)) ?? []
-
-        guard !zuLoeschendeKaufEintraege.isEmpty || !vorgangKandidaten.isEmpty else { return 0 }
+        let deskriptor = FetchDescriptor<Preispunkt>(predicate: #Predicate { $0.datum < stichtag })
+        let kandidaten = (try? context.fetch(deskriptor)) ?? []
+        guard !kandidaten.isEmpty else { return 0 }
 
         // Nur Identitäten über die `await`-Grenze hinweg sichern (siehe
         // ``ModelReference``) — während des Micro-Lease-Erwerbs kann ein
-        // nebenläufiger Sync-Zyklus einen dieser Einträge bereits gelöscht
-        // haben.
-        let kaufEintragReferenzen = zuLoeschendeKaufEintraege.map { ModelReference($0) }
-        let vorgangReferenzen = vorgangKandidaten.map { ModelReference($0) }
+        // nebenläufiger Sync-Zyklus einen dieser Einträge bereits gelöscht haben.
+        let referenzen = kandidaten.map { ModelReference($0) }
 
-        var geloeschteKaufEintraegeAnzahl = 0
+        var geloeschteAnzahl = 0
         await DatabaseLeaseService.performMicroLease(context: context) {
-            for referenz in kaufEintragReferenzen {
-                guard let eintrag = referenz.resolved(in: context) else { continue }
-                SyncTombstoneService.markiereGeloescht(art: SyncEntitaetsArt.kaufEintrag, id: eintrag.id, context: context)
-                context.delete(eintrag)
+            for referenz in referenzen {
+                guard let punkt = referenz.resolved(in: context) else { continue }
+                SyncTombstoneService.markiereGeloescht(art: SyncEntitaetsArt.preispunkt, id: punkt.id, context: context)
+                context.delete(punkt)
             }
-            geloeschteKaufEintraegeAnzahl = kaufEintragReferenzen.count
-
-            // Erst NACH den obigen Löschungen prüfen, ob ein Vorgang jetzt
-            // leer ist — ein Vorgang, dessen letzte KaufEintraege gerade eben
-            // durch diesen Aufruf entfernt wurden, soll im selben Durchlauf
-            // mit aufgeräumt werden, nicht erst beim nächsten.
-            for referenz in vorgangReferenzen {
-                guard let vorgang = referenz.resolved(in: context), vorgang.kaufEintraege.isEmpty else { continue }
-                SyncTombstoneService.markiereGeloescht(art: SyncEntitaetsArt.einkaufsvorgang, id: vorgang.id, context: context)
-                context.delete(vorgang)
-            }
+            geloeschteAnzahl = referenzen.count
         }
-        return geloeschteKaufEintraegeAnzahl
+        return geloeschteAnzahl
     }
 
     /// Bereinigt jetzt anhand von ``aktuelleAufbewahrung`` und aktualisiert

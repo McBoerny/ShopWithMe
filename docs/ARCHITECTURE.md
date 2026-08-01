@@ -193,12 +193,17 @@ Abschnitt (Belegscan, Preisschild-Scan, Sync-Import).
 - **DebugLogWriter**/**DatabaseDebugLogger**: optionaler, standardmäßig deaktivierter
   Diagnose-Logging-Mechanismus für den Mehrbenutzerzugriff (Rotation, `os.Logger`) —
   siehe `docs/LOGGING.md`.
-- **PreisHistorieBereinigungService**: löscht alte, operative `KaufEintrag`e
-  anhand einer vom Nutzer gewählten, standardmäßig deaktivierten Aufbewahrungsfrist,
-  automatisch bei App-Start/Vordergrund-Wechsel oder manuell — lässt Einträge eines
-  laufenden `Einkaufsvorgang`s dabei immer unangetastet. Seit GitHub #76 keine
-  Preishistorie mehr (die ist jetzt `Preispunkt`, siehe Datenmodell oben) — Details
-  in `docs/PREISHISTORIE_BEREINIGUNG.md`.
+- **PreisHistorieBereinigungService**: löscht alte `Preispunkt`e (echte Preishistorie,
+  siehe Datenmodell oben) anhand einer vom Nutzer gewählten, standardmäßig
+  deaktivierten Aufbewahrungsfrist, automatisch bei App-Start/Vordergrund-Wechsel
+  oder manuell.
+- **KaufEintragBereinigungService** (GitHub #76, Phase 2): löscht abgeschlossene,
+  operative `KaufEintrag`e (keine Preisrolle mehr) und dadurch leer gewordene
+  `Einkaufsvorgang`e — immer aktiv, ohne Nutzer-Einstellung, feste kurze Karenzzeit
+  (48h) statt der langen, nutzerkonfigurierbaren Preishistorie-Frist, da ein
+  `KaufEintrag` nach Abschluss seines Einkaufsvorgangs fachlich keine Funktion mehr
+  hat. Lässt Einträge eines laufenden `Einkaufsvorgang`s dabei immer unangetastet.
+  Details zu beiden Services in `docs/PREISHISTORIE_BEREINIGUNG.md`.
 
 ## Liquid Glass
 

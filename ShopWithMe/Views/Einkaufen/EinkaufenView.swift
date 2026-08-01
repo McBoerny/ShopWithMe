@@ -45,7 +45,7 @@ struct EinkaufenView: View {
     /// Anwendungsfall unterbrechen. Ein deutlich längeres Fenster schließt den
     /// Vorgang trotzdem irgendwann automatisch ab, sobald wirklich keine
     /// Aktivität mehr stattfindet — Voraussetzung dafür, dass
-    /// ``PreisHistorieBereinigungService`` (die nur abgeschlossene Vorgänge
+    /// ``KaufEintragBereinigungService`` (die nur abgeschlossene Vorgänge
     /// anfasst) ihn je erreichen kann.
     private static let inaktivitaetsSchwelleOhneGeschaeft: TimeInterval = 24 * 60 * 60
 

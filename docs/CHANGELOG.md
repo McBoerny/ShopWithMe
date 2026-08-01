@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.10 (Build 173) — Automatische Bereinigung verarbeiteter KaufEintraege (Phase 2)
+
+- **GitHub #76, Phase 2.** `PreisHistorieBereinigungService` zielt jetzt
+  ausschließlich auf `Preispunkt` (echte Preishistorie, nutzerkonfigurierbare
+  Frist, Standard „Nie"). Ein neuer `KaufEintragBereinigungService` übernimmt die
+  Bereinigung von `KaufEintrag` (operative Buchungszeile ohne Preisrolle) und
+  dadurch leer gewordenen `Einkaufsvorgang`en — immer aktiv, ohne
+  Nutzer-Einstellung, feste Karenzzeit (48h), da ein `KaufEintrag` nach Abschluss
+  seines Einkaufsvorgangs fachlich keine Funktion mehr hat.
+- **Zwei Bugs beim Umsetzen gefunden und dabei direkt gefixt (GitHub #77):** ein
+  `#Predicate` mit Force-Unwrap (`$0.endZeit! < stichtag`) lieferte nachweislich
+  keine Treffer, obwohl derselbe Vergleich in reinem Swift korrekt war — Fix:
+  ungefilterter Fetch + Swift-seitiger `.filter`. Zusätzlich wird „wird dieser
+  Vorgang leer" jetzt vor statt nach der Löschung berechnet, da SwiftData die
+  inverse `@Relationship`-Sammlung nachweislich erst bei/nach `context.save()`
+  aktualisiert.
+- Zwei weitere, unabhängig davon vorbestehende Testfehler als eigene Issues
+  dokumentiert (nicht in diesem Schritt behoben): #78 (nicht-deterministischer
+  Sync-Fingerabdruck, `JSONEncoder` ohne `.sortedKeys`), #79 (veralteter Test
+  nach dem „Abschnitt 25"-Guard).
+
 ## v0.10 (Build 172) — Preishistorie von KaufEintrag entkoppelt: neue Modelle Preispunkt/ArtikelAlias
 
 - **GitHub #76, Phase 1.** `KaufEintrag` bündelte bisher zwei unabhängige Rollen:

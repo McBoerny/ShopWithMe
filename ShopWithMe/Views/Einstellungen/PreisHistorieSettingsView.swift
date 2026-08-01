@@ -55,7 +55,7 @@ struct PreisHistorieSettingsView: View {
                         .onChange(of: eigeneTage) { _, _ in speichern() }
                 }
             } footer: {
-                Text("Preishistorie-Einträge, die älter als die gewählte Frist sind, werden automatisch beim App-Start bzw. beim Zurückkehren aus dem Hintergrund gelöscht. Einträge eines noch laufenden Einkaufsvorgangs bleiben davon immer unberührt. „Nie“ deaktiviert die automatische Löschung vollständig.")
+                Text("Preishistorie-Einträge, die älter als die gewählte Frist sind, werden automatisch beim App-Start bzw. beim Zurückkehren aus dem Hintergrund gelöscht. „Nie“ deaktiviert die automatische Löschung vollständig.")
             }
 
             Section {
