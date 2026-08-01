@@ -370,23 +370,23 @@ enum SyncSnapshotExportService {
 
         schreibeTeilFallsGeaendert(
             normalisiereTombstones(teile.tombstones), url: eigenerOrdner.appendingPathComponent("tombstones.json"),
-            fingerabdruckSchluessel: fingerabdruckSchluesselTombstones
+            fingerabdruckSchluessel: fingerabdruckSchluesselTombstones, teilName: "tombstones"
         )
         schreibeTeilFallsGeaendert(
             normalisiereStamm(teile.stamm), url: eigenerOrdner.appendingPathComponent("stamm.json"),
-            fingerabdruckSchluessel: fingerabdruckSchluesselStamm
+            fingerabdruckSchluessel: fingerabdruckSchluesselStamm, teilName: "stamm"
         )
         schreibeTeilFallsGeaendert(
             normalisiereLernen(teile.lernen), url: eigenerOrdner.appendingPathComponent("lernen.json"),
-            fingerabdruckSchluessel: fingerabdruckSchluesselLernen
+            fingerabdruckSchluessel: fingerabdruckSchluesselLernen, teilName: "lernen"
         )
         schreibeTeilFallsGeaendert(
             normalisiereVorgaenge(teile.vorgaenge), url: eigenerOrdner.appendingPathComponent("vorgaenge.json"),
-            fingerabdruckSchluessel: fingerabdruckSchluesselVorgaenge
+            fingerabdruckSchluessel: fingerabdruckSchluesselVorgaenge, teilName: "vorgaenge"
         )
         schreibeTeilFallsGeaendert(
             normalisierePreise(teile.preise), url: eigenerOrdner.appendingPathComponent("preise.json"),
-            fingerabdruckSchluessel: fingerabdruckSchluesselPreise
+            fingerabdruckSchluessel: fingerabdruckSchluesselPreise, teilName: "preise"
         )
         return true
     }
@@ -399,13 +399,31 @@ enum SyncSnapshotExportService {
     /// Fetch-Reihenfolge nicht fälschlich als Änderung erkannt wird — die
     /// GESCHRIEBENEN Bytes selbst müssen dafür nicht sortiert sein (Werte
     /// werden hier bereits normalisiert übergeben, siehe Aufrufer).
+    ///
+    /// Protokolliert im Sync-Debug-Modus explizit geschrieben/übersprungen je
+    /// Teil (`teilName`) — Live-Test-Nachfolgefund: die Vorgänger-Funktion
+    /// `exportiereSnapshot` hatte diese Sichtbarkeit (`.snapshotGeschrieben`/
+    /// `.snapshotUnveraendertUebersprungen`), beim Aufteilen in fünf Teile
+    /// zunächst verlorengegangen — ohne sie ließ sich „welcher Teil schreibt,
+    /// welcher wird fälschlich als unverändert übersprungen" nicht mehr direkt
+    /// aus dem Protokoll ablesen, nur noch indirekt über die Datei-Zeitstempel.
     @discardableResult
-    private static func schreibeTeilFallsGeaendert<T: Encodable>(_ wert: T, url: URL, fingerabdruckSchluessel: String) -> Bool {
+    private static func schreibeTeilFallsGeaendert<T: Encodable>(_ wert: T, url: URL, fingerabdruckSchluessel: String, teilName: String) -> Bool {
         guard let daten = try? encoder.encode(wert) else { return true }
         let fingerabdruck = SHA256.hash(data: daten).map { String(format: "%02x", $0) }.joined()
-        guard fingerabdruck != UserDefaults.standard.string(forKey: fingerabdruckSchluessel) else { return true }
+        guard fingerabdruck != UserDefaults.standard.string(forKey: fingerabdruckSchluessel) else {
+            if SyncDebugLogger.istAktiv {
+                SyncDebugLogger.log(.snapshotUnveraendertUebersprungen, details: "\(teilName) fingerabdruck=\(fingerabdruck.prefix(8))")
+            }
+            return true
+        }
         guard schreibeBlocking(daten, nach: url) else { return true }
+        let vorherigerFingerabdruck = UserDefaults.standard.string(forKey: fingerabdruckSchluessel)
         UserDefaults.standard.set(fingerabdruck, forKey: fingerabdruckSchluessel)
+        if SyncDebugLogger.istAktiv {
+            let vorherKurz = vorherigerFingerabdruck.map { String($0.prefix(8)) } ?? "nil"
+            SyncDebugLogger.log(.snapshotGeschrieben, details: "\(teilName) vorher=\(vorherKurz) jetzt=\(fingerabdruck.prefix(8))")
+        }
         return true
     }
 
