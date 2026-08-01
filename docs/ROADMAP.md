@@ -115,8 +115,9 @@ vollständig umgesetzt; weitere Ideen siehe „Zukünftig“ unten.
   Erweiterungen innerhalb ShopWithMes vereinfachen als auch Wiederverwendung in
   anderen Apps ermöglichen — größerer, eigenständiger Umbau, nicht Teil des
   laufenden Betriebs.
-- **`export.json` als Paket statt Monolith** (der zugehörige Modellvorschlag
-  `Preispunkt`/`ArtikelAlias` aus [#76](https://github.com/McBoerny/ShopWithMe/issues/76)
+- **`export.json` als Paket statt Monolith** ([#82](https://github.com/McBoerny/ShopWithMe/issues/82);
+  der zugehörige Modellvorschlag `Preispunkt`/`ArtikelAlias` aus
+  [#76](https://github.com/McBoerny/ShopWithMe/issues/76)
   ist umgesetzt und geschlossen — Preishistorie ist jetzt bereits ein eigenständiges,
   vom `Einkaufsvorgang` unabhängiges Model, was diese Paket-Idee erleichtert, aber
   selbst noch nicht umsetzt): `SyncSnapshotExportService.erstelleSnapshot` baut bei jedem
