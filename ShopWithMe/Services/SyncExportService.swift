@@ -16,9 +16,12 @@ enum SyncExportService {
             .appendingPathComponent("events", isDirectory: true)
     }
 
-    /// Der Event-Ordner dieses Geräts innerhalb des Sync-Ordners.
+    /// Der Event-Ordner dieses Geräts innerhalb des Sync-Ordners — Ordnername
+    /// trägt seit GitHub #81 den Gerätenamen (``SyncOrdnerService/eigenerPeerOrdnerName(in:)``),
+    /// nicht mehr die rohe `geraeteID`.
+    @MainActor
     static func eigenerEventsOrdner(in syncOrdner: URL) -> URL {
-        eventsOrdner(fuerPeer: DatabaseLeaseService.geraeteID, in: syncOrdner)
+        eventsOrdner(fuerPeer: SyncOrdnerService.eigenerPeerOrdnerName(in: syncOrdner), in: syncOrdner)
     }
 
     /// Schreibt alle noch nicht hochgeladenen `SyncEvent`s in den eigenen

@@ -47,9 +47,13 @@ enum SyncSnapshotExportService {
             .appendingPathComponent(dateiName)
     }
 
-    /// Die `export.json`-URL dieses Geräts innerhalb des Sync-Ordners.
+    /// Die `export.json`-URL dieses Geräts innerhalb des Sync-Ordners —
+    /// Ordnername trägt seit GitHub #81 den Gerätenamen
+    /// (``SyncOrdnerService/eigenerPeerOrdnerName(in:)``), nicht mehr die
+    /// rohe `geraeteID`.
+    @MainActor
     static func eigeneExportURL(in syncOrdner: URL) -> URL {
-        exportURL(fuerPeer: DatabaseLeaseService.geraeteID, in: syncOrdner)
+        exportURL(fuerPeer: SyncOrdnerService.eigenerPeerOrdnerName(in: syncOrdner), in: syncOrdner)
     }
 
     /// Debug-Werkzeug für manuelle Statuskonsolidierung

@@ -19,6 +19,10 @@ enum SyncOrdnerError: LocalizedError {
 /// bleibt immer am Standardpfad (siehe Plan-Dokument Abschnitt 2, GitHub #54).
 enum SyncOrdnerService {
     private static let bookmarkSchluessel = "syncOrdnerBookmark"
+    /// Bewusst nicht `private` — Tests setzen den zwischengespeicherten
+    /// eigenen Peer-Ordnernamen (GitHub #81) gezielt zurück, analog
+    /// `LamportClock.schluessel`.
+    static let eigenerPeerOrdnerNameCacheSchluessel = "eigenerPeerOrdnerNameCache"
 
     /// Der vom Anwender gewählte Sync-Ordner, sofern einer hinterlegt und das
     /// Security-Scoped-Bookmark noch gültig ist.
@@ -68,6 +72,35 @@ enum SyncOrdnerService {
             at: peersOrdner, includingPropertiesForKeys: nil
         ) else { return false }
 
-        return peerVerzeichnisse.contains { $0.lastPathComponent != DatabaseLeaseService.geraeteID }
+        let eigeneGeraeteID = DatabaseLeaseService.geraeteID
+        return peerVerzeichnisse.contains { !PeerOrdnerName.gehoertZu($0.lastPathComponent, geraeteID: eigeneGeraeteID) }
+    }
+
+    /// Ordnername dieses Geräts unter `peers/` (GitHub #81) — Gerätename +
+    /// kurzes ID-Suffix (``PeerOrdnerName``). Einmal vergeben, wird der Name
+    /// in `UserDefaults` zwischengespeichert; ändert der Anwender später
+    /// seinen Gerätenamen, wird der **bestehende** Ordner beim nächsten
+    /// Export-Zyklus umbenannt statt ein neuer angelegt — sonst blieben dort
+    /// ggf. noch nicht von Peers abgeholte Event-Dateien verwaist liegen
+    /// (vgl. Revert-Begründung in ``SyncExportService``, „Kein Aufräumen
+    /// alter Event-Dateien"). Erkennt auch den erstmaligen Wechsel von einem
+    /// alten, reinen UUID-Ordner (vor GitHub #81) und benennt diesen um.
+    @MainActor
+    static func eigenerPeerOrdnerName(in syncOrdner: URL) -> String {
+        let ziel = PeerOrdnerName.name(geraeteID: DatabaseLeaseService.geraeteID, geraeteName: DatabaseLeaseService.geraeteName)
+        let zwischengespeichert = UserDefaults.standard.string(forKey: eigenerPeerOrdnerNameCacheSchluessel)
+        guard zwischengespeichert != ziel else { return ziel }
+
+        let alterName = zwischengespeichert ?? DatabaseLeaseService.geraeteID
+        if alterName != ziel {
+            let peersOrdner = syncOrdner.appendingPathComponent("peers", isDirectory: true)
+            let alterOrdner = peersOrdner.appendingPathComponent(alterName, isDirectory: true)
+            let neuerOrdner = peersOrdner.appendingPathComponent(ziel, isDirectory: true)
+            if FileManager.default.fileExists(atPath: alterOrdner.path) {
+                try? FileManager.default.moveItem(at: alterOrdner, to: neuerOrdner)
+            }
+        }
+        UserDefaults.standard.set(ziel, forKey: eigenerPeerOrdnerNameCacheSchluessel)
+        return ziel
     }
 }

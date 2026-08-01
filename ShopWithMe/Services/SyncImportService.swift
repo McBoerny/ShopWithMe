@@ -87,7 +87,7 @@ enum SyncImportService {
             at: peersOrdner, includingPropertiesForKeys: nil
         ) else { return true }
 
-        for peerOrdner in peerVerzeichnisse where peerOrdner.lastPathComponent != eigeneGeraeteID {
+        for peerOrdner in peerVerzeichnisse where !PeerOrdnerName.gehoertZu(peerOrdner.lastPathComponent, geraeteID: eigeneGeraeteID) {
             let eventsOrdner = SyncExportService.eventsOrdner(fuerPeer: peerOrdner.lastPathComponent, in: syncOrdner)
             guard let dateien = try? FileManager.default.contentsOfDirectory(
                 at: eventsOrdner, includingPropertiesForKeys: nil

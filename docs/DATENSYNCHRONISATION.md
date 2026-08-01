@@ -9,7 +9,7 @@ warum getroffen wurde, jeder Live-Test-Fund, jeder Bugfix) steht separat in
 
 **Bezug:** [Issue #39](https://github.com/McBoerny/ShopWithMe/issues/39) (Grundarchitektur),
 #48 (Überkauf-Hinweis), #50 (Gruppen-Beitritt), #52/#60/#70/#71 (Live-Test-Robustheit),
-#63 (Ersetzen/Backup).
+#63 (Ersetzen/Backup), #81 (lesbare Peer-Ordnernamen).
 
 ## 1. Grundprinzip
 
@@ -23,14 +23,26 @@ eigenen Unterordner und liest alle anderen:
 ```
 {geteilter Ordner}/
   peers/
-    {geraeteID-A}/
+    {Gerätename-A}_{kurzeID-A}/
       export.json           ← vollständiger Bereich-B/C/D-Stand
       events/
         0001_{uuid}.json     ← einzelne Bereich-A-Events seit letztem Export
         0002_{uuid}.json
-    {geraeteID-B}/
+    {Gerätename-B}_{kurzeID-B}/
       ...
 ```
+
+Der Ordnername (`PeerOrdnerName`, GitHub #81) trägt den vom Anwender vergebenen
+Gerätenamen plus ein sechsstelliges, aus der Geräte-ID abgeleitetes Suffix — das
+Suffix ist **immer** Teil des Namens, nicht nur bei Namensgleichheit zweier
+Geräte, wodurch jede Kollisionsprüfung entfällt. Rein kosmetisch: der Ordnername
+selbst ist niemals die interne Peer-Identität (siehe Abschnitt 2). Ändert der
+Anwender später seinen Gerätenamen, wird der bestehende eigene Ordner beim
+nächsten Export-Zyklus umbenannt (`SyncOrdnerService.eigenerPeerOrdnerName(in:)`),
+nicht neu angelegt — damit dort bereits liegende, von Peers noch nicht
+abgeholte Event-Dateien nicht verwaisen. Alte, noch nicht umbenannte Ordner aus
+der Zeit vor #81 (Ordnername == rohe Geräte-ID) werden von lesendem Code
+weiterhin erkannt (`PeerOrdnerName.gehoertZu(_:geraeteID:)`).
 
 Jedes Gerät liest **alle** Peer-Ordner (auch den eigenen, zur Kontrolle),
 schreibt aber **ausschließlich** in seinen eigenen — dadurch entsteht
@@ -58,7 +70,11 @@ Peers gespiegelt), keine Ablösung dieser Architektur.
 ## 2. Geräte-Identität und Lamport-Uhr
 
 - **Geräte-ID:** `DatabaseLeaseService.geraeteID` (stabile UUID pro
-  Installation) — keine zweite Geräte-Identität.
+  Installation) — die alleinige interne Peer-Identität
+  (`SyncEvent.autorGeraeteID`, `SyncPeerInfo.peerGeraeteID`,
+  `SyncPeerZaehlerStand.peerGeraeteID`). Der Peer-**Ordnername** (Abschnitt 1,
+  GitHub #81) ist davon bewusst entkoppelt und rein kosmetisch — er darf
+  nirgends anstelle der echten `geraeteID` als Identität verwendet werden.
 - **`LamportClock`** (`UserDefaults`-basiert): `naechsterZaehler()` beim
   Erzeugen eines eigenen Events, `beiEmpfang(fremderZaehler:)` beim Empfang
   eines fremden — sorgt für eine geräteübergreifend vergleichbare, monoton

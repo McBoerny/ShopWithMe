@@ -160,10 +160,19 @@ private struct BekannteSyncPeersSection: View {
         for index in offsets {
             let peer = peers[index]
             if let syncOrdner, syncOrdner.startAccessingSecurityScopedResource() {
-                let peerOrdner = syncOrdner
-                    .appendingPathComponent("peers", isDirectory: true)
-                    .appendingPathComponent(peer.peerGeraeteID, isDirectory: true)
-                try? FileManager.default.removeItem(at: peerOrdner)
+                // Der Ordnername trägt seit GitHub #81 den Gerätenamen, nicht
+                // mehr zwingend `peer.peerGeraeteID` selbst — daher `peers/`
+                // scannen und per ``PeerOrdnerName/gehoertZu(_:geraeteID:)``
+                // den tatsächlichen Ordner dieses Peers finden.
+                let peersOrdner = syncOrdner.appendingPathComponent("peers", isDirectory: true)
+                if let peerVerzeichnisse = try? FileManager.default.contentsOfDirectory(
+                    at: peersOrdner, includingPropertiesForKeys: nil
+                ) {
+                    for peerOrdner in peerVerzeichnisse
+                    where PeerOrdnerName.gehoertZu(peerOrdner.lastPathComponent, geraeteID: peer.peerGeraeteID) {
+                        try? FileManager.default.removeItem(at: peerOrdner)
+                    }
+                }
                 syncOrdner.stopAccessingSecurityScopedResource()
             }
             modelContext.delete(peer)

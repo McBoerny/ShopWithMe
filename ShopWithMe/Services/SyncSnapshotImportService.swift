@@ -75,7 +75,7 @@ enum SyncSnapshotImportService {
             at: peersOrdner, includingPropertiesForKeys: nil
         ) else { return true }
 
-        for peerOrdner in peerVerzeichnisse where peerOrdner.lastPathComponent != eigeneGeraeteID {
+        for peerOrdner in peerVerzeichnisse where !PeerOrdnerName.gehoertZu(peerOrdner.lastPathComponent, geraeteID: eigeneGeraeteID) {
             let exportURL = SyncSnapshotExportService.exportURL(fuerPeer: peerOrdner.lastPathComponent, in: syncOrdner)
             guard let snapshot = await ladeSnapshot(von: exportURL) else { continue }
             guard Date().timeIntervalSince(snapshot.erzeugtAm) <= maximalesSnapshotAlter else {
@@ -83,7 +83,14 @@ enum SyncSnapshotImportService {
                 continue
             }
             SyncDebugLogger.protokolliereAlter(.snapshotEmpfangen, erzeugtAm: snapshot.erzeugtAm, zusatz: "peer=\(peerOrdner.lastPathComponent.prefix(8))")
-            merge(snapshot, peerGeraeteID: peerOrdner.lastPathComponent, context: context)
+            // `snapshot.geraeteID` statt des Ordnernamens (GitHub #81): der
+            // Ordnername ist seither eine reine Lesehilfe (Gerätename +
+            // Kurz-Suffix) und keine verlässliche Kennung mehr — die interne
+            // Peer-Identität (`SyncPeerInfo.peerGeraeteID`,
+            // `SyncPeerZaehlerStand.peerGeraeteID`) muss exakt der
+            // `SyncEvent.autorGeraeteID` desselben Geräts entsprechen, sonst
+            // bricht u.a. der Cross-Device-Zähler-Abgleich.
+            merge(snapshot, peerGeraeteID: snapshot.geraeteID, context: context)
         }
 
         protokolliereEinkaufslistenStand(context: context)
@@ -867,7 +874,7 @@ enum SyncSnapshotImportService {
             at: peersOrdner, includingPropertiesForKeys: nil
         ) else { return true }
 
-        for peerOrdner in peerVerzeichnisse where peerOrdner.lastPathComponent != eigeneGeraeteID {
+        for peerOrdner in peerVerzeichnisse where !PeerOrdnerName.gehoertZu(peerOrdner.lastPathComponent, geraeteID: eigeneGeraeteID) {
             let exportURL = SyncSnapshotExportService.exportURL(fuerPeer: peerOrdner.lastPathComponent, in: syncOrdner)
             guard let snapshot = await ladeSnapshot(von: exportURL) else { continue }
             guard Date().timeIntervalSince(snapshot.erzeugtAm) > maximalesSnapshotAlter else { continue }

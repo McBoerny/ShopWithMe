@@ -1696,3 +1696,76 @@ siehe Abschnitt 20).
 **Verifikationsstand:** `xcodebuild build`/`build-for-testing` grün. Neuer
 Test in `SyncSnapshotImportServiceTests`. Noch nicht mit echten Geräten
 nachverifiziert — geplant nach dem vom Nutzer angekündigten Neuaufbau.
+
+## 26. Lesbare Peer-Ordnernamen (GitHub #81)
+
+**Anforderung:** Peer-Ordner unter `peers/` sollten sich im geteilten
+Sync-Ordner (Finder/Dateien-App) schneller einem Gerät zuordnen lassen —
+bisher trug der Ordner ausschließlich die rohe `geraeteID` (eine UUID), ohne
+jeden Bezug zum vom Anwender vergebenen Gerätenamen. Zwei Alternativen
+erwogen: (A) Ordnername = reiner Gerätename, UUID/Kurz-Suffix nur bei
+tatsächlicher Namenskollision angehängt — issue-nah, aber erfordert eine
+Kollisionsprüfung über den Inhalt anderer Peer-Ordner sowie eine zusätzliche
+Identitäts-Referenz je Ordner. (B) Ordnername = Gerätename + Kurz-Suffix aus
+der Geräte-ID, das Suffix **immer**, nicht nur bei Kollision — gewählt, da
+dadurch jede Kollisionsprüfung strukturell entfällt, bei kaum schlechterer
+Lesbarkeit.
+
+**Wichtiger Fund vor der Umsetzung:** `SyncSnapshotImportService.merge(_:peerGeraeteID:context:)`
+erhielt seine `peerGeraeteID` bisher aus dem **Ordnernamen**
+(`peerOrdner.lastPathComponent`), nicht aus dem dafür vorgesehenen
+`SyncSnapshot.geraeteID`-Feld — funktionierte nur, weil beide bislang
+zufällig identisch waren (Ordnername == rohe UUID). `peerGeraeteID` ist
+darüber die interne Peer-Identität von `SyncPeerInfo`/`SyncPeerZaehlerStand`
+(Abgleich gegen `SyncEvent.autorGeraeteID`, siehe Abschnitt 2 in
+`docs/DATENSYNCHRONISATION.md`) — hätte man den Ordnernamen wie geplant vom
+Gerätenamen abhängig gemacht, OHNE diese Stelle zu korrigieren, wäre für
+jeden Peer, der auf das neue Ordnerschema umgestellt hat, eine NEUE,
+unpassende `peerGeraeteID` entstanden: `SyncPeerInfo.geraeteName(fuer:
+autorGeraeteID:)` hätte den Peer nicht mehr gefunden (falsche
+Anzeigenamen bei „bereits abgehakt von …"), und der additive
+Cross-Device-Zähler (`SyncPeerZaehlerStand`, siehe Abschnitt 14) hätte den
+Zählerstand dieses Peers als „neu, noch nie gesehen" behandelt und dessen
+kompletten aktuellen Wert einmalig addiert statt nur das seit dem letzten
+Abgleich entstandene Delta — ein Doppelzählungs-Bug derselben Klasse, vor der
+Abschnitt 14 bereits einmal warnt. Fix im selben Schritt: `merge(...)`
+verwendet jetzt `snapshot.geraeteID` statt des Ordnernamens; der Ordnername
+ist seither vollständig entkoppelt von jeder internen Identität.
+
+**Umsetzung:**
+- `PeerOrdnerName` (neuer Typ): `kurzeID(_:)` (6 Hex-Zeichen der UUID),
+  `bereinigterName(_:)` (dateisystem-sichere Zeichen, max. 40 Zeichen,
+  Fallback „Geraet" bei restlos leerem Namen), `name(geraeteID:geraeteName:)`,
+  `gehoertZu(_:geraeteID:)` (erkennt sowohl das neue Schema als auch alte,
+  reine UUID-Ordner von vor diesem Issue).
+- `SyncOrdnerService.eigenerPeerOrdnerName(in:)`: liefert den aktuellen
+  Zielnamen, zwischengespeichert in `UserDefaults`. Weicht der neu berechnete
+  Zielname vom zwischengespeicherten (oder, beim allerersten Aufruf nach
+  einem Update, von der alten reinen `geraeteID`) ab, wird der **bestehende**
+  Ordner umbenannt (`FileManager.moveItem`), nicht neu angelegt — sonst
+  blieben dort noch nicht von Peers abgeholte Event-Dateien verwaist liegen
+  (vgl. Abschnitt „Kein Aufräumen alter Event-Dateien" in
+  `SyncExportService`). Läuft synchron im bereits bestehenden
+  Security-Scope-Block der Export-Funktionen.
+- `SyncExportService.eigenerEventsOrdner(in:)`/`SyncSnapshotExportService.eigeneExportURL(in:)`:
+  jetzt `@MainActor` (wie `DatabaseLeaseService.geraeteName`), nutzen den
+  neuen Ordnernamen statt der rohen `geraeteID`.
+- Alle „eigenen Ordner überspringen"-Filter (`SyncOrdnerService.hatVorhandenePeers`,
+  `SyncImportService.importiereNeueEvents`, `SyncSnapshotImportService.importiereSnapshots`/
+  `raeumeVerwaisteFremdeExportsAuf`) verwenden jetzt `PeerOrdnerName.gehoertZu(_:geraeteID:)`
+  statt eines exakten String-Vergleichs mit der rohen `geraeteID`.
+- `DebuggingView.peerEntfernen`: baute den zu löschenden Ordner bisher direkt
+  aus `peer.peerGeraeteID`; scannt jetzt `peers/` und löscht per
+  `PeerOrdnerName.gehoertZu(_:geraeteID:)` den tatsächlich passenden Ordner
+  (kann nach obigem Fix vom Ordnernamen abweichen).
+- Die reine Foreign-Peer-Lesepfad-Konstruktion (`eventsOrdner(fuerPeer:)`/
+  `exportURL(fuerPeer:)`, aufgerufen mit `peerOrdner.lastPathComponent` aus
+  einer bereits vorliegenden Ordnerliste) brauchte KEINE Änderung — sie baut
+  ohnehin nur denselben, bereits enumerierten Ordnernamen zu einem Unterpfad
+  zusammen, unabhängig vom gewählten Namensschema.
+
+**Verifikationsstand:** `xcodegen generate` + `xcodebuild build` grün. Neue
+Tests `PeerOrdnerNameTests`, `SyncOrdnerServiceTests` (Umbenennung ohne
+Datenverlust, `hatVorhandenePeers` erkennt neues und altes Schema). Kein
+eigenständiger `xcodebuild test`-Lauf durch Claude (Projektkonvention). Noch
+nicht mit echten Geräten live nachverifiziert.

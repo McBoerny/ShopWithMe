@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.10 (Build 176) — Lesbare Peer-Ordnernamen (GitHub #81)
+
+- Peer-Ordner unter `peers/` im geteilten Sync-Ordner tragen jetzt den vom
+  Anwender vergebenen Gerätenamen statt nur einer rohen UUID (`PeerOrdnerName`),
+  damit sie sich in Finder/Dateien-App direkt einem Gerät zuordnen lassen. Ein
+  kurzes ID-Suffix ist immer Teil des Namens — macht jede Kollisionsprüfung
+  unnötig. Ändert sich der Gerätename später, wird der bestehende Ordner
+  umbenannt statt neu angelegt (keine verwaisten Event-Dateien).
+- Im selben Zug einen latenten Bug behoben: die interne Peer-Identität für den
+  additiven Cross-Device-Zähler und die „bereits abgehakt von …"-Anzeige wurde
+  bisher aus dem Ordnernamen statt aus dem dafür vorgesehenen Feld
+  `SyncSnapshot.geraeteID` abgeleitet — hätte mit der Ordnernamens-Änderung
+  sonst zu doppelt gezählten Peer-Ständen geführt. Details:
+  `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 26.
+
 ## v0.10 (Build 175) — Preishistorie-Verdichtung (täglich → wöchentlich → monatlich)
 
 - **GitHub #76-Folgearbeit.** Neuer `PreispunktVerdichtungService`: reduziert alte
