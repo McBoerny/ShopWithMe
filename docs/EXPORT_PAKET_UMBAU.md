@@ -51,6 +51,20 @@ tatsächlich geändert hat (`SyncSnapshotExportService.schreibeTeilFallsGeaender
 — ein Zyklus, in dem nur ein `Einkaufsvorgang.endZeit` sich ändert, schreibt
 nur `vorgaenge.json` neu, nicht `stamm.json`/`lernen.json`/`preise.json`.
 
+**Live-Test-Fund (2026-08-01): Fingerabdruck-Übereinstimmung allein reicht
+nicht.** Der in `UserDefaults` gespeicherte Fingerabdruck übersteht bewusst
+einen App-Neustart, sagt aber nichts darüber aus, ob die zugehörige Datei am
+Zielort noch existiert. Nach Deaktivieren/Reaktivieren der Synchronisierung
+fehlten `stamm.json`/`lernen.json`/`vorgaenge.json`/`preise.json`/
+`tombstones.json` im neu verbundenen Peer-Ordner dauerhaft — der
+Fingerabdruck-Vergleich meldete „unverändert", obwohl die Datei dort schlicht
+nie angekommen war. `manifest.json` (immer geschrieben) und `kaeufe/`
+(Existenz-Check auf die Datei selbst) blieben davon unberührt, was den Befund
+zunächst auf genau diese fünf Dateien eingrenzte. Fix:
+`schreibeTeilFallsGeaendert` prüft jetzt zusätzlich `FileManager.default.fileExists`
+— nur wenn Fingerabdruck UND tatsächliches Vorhandensein übereinstimmen, wird
+übersprungen.
+
 ## Warum eine eigene `tombstones.json`
 
 Ursprünglich war geplant, Tombstones in `vorgaenge.json` zu bündeln. Beim

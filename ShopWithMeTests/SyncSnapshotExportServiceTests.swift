@@ -213,6 +213,42 @@ struct SyncSnapshotExportServiceTests {
         #expect(FileManager.default.fileExists(atPath: vorgaengeURL.path))
     }
 
+    /// Regressionstest für einen Live-Test-Nachfolgefund (2026-08-01): der in
+    /// `UserDefaults` gespeicherte Fingerabdruck übersteht bewusst einen
+    /// App-Neustart — sagt aber nichts darüber aus, ob die zugehörige Datei
+    /// am Zielort noch existiert. Nach Deaktivieren/Reaktivieren der
+    /// Synchronisierung (hier simuliert: Datei manuell gelöscht, ohne den
+    /// lokalen Bestand zu ändern) blieb `stamm.json` bisher dauerhaft
+    /// unerreichbar, weil der Fingerabdruck-Vergleich allein „unverändert"
+    /// meldete. Existiert die Datei nicht mehr, muss trotz unverändertem
+    /// Fingerabdruck neu geschrieben werden.
+    @Test
+    func teilWirdErneutGeschriebenWennDateiTrotzUnveraendertemFingerabdruckFehlt() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let geschaeft = Geschaeft(name: "Rewe", typen: [])
+        context.insert(geschaeft)
+        try context.save()
+
+        await SyncSnapshotExportService.exportierePaket(context: context)
+        let stammURL = SyncSnapshotExportService.eigeneStammURL(in: syncOrdner)
+        #expect(FileManager.default.fileExists(atPath: stammURL.path))
+
+        // Simuliert einen verlorenen Zielort (z.B. Deaktivieren/Reaktivieren
+        // der Synchronisierung) — der lokale Bestand ändert sich NICHT,
+        // der zwischengespeicherte Fingerabdruck bleibt also identisch.
+        try FileManager.default.removeItem(at: stammURL)
+        #expect(!FileManager.default.fileExists(atPath: stammURL.path))
+
+        await SyncSnapshotExportService.exportierePaket(context: context)
+
+        #expect(FileManager.default.fileExists(atPath: stammURL.path))
+    }
+
     /// Regressionstest für einen Live-Test-Nachfolgefund (2026-07-31): nicht
     /// nur die äußeren Snapshot-Arrays (ein Eintrag je Entität), auch die
     /// ID-Arrays INNERHALB eines Eintrags (z.B. `GeschaeftSnapshot/typIDs`,

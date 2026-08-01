@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.10 (Build 183) — Fix: Paket-Teile fehlten dauerhaft nach Reaktivieren der Synchronisierung
+
+- **Live-Test-Fund.** Der in `UserDefaults` gespeicherte Fingerabdruck je
+  Paket-Teil übersteht bewusst einen App-Neustart, sagte aber nichts darüber
+  aus, ob die zugehörige Datei am Zielort noch existiert. Nach
+  Deaktivieren/Reaktivieren der Synchronisierung fehlten `stamm.json`/
+  `lernen.json`/`vorgaenge.json`/`preise.json`/`tombstones.json` im neu
+  verbundenen Peer-Ordner dauerhaft — nur `manifest.json` (immer geschrieben)
+  und `kaeufe/` (Existenz-Check pro Datei) legten sich an. Fix:
+  `schreibeTeilFallsGeaendert` prüft jetzt zusätzlich, ob die Datei
+  tatsächlich noch existiert — nur bei Fingerabdruck-Übereinstimmung UND
+  vorhandener Datei wird übersprungen. Details: `docs/EXPORT_PAKET_UMBAU.md`.
+
 ## v0.10 (Build 181) — Fix: kompletter Sync-Stillstand durch verschachtelte Security-Scope-Zugriffe
 
 - **Live-Test-Fund, direkt nach der export.json-Paket-Umstellung.** Das neue

@@ -407,11 +407,29 @@ enum SyncSnapshotExportService {
     /// zunächst verlorengegangen — ohne sie ließ sich „welcher Teil schreibt,
     /// welcher wird fälschlich als unverändert übersprungen" nicht mehr direkt
     /// aus dem Protokoll ablesen, nur noch indirekt über die Datei-Zeitstempel.
+    ///
+    /// **Live-Test-Nachfolgefund (2026-08-01): Fingerabdruck-Übereinstimmung
+    /// allein reicht nicht.** `letzterGeschriebenerFingerabdruck` in
+    /// `UserDefaults` übersteht bewusst einen App-Neustart (Zweck: „diese
+    /// Daten habe ich schon geschrieben"), sagt aber nichts darüber aus, ob
+    /// die zugehörige Datei am Zielort tatsächlich noch existiert. Nach
+    /// Deaktivieren/Reaktivieren der Synchronisierung (oder jedem anderen
+    /// Verlust der Zieldatei unabhängig von einer echten Inhaltsänderung)
+    /// verhinderte das fälschlich jedes erneute Schreiben — beobachtet als
+    /// dauerhaft fehlende `stamm.json`/`lernen.json`/`vorgaenge.json`/
+    /// `preise.json`/`tombstones.json` in einem frisch verbundenen
+    /// Peer-Ordner, während `manifest.json` (immer geschrieben) und
+    /// `kaeufe/` (Existenz-Check auf die Datei selbst, kein Fingerabdruck)
+    /// unauffällig blieben. Fix: zusätzlich zum Fingerabdruck-Vergleich
+    /// prüfen, ob die Datei tatsächlich noch vorhanden ist — fehlt sie, wird
+    /// unabhängig vom Fingerabdruck neu geschrieben.
     @discardableResult
     private static func schreibeTeilFallsGeaendert<T: Encodable>(_ wert: T, url: URL, fingerabdruckSchluessel: String, teilName: String) -> Bool {
         guard let daten = try? encoder.encode(wert) else { return true }
         let fingerabdruck = SHA256.hash(data: daten).map { String(format: "%02x", $0) }.joined()
-        guard fingerabdruck != UserDefaults.standard.string(forKey: fingerabdruckSchluessel) else {
+        let unveraendertUndVorhanden = fingerabdruck == UserDefaults.standard.string(forKey: fingerabdruckSchluessel)
+            && FileManager.default.fileExists(atPath: url.path)
+        guard !unveraendertUndVorhanden else {
             if SyncDebugLogger.istAktiv {
                 SyncDebugLogger.log(.snapshotUnveraendertUebersprungen, details: "\(teilName) fingerabdruck=\(fingerabdruck.prefix(8))")
             }

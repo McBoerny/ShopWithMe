@@ -2003,3 +2003,55 @@ grün, keine neuen Warnungen. Test `SyncKaeufeExportServiceTests.entferneDateien
 an den Batch-Aufruf angepasst. Noch nicht erneut auf den beiden betroffenen
 echten Geräten nachverifiziert — dafür muss die App dort neu gebaut/installiert
 werden.
+
+## 31. Live-Test-Fund: Paket-Teile fehlten dauerhaft nach Reaktivieren der Synchronisierung
+
+**Nach Build 181** (Abschnitt 30-Fix bereits auf beiden Geräten installiert)
+meldete der Nutzer: nach Deaktivieren der Synchronisierung auf beiden
+Geräten, Neustart und Reaktivieren legt der Sync-Zyklus im Peer-Ordner nur
+noch `manifest.json` und den `kaeufe/`-Ordner an — `tombstones.json`/
+`stamm.json`/`lernen.json`/`vorgaenge.json`/`preise.json` fehlen komplett,
+dauerhaft, auch nach mehreren Zyklen.
+
+**Erster Schritt: Sichtbarkeit fehlte.** `schreibeTeilFallsGeaendert` (aus
+Abschnitt 29) protokollierte anders als die alte `exportiereSnapshot`-Funktion
+nicht, ob ein Teil geschrieben oder als unverändert übersprungen wurde —
+nachgerüstet (`.snapshotGeschrieben`/`.snapshotUnveraendertUebersprungen` je
+Teilname), ohne diese Sichtbarkeit wäre die eigentliche Ursache nicht
+auffindbar gewesen.
+
+**Mit der Sichtbarkeit sofort erkennbar:** das Protokoll zeigte
+`sync_snapshot_unveraendert_uebersprungen` für alle fünf Teile, mit
+**identischem, stabilem Fingerabdruck bereits im ersten Zyklus nach dem
+Neustart** — der in `UserDefaults` gespeicherte Fingerabdruck aus einer
+früheren Sitzung wurde also als „unverändert" erkannt. Der Nutzer bestätigte
+danach explizit: die fünf Dateien fehlen im neu verbundenen Peer-Ordner
+tatsächlich komplett, nicht nur „nicht aktualisiert".
+
+**Root Cause:** `schreibeTeilFallsGeaendert` verglich ausschließlich den
+Fingerabdruck, nie ob die Zieldatei überhaupt noch existiert. Der
+`UserDefaults`-Fingerabdruck ist bewusst so gebaut, dass er einen
+App-Neustart übersteht (soll er auch) — er beantwortet aber nur „hat sich der
+lokale Datenbestand seit dem letzten Schreiben verändert", nicht „liegt die
+Datei auch tatsächlich noch am erwarteten Ort". Nach
+Deaktivieren/Reaktivieren der Synchronisierung war genau das nicht mehr der
+Fall (die fünf Dateien im neu verbundenen Peer-Ordner existierten schlicht
+nicht) — der unveränderte lokale Bestand + der unveränderte Fingerabdruck
+verhinderten dadurch dauerhaft jedes erneute Schreiben. `manifest.json`
+(bedingungslos jeden Zyklus geschrieben) und `kaeufe/` (Existenz-Check direkt
+auf die Datei, kein Fingerabdruck-Umweg) waren strukturell gegen genau diese
+Fehlerklasse immun — was den Befund von Anfang an auf die fünf
+Fingerabdruck-geprüften Teile eingrenzte.
+
+**Fix:** `schreibeTeilFallsGeaendert` überspringt das Schreiben jetzt nur noch,
+wenn Fingerabdruck-Übereinstimmung UND `FileManager.default.fileExists`
+beide zutreffen — fehlt die Datei, wird unabhängig vom Fingerabdruck neu
+geschrieben.
+
+**Verifikationsstand:** `xcodegen generate` + `xcodebuild build-for-testing`
+grün, keine neuen Warnungen. Neuer Regressionstest
+`SyncSnapshotExportServiceTests.teilWirdErneutGeschriebenWennDateiTrotzUnveraendertemFingerabdruckFehlt`
+(Datei nach erstem Export manuell entfernt, Bestand unverändert gelassen,
+zweiter Export muss die Datei trotz identischem Fingerabdruck neu schreiben).
+Kein eigenständiger `xcodebuild test`-Lauf durch Claude (Projektkonvention) —
+noch nicht auf den beiden betroffenen echten Geräten nachverifiziert.
