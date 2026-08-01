@@ -415,7 +415,13 @@ kompletten `kaeufe/`-Ordners, aber ohne `events/` anzutasten.
   unbegrenzt) — ein früherer Versuch, sie nach einem Sicherheitsfenster zu
   löschen, löschte dabei noch nicht von allen Peers abgeholte Events (siehe
   `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 15) und wurde revertiert.
-  Für den aktuellen Umfang unkritisch (kleine JSON-Dateien).
+  Die Speicherplatz-Grenze bleibt unadressiert (kleine JSON-Dateien, für den
+  aktuellen Umfang unkritisch); das wiederholte LESEN längst entschiedener
+  Dateien bei jedem Zyklus ist seit dem Performance-Fund „ID-Vorfilter aus
+  Dateinamen" (`SyncImportService.importiereNeueEvents`) aber kein
+  wachsendes Problem mehr — bereits bekannte Event-IDs werden anhand des
+  Dateinamens erkannt und ihre Dateien gar nicht erst gelesen/dekodiert,
+  ohne die Retry-Semantik für noch nicht auflösbare Events zu berühren.
 - **Kein echtes Hintergrund-Sync:** ein In-App-`Task`-Loop läuft nur im
   Vordergrund — Sync bei gesperrtem Gerät oder vor dem Öffnen der App bräuchte
   das `BackgroundTasks`-Framework, nicht umgesetzt.

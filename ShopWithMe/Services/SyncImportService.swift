@@ -90,9 +90,10 @@ enum SyncImportService {
         // Einmal für den gesamten Zyklus aufgebaut statt pro eingehendem Event
         // per ``SyncEventService/aktuellerGewinner(bezugsID:artikelID:context:)``
         // neu gefetcht+dekodiert (Performance-Fund, O(n) statt O(n²) bei n
-        // eingehenden Events) — ``wendeAn(_:gewinner:context:)`` hält den Index
-        // während der Verarbeitung selbst aktuell, siehe dort.
-        var gewinner = SyncEventService.alleAktuellenGewinner(context: context)
+        // eingehenden Events) — ``wendeAn(_:gewinner:context:)`` hält den
+        // Gewinner-Index während der Verarbeitung selbst aktuell, siehe dort.
+        // `bekannteIDs` dient unten als Vorfilter gegen unnötige Datei-Lesevorgänge.
+        var (gewinner, bekannteIDs) = SyncEventService.alleAktuellenGewinnerUndBekannteIDs(context: context)
 
         for peerOrdner in peerVerzeichnisse where !PeerOrdnerName.gehoertZu(peerOrdner.lastPathComponent, geraeteID: eigeneGeraeteID) {
             let eventsOrdner = SyncExportService.eventsOrdner(fuerPeer: peerOrdner.lastPathComponent, in: syncOrdner)
@@ -100,7 +101,23 @@ enum SyncImportService {
                 at: eventsOrdner, includingPropertiesForKeys: nil
             ) else { continue }
 
-            let jsonDateien = dateien.filter { $0.pathExtension == "json" }
+            // Vorfilter gegen die im Dateinamen kodierte ID (Performance-Fund,
+            // siehe Typ-Doku „Bekannte Grenze" oben und
+            // ``SyncEventService/alleAktuellenGewinnerUndBekannteIDs(context:)``):
+            // Event-Dateien werden nie gelöscht (Abschnitt 9), ohne diesen
+            // Vorfilter läse und dekodierte jeder Zyklus JEDE jemals
+            // exportierte Datei erneut, auch längst entschiedene. Ein Event,
+            // dessen Referenz noch nicht auflösbar ist, wird laut Typ-Doku
+            // NIE als bekannt markiert — bleibt also außerhalb von
+            // `bekannteIDs` und wird hier weiterhin jeden Zyklus neu
+            // gelesen/versucht, die Retry-Semantik bleibt dadurch unverändert
+            // korrekt. Ein Dateiname, dessen ID sich nicht parsen lässt (z.B.
+            // fremdes/beschädigtes Format), wird sicherheitshalber NICHT
+            // gefiltert, sondern wie bisher gelesen.
+            let jsonDateien = dateien.filter { $0.pathExtension == "json" }.filter { url in
+                guard let id = eventID(ausDateiname: url) else { return true }
+                return !bekannteIDs.contains(id)
+            }
             let empfangeneEvents = await ladeEvents(aus: jsonDateien)
                 .sorted { $0.lamportZaehler < $1.lamportZaehler }
 
@@ -116,6 +133,18 @@ enum SyncImportService {
         guard context.hasChanges else { return true }
         try? context.save()
         return true
+    }
+
+    /// Extrahiert die ``SyncEvent/id`` aus dem Dateinamen einer Peer-Event-Datei
+    /// (`{zehnstelliger Lamport-Zähler}_{uuid}.json`, siehe
+    /// ``SyncExportService/dateiname(fuer:)``) — OHNE die Datei zu lesen.
+    /// Grundlage für den Vorfilter in ``importiereNeueEvents(context:)``, `nil`
+    /// bei jedem nicht zum erwarteten Muster passenden Namen (sicherheitshalber
+    /// nicht gefiltert, siehe Aufrufer).
+    nonisolated private static func eventID(ausDateiname url: URL) -> UUID? {
+        let basisname = url.deletingPathExtension().lastPathComponent
+        guard let unterstrichIndex = basisname.firstIndex(of: "_") else { return nil }
+        return UUID(uuidString: String(basisname[basisname.index(after: unterstrichIndex)...]))
     }
 
     /// Lädt und dekodiert Event-Dateien über einen koordinierten Lesezugriff
@@ -203,7 +232,7 @@ enum SyncImportService {
         SyncDebugLogger.protokolliereAlter(.eventEmpfangen, erzeugtAm: empfangen.wallClock, zusatz: "art=\(art.rawValue)")
     }
 
-    /// Prüft gegen den vorab per ``SyncEventService/alleAktuellenGewinner(context:)``
+    /// Prüft gegen den vorab per ``SyncEventService/alleAktuellenGewinnerUndBekannteIDs(context:)``
     /// aufgebauten und vom Aufrufer aktuell gehaltenen Index, ob das neue Event
     /// gegen den bisher bekannten Gewinner für dasselbe (`bezugsID`,
     /// `artikelID`)-Paar besteht. Ohne konkurrierende Events gewinnt das neue

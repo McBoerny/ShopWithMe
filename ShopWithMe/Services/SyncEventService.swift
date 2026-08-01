@@ -86,7 +86,7 @@ enum SyncEventService {
         }
     }
 
-    /// Schlüssel für den Gewinner-Index (``alleAktuellenGewinner(context:)``).
+    /// Schlüssel für den Gewinner-Index (``alleAktuellenGewinnerUndBekannteIDs(context:)``).
     struct PaarSchluessel: Hashable {
         var bezugsID: UUID
         var artikelID: UUID
@@ -103,15 +103,30 @@ enum SyncEventService {
     /// ``aktuellerGewinner(bezugsID:artikelID:context:)``, ein voller
     /// Indexaufbau lohnt sich dort nicht.
     ///
-    /// Der Aufrufer muss den zurückgegebenen Index während der Verarbeitung
-    /// selbst aktuell halten (siehe ``SyncImportService/wendeAn(_:gewinner:context:)``):
-    /// ein innerhalb desselben Zyklus neu übernommenes Event kann den
-    /// Gewinner für sein eigenes Paar sofort ändern, dieser Index ist nur eine
-    /// Momentaufnahme zum Zeitpunkt des Aufrufs.
-    static func alleAktuellenGewinner(context: ModelContext) -> [PaarSchluessel: SyncEvent] {
+    /// Liefert außerdem `bekannteIDs` (alle lokal vorhandenen ``SyncEvent/id``s)
+    /// aus demselben, bereits geladenen Bestand mit — ``SyncImportService``
+    /// nutzt sie, um bereits entschiedene Peer-Event-Dateien anhand der im
+    /// Dateinamen kodierten ID zu überspringen, OHNE sie zu lesen/dekodieren
+    /// (Abschnitt 9 „Bekannte Grenzen": Event-Dateien werden nie gelöscht,
+    /// ohne diesen Vorfilter läse und dekodierte jeder Zyklus JEDE jemals
+    /// exportierte Event-Datei neu). Ein separater Fetch dafür wäre
+    /// redundant, da hier ohnehin schon jedes ``SyncEvent`` durchlaufen wird.
+    ///
+    /// Der Aufrufer muss den zurückgegebenen Gewinner-Index während der
+    /// Verarbeitung selbst aktuell halten (siehe
+    /// ``SyncImportService/wendeAn(_:gewinner:context:)``): ein innerhalb
+    /// desselben Zyklus neu übernommenes Event kann den Gewinner für sein
+    /// eigenes Paar sofort ändern, dieser Index ist nur eine Momentaufnahme
+    /// zum Zeitpunkt des Aufrufs. `bekannteIDs` braucht dagegen keine
+    /// Mid-Zyklus-Aktualisierung — jede Peer-Datei wird pro Zyklus ohnehin nur
+    /// einmal betrachtet, ein bereits VOR dem Zyklus bekanntes Event bleibt
+    /// über den gesamten Zyklus hinweg bekannt.
+    static func alleAktuellenGewinnerUndBekannteIDs(context: ModelContext) -> (gewinner: [PaarSchluessel: SyncEvent], bekannteIDs: Set<UUID>) {
         let alle = (try? context.fetch(FetchDescriptor<SyncEvent>())) ?? []
         var gewinner: [PaarSchluessel: SyncEvent] = [:]
+        var bekannteIDs: Set<UUID> = []
         for event in alle {
+            bekannteIDs.insert(event.id)
             guard let nutzlast = event.nutzlastDekodiert, let art = event.art else { continue }
             let schluessel = PaarSchluessel(bezugsID: nutzlast.bezugsID, artikelID: nutzlast.artikelID)
             guard let bisheriger = gewinner[schluessel], let bisherigeArt = bisheriger.art else {
@@ -124,6 +139,6 @@ enum SyncEventService {
             )
             if kandidatGewinnt { gewinner[schluessel] = event }
         }
-        return gewinner
+        return (gewinner, bekannteIDs)
     }
 }
