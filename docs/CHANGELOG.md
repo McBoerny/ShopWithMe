@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.10 (Build 189) — Sync-Performance: einkaufslistenEintraege aus stamm.json in listen.json ausgelagert (GitHub #85)
+
+- **Analyse-Fund.** `stamm.json` enthielt neben den echten (seltenen)
+  Stammdaten (Geschäftstypen/Kategorien/Geschäfte/Artikel/Listen/Aliase)
+  zusätzlich `einkaufslistenEintraege` — den vollständigen
+  Einkaufslisten-Inhalt als additives Sicherheitsnetz neben den eigentlich
+  zuständigen Bereich-A-Events. Da der Fingerabdruck-Vergleich `stamm.json`
+  als eine Einheit behandelt, riss praktisch jedes Abhaken/Hinzufügen/
+  Entfernen auf einer Einkaufsliste einen kompletten Neuaufbau/-schrieb der
+  eigentlich stabilen Stammdaten mit sich — genau das Muster, das GitHub #82
+  für `kaufEintraege` bereits behoben hatte, hier unentdeckt in `stamm.json`
+  weiterbestehend. `einkaufslistenEintraege` ist jetzt ein eigener,
+  unabhängig fingerabdruck-geprüfter Paket-Teil (`SyncListenSnapshot`/
+  `listen.json`) — Details und Migrationsverhalten für Peers mit alter
+  `stamm.json` in `docs/EXPORT_PAKET_UMBAU.md`. Merge-Logik unverändert.
+  Regressionstest `nurEinkaufslisteGeaendertLaesstStammJsonUnveraendert`
+  verifiziert die Kernaussage direkt.
+
 ## v0.10 (Build 188) — Umbenennung Kategorie → Warengruppe in GUI und internen Bezeichnern (GitHub #62)
 
 - Alle sichtbaren GUI-Texte ("Kategorie(n)" → "Warengruppe(n)") in Views,

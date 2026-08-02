@@ -278,14 +278,38 @@ struct SyncPeerManifest: Codable {
 /// Bereich B (Stammdaten) — ändert sich selten, klein, immer als Ganzes
 /// neu aufgebaut wie bisher der komplette Monolith, aber unabhängig von den
 /// anderen Teilen fingerabdruck-geprüft.
+///
+/// **Enthält bewusst NICHT `einkaufslistenEintraege`** (GitHub #85, siehe
+/// ``SyncListenSnapshot``) — dieses Feld gehörte zwar inhaltlich zu Bereich B
+/// (Sicherheitsnetz-Kopie), änderte sich aber mit der Frequenz von Bereich A
+/// (bei jedem Abhaken/Hinzufügen/Entfernen auf einer Einkaufsliste) und riss
+/// dadurch bislang bei JEDER dieser sehr häufigen Aktionen einen kompletten
+/// Neuaufbau/-schrieb der eigentlich seltenen echten Stammdaten
+/// (Geschäftstypen/Kategorien/Geschäfte/Artikel/Listen/Aliase) mit sich, weil
+/// der Fingerabdruck-Vergleich die gesamte Struktur als eine Einheit
+/// behandelt — analog der bereits bestehenden Begründung für die Trennung von
+/// ``SyncVorgaengeSnapshot``/``SyncPreisSnapshot`` unten.
 struct SyncStammSnapshot: Codable {
     var geschaeftsTypen: [GeschaeftTypSnapshot]
     var artikelKategorien: [ArtikelKategorieSnapshot]
     var geschaefte: [GeschaeftSnapshot]
     var artikel: [ArtikelSnapshot]
     var einkaufslisten: [EinkaufslisteSnapshot]
-    var einkaufslistenEintraege: [EinkaufslistenEintragSnapshot]
     var artikelAliase: [ArtikelAliasSnapshot]
+}
+
+/// Bereich A, Sicherheitsnetz-Kopie des vollständigen Einkaufslisten-Inhalts
+/// (GitHub #85, herausgelöst aus ``SyncStammSnapshot``) — eigene Datei, weil
+/// sich dieser Inhalt mit der Häufigkeit von Bereich-A-Aktionen ändert
+/// (Abhaken/Hinzufügen/Entfernen, oft alle paar Sekunden während aktiv
+/// eingekauft wird), nicht mit der Häufigkeit echter Stammdaten-Änderungen.
+/// Zweck und additive Merge-Regel unverändert gegenüber der bisherigen
+/// Platzierung, siehe ``SyncSnapshot/einkaufslistenEintraege`` (dort für den
+/// weiterhin unveränderten lokalen Backup-Pfad) bzw.
+/// `docs/DATENSYNCHRONISATION.md` Abschnitt 4, „Architektur-Revision
+/// Alternative A".
+struct SyncListenSnapshot: Codable {
+    var einkaufslistenEintraege: [EinkaufslistenEintragSnapshot]
 }
 
 /// Bereich D (Lernen) — eigene Datei statt Bündelung mit Stammdaten, da

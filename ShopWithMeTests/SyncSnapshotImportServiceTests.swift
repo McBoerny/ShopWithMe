@@ -49,8 +49,9 @@ struct SyncSnapshotImportServiceTests {
         let stamm = SyncStammSnapshot(
             geschaeftsTypen: snapshot.geschaeftsTypen, artikelKategorien: snapshot.artikelKategorien,
             geschaefte: snapshot.geschaefte, artikel: snapshot.artikel, einkaufslisten: snapshot.einkaufslisten,
-            einkaufslistenEintraege: snapshot.einkaufslistenEintraege, artikelAliase: snapshot.artikelAliase
+            artikelAliase: snapshot.artikelAliase
         )
+        let listen = SyncListenSnapshot(einkaufslistenEintraege: snapshot.einkaufslistenEintraege)
         let lernen = SyncLernenSnapshot(warengruppenDistanzen: snapshot.warengruppenDistanzen)
         let vorgaenge = SyncVorgaengeSnapshot(einkaufsvorgaenge: snapshot.einkaufsvorgaenge)
         let preise = SyncPreisSnapshot(preispunkte: snapshot.preispunkte)
@@ -61,6 +62,7 @@ struct SyncSnapshotImportServiceTests {
         try JSONEncoder().encode(snapshot.tombstones)
             .write(to: SyncSnapshotExportService.tombstonesURL(fuerPeer: fremdeGeraeteID, in: syncOrdner))
         try JSONEncoder().encode(stamm).write(to: SyncSnapshotExportService.stammURL(fuerPeer: fremdeGeraeteID, in: syncOrdner))
+        try JSONEncoder().encode(listen).write(to: SyncSnapshotExportService.listenURL(fuerPeer: fremdeGeraeteID, in: syncOrdner))
         try JSONEncoder().encode(lernen).write(to: SyncSnapshotExportService.lernenURL(fuerPeer: fremdeGeraeteID, in: syncOrdner))
         try JSONEncoder().encode(vorgaenge).write(to: SyncSnapshotExportService.vorgaengeURL(fuerPeer: fremdeGeraeteID, in: syncOrdner))
         try JSONEncoder().encode(preise).write(to: SyncSnapshotExportService.preiseURL(fuerPeer: fremdeGeraeteID, in: syncOrdner))
@@ -231,6 +233,7 @@ struct SyncSnapshotImportServiceTests {
             try JSONEncoder().encode(teile.manifest).write(to: manifestURL)
             try JSONEncoder().encode(teile.tombstones).write(to: SyncSnapshotExportService.tombstonesURL(fuerPeer: "peer", in: ordner))
             try JSONEncoder().encode(teile.stamm).write(to: SyncSnapshotExportService.stammURL(fuerPeer: "peer", in: ordner))
+            try JSONEncoder().encode(teile.listen).write(to: SyncSnapshotExportService.listenURL(fuerPeer: "peer", in: ordner))
             try JSONEncoder().encode(teile.lernen).write(to: SyncSnapshotExportService.lernenURL(fuerPeer: "peer", in: ordner))
             try JSONEncoder().encode(teile.vorgaenge).write(to: SyncSnapshotExportService.vorgaengeURL(fuerPeer: "peer", in: ordner))
             try JSONEncoder().encode(teile.preise).write(to: SyncSnapshotExportService.preiseURL(fuerPeer: "peer", in: ordner))

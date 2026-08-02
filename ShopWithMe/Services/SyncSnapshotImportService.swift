@@ -99,8 +99,17 @@ enum SyncSnapshotImportService {
                 SyncStammSnapshot.self, von: SyncSnapshotExportService.stammURL(fuerPeer: peerName, in: syncOrdner)
             ) ?? SyncStammSnapshot(
                 geschaeftsTypen: [], artikelKategorien: [], geschaefte: [], artikel: [],
-                einkaufslisten: [], einkaufslistenEintraege: [], artikelAliase: []
+                einkaufslisten: [], artikelAliase: []
             )
+            // GitHub #85: aus `stamm.json` herausgelöst — `nil`/leer bedeutet
+            // hier zusätzlich „Peer schreibt noch die alte, kombinierte
+            // stamm.json" (Übergangszeit bis beide Geräte aktualisiert sind);
+            // das Sicherheitsnetz bleibt für diesen einen Zyklus dann leer,
+            // ist aber rein additiv und holt sich fehlende Einträge beim
+            // nächsten Zyklus nach, sobald der Peer selbst aktualisiert.
+            let listen = await ladeTeil(
+                SyncListenSnapshot.self, von: SyncSnapshotExportService.listenURL(fuerPeer: peerName, in: syncOrdner)
+            ) ?? SyncListenSnapshot(einkaufslistenEintraege: [])
             let lernen = await ladeTeil(
                 SyncLernenSnapshot.self, von: SyncSnapshotExportService.lernenURL(fuerPeer: peerName, in: syncOrdner)
             ) ?? SyncLernenSnapshot(warengruppenDistanzen: [])
@@ -119,7 +128,7 @@ enum SyncSnapshotImportService {
             // muss exakt der `SyncEvent.autorGeraeteID` desselben Geräts
             // entsprechen, sonst bricht u.a. der Cross-Device-Zähler-Abgleich.
             mergePaket(
-                tombstones: tombstones, stamm: stamm, lernen: lernen, vorgaenge: vorgaenge, preise: preise, kaeufe: kaeufe,
+                tombstones: tombstones, stamm: stamm, listen: listen, lernen: lernen, vorgaenge: vorgaenge, preise: preise, kaeufe: kaeufe,
                 geraeteName: manifest.geraeteName, peerGeraeteID: manifest.geraeteID, erzeugtAm: manifest.erzeugtAm, context: context
             )
         }
@@ -209,9 +218,10 @@ enum SyncSnapshotImportService {
     }
 
     /// Paket-Pendant zu ``merge(_:peerGeraeteID:context:)`` (GitHub #82) —
-    /// identische Reihenfolge/Merge-Logik, nur aus den fünf unabhängig
-    /// gelesenen Paket-Teilen zusammengesetzt statt aus einem einzelnen
-    /// ``SyncSnapshot``. Ruft dieselben, unverändert wiederverwendeten
+    /// identische Reihenfolge/Merge-Logik, nur aus den unabhängig gelesenen
+    /// Paket-Teilen zusammengesetzt statt aus einem einzelnen ``SyncSnapshot``
+    /// (`listen` seit GitHub #85 ein eigener Teil statt in `stamm` gebündelt,
+    /// siehe ``SyncListenSnapshot``). Ruft dieselben, unverändert wiederverwendeten
     /// `mergeX`-Funktionen auf — insbesondere bleibt die Reihenfolge
     /// „Tombstones zuerst" erhalten (siehe Typ-Doku „Architektur-Revision
     /// Alternative A"): `tombstones.json` gilt bewusst nicht nur für Bereich C
@@ -221,7 +231,7 @@ enum SyncSnapshotImportService {
     /// `vorgaenge.json`.
     @MainActor
     private static func mergePaket(
-        tombstones: [SyncTombstoneSnapshot], stamm: SyncStammSnapshot, lernen: SyncLernenSnapshot,
+        tombstones: [SyncTombstoneSnapshot], stamm: SyncStammSnapshot, listen: SyncListenSnapshot, lernen: SyncLernenSnapshot,
         vorgaenge: SyncVorgaengeSnapshot, preise: SyncPreisSnapshot, kaeufe: [KaufEintragSnapshot],
         geraeteName: String, peerGeraeteID: String, erzeugtAm: Date, context: ModelContext
     ) {
@@ -251,7 +261,7 @@ enum SyncSnapshotImportService {
         let artikelZuordnung = mergeArtikel(stamm.artikel, kategorieZuordnung: kategorieZuordnung, aliase: aliase, context: context)
         let listeZuordnung = mergeEinkaufslisten(stamm.einkaufslisten, aliase: aliase, context: context)
         mergeEinkaufslistenEintraege(
-            stamm.einkaufslistenEintraege, listeZuordnung: listeZuordnung, artikelZuordnung: artikelZuordnung, context: context
+            listen.einkaufslistenEintraege, listeZuordnung: listeZuordnung, artikelZuordnung: artikelZuordnung, context: context
         )
         let einkaufsvorgangZuordnung = mergeEinkaufsvorgaenge(
             vorgaenge.einkaufsvorgaenge, geschaeftZuordnung: geschaeftZuordnung, listeZuordnung: listeZuordnung, aliase: aliase, context: context
@@ -1056,8 +1066,9 @@ enum SyncSnapshotImportService {
     /// Debug-Werkzeug für manuelle Statuskonsolidierung
     /// (``SyncOrdnerSettingsView``): löscht alle Paket-Dateien (GitHub #82:
     /// `manifest.json`, `tombstones.json`, `stamm.json`, `lernen.json`,
-    /// `vorgaenge.json`, `preise.json`, den kompletten `kaeufe/`-Ordner)
-    /// fremder Peer-Ordner, deren `manifest.erzeugtAm` bereits über
+    /// `vorgaenge.json`, `preise.json`; GitHub #85: `listen.json`; den
+    /// kompletten `kaeufe/`-Ordner) fremder Peer-Ordner, deren
+    /// `manifest.erzeugtAm` bereits über
     /// ``maximalesSnapshotAlter`` hinaus ist — dieselbe Schwelle, die
     /// ``importiereSnapshots(context:)`` ohnehin verwendet, um solche Peers
     /// beim Import zu ignorieren (siehe dort); hier werden die verwaisten
@@ -1089,6 +1100,7 @@ enum SyncSnapshotImportService {
                 SyncSnapshotExportService.manifestURL(fuerPeer: peerName, in: syncOrdner),
                 SyncSnapshotExportService.tombstonesURL(fuerPeer: peerName, in: syncOrdner),
                 SyncSnapshotExportService.stammURL(fuerPeer: peerName, in: syncOrdner),
+                SyncSnapshotExportService.listenURL(fuerPeer: peerName, in: syncOrdner),
                 SyncSnapshotExportService.lernenURL(fuerPeer: peerName, in: syncOrdner),
                 SyncSnapshotExportService.vorgaengeURL(fuerPeer: peerName, in: syncOrdner),
                 SyncSnapshotExportService.preiseURL(fuerPeer: peerName, in: syncOrdner),

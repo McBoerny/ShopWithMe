@@ -33,7 +33,9 @@ tombstones.json  Löschungen (Geschäft/Artikel/ArtikelKategorie/Einkaufsliste/
                  mit vorgaenge.json gebündelt (siehe „Warum eine eigene
                  tombstones.json" unten).
 stamm.json       GeschaeftTyp, ArtikelKategorie, Geschaeft, Artikel,
-                 Einkaufsliste, EinkaufslistenEintrag, ArtikelAlias.
+                 Einkaufsliste, ArtikelAlias.
+listen.json      EinkaufslistenEintrag — seit GitHub #85 eigene Datei statt
+                 Bündelung mit stamm.json, siehe unten.
 lernen.json      WarengruppenDistanz.
 vorgaenge.json   Einkaufsvorgang.
 preise.json      Preispunkt — eigene Datei statt Bündelung mit vorgaenge.json,
@@ -44,8 +46,8 @@ kaeufe/          Ein <uuid>.json pro KaufEintrag — Append-Log analog dem
 events/          Unverändert (Bereich A).
 ```
 
-Jede der fünf Dateien (`tombstones.json`/`stamm.json`/`lernen.json`/
-`vorgaenge.json`/`preise.json`) hat einen eigenen `UserDefaults`-Fingerabdruck
+Jede der sechs Dateien (`tombstones.json`/`stamm.json`/`listen.json`/
+`lernen.json`/`vorgaenge.json`/`preise.json`) hat einen eigenen `UserDefaults`-Fingerabdruck
 und wird nur neu geschrieben, wenn sich ihr Inhalt seit dem letzten Schreiben
 tatsächlich geändert hat (`SyncSnapshotExportService.schreibeTeilFallsGeaendert`)
 — ein Zyklus, in dem nur ein `Einkaufsvorgang.endZeit` sich ändert, schreibt
@@ -76,6 +78,33 @@ KaufEintrag/Preispunkt), sondern auch für Stammdaten (Geschäft/Artikel/
 ArtikelKategorie/Einkaufsliste). Läge diese Datei in `vorgaenge.json`, würde sie
 erst NACH `stamm.json` gelesen — die Stammdaten-Tombstone-Prüfung käme zu
 spät. Deshalb eine eigene, immer zuerst gelesene Datei.
+
+## Warum eine eigene `listen.json` (GitHub #85)
+
+Analyse-Fund, nachträglich zum ursprünglichen GitHub-#82-Umbau: `stamm.json`
+enthielt bis dahin zusätzlich zu den echten Stammdaten auch
+`einkaufslistenEintraege` — den vollständigen Einkaufslisten-Inhalt als
+additives Sicherheitsnetz neben den eigentlich zuständigen, schnelleren
+Bereich-A-`SyncEvent`s (siehe `docs/DATENSYNCHRONISATION.md` §4,
+„Architektur-Revision Alternative A"). Dieses Feld ändert sich aber mit der
+Häufigkeit von Bereich-A-Aktionen (Abhaken/Hinzufügen/Entfernen — oft alle
+paar Sekunden während aktiv eingekauft wird), nicht mit der Häufigkeit echter
+Stammdaten-Änderungen (neuer Laden/neue Kategorie — selten). Weil der
+Fingerabdruck-Vergleich `stamm.json` als eine unteilbare Einheit behandelt,
+riss praktisch jedes Abhaken einen kompletten Neuaufbau/-schrieb der
+eigentlich stabilen Geschäfte-/Artikel-/Kategorien-/Alias-Liste mit sich —
+derselbe Fehler-Typ, den GitHub #82 für `kaufEintraege` bereits behoben hatte,
+hier nur unentdeckt in `stamm.json` weiterbestehend.
+
+`einkaufslistenEintraege` ist jetzt `SyncListenSnapshot`/`listen.json`,
+unabhängig fingerabdruck-geprüft wie die übrigen Teile. Merge-Logik
+(`mergeEinkaufslistenEintraege`, additiv/nie destruktiv) unverändert — nur die
+Datei, aus der sie ihre Eingabe bekommt. Kein Dual-Read für Peers, die noch
+die alte, kombinierte `stamm.json` schreiben (siehe „Harter Formatschnitt"
+unten): ein solcher Peer liefert für `listen.json` schlicht „nicht vorhanden",
+`SyncSnapshotImportService` behandelt das wie „noch keine Einträge" — das
+additive Sicherheitsnetz bleibt für diesen einen Peer bis zu dessen eigenem
+Update leer, holt sich den fehlenden Stand danach wie gewohnt nach.
 
 ## `kaeufe/` — Append-Log statt Voll-Rebuild
 

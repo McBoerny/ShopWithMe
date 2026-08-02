@@ -290,6 +290,10 @@ enum SyncSnapshotExportService {
     static func stammURL(fuerPeer geraeteID: String, in syncOrdner: URL) -> URL {
         peerOrdner(fuer: geraeteID, in: syncOrdner).appendingPathComponent("stamm.json")
     }
+    /// GitHub #85: aus `stamm.json` herausgelöst, siehe ``SyncListenSnapshot``.
+    static func listenURL(fuerPeer geraeteID: String, in syncOrdner: URL) -> URL {
+        peerOrdner(fuer: geraeteID, in: syncOrdner).appendingPathComponent("listen.json")
+    }
     static func lernenURL(fuerPeer geraeteID: String, in syncOrdner: URL) -> URL {
         peerOrdner(fuer: geraeteID, in: syncOrdner).appendingPathComponent("lernen.json")
     }
@@ -314,6 +318,9 @@ enum SyncSnapshotExportService {
     @MainActor static func eigeneStammURL(in syncOrdner: URL) -> URL {
         stammURL(fuerPeer: SyncOrdnerService.eigenerPeerOrdnerName(in: syncOrdner), in: syncOrdner)
     }
+    @MainActor static func eigeneListenURL(in syncOrdner: URL) -> URL {
+        listenURL(fuerPeer: SyncOrdnerService.eigenerPeerOrdnerName(in: syncOrdner), in: syncOrdner)
+    }
     @MainActor static func eigeneLernenURL(in syncOrdner: URL) -> URL {
         lernenURL(fuerPeer: SyncOrdnerService.eigenerPeerOrdnerName(in: syncOrdner), in: syncOrdner)
     }
@@ -333,11 +340,13 @@ enum SyncSnapshotExportService {
     /// `letzterFingerabdruckSchluessel` des bisherigen Monolithen.
     private static let fingerabdruckSchluesselTombstones = "syncPaketFingerabdruckTombstones"
     private static let fingerabdruckSchluesselStamm = "syncPaketFingerabdruckStamm"
+    /// GitHub #85: aus `stamm.json` herausgelöst, siehe ``SyncListenSnapshot``.
+    private static let fingerabdruckSchluesselListen = "syncPaketFingerabdruckListen"
     private static let fingerabdruckSchluesselLernen = "syncPaketFingerabdruckLernen"
     private static let fingerabdruckSchluesselVorgaenge = "syncPaketFingerabdruckVorgaenge"
     private static let fingerabdruckSchluesselPreise = "syncPaketFingerabdruckPreise"
 
-    /// Debug-Werkzeug für manuelle Statuskonsolidierung: verwirft alle fünf
+    /// Debug-Werkzeug für manuelle Statuskonsolidierung: verwirft alle
     /// gespeicherten Fingerabdruck-Caches und erzwingt dadurch ein sofortiges,
     /// garantiert frisches Neuschreiben aller Teile — unabhängig vom
     /// sonstigen Skip-Mechanismus. Rein additiv/sicher: schreibt nur die
@@ -346,16 +355,16 @@ enum SyncSnapshotExportService {
     @MainActor
     static func erzwingeFrischesPaket(context: ModelContext) async -> Bool {
         for schluessel in [
-            fingerabdruckSchluesselTombstones, fingerabdruckSchluesselStamm, fingerabdruckSchluesselLernen,
-            fingerabdruckSchluesselVorgaenge, fingerabdruckSchluesselPreise,
+            fingerabdruckSchluesselTombstones, fingerabdruckSchluesselStamm, fingerabdruckSchluesselListen,
+            fingerabdruckSchluesselLernen, fingerabdruckSchluesselVorgaenge, fingerabdruckSchluesselPreise,
         ] {
             UserDefaults.standard.removeObject(forKey: schluessel)
         }
         return await exportierePaket(context: context)
     }
 
-    /// Baut die fünf Paket-Teile aus dem aktuellen Modellzustand und schreibt
-    /// jeden nur dann neu, wenn sich sein Inhalt seit dem letzten Schreiben
+    /// Baut die Paket-Teile aus dem aktuellen Modellzustand und schreibt jeden
+    /// nur dann neu, wenn sich sein Inhalt seit dem letzten Schreiben
     /// tatsächlich geändert hat — Nachfolger von `exportiereSnapshot(context:)`
     /// (siehe `docs/EXPORT_PAKET_UMBAU.md`). `manifest.json` wird davon
     /// unabhängig **immer** neu geschrieben (siehe ``SyncPeerManifest``).
@@ -389,6 +398,10 @@ enum SyncSnapshotExportService {
         schreibeTeilFallsGeaendert(
             normalisiereStamm(teile.stamm), url: eigenerOrdner.appendingPathComponent("stamm.json"),
             fingerabdruckSchluessel: fingerabdruckSchluesselStamm, teilName: "stamm"
+        )
+        schreibeTeilFallsGeaendert(
+            normalisiereListen(teile.listen), url: eigenerOrdner.appendingPathComponent("listen.json"),
+            fingerabdruckSchluessel: fingerabdruckSchluesselListen, teilName: "listen"
         )
         schreibeTeilFallsGeaendert(
             normalisiereLernen(teile.lernen), url: eigenerOrdner.appendingPathComponent("lernen.json"),
@@ -493,9 +506,16 @@ enum SyncSnapshotExportService {
         }
         stamm.artikel.sort { $0.id.uuidString < $1.id.uuidString }
         stamm.einkaufslisten.sort { $0.id.uuidString < $1.id.uuidString }
-        stamm.einkaufslistenEintraege.sort { "\($0.einkaufslisteID)_\($0.artikelID)" < "\($1.einkaufslisteID)_\($1.artikelID)" }
         stamm.artikelAliase.sort { $0.id.uuidString < $1.id.uuidString }
         return stamm
+    }
+
+    /// GitHub #85: analog dem entsprechenden Teil-Sort in ``normalisiereStamm(_:)``,
+    /// nur für den jetzt eigenständigen ``SyncListenSnapshot``.
+    private static func normalisiereListen(_ listen: SyncListenSnapshot) -> SyncListenSnapshot {
+        var listen = listen
+        listen.einkaufslistenEintraege.sort { "\($0.einkaufslisteID)_\($0.artikelID)" < "\($1.einkaufslisteID)_\($1.artikelID)" }
+        return listen
     }
 
     private static func normalisiereLernen(_ lernen: SyncLernenSnapshot) -> SyncLernenSnapshot {
@@ -517,22 +537,30 @@ enum SyncSnapshotExportService {
     }
 
     /// Zerlegt einen frisch gebauten ``erstelleSnapshot(context:mitKaufEintraegen:)``
-    /// in die fünf unabhängig fingerabdruck-geprüften Paket-Teile — **bewusst
-    /// kein eigener, sparsamerer Fetch je Teil**: `stamm`/`lernen`/`vorgaenge`/
-    /// `preise`/`tombstones` sind klein und ihr Fetch war nie das Problem
-    /// (Analyse-Fund: `kaufEintraege` allein machte 56% der Dateigröße aus,
-    /// alles andere zusammen nur 44%). Der eigentliche Performance-Gewinn
-    /// entsteht durch `mitKaufEintraegen: false` — dieser Bereich wird separat
-    /// und inkrementell über ``SyncKaeufeExportService`` geschrieben, ohne die
-    /// wachsende Historie bei jedem Zyklus erneut aus SwiftData zu laden und
-    /// zu kodieren. Wiederverwendung von ``erstelleSnapshot(context:mitKaufEintraegen:)``
-    /// hält diesen Code kurz und beweisbar konsistent mit dem weiterhin
-    /// unveränderten Backup-Pfad (``SyncErsetzenService``, der die volle
-    /// Historie über den Default `mitKaufEintraegen: true` weiterhin bekommt).
+    /// in die unabhängig fingerabdruck-geprüften Paket-Teile — **bewusst kein
+    /// eigener, sparsamerer Fetch je Teil**: `stamm`/`listen`/`lernen`/
+    /// `vorgaenge`/`preise`/`tombstones` sind klein und ihr Fetch war nie das
+    /// Problem (Analyse-Fund: `kaufEintraege` allein machte 56% der
+    /// Dateigröße aus, alles andere zusammen nur 44%). Der eigentliche
+    /// Performance-Gewinn entsteht durch `mitKaufEintraegen: false` — dieser
+    /// Bereich wird separat und inkrementell über ``SyncKaeufeExportService``
+    /// geschrieben, ohne die wachsende Historie bei jedem Zyklus erneut aus
+    /// SwiftData zu laden und zu kodieren. Wiederverwendung von
+    /// ``erstelleSnapshot(context:mitKaufEintraegen:)`` hält diesen Code kurz
+    /// und beweisbar konsistent mit dem weiterhin unveränderten Backup-Pfad
+    /// (``SyncErsetzenService``, der die volle Historie über den Default
+    /// `mitKaufEintraegen: true` weiterhin bekommt).
+    ///
+    /// `listen` (GitHub #85) separat von `stamm` zurückgegeben, obwohl beide
+    /// aus demselben `snapshot.einkaufslistenEintraege`-Feld gespeist werden
+    /// — sie werden vom Aufrufer unabhängig fingerabdruck-geprüft, damit ein
+    /// häufiges Abhaken/Hinzufügen/Entfernen (ändert nur `listen`) nicht mehr
+    /// automatisch auch die seltenen `stamm`-Stammdaten neu schreibt (siehe
+    /// ``SyncListenSnapshot``).
     @MainActor
     static func erstellePaketTeile(context: ModelContext) -> (
         manifest: SyncPeerManifest, tombstones: [SyncTombstoneSnapshot], stamm: SyncStammSnapshot,
-        lernen: SyncLernenSnapshot, vorgaenge: SyncVorgaengeSnapshot, preise: SyncPreisSnapshot
+        listen: SyncListenSnapshot, lernen: SyncLernenSnapshot, vorgaenge: SyncVorgaengeSnapshot, preise: SyncPreisSnapshot
     ) {
         let snapshot = erstelleSnapshot(context: context, mitKaufEintraegen: false)
         let manifest = SyncPeerManifest(
@@ -542,11 +570,12 @@ enum SyncSnapshotExportService {
         let stamm = SyncStammSnapshot(
             geschaeftsTypen: snapshot.geschaeftsTypen, artikelKategorien: snapshot.artikelKategorien,
             geschaefte: snapshot.geschaefte, artikel: snapshot.artikel, einkaufslisten: snapshot.einkaufslisten,
-            einkaufslistenEintraege: snapshot.einkaufslistenEintraege, artikelAliase: snapshot.artikelAliase
+            artikelAliase: snapshot.artikelAliase
         )
+        let listen = SyncListenSnapshot(einkaufslistenEintraege: snapshot.einkaufslistenEintraege)
         let lernen = SyncLernenSnapshot(warengruppenDistanzen: snapshot.warengruppenDistanzen)
         let vorgaenge = SyncVorgaengeSnapshot(einkaufsvorgaenge: snapshot.einkaufsvorgaenge)
         let preise = SyncPreisSnapshot(preispunkte: snapshot.preispunkte)
-        return (manifest, snapshot.tombstones, stamm, lernen, vorgaenge, preise)
+        return (manifest, snapshot.tombstones, stamm, listen, lernen, vorgaenge, preise)
     }
 }

@@ -157,7 +157,7 @@ struct SyncSnapshotExportServiceTests {
         let text = try String(contentsOf: SyncSnapshotExportService.eigeneStammURL(in: syncOrdner), encoding: .utf8)
 
         let topLevelSchluessel = [
-            "artikel", "artikelAliase", "artikelKategorien", "einkaufslisten", "einkaufslistenEintraege",
+            "artikel", "artikelAliase", "artikelKategorien", "einkaufslisten",
             "geschaefte", "geschaeftsTypen",
         ]
         let gefundenInReihenfolge = try topLevelSchluessel
@@ -211,6 +211,49 @@ struct SyncSnapshotExportServiceTests {
         let stammNachher = try Data(contentsOf: SyncSnapshotExportService.eigeneStammURL(in: syncOrdner))
         #expect(stammVorher == stammNachher)
         #expect(FileManager.default.fileExists(atPath: vorgaengeURL.path))
+    }
+
+    /// Regressionstest für GitHub #85 (Analyse-Fund: `einkaufslistenEintraege`
+    /// steckte bislang IN `stamm.json` — jede Einkaufslisten-Änderung, allen
+    /// voran das sehr häufige Abhaken beim Einkaufen, riss dadurch einen
+    /// kompletten Neuaufbau/-schrieb der eigentlich seltenen echten
+    /// Stammdaten (Geschäfte/Artikel/Kategorien/...) mit sich). Seit der
+    /// Auslagerung in ``SyncListenSnapshot``/`listen.json` muss ein
+    /// unveränderter `Geschaeft`-Bestand `stamm.json` NICHT neu schreiben,
+    /// nur weil sich die Einkaufsliste geändert hat — `listen.json` dagegen
+    /// schon, analog ``nurGeaenderterTeilWirdNeuGeschrieben()`` für
+    /// `vorgaenge.json`.
+    @Test
+    func nurEinkaufslisteGeaendertLaesstStammJsonUnveraendert() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let geschaeft = Geschaeft(name: "Rewe", typen: [])
+        context.insert(geschaeft)
+        let liste = Einkaufsliste(name: "Wocheneinkauf")
+        context.insert(liste)
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759")
+        context.insert(apfel)
+        try context.save()
+
+        await SyncSnapshotExportService.exportierePaket(context: context)
+        let stammVorher = try Data(contentsOf: SyncSnapshotExportService.eigeneStammURL(in: syncOrdner))
+        let listenURL = SyncSnapshotExportService.eigeneListenURL(in: syncOrdner)
+        #expect(!FileManager.default.fileExists(atPath: listenURL.path))
+
+        // Nur ein neuer Einkaufslisten-Eintrag (z.B. Artikel zur Liste
+        // hinzugefügt/abgehakt) — Geschäfte/Artikel/Kategorien bleiben
+        // unverändert.
+        context.insert(EinkaufslistenEintrag(einkaufsliste: liste, artikel: apfel, menge: 1))
+        try context.save()
+        await SyncSnapshotExportService.exportierePaket(context: context)
+
+        let stammNachher = try Data(contentsOf: SyncSnapshotExportService.eigeneStammURL(in: syncOrdner))
+        #expect(stammVorher == stammNachher)
+        #expect(FileManager.default.fileExists(atPath: listenURL.path))
     }
 
     /// Regressionstest für einen Live-Test-Nachfolgefund (2026-08-01): der in
@@ -279,7 +322,7 @@ struct SyncSnapshotExportServiceTests {
                         umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
                     ),
                 ],
-                artikel: [], einkaufslisten: [], einkaufslistenEintraege: [], artikelAliase: []
+                artikel: [], einkaufslisten: [], artikelAliase: []
             )
         }
 
