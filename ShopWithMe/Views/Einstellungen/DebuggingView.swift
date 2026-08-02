@@ -5,8 +5,8 @@ import SwiftData
 /// Ansicht (GitHub #53) — zuvor auf drei getrennte Bildschirme verteilt
 /// (Sync-Debug-Modus, DB-Debug-Modus, Debug-Einstellungen).
 struct DebuggingView: View {
-    @State private var syncDebugAktiv = SyncDebugLogger.istAktiv
-    @State private var dbDebugAktiv = DatabaseDebugLogger.istAktiv
+    @State private var syncStufe = SyncDebugLogger.stufe
+    @State private var dbStufe = DatabaseDebugLogger.stufe
     @State private var gesamtGroesse = SyncDebugLogger.gesamtGroesse() + DatabaseDebugLogger.gesamtGroesse()
     @State private var zeigeTeilen = false
 
@@ -15,15 +15,31 @@ struct DebuggingView: View {
             // GitHub #84: Sync- und DB-Debug-Modus zu einem Setting mit zwei
             // Unteroptionen verschmolzen (zuvor zwei fast identische Sektionen
             // mit je eigenem Protokollgröße-/Teilen-/Leeren-Block).
+            //
+            // Drei Stufen statt eines einfachen An/Aus (2026-08-02, nach
+            // einem Live-Fund mit 1065 identischen Fehlerzeilen aus einer
+            // einzigen anhaltenden Störung sowie ca. 60% reinem
+            // "unverändert"-Rauschen im Normalbetrieb): „Fehler" für eine
+            // ruhige Dauerüberwachung, „Standard" für die bisherige normale
+            // Zyklus-Aktivität, „Ausführlich" nur für eine gezielte
+            // Tiefenanalyse (z.B. die Security-Scope-Zugriffsdiagnose).
             Section {
-                Toggle("Sync-Protokoll", isOn: $syncDebugAktiv)
-                    .onChange(of: syncDebugAktiv) { _, neuerWert in
-                        SyncDebugLogger.istAktiv = neuerWert
+                Picker("Sync-Protokoll", selection: $syncStufe) {
+                    ForEach(Protokollstufe.allCases, id: \.self) { stufe in
+                        Text(stufe.anzeigename).tag(stufe)
                     }
-                Toggle("Datenbank-Protokoll", isOn: $dbDebugAktiv)
-                    .onChange(of: dbDebugAktiv) { _, neuerWert in
-                        DatabaseDebugLogger.istAktiv = neuerWert
+                }
+                .onChange(of: syncStufe) { _, neueStufe in
+                    SyncDebugLogger.stufe = neueStufe
+                }
+                Picker("Datenbank-Protokoll", selection: $dbStufe) {
+                    ForEach(Protokollstufe.allCases, id: \.self) { stufe in
+                        Text(stufe.anzeigename).tag(stufe)
                     }
+                }
+                .onChange(of: dbStufe) { _, neueStufe in
+                    DatabaseDebugLogger.stufe = neueStufe
+                }
                 LabeledContent("Protokollgröße", value: gesamtGroesse.formatted(.byteCount(style: .file)))
                 Button("Protokoll teilen…") {
                     zeigeTeilen = true
@@ -38,7 +54,7 @@ struct DebuggingView: View {
             } header: {
                 Text("Debug-Modus")
             } footer: {
-                Text("Sync-Protokoll: wie alt empfangene Updates beim Eintreffen waren und wie lange ein Sync-Zyklus dauert. Datenbank-Protokoll: Probleme rund um den Mehrbenutzerzugriff (Sperren, Öffnen, Speichern). Beide nur lokal auf diesem Gerät, nicht geteilt. Nur für gezielte Testphasen aktivieren.")
+                Text("Sync-Protokoll: wie alt empfangene Updates beim Eintreffen waren und wie lange ein Sync-Zyklus dauert. Datenbank-Protokoll: Probleme rund um den Mehrbenutzerzugriff (Sperren, Öffnen, Speichern). „Fehler“: nur Störungen und seltene bedeutsame Ereignisse. „Standard“: zusätzlich die normale Zyklus-Aktivität. „Ausführlich“: zusätzlich hochfrequente Detail-Ereignisse (u.a. je Sync-Teilbereich eine „unverändert“-Zeile, sowie eine Security-Ordnerzugriffs-Diagnose) — nur für eine gezielte Tiefenanalyse einschalten, nicht dauerhaft. Beide Protokolle nur lokal auf diesem Gerät, nicht geteilt.")
             }
 
             BekannteSyncPeersSection()

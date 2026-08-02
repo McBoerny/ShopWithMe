@@ -15,6 +15,17 @@ Grundregeln, unabhängig vom konkreten Anwendungsfall:
 - **Opt-in, standardmäßig aus.** Kein Mechanismus protokolliert in der
   regulären Nutzung ungefragt mit — jeder hat einen eigenen globalen Schalter
   in den Einstellungen.
+- **Drei Verbositätsstufen statt eines einfachen An/Aus** (seit 2026-08-02,
+  siehe „Gemeinsamer Baustein: `Protokollstufe`" unten): `Fehler` (nur
+  Störungen und seltene bedeutsame Ereignisse), `Standard` (zusätzlich die
+  normale Zyklus-/Aktions-Aktivität), `Ausführlich` (zusätzlich hochfrequente
+  Detail-Ereignisse, nur für eine gezielte Tiefenanalyse). Jeder Mechanismus
+  ordnet seine eigenen Ereignistypen einer dieser Stufen zu.
+- **Wiederholte identische Ereignisse werden gedrosselt**, statt jede
+  Wiederholung einzeln zu schreiben (siehe „Gemeinsamer Baustein:
+  `WiederholungsFilter`" unten) — verhindert, dass eine einzelne anhaltende
+  Störung (z.B. ein dauerhaft fehlschlagender Ordnerzugriff) das Protokoll
+  mit tausenden identischen Zeilen flutet.
 - **Kein spürbarer Overhead bei Deaktivierung.** Schalter-Zustand wird
   In-Memory gecacht (nicht bei jedem Aufruf `UserDefaults` lesen), damit ein
   deaktivierter Mechanismus praktisch unsichtbar im Code bleibt.
@@ -32,6 +43,32 @@ Grundregeln, unabhängig vom konkreten Anwendungsfall:
   je Mechanismus ein eigenes Format zu parsen.
 - **Feste Größenrotation** (Zwei-Datei-Rotation: aktuelle Datei +
   `.previous`), damit kein Mechanismus unbegrenzt wächst.
+
+## Gemeinsamer Baustein: `Protokollstufe` & `WiederholungsFilter`
+
+Eingeführt 2026-08-02 nach einer konkreten Analyse zweier realer
+Sync-Debug-Protokolle (`docs/DATENSYNCHRONISATION_VERLAUF.md` §30/§32): ca.
+60% des Zeilenvolumens im Normalbetrieb bestand aus je Zyklus unbedingt
+mehrfach feuernden „unverändert"-Zeilen ohne Diagnosewert für die meisten
+Fragestellungen, und eine einzelne anhaltende Störung erzeugte binnen 27
+Minuten 1065 identische Fehlerzeilen.
+
+- **`Protokollstufe`** (`Services/DebugLogWriter.swift`): geordnetes Enum
+  `aus < fehler < standard < ausfuehrlich`. Jeder Ereignistyp jedes
+  Mechanismus trägt eine `mindestStufe`; geschrieben wird, wenn die
+  eingestellte Stufe die des Ereignisses erreicht oder übersteigt. Ersetzt
+  den früheren reinen Bool-Schalter — bestehende Installationen werden beim
+  ersten Zugriff einmalig migriert (alter „an"-Zustand → `.standard`, „aus"
+  → `.aus`).
+- **`WiederholungsFilter`** (`Services/DebugLogWriter.swift`): unterdrückt
+  exakt wiederholte (gleicher Ereignistyp + gleicher Detail-Text) Ereignisse
+  zugunsten eines periodischen Lebenszeichens (Standard: alle 60s) mit
+  Zähler der zwischenzeitlich unterdrückten Wiederholungen. Ändert sich der
+  Inhalt, wird sofort wieder normal protokolliert. Jeder Mechanismus hält
+  eine eigene Instanz und reicht jeden `log(...)`-Aufruf hindurch, bevor er
+  tatsächlich geschrieben wird.
+- **UI:** `DebuggingView` zeigt pro Mechanismus einen Picker mit den drei
+  Stufen statt eines einfachen Toggles.
 
 ## Gemeinsamer Baustein: `DebugLogWriter`
 
@@ -92,6 +129,15 @@ Live-Test mit mehreren Geräten ausgewertet werden können.
 wann überhaupt protokolliert wurde). Micro- und Session-Lease teilen sich
 dieselben Ereignistypen — unterschieden über ein `"micro"`/`"session"`-Präfix im
 Detail-Text statt über eigene Ereignistypen.
+
+**Stufen-Einordnung** (siehe „Gemeinsamer Baustein: `Protokollstufe`" oben):
+`Fehler` für `store_open_failure`, `lease_acquire_denied_readonly`,
+`lease_stale_takeover`, `save_failure`, `dedupe_conflict_detected`,
+`debug_mode_{enabled,disabled}`; `Standard` für den Rest. Anders als beim
+Sync-Protokoll aktuell keine `Ausführlich`-exklusiven Ereignisse — das
+Micro-Lease-Verfahren ist aktionsgetrieben (ein Lease pro Speichervorgang),
+nicht poll-getrieben, und hat damit kein Äquivalent zu
+`sync_snapshot_unveraendert_uebersprungen`.
 
 **Bewusst nicht umgesetzt:** eigene Ereignistypen für WAL-Checkpoints,
 `NSFileCoordinator`-Fehler oder `NSFilePresenter`-Änderungsbenachrichtigungen —
@@ -200,6 +246,27 @@ gleicher Anzahl, hat sich ein Feld eines bestehenden Eintrags geändert (z.B.
 `vorgangID=… grund=…`, `grund` eines von `unaufloesbareListe`/`tombstone` —
 der Eintrag wurde ohne jeden Matching-Versuch verworfen, bevor die
 Abschluss-Prüfung überhaupt erreicht wurde).
+
+**`sync_scope_zugriff`** (2026-08-02, Diagnose für einen Live-Test-Fund —
+permanenter `sync_ordner_zugriff_fehlgeschlagen` auf dem „Backup"-Gerät ohne
+erkennbaren Auslöser, siehe `docs/DATENSYNCHRONISATION_VERLAUF.md` §30/§32):
+``SyncOrdnerZugriffsDiagnose`` protokolliert um jeden
+`startAccessingSecurityScopedResource()`-Aufruf der acht wiederkehrenden
+Top-Level-Sync-Funktionen herum Details der Form `<Aufrufstelle>
+erfolgreich=<Bool> gleichzeitigOffen=<kommagetrennte Liste oder "keine">` —
+macht verschachtelten/überlappenden Scope-Zugriff (historische Root Cause
+eines identischen Symptoms, siehe §30) von einem rein extern verursachten
+Ordner-Ausfall unterscheidbar. Nur bei ``Protokollstufe/ausfuehrlich``, da es
+pro Aufrufstelle bei jedem Zyklus feuert.
+
+**Stufen-Einordnung** (siehe „Gemeinsamer Baustein: `Protokollstufe`" oben):
+`Ausführlich` für `sync_snapshot_unveraendert_uebersprungen` (feuert 6× pro
+Zyklus unbedingt, größter Volumentreiber im Normalbetrieb) und
+`sync_scope_zugriff`; `Standard` für `sync_zyklus_{start,ende}`,
+`sync_event_empfangen`, `sync_snapshot_empfangen`, `sync_einkaufslisten_stand`,
+`sync_snapshot_geschrieben`; `Fehler` für den Rest (u.a.
+`sync_ordner_zugriff_fehlgeschlagen`, `sync_event_nicht_anwendbar`,
+`sync_peer_verworfen_altersgrenze`, `sync_event_aufgegeben`).
 
 **Bewusste Wiederverwendung von `wallClock`/`erzeugtAm` für die
 Latenzmessung:** Diese Felder sind in `SyncEvent`/`SyncSnapshot` als „nur

@@ -56,11 +56,16 @@ enum SyncExportService {
         beschreibung.sortBy = [SortDescriptor(\.lamportZaehler)]
         guard let ausstehende = try? context.fetch(beschreibung), !ausstehende.isEmpty else { return true }
 
-        guard syncOrdner.startAccessingSecurityScopedResource() else {
+        let zugriffErfolgreich = syncOrdner.startAccessingSecurityScopedResource()
+        SyncOrdnerZugriffsDiagnose.markiereOeffnen(aufrufstelle: "exportiereNeueEvents", erfolgreich: zugriffErfolgreich)
+        guard zugriffErfolgreich else {
             SyncDebugLogger.log(.ordnerZugriffFehlgeschlagen, details: "exportiereNeueEvents")
             return false
         }
-        defer { syncOrdner.stopAccessingSecurityScopedResource() }
+        defer {
+            syncOrdner.stopAccessingSecurityScopedResource()
+            SyncOrdnerZugriffsDiagnose.markiereSchliessen(aufrufstelle: "exportiereNeueEvents")
+        }
 
         let eventsOrdner = eigenerEventsOrdner(in: syncOrdner)
         guard (try? FileManager.default.createDirectory(
@@ -134,11 +139,16 @@ enum SyncExportService {
         letzteEventBereinigung = Date()
 
         guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return }
-        guard syncOrdner.startAccessingSecurityScopedResource() else {
+        let zugriffErfolgreich = syncOrdner.startAccessingSecurityScopedResource()
+        SyncOrdnerZugriffsDiagnose.markiereOeffnen(aufrufstelle: "raeumeAlteEigeneEventDateienAuf", erfolgreich: zugriffErfolgreich)
+        guard zugriffErfolgreich else {
             SyncDebugLogger.log(.ordnerZugriffFehlgeschlagen, details: "raeumeAlteEigeneEventDateienAuf")
             return
         }
-        defer { syncOrdner.stopAccessingSecurityScopedResource() }
+        defer {
+            syncOrdner.stopAccessingSecurityScopedResource()
+            SyncOrdnerZugriffsDiagnose.markiereSchliessen(aufrufstelle: "raeumeAlteEigeneEventDateienAuf")
+        }
 
         let eventsOrdner = eigenerEventsOrdner(in: syncOrdner)
         guard let dateien = try? FileManager.default.contentsOfDirectory(

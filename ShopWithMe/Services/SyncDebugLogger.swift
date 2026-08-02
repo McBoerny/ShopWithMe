@@ -68,23 +68,84 @@ enum SyncDebugLogger {
         /// abgeschlossen, „Ersetzen durch Peer" für den nächsten Start
         /// vorgemerkt).
         case vollAbgleichEingeleitet = "sync_voll_abgleich_eingeleitet"
+        /// Diagnose für einen Live-Test-Fund (2026-08-02, „Backup"-Gerät nach
+        /// permanentem `sync_ordner_zugriff_fehlgeschlagen`, siehe
+        /// `docs/DATENSYNCHRONISATION_VERLAUF.md` §30/§32): jeder
+        /// `startAccessingSecurityScopedResource()`/`stop…`-Aufruf einer der
+        /// Top-Level-Sync-Funktionen (siehe ``SyncOrdnerZugriffsDiagnose``),
+        /// mit Aufrufstelle, Erfolg/Fehlschlag und welche anderen
+        /// Aufrufstellen zu diesem Zeitpunkt selbst noch einen eigenen Scope
+        /// offen halten — verschachtelter/überlappender Zugriff war die Root
+        /// Cause des historischen §30-Vorfalls und lässt sich damit von einem
+        /// rein extern verursachten Ordner-Ausfall unterscheiden. Nur bei
+        /// ``Protokollstufe/ausfuehrlich`` protokolliert (feuert pro
+        /// Aufrufstelle bei jedem Zyklus).
+        case scopeZugriff = "sync_scope_zugriff"
+
+        /// Mindest-Protokollstufe, ab der dieses Ereignis geschrieben wird
+        /// (siehe ``Protokollstufe``-Typ-Doku für die Einteilungskriterien).
+        var mindestStufe: Protokollstufe {
+            switch self {
+            case .ordnerZugriffFehlgeschlagen, .baumelndeReferenzGefunden, .eventNichtAnwendbar,
+                 .peerVerworfenAltersgrenze, .eventAufgegeben, .debugModeEnabled, .debugModeDisabled,
+                 .einkaufsvorgangAbschlussNichtUebernommen, .einkaufsvorgangAbschlussUebernommen,
+                 .einkaufsvorgangEintragUebersprungen, .eventDateienBereinigt, .ausDerZeitGefallenErkannt,
+                 .vollAbgleichEingeleitet:
+                return .fehler
+            case .zyklusStart, .zyklusEnde, .eventEmpfangen, .snapshotEmpfangen, .einkaufslistenStand,
+                 .snapshotGeschrieben:
+                return .standard
+            case .snapshotUnveraendertUebersprungen, .scopeZugriff:
+                return .ausfuehrlich
+            }
+        }
     }
 
-    private static let aktivSchluessel = "datensyncDebugModusAktiv"
+    /// Nicht `private`, damit ``SyncDebugLoggerTests`` isolierte
+    /// `UserDefaults`-Instanzen mit denselben Schlüsseln befüllen kann.
+    static let stufeSchluessel = "datensyncProtokollstufe"
+    /// Alter, vor der Stufen-Einführung genutzter Bool-Key — nur noch für die
+    /// einmalige Migration bestehender Installationen gelesen (siehe
+    /// ``ermittleMigrierteStartstufe(defaults:)``).
+    static let alterAktivSchluessel = "datensyncDebugModusAktiv"
 
-    /// In-Memory-gecachter Schalter-Zustand, siehe
-    /// ``DatabaseDebugLogger/istAktivCache`` für die identische Begründung.
-    nonisolated(unsafe) private static var istAktivCache: Bool = UserDefaults.standard.bool(forKey: aktivSchluessel)
+    /// In-Memory-gecachter Zustand, siehe ``DatabaseDebugLogger/stufeCache``
+    /// für die identische Begründung.
+    nonisolated(unsafe) private static var stufeCache: Protokollstufe = ermittleMigrierteStartstufe()
 
-    static var istAktiv: Bool {
-        get { istAktivCache }
-        set {
-            let vorher = istAktivCache
-            istAktivCache = newValue
-            UserDefaults.standard.set(newValue, forKey: aktivSchluessel)
-            guard vorher != newValue else { return }
-            log(newValue ? .debugModeEnabled : .debugModeDisabled, details: "")
+    /// `defaults`-Parameter ausschließlich für ``SyncDebugLoggerTests``, um die
+    /// Migrationslogik isoliert zu testen — die statische ``stufeCache``
+    /// selbst wird pro Prozess nur einmal lazy initialisiert und lässt sich
+    /// danach nicht erneut auslösen.
+    static func ermittleMigrierteStartstufe(defaults: UserDefaults = .standard) -> Protokollstufe {
+        if let gespeichert = defaults.object(forKey: stufeSchluessel) as? Int, let stufe = Protokollstufe(rawValue: gespeichert) {
+            return stufe
         }
+        // Migration: vor der Stufen-Einführung gab es nur „an"/„aus" — „an"
+        // wird zu `.standard`, dem bisherigen tatsächlichen Verhalten
+        // (Ausführlich-Ereignisse gab es damals noch nicht).
+        let migriert: Protokollstufe = defaults.bool(forKey: alterAktivSchluessel) ? .standard : .aus
+        defaults.set(migriert.rawValue, forKey: stufeSchluessel)
+        return migriert
+    }
+
+    static var stufe: Protokollstufe {
+        get { stufeCache }
+        set {
+            let vorher = stufeCache
+            stufeCache = newValue
+            UserDefaults.standard.set(newValue.rawValue, forKey: stufeSchluessel)
+            guard (vorher == .aus) != (newValue == .aus) else { return }
+            log(newValue == .aus ? .debugModeDisabled : .debugModeEnabled, details: "")
+        }
+    }
+
+    /// Kompatibler Zugriff für Aufrufstellen, die nur „protokolliert
+    /// überhaupt etwas" statt der genauen Stufe wissen müssen (z.B. um vor
+    /// einer teuren Detail-Text-Bildung früh abzubrechen).
+    static var istAktiv: Bool {
+        get { stufeCache != .aus }
+        set { stufe = newValue ? (stufeCache == .aus ? .standard : stufeCache) : .aus }
     }
 
     private static let writer = DebugLogWriter(
@@ -93,11 +154,14 @@ enum SyncDebugLogger {
             .appendingPathComponent("sync-debug.log")
     )
 
+    private static let wiederholungsFilter = WiederholungsFilter()
+
     static func log(_ ereignis: Ereignis, details: String) {
-        guard istAktiv else { return }
+        guard stufeCache >= ereignis.mindestStufe else { return }
+        guard let effektiveDetails = wiederholungsFilter.pruefe(ereignis: ereignis.rawValue, details: details) else { return }
         Task.detached(priority: .background) {
             let geraeteName = await DatabaseLeaseService.geraeteName
-            await writer.protokolliere(ereignis: ereignis.rawValue, details: details, geraeteName: geraeteName)
+            await writer.protokolliere(ereignis: ereignis.rawValue, details: effektiveDetails, geraeteName: geraeteName)
         }
     }
 
@@ -106,7 +170,7 @@ enum SyncDebugLogger {
     /// Erzeugungszeitpunkt auf dem Herkunftsgerät. Grundlage für die
     /// tatsächlich beobachtete Sync-Latenz (siehe Typ-Doku).
     static func protokolliereAlter(_ ereignis: Ereignis, erzeugtAm: Date, zusatz: String = "") {
-        guard istAktiv else { return }
+        guard stufeCache >= ereignis.mindestStufe else { return }
         let alterSekunden = Date().timeIntervalSince(erzeugtAm)
         let details = zusatz.isEmpty
             ? "alter_sekunden=\(String(format: "%.1f", alterSekunden))"

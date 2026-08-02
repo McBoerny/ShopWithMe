@@ -71,11 +71,16 @@ enum SyncSnapshotImportService {
     @MainActor
     static func importiereSnapshots(context: ModelContext) async -> Bool {
         guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return true }
-        guard syncOrdner.startAccessingSecurityScopedResource() else {
+        let zugriffErfolgreich = syncOrdner.startAccessingSecurityScopedResource()
+        SyncOrdnerZugriffsDiagnose.markiereOeffnen(aufrufstelle: "importiereSnapshots", erfolgreich: zugriffErfolgreich)
+        guard zugriffErfolgreich else {
             SyncDebugLogger.log(.ordnerZugriffFehlgeschlagen, details: "importiereSnapshots")
             return false
         }
-        defer { syncOrdner.stopAccessingSecurityScopedResource() }
+        defer {
+            syncOrdner.stopAccessingSecurityScopedResource()
+            SyncOrdnerZugriffsDiagnose.markiereSchliessen(aufrufstelle: "importiereSnapshots")
+        }
 
         let peersOrdner = syncOrdner.appendingPathComponent("peers", isDirectory: true)
         let eigeneGeraeteID = DatabaseLeaseService.geraeteID
@@ -1120,11 +1125,16 @@ enum SyncSnapshotImportService {
     @MainActor
     static func raeumeVerwaisteFremdeExportsAuf() async -> Bool {
         guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return true }
-        guard syncOrdner.startAccessingSecurityScopedResource() else {
+        let zugriffErfolgreich = syncOrdner.startAccessingSecurityScopedResource()
+        SyncOrdnerZugriffsDiagnose.markiereOeffnen(aufrufstelle: "raeumeVerwaisteFremdeExportsAuf", erfolgreich: zugriffErfolgreich)
+        guard zugriffErfolgreich else {
             SyncDebugLogger.log(.ordnerZugriffFehlgeschlagen, details: "raeumeVerwaisteFremdeExportsAuf")
             return false
         }
-        defer { syncOrdner.stopAccessingSecurityScopedResource() }
+        defer {
+            syncOrdner.stopAccessingSecurityScopedResource()
+            SyncOrdnerZugriffsDiagnose.markiereSchliessen(aufrufstelle: "raeumeVerwaisteFremdeExportsAuf")
+        }
 
         let peersOrdner = syncOrdner.appendingPathComponent("peers", isDirectory: true)
         let eigeneGeraeteID = DatabaseLeaseService.geraeteID

@@ -20,26 +20,75 @@ enum DatabaseDebugLogger {
         case dedupeConflictDetected = "dedupe_conflict_detected"
         case debugModeEnabled = "debug_mode_enabled"
         case debugModeDisabled = "debug_mode_disabled"
+
+        /// Mindest-Protokollstufe, ab der dieses Ereignis geschrieben wird
+        /// (siehe ``Protokollstufe``-Typ-Doku). Anders als beim
+        /// Sync-Protokoll gibt es hier (Stand jetzt) kein
+        /// wiederkehrendes-mehrfach-pro-Zyklus-Muster wie
+        /// `sync_snapshot_unveraendert_uebersprungen` — das Micro-Lease-
+        /// Verfahren ist aktionsgetrieben (ein Lease pro Speichervorgang),
+        /// nicht poll-getrieben, siehe `docs/DATABASE_CONCURRENCY.md`.
+        /// ``Protokollstufe/ausfuehrlich`` ist daher aktuell nur ein
+        /// Platzhalter für künftige, tiefere Diagnose-Ereignisse.
+        var mindestStufe: Protokollstufe {
+            switch self {
+            case .storeOpenFailure, .leaseAcquireDeniedReadonly, .leaseStaleTakeover, .saveFailure,
+                 .dedupeConflictDetected, .debugModeEnabled, .debugModeDisabled:
+                return .fehler
+            case .storeOpenStart, .storeOpenSuccess, .leaseAcquireAttempt, .leaseAcquireSuccess,
+                 .leaseRelease, .saveSuccess:
+                return .standard
+            }
+        }
     }
 
-    private static let aktivSchluessel = "datenbankDebugModusAktiv"
+    /// Nicht `private`, damit ``DatabaseDebugLoggerTests`` isolierte
+    /// `UserDefaults`-Instanzen mit denselben Schlüsseln befüllen kann.
+    static let stufeSchluessel = "datenbankProtokollstufe"
+    /// Alter, vor der Stufen-Einführung genutzter Bool-Key — nur noch für die
+    /// einmalige Migration bestehender Installationen gelesen (siehe
+    /// ``ermittleMigrierteStartstufe(defaults:)``).
+    static let alterAktivSchluessel = "datenbankDebugModusAktiv"
 
-    /// In-Memory-gecachter Schalter-Zustand, damit ein deaktivierter Debug-Modus
-    /// keinen `UserDefaults`-Zugriff pro Ereignis verursacht. Nur über ``istAktiv``
-    /// gelesen/geschrieben (von der Einstellungen-UI auf dem Main-Thread) — daher
-    /// bewusst `nonisolated(unsafe)` statt eines Actors, damit ``log(_:details:)``
-    /// von jedem Aufrufkontext aus synchron geprüft werden kann.
-    nonisolated(unsafe) private static var istAktivCache: Bool = UserDefaults.standard.bool(forKey: aktivSchluessel)
+    /// In-Memory-gecachter Zustand, damit ein deaktiviertes Protokoll keinen
+    /// `UserDefaults`-Zugriff pro Ereignis verursacht. Nur über ``stufe``/
+    /// ``istAktiv`` gelesen/geschrieben (von der Einstellungen-UI auf dem
+    /// Main-Thread) — daher bewusst `nonisolated(unsafe)` statt eines
+    /// Actors, damit ``log(_:details:)`` von jedem Aufrufkontext aus
+    /// synchron geprüft werden kann.
+    nonisolated(unsafe) private static var stufeCache: Protokollstufe = ermittleMigrierteStartstufe()
 
-    static var istAktiv: Bool {
-        get { istAktivCache }
-        set {
-            let vorher = istAktivCache
-            istAktivCache = newValue
-            UserDefaults.standard.set(newValue, forKey: aktivSchluessel)
-            guard vorher != newValue else { return }
-            log(newValue ? .debugModeEnabled : .debugModeDisabled, details: "")
+    /// `defaults`-Parameter ausschließlich für ``DatabaseDebugLoggerTests``,
+    /// um die Migrationslogik isoliert zu testen — die statische
+    /// ``stufeCache`` selbst wird pro Prozess nur einmal lazy initialisiert
+    /// und lässt sich danach nicht erneut auslösen.
+    static func ermittleMigrierteStartstufe(defaults: UserDefaults = .standard) -> Protokollstufe {
+        if let gespeichert = defaults.object(forKey: stufeSchluessel) as? Int, let stufe = Protokollstufe(rawValue: gespeichert) {
+            return stufe
         }
+        // Migration: vor der Stufen-Einführung gab es nur „an"/„aus" — „an"
+        // wird zu `.standard`, dem bisherigen tatsächlichen Verhalten.
+        let migriert: Protokollstufe = defaults.bool(forKey: alterAktivSchluessel) ? .standard : .aus
+        defaults.set(migriert.rawValue, forKey: stufeSchluessel)
+        return migriert
+    }
+
+    static var stufe: Protokollstufe {
+        get { stufeCache }
+        set {
+            let vorher = stufeCache
+            stufeCache = newValue
+            UserDefaults.standard.set(newValue.rawValue, forKey: stufeSchluessel)
+            guard (vorher == .aus) != (newValue == .aus) else { return }
+            log(newValue == .aus ? .debugModeDisabled : .debugModeEnabled, details: "")
+        }
+    }
+
+    /// Kompatibler Zugriff für Aufrufstellen, die nur „protokolliert
+    /// überhaupt etwas" statt der genauen Stufe wissen müssen.
+    static var istAktiv: Bool {
+        get { stufeCache != .aus }
+        set { stufe = newValue ? (stufeCache == .aus ? .standard : stufeCache) : .aus }
     }
 
     /// Dateiname trägt den gesetzten Gerätenamen (GitHub #84), z.B.
@@ -60,11 +109,14 @@ enum DatabaseDebugLogger {
         )
     }
 
+    private static let wiederholungsFilter = WiederholungsFilter()
+
     static func log(_ ereignis: Ereignis, details: String) {
-        guard istAktiv else { return }
+        guard stufeCache >= ereignis.mindestStufe else { return }
+        guard let effektiveDetails = wiederholungsFilter.pruefe(ereignis: ereignis.rawValue, details: details) else { return }
         Task.detached(priority: .background) {
             let geraeteName = await DatabaseLeaseService.geraeteName
-            await lokalerWriter.protokolliere(ereignis: ereignis.rawValue, details: details, geraeteName: geraeteName)
+            await lokalerWriter.protokolliere(ereignis: ereignis.rawValue, details: effektiveDetails, geraeteName: geraeteName)
         }
     }
 

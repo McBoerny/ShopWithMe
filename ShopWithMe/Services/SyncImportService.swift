@@ -75,11 +75,16 @@ enum SyncImportService {
     @MainActor
     static func importiereNeueEvents(context: ModelContext) async -> Bool {
         guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return true }
-        guard syncOrdner.startAccessingSecurityScopedResource() else {
+        let zugriffErfolgreich = syncOrdner.startAccessingSecurityScopedResource()
+        SyncOrdnerZugriffsDiagnose.markiereOeffnen(aufrufstelle: "importiereNeueEvents", erfolgreich: zugriffErfolgreich)
+        guard zugriffErfolgreich else {
             SyncDebugLogger.log(.ordnerZugriffFehlgeschlagen, details: "importiereNeueEvents")
             return false
         }
-        defer { syncOrdner.stopAccessingSecurityScopedResource() }
+        defer {
+            syncOrdner.stopAccessingSecurityScopedResource()
+            SyncOrdnerZugriffsDiagnose.markiereSchliessen(aufrufstelle: "importiereNeueEvents")
+        }
 
         let peersOrdner = syncOrdner.appendingPathComponent("peers", isDirectory: true)
         let eigeneGeraeteID = DatabaseLeaseService.geraeteID

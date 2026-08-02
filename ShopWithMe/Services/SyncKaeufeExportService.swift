@@ -49,11 +49,16 @@ enum SyncKaeufeExportService {
         let alleLokalen = (try? context.fetch(FetchDescriptor<KaufEintrag>())) ?? []
         guard !alleLokalen.isEmpty else { return true }
 
-        guard syncOrdner.startAccessingSecurityScopedResource() else {
+        let zugriffErfolgreich = syncOrdner.startAccessingSecurityScopedResource()
+        SyncOrdnerZugriffsDiagnose.markiereOeffnen(aufrufstelle: "exportiereNeueKaeufe", erfolgreich: zugriffErfolgreich)
+        guard zugriffErfolgreich else {
             SyncDebugLogger.log(.ordnerZugriffFehlgeschlagen, details: "exportiereNeueKaeufe")
             return false
         }
-        defer { syncOrdner.stopAccessingSecurityScopedResource() }
+        defer {
+            syncOrdner.stopAccessingSecurityScopedResource()
+            SyncOrdnerZugriffsDiagnose.markiereSchliessen(aufrufstelle: "exportiereNeueKaeufe")
+        }
 
         let ordner = SyncSnapshotExportService.eigenerKaeufeOrdner(in: syncOrdner)
         guard (try? FileManager.default.createDirectory(at: ordner, withIntermediateDirectories: true)) != nil else {
@@ -125,8 +130,13 @@ enum SyncKaeufeExportService {
     static func entferneDateien(fuerKaufEintragIDs ids: [UUID]) {
         guard !ids.isEmpty else { return }
         guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return }
-        guard syncOrdner.startAccessingSecurityScopedResource() else { return }
-        defer { syncOrdner.stopAccessingSecurityScopedResource() }
+        let zugriffErfolgreich = syncOrdner.startAccessingSecurityScopedResource()
+        SyncOrdnerZugriffsDiagnose.markiereOeffnen(aufrufstelle: "entferneDateien", erfolgreich: zugriffErfolgreich)
+        guard zugriffErfolgreich else { return }
+        defer {
+            syncOrdner.stopAccessingSecurityScopedResource()
+            SyncOrdnerZugriffsDiagnose.markiereSchliessen(aufrufstelle: "entferneDateien")
+        }
         let ordner = SyncSnapshotExportService.eigenerKaeufeOrdner(in: syncOrdner)
         for id in ids {
             try? FileManager.default.removeItem(at: ordner.appendingPathComponent("\(id.uuidString).json"))

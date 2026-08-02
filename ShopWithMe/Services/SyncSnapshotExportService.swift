@@ -376,11 +376,16 @@ enum SyncSnapshotExportService {
         guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return true }
         let teile = erstellePaketTeile(context: context)
 
-        guard syncOrdner.startAccessingSecurityScopedResource() else {
+        let zugriffErfolgreich = syncOrdner.startAccessingSecurityScopedResource()
+        SyncOrdnerZugriffsDiagnose.markiereOeffnen(aufrufstelle: "exportierePaket", erfolgreich: zugriffErfolgreich)
+        guard zugriffErfolgreich else {
             SyncDebugLogger.log(.ordnerZugriffFehlgeschlagen, details: "exportierePaket")
             return false
         }
-        defer { syncOrdner.stopAccessingSecurityScopedResource() }
+        defer {
+            syncOrdner.stopAccessingSecurityScopedResource()
+            SyncOrdnerZugriffsDiagnose.markiereSchliessen(aufrufstelle: "exportierePaket")
+        }
 
         let eigenerOrdner = peerOrdner(fuer: SyncOrdnerService.eigenerPeerOrdnerName(in: syncOrdner), in: syncOrdner)
         guard (try? FileManager.default.createDirectory(at: eigenerOrdner, withIntermediateDirectories: true)) != nil else {

@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.10 (Build 194) — Debug-Protokolle: drei Verbositätsstufen + Wiederholungs-Drosselung, Security-Scope-Zugriffsdiagnose
+
+- **Verbositätsstufen statt An/Aus.** `SyncDebugLogger`/`DatabaseDebugLogger`
+  bekommen je eine `Protokollstufe` (`Fehler`/`Standard`/`Ausführlich`,
+  `Services/DebugLogWriter.swift`) statt eines einfachen Bool-Schalters —
+  Analyse zweier realer Sync-Debug-Protokolle zeigte ca. 60% reines
+  "unverändert"-Rauschen im Normalbetrieb. Bestehende Installationen werden
+  beim ersten Zugriff einmalig vom alten Bool-Key migriert. `DebuggingView`
+  zeigt pro Protokoll einen Picker statt eines Toggles.
+- **Wiederholungs-Drosselung.** Neuer `WiederholungsFilter`
+  (`Services/DebugLogWriter.swift`): exakt wiederholte Ereignisse (gleicher
+  Typ + gleicher Detail-Text) werden zugunsten eines periodischen
+  Lebenszeichens (60s) unterdrückt — ein Live-Fund zeigte, dass eine einzige
+  anhaltende Störung binnen 27 Minuten 1065 identische Fehlerzeilen erzeugt
+  hatte.
+- **Security-Scope-Zugriffsdiagnose (neues `Ausführlich`-Ereignis
+  `sync_scope_zugriff`).** Diagnose für einen Live-Test-Fund: das
+  "Backup"-Gerät verlor mitten in einem Sync-Zyklus dauerhaft den
+  Ordnerzugriff (`sync_ordner_zugriff_fehlgeschlagen` für jeden weiteren
+  Schritt bis Sitzungsende), ohne dass sich aus dem bisherigen Protokoll
+  klären ließ, ob ein verschachtelter/überlappender Scope-Zugriff (historische
+  Root Cause eines identischen Symptoms, `docs/DATENSYNCHRONISATION_VERLAUF.md`
+  §30) oder eine rein externe Ursache dahintersteckte. Neuer
+  `SyncOrdnerZugriffsDiagnose`-Helper (`SyncOrdnerService.swift`) protokolliert
+  jetzt um alle acht wiederkehrenden Top-Level-Sync-Funktionen herum
+  Aufrufstelle, Erfolg/Fehlschlag und welche anderen Aufrufstellen zu diesem
+  Zeitpunkt selbst noch einen Scope offen halten.
+- Details, Stufen-Einordnung aller Ereignistypen und Schlüsselbildung des
+  Wiederholungsfilters in `docs/LOGGING.md`.
+
 ## v0.10 (Build 193) — Sync-Event-Bereinigung: Alters-Löschung + erzwungener Voll-Abgleich für lange abwesende Geräte (GitHub #89)
 
 - Eigene, hochgeladene Bereich-A-Event-Dateien (`peers/{gerät}/events/`)

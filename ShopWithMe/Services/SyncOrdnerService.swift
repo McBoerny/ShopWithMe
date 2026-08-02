@@ -1,5 +1,53 @@
 import Foundation
 
+/// Reine Diagnose-Instrumentierung um jeden `startAccessingSecurityScopedResource()`/
+/// `stopAccessingSecurityScopedResource()`-Aufruf der wiederkehrenden
+/// Sync-Zyklus-Funktionen (siehe `docs/DATENSYNCHRONISATION_VERLAUF.md` §30 —
+/// verschachtelte/überlappende Zugriffe auf denselben Security-Scoped-
+/// Bookmark destabilisieren ihn auf echten Geräten nachweisbar dauerhaft, und
+/// ein späterer Live-Fund auf demselben Gerät ließ sich aus dem bisherigen
+/// Logging allein nicht mehr sicher von einem rein extern verursachten
+/// Ordner-Ausfall unterscheiden — beide erzeugen identisch
+/// `sync_ordner_zugriff_fehlgeschlagen`). Protokolliert bei
+/// ``Protokollstufe/ausfuehrlich`` für jeden Aufruf Aufrufstelle,
+/// Erfolg/Fehlschlag sowie welche anderen Aufrufstellen zu diesem Zeitpunkt
+/// selbst noch einen eigenen Scope offen halten.
+///
+/// **Bewusst nur um die 8 wiederkehrenden Top-Level-Funktionen** (siehe deren
+/// jeweilige `SyncDebugLogger.log(.ordnerZugriffFehlgeschlagen, …)`-Aufrufe),
+/// nicht um `SyncOrdnerService.ordnerFestlegen`/`hatVorhandenePeers` — diese
+/// beiden laufen nur einmalig beim Einrichten, nicht wiederkehrend, und sind
+/// für eine Tiefenanalyse eines Laufzeit-Stillstands nicht relevant.
+enum SyncOrdnerZugriffsDiagnose {
+    private static let sperre = NSLock()
+    nonisolated(unsafe) private static var offeneAufrufstellen: [String] = []
+
+    /// Direkt nach einem `startAccessingSecurityScopedResource()`-Aufruf
+    /// aufzurufen, mit dessen Rückgabewert als `erfolgreich`.
+    static func markiereOeffnen(aufrufstelle: String, erfolgreich: Bool) {
+        sperre.lock()
+        let gleichzeitigOffene = offeneAufrufstellen
+        if erfolgreich { offeneAufrufstellen.append(aufrufstelle) }
+        sperre.unlock()
+
+        let andere = gleichzeitigOffene.isEmpty ? "keine" : gleichzeitigOffene.joined(separator: ",")
+        SyncDebugLogger.log(
+            .scopeZugriff,
+            details: "\(aufrufstelle) erfolgreich=\(erfolgreich) gleichzeitigOffen=\(andere)"
+        )
+    }
+
+    /// Vor bzw. in einem `defer` zusammen mit dem passenden
+    /// `stopAccessingSecurityScopedResource()`-Aufruf aufzurufen — nur wenn
+    /// zuvor ``markiereOeffnen(aufrufstelle:erfolgreich:)`` mit `erfolgreich:
+    /// true` für dieselbe `aufrufstelle` gemeldet wurde.
+    static func markiereSchliessen(aufrufstelle: String) {
+        sperre.lock()
+        offeneAufrufstellen.removeAll { $0 == aufrufstelle }
+        sperre.unlock()
+    }
+}
+
 /// Fehler beim Festlegen des Sync-Ordners.
 enum SyncOrdnerError: LocalizedError {
     case zugriffVerweigert
