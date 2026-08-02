@@ -306,6 +306,44 @@ struct SyncErsetzenServiceTests {
         #expect(zusammenfassung.nachher.geschaefte == 1)
     }
 
+    /// Härtung (Kategorie-3-Review, GitHub-Diskussion 2026-08-03): ein
+    /// Neuaufbau, der eindeutig fehlschlägt (hier: kein einziger erreichbarer
+    /// Peer, `peers`-Ordner bleibt leer), darf NICHT als leerer Datenbestand
+    /// stehen bleiben, sondern muss automatisch auf den Vorher-Stand aus dem
+    /// Backup zurückgerollt werden — anders als der Live-Test-Nachfolgefund
+    /// oben (Abschnitt 21, teilweiser Rückgang), der bewusst nur informativ
+    /// bleibt.
+    @Test
+    func fuehreAusstehendeAktionAusRolltBeiKomplettLeeremNeuaufbauAutomatischZurueck() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+        defer { raeumeAusstehendeAktionAuf() }
+        defer { SyncErsetzenService.loescheBackup() }
+        defer { SyncErsetzenService.zusammenfassungVerwerfen() }
+
+        // Vorher-Backup: 2 Geschäfte.
+        context.insert(Geschaeft(name: "Rewe", typen: []))
+        context.insert(Geschaeft(name: "Edeka", typen: []))
+        try context.save()
+        try SyncErsetzenService.erstelleBackup(context: context)
+
+        // Neuaufbau auf einem frischen, leeren Context — bewusst KEIN Peer im
+        // Sync-Ordner (kein `schreibeFremdenSnapshot`-Aufruf), simuliert den
+        // Fall "kein erreichbares Sync-Gerät zum Zeitpunkt des Neuaufbaus".
+        let (leererContainer, leererContext) = try machtLeerenContainer()
+        _ = leererContainer
+        setzeAusstehendeAktion(.ersetzenDurchPeer)
+
+        await SyncErsetzenService.fuehreAusstehendeAktionAus(context: leererContext)
+
+        #expect(SyncErsetzenService.letzterNeuaufbauAutomatischZurueckgerollt)
+        let geschaefte = try leererContext.fetch(FetchDescriptor<Geschaeft>())
+        #expect(Set(geschaefte.map(\.name)) == Set(["Rewe", "Edeka"]))
+    }
+
     @Test
     func fuehreAusstehendeAktionAusStelltGesichertenStandWiederHer() async throws {
         let (container, context) = try machtLeerenContainer()

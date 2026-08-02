@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.10 (Build 196) — Härtung: automatischer Rollback bei eindeutig fehlgeschlagenem Neuaufbau
+
+- `SyncErsetzenService.fuehreAusstehendeAktionAus` zeigte einen Rückgang nach
+  einem „Ersetzen durch Peer"-Neuaufbau bisher nur an (Vorher-/Nachher-
+  Zusammenfassung), verhinderte ihn aber nicht. Ein EINDEUTIGER Totalverlust
+  (Ordnerzugriff gescheitert, oder kein einziger erreichbarer Peer bringt
+  irgendetwas zurück, obwohl vorher Daten vorhanden waren) importiert jetzt
+  automatisch das ohnehin vorhandene Vorher-Backup zurück, statt den leeren
+  Neuaufbau stehen zu lassen — `DebuggingView` zeigt dafür zusätzlich einen
+  roten Hinweis. Ein teilweiser Rückgang (kann legitim sein, z.B. bereits
+  verarbeitete Peer-Löschungen) bleibt bewusst nur informativ, keine
+  automatische Aktion.
+
 ## v0.10 (Build 195) — Sync-Merge für Geschäfte korrigiert + aktive Rückfrage beim Ordner-Beitritt (GitHub #86)
 
 - **Bug-Fix.** `SyncSnapshotImportService.mergeGeschaefte` verglich Geschäfte

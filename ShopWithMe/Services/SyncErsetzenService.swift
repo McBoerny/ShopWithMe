@@ -111,9 +111,18 @@ enum SyncErsetzenService {
             kaufEintraege = snapshot.kaufEintraege.count
             warengruppenDistanzen = snapshot.warengruppenDistanzen.count
         }
+
+        /// Summe aller Bereiche — genügt für den harten „komplett leer trotz
+        /// vorher nicht leer"-Abbruchtest in ``fuehreAusstehendeAktionAus(context:)``,
+        /// ohne jeden Bereich einzeln auf Null prüfen zu müssen.
+        var gesamt: Int {
+            geschaeftsTypen + artikelKategorien + geschaefte + artikel + einkaufslisten
+                + einkaufsvorgaenge + kaufEintraege + warengruppenDistanzen
+        }
     }
 
     private static let letzteZusammenfassungSchluessel = "syncErsetzenLetzteZusammenfassung"
+    private static let automatischZurueckgerolltSchluessel = "syncErsetzenAutomatischZurueckgerollt"
 
     /// Zusammenfassung des letzten „Ersetzen durch Peer"-Neuaufbaus, `nil`
     /// falls keiner stattfand oder bereits verworfen wurde (``DebuggingView``).
@@ -131,8 +140,18 @@ enum SyncErsetzenService {
         }
     }
 
+    /// `true`, wenn der letzte „Ersetzen durch Peer"-Neuaufbau eindeutig
+    /// fehlgeschlagen ist (Ordnerzugriff gescheitert, oder vorher nicht
+    /// leerer Bestand komplett verschwunden) und deshalb automatisch auf den
+    /// Vorher-Stand zurückgerollt wurde — siehe ``fuehreAusstehendeAktionAus(context:)``.
+    private(set) static var letzterNeuaufbauAutomatischZurueckgerollt: Bool {
+        get { UserDefaults.standard.bool(forKey: automatischZurueckgerolltSchluessel) }
+        set { UserDefaults.standard.set(newValue, forKey: automatischZurueckgerolltSchluessel) }
+    }
+
     static func zusammenfassungVerwerfen() {
         letzteNeuaufbauZusammenfassung = nil
+        letzterNeuaufbauAutomatischZurueckgerollt = false
     }
 
     // MARK: - Planen (aktueller Sitzung, vor dem Neustart)
@@ -207,16 +226,41 @@ enum SyncErsetzenService {
             // Vorher-Stand aus dem ohnehin vor dem Neuaufbau erstellten
             // Backup lesen (noch vorhanden, ``fuehreAusstehendeAktionAus``
             // löscht es hier bewusst nicht) — Grundlage für die
-            // Vorher-/Nachher-Zusammenfassung unten.
+            // Vorher-/Nachher-Zusammenfassung unten UND für den
+            // Härtungs-Rollback (siehe unten).
             let vorherSnapshot = ladeBackup()?.snapshot
-            await SyncSnapshotImportService.importiereSnapshots(context: context)
+            let ordnerZugriffErfolgreich = await SyncSnapshotImportService.importiereSnapshots(context: context)
             if let vorherSnapshot {
                 let nachherSnapshot = SyncSnapshotExportService.erstelleSnapshot(context: context)
+                let vorherZaehler = BereichsZaehler(snapshot: vorherSnapshot)
+                let nachherZaehler = BereichsZaehler(snapshot: nachherSnapshot)
                 letzteNeuaufbauZusammenfassung = NeuaufbauZusammenfassung(
-                    zeitpunkt: Date(),
-                    vorher: BereichsZaehler(snapshot: vorherSnapshot),
-                    nachher: BereichsZaehler(snapshot: nachherSnapshot)
+                    zeitpunkt: Date(), vorher: vorherZaehler, nachher: nachherZaehler
                 )
+
+                // Härtung (Kategorie-3-Review): ein Neuaufbau, der eindeutig
+                // fehlgeschlagen ist — Ordnerzugriff gescheitert, oder ein
+                // vorher nicht leerer Bestand ist danach komplett leer (kein
+                // erreichbarer Peer hatte irgendetwas) — wird nicht mehr nur
+                // in der Vorher-/Nachher-Anzeige gemeldet und dem Nutzer
+                // überlassen, sondern automatisch auf den Vorher-Stand
+                // zurückgerollt. Ein bloßer TEILWEISER Rückgang (manche
+                // Bereiche kleiner, andere unverändert) bleibt bewusst NUR
+                // informativ — der kann legitim sein (z.B. echte, vom Peer
+                // bereits verarbeitete Löschungen), ein eindeutiger
+                // Totalverlust dagegen nie.
+                // `nachherZaehler.gesamt == 0` bedeutet: der frische Context
+                // ist tatsächlich noch komplett leer (Summe aller Bereiche
+                // ist nur dann 0, wenn jeder einzelne Bereich 0 ist) — der
+                // Neuaufbau hat buchstäblich nichts eingefügt. Kein
+                // zusätzliches Löschen nötig, bevor das Backup importiert wird.
+                let eindeutigFehlgeschlagen = !ordnerZugriffErfolgreich || (vorherZaehler.gesamt > 0 && nachherZaehler.gesamt == 0)
+                if eindeutigFehlgeschlagen {
+                    SyncSnapshotImportService.importiereEinzelnenSnapshot(
+                        vorherSnapshot, peerGeraeteID: "lokales-backup", context: context
+                    )
+                    letzterNeuaufbauAutomatischZurueckgerollt = true
+                }
             }
         case .wiederherstellenAusBackup:
             guard let daten = try? Data(contentsOf: backupURL),

@@ -274,14 +274,20 @@ private struct DatenintegritaetSection: View {
     @State private var zeigeNeustartHinweis = false
     @State private var resetFehlermeldung: String?
     @State private var neuaufbauZusammenfassung = SyncErsetzenService.letzteNeuaufbauZusammenfassung
+    @State private var neuaufbauAutomatischZurueckgerollt = SyncErsetzenService.letzterNeuaufbauAutomatischZurueckgerollt
 
     var body: some View {
         Section {
             if let neuaufbauZusammenfassung {
+                if neuaufbauAutomatischZurueckgerollt {
+                    Label("Neuaufbau fehlgeschlagen (leeres Ergebnis oder Ordnerzugriff gescheitert) — automatisch auf den vorherigen Stand zurückgesetzt.", systemImage: "arrow.uturn.backward.circle.fill")
+                        .foregroundStyle(.red)
+                }
                 NeuaufbauZusammenfassungView(zusammenfassung: neuaufbauZusammenfassung)
                 Button("Zusammenfassung ausblenden") {
                     SyncErsetzenService.zusammenfassungVerwerfen()
                     self.neuaufbauZusammenfassung = nil
+                    self.neuaufbauAutomatischZurueckgerollt = false
                 }
             }
             if bericht.isEmpty {
@@ -330,7 +336,7 @@ private struct DatenintegritaetSection: View {
         } header: {
             Text("Datenintegrität")
         } footer: {
-            Text("Zeigt bei jedem App-Start erkannte baumelnde Referenzen auf bereits gelöschte Objekte sowie Einkaufsvorgänge ohne Einkaufsliste, die dadurch für die App unerreichbar sind (z.B. nach einer fehlerhaften Synchronisation) — rein informativ, ohne selbst etwas zu reparieren. Das vollständige Protokoll lässt sich über „Protokoll teilen…“ exportieren. „Gerät zurücksetzen“ sichert den aktuellen Bestand lokal und baut die Datenbank anschließend ausschließlich aus dem Stand eines erreichbaren Sync-Geräts neu auf — setzt eine aktive Datensynchronisation mit mindestens einem erreichbaren Gerät voraus. „Baumelnde Referenzen bereinigen“ macht dasselbe ohne Sync-Gerät, aus einem frisch erstellten Snapshot des eigenen Bestands.")
+            Text("Zeigt bei jedem App-Start erkannte baumelnde Referenzen auf bereits gelöschte Objekte sowie Einkaufsvorgänge ohne Einkaufsliste, die dadurch für die App unerreichbar sind (z.B. nach einer fehlerhaften Synchronisation) — rein informativ, ohne selbst etwas zu reparieren. Das vollständige Protokoll lässt sich über „Protokoll teilen…“ exportieren. „Gerät zurücksetzen“ sichert den aktuellen Bestand lokal und baut die Datenbank anschließend ausschließlich aus dem Stand eines erreichbaren Sync-Geräts neu auf — setzt eine aktive Datensynchronisation mit mindestens einem erreichbaren Gerät voraus. Schlägt der Neuaufbau eindeutig fehl (kein Ordnerzugriff oder komplett leeres Ergebnis), wird automatisch auf den vorherigen, gesicherten Stand zurückgesetzt, statt einen leeren Bestand zu übernehmen. „Baumelnde Referenzen bereinigen“ macht dasselbe ohne Sync-Gerät, aus einem frisch erstellten Snapshot des eigenen Bestands.")
         }
         .sheet(isPresented: $zeigeTeilen) {
             DebugLogTeilenView(urls: DatenintegritaetsLogger.exportURLs)
@@ -338,6 +344,7 @@ private struct DatenintegritaetSection: View {
         .onAppear {
             logGroesse = DatenintegritaetsLogger.gesamtGroesse()
             neuaufbauZusammenfassung = SyncErsetzenService.letzteNeuaufbauZusammenfassung
+            neuaufbauAutomatischZurueckgerollt = SyncErsetzenService.letzterNeuaufbauAutomatischZurueckgerollt
         }
         .confirmationDialog("Gerät zurücksetzen", isPresented: $zeigeResetBestaetigung, titleVisibility: .visible) {
             Button("Zurücksetzen und neu aufbauen", role: .destructive) {

@@ -412,6 +412,21 @@ zeigt ihn in `DebuggingView` an, Rückgänge rot markiert — das bestehende
 „Backup wiederherstellen" bleibt direkt daneben als Rückgängig-Option
 sichtbar.
 
+**Automatischer Rollback bei eindeutigem Fehlschlag (Härtung, 2026-08-03):**
+Die reine Anzeige oben deckt nur den TEILWEISEN Rückgang ab (kann legitim
+sein, z.B. bereits verarbeitete Peer-Löschungen) — ein EINDEUTIGER
+Totalverlust wurde bisher trotzdem nur angezeigt, nicht verhindert: scheitert
+der Ordnerzugriff komplett, oder bringt kein einziger erreichbarer Peer
+irgendetwas zurück (vorher nicht leerer Bestand, nachher Summe aller Bereiche
+exakt 0), importiert `fuehreAusstehendeAktionAus(context:)` jetzt automatisch
+das ohnehin vorhandene Vorher-Backup zurück in den Context, statt den leeren
+Neuaufbau stehen zu lassen. `DebuggingView` zeigt dafür zusätzlich zur
+Vorher-/Nachher-Zusammenfassung einen roten Hinweis
+(`SyncErsetzenService.letzterNeuaufbauAutomatischZurueckgerollt`). Ein
+teilweiser Rückgang bleibt bewusst nur informativ, ohne automatischen
+Rollback — die Unterscheidung "legitim vs. Bug" ist dort nicht zuverlässig
+automatisierbar.
+
 **Verwaiste Peer-Exports:** Sync-Pakete (`docs/EXPORT_PAKET_UMBAU.md`) von
 Peers, deren `manifest.erzeugtAm` über `SyncSnapshotImportService.maximalesSnapshotAlter`
 (30 Tage) hinaus ist, werden beim Import ignoriert (verwaister Peer-Ordner aus

@@ -2055,3 +2055,65 @@ grün, keine neuen Warnungen. Neuer Regressionstest
 zweiter Export muss die Datei trotz identischem Fingerabdruck neu schreiben).
 Kein eigenständiger `xcodebuild test`-Lauf durch Claude (Projektkonvention) —
 noch nicht auf den beiden betroffenen echten Geräten nachverifiziert.
+
+## 32. Sync-Merge-Fehlmerge (GitHub #86) + Härtung des Neuaufbau-Pfads gegen eindeutigen Fehlschlag
+
+**Auslöser:** Nutzerfrage, warum Geschäfte beim Sync-Merge überhaupt anhand
+des Radius zusammengeführt werden — daraus entwickelte sich im Gespräch ein
+zweiter, tieferliegender Fund (Namensgleichheit allein reichte beim Merge
+schon aus, unabhängig von der Distanz) und anschließend eine breitere
+Bewertung, ob die vielen einzelnen Sonderfall-Fixes in diesem Dokument (31
+Abschnitte) durch strengere Regeln an wenigen, klar abgegrenzten
+Kontrollpunkten (Migration, Sync-Ordner-Beitritt, Backup/Ersetzen) reduzierbar
+wären, statt jedes Mal einzeln nachzupatchen.
+
+**Ergebnis der Bewertung:** Migration ist bereits streng genug (nur additive
+Attribute, siehe `docs/DECISIONS.md`). Der laufende Betrieb (Vorgangs-
+Umleitung, baumelnde Referenzen, Event-Retry) ist NICHT durch striktere
+Checkpoints reduzierbar — das ist der Preis für gleichzeitiges Bearbeiten
+mehrerer Geräte während eines laufenden Einkaufs, keine vermeidbare
+Sonderfall-Anhäufung. Zwei konkrete Verbesserungen blieben: der Sync-Merge-Bug
+selbst (#86) und eine fehlende harte Erfolgsprüfung beim Neuaufbau-Pfad.
+
+**#86, Teil 1 — Merge-Regel verschärft:** `mergeGeschaefte` verglich Geschäfte
+bisher mit der für interaktive, bestätigbare Fälle gedachten großzügigen
+Regel (Name exakt ODER Teilstring ODER reine Koordinaten-Nähe, fester
+75m-Standardwert statt des individuellen `erkennungsradius` aus #41). Neue,
+strengere `istGleicherOrtFuerSyncMerge`-Regel nur für diesen automatischen,
+unbestätigten Pfad: Name muss EXAKT übereinstimmen UND beide Koordinaten
+innerhalb der strengeren der beiden individuellen Radien liegen.
+
+**#86, Teil 2 — aktive Rückfrage beim Ordner-Beitritt:** Der Beitritt zu
+einem Sync-Ordner mit bestehenden Peer-Daten ist ein einmaliger,
+nutzerinitiierter Moment — dort lohnt sich eine Rückfrage, die im laufenden
+Hintergrund-Betrieb bewusst nicht eingeführt wurde (kein wiederkehrender
+Dialog). `mehrdeutigeGeschaeftsKandidatenBeimBeitritt` scannt vorab (reines
+Lesen) auf Kandidaten, die nach der alten, lockeren Regel übereinstimmen
+würden, aber nicht nach der neuen strengen; `GeschaeftsBeitrittsAbgleichSheet`
+fragt bei Treffern aktiv nach ("gleicher Laden" mit Namenswahl, oder
+"unterschiedliche Läden" als Standard ohne Aktion). Im laufenden Betrieb
+danach bewusst keine neue Zusammenführungs-Funktion — seltene Duplikate
+fallen sichtbar auf und werden über die bereits bestehende Löschfunktion
+bereinigt (Tombstone propagiert automatisch).
+
+**Härtung des `SyncErsetzenService`-Neuaufbau-Pfads:** Die bestehende
+Vorher-/Nachher-Zusammenfassung (Abschnitt 21) zeigte einen Rückgang nur an,
+verhinderte ihn aber nicht — ein EINDEUTIGER Totalverlust (Ordnerzugriff
+gescheitert, oder kein einziger erreichbarer Peer bringt irgendetwas zurück)
+wurde bisher genauso nur angezeigt wie ein harmloser TEILWEISER Rückgang
+(kann legitim sein, z.B. bereits verarbeitete Peer-Löschungen). Da
+`nachherZaehler.gesamt == 0` bei vorher nicht leerem Bestand eindeutig auf
+einen kompletten Fehlschlag hinweist (nie ein legitimer Fall), importiert
+`fuehreAusstehendeAktionAus(context:)` bei dieser Konstellation jetzt
+automatisch das ohnehin vorhandene Vorher-Backup zurück, statt den leeren
+Neuaufbau stehen zu lassen — `DebuggingView` zeigt dafür zusätzlich einen
+roten Hinweis. Ein teilweiser Rückgang bleibt bewusst nur informativ, da
+"legitim vs. Bug" dort nicht zuverlässig automatisierbar ist.
+
+**Verifikationsstand:** `xcodegen generate` + `xcodebuild build`/
+`build-for-testing` grün. Neue Tests:
+`SyncSnapshotImportServiceTests.geschaeftMitAehnlichemNamenAberNaheKoordinatenWirdNichtGemergt`,
+`.mehrdeutigerBeitrittsKandidatWirdGefundenUndNachBestaetigungGemergt`,
+`SyncErsetzenServiceTests.fuehreAusstehendeAktionAusRolltBeiKomplettLeeremNeuaufbauAutomatischZurueck`.
+Kein eigenständiger `xcodebuild test`-Lauf durch Claude (Projektkonvention) —
+nicht auf echten Geräten nachverifiziert.
