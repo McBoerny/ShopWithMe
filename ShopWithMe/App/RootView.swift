@@ -27,7 +27,10 @@ import SwiftData
 struct RootView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
+    @EnvironmentObject private var syncPollingService: SyncPollingService
     @State private var ausstehenderMilkForUsImport: AusstehenderImport?
+    @State private var zeigeAusDerZeitGefallenDialog = false
+    @State private var zeigeNeustartHinweisNachVollAbgleich = false
 
     var body: some View {
         TabView {
@@ -45,6 +48,8 @@ struct RootView: View {
             await PreisHistorieBereinigungService.automatischBereinigenFallsFaellig(context: modelContext)
             await KaufEintragBereinigungService.automatischBereinigenFallsFaellig(context: modelContext)
             await PreispunktVerdichtungService.automatischVerdichtenFallsFaellig(context: modelContext)
+            await SyncExportService.raeumeAlteEigeneEventDateienAufFallsFaellig()
+            pruefeAusDerZeitGefallen()
         }
         .onChange(of: scenePhase) { _, neuePhase in
             guard neuePhase == .active else { return }
@@ -52,6 +57,8 @@ struct RootView: View {
                 await PreisHistorieBereinigungService.automatischBereinigenFallsFaellig(context: modelContext)
                 await KaufEintragBereinigungService.automatischBereinigenFallsFaellig(context: modelContext)
                 await PreispunktVerdichtungService.automatischVerdichtenFallsFaellig(context: modelContext)
+                await SyncExportService.raeumeAlteEigeneEventDateienAufFallsFaellig()
+                pruefeAusDerZeitGefallen()
             }
         }
         .onOpenURL { url in
@@ -62,6 +69,59 @@ struct RootView: View {
         }
         .sheet(item: $ausstehenderMilkForUsImport) { eintrag in
             MilkForUsImportView(initialText: eintrag.text)
+        }
+        // GitHub #89: bewusst kein Zusammenführen-Angebot — additive Merges
+        // (auch das Bereich-A-Sicherheitsnetz) können nur hinzufügen, nie
+        // entfernen, ein bereits etabliertes Gerät mit potenziell veralteten
+        // lokalen Karteileichen bräuchte einen echten Ersatz, siehe
+        // ``SyncAktualitaetsService``.
+        .confirmationDialog("Sync-Abgleich nötig", isPresented: $zeigeAusDerZeitGefallenDialog) {
+            Button("Jetzt abgleichen") {
+                vollAbgleichAusloesen()
+            }
+            Button("Später erinnern", role: .cancel) {}
+        } message: {
+            Text("Dieses Gerät war länger als 30 Tage nicht erfolgreich synchronisiert. Damit Änderungen anderer Geräte sicher übernommen werden, muss der Datenbestand einmal komplett neu abgeglichen werden. Deine eigenen, noch nicht übertragenen Änderungen werden vorher gesichert.")
+        }
+        .alert("Neustart nötig", isPresented: $zeigeNeustartHinweisNachVollAbgleich) {
+            Button("OK") {}
+        } message: {
+            Text("Bitte schließe die App jetzt vollständig (nicht nur in den Hintergrund legen) und öffne sie erneut, um den Abgleich abzuschließen.")
+        }
+    }
+
+    private func pruefeAusDerZeitGefallen() {
+        guard SyncAktualitaetsService.istAusDerZeitGefallen(context: modelContext) else { return }
+        if SyncDebugLogger.istAktiv {
+            let zuletzt = SyncAktualitaetsService.zuletztErfolgreichSynchronisiertAm.map { "\($0)" } ?? "nil"
+            SyncDebugLogger.log(.ausDerZeitGefallenErkannt, details: "zuletztErfolgreichAm=\(zuletzt)")
+        }
+        zeigeAusDerZeitGefallenDialog = true
+    }
+
+    /// Sichert zuerst per einem echten Sync-Zyklus die eigenen, noch nicht
+    /// hochgeladenen Änderungen (kritische Voraussetzung, siehe
+    /// ``SyncAktualitaetsService``-Typ-Doku), plant dann „Ersetzen durch
+    /// Peer" für den nächsten Start. Schlägt der Export fehl (z.B. kein
+    /// Ordnerzugriff), wird NICHTS geplant — die Prüfung greift beim
+    /// nächsten Vordergrund-Wechsel einfach erneut, statt eigene Änderungen
+    /// zu riskieren.
+    private func vollAbgleichAusloesen() {
+        Task {
+            let exportErfolgreich = await syncPollingService.syncZyklus()
+            guard exportErfolgreich else { return }
+            do {
+                try SyncErsetzenService.planeErsetzenDurchPeer(context: modelContext)
+                if SyncDebugLogger.istAktiv {
+                    SyncDebugLogger.log(.vollAbgleichEingeleitet, details: "")
+                }
+                zeigeNeustartHinweisNachVollAbgleich = true
+            } catch {
+                // Seltener Fehlerfall (z.B. eigener Snapshot-Export
+                // schlägt lokal fehl) — beim nächsten Vordergrund-Wechsel
+                // erneut versucht, kein stiller Datenverlust möglich, da
+                // noch nichts geplant wurde.
+            }
         }
     }
 }
@@ -74,4 +134,5 @@ private struct AusstehenderImport: Identifiable {
 
 #Preview {
     RootView()
+        .environmentObject(SyncPollingService())
 }

@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.10 (Build 193) — Sync-Event-Bereinigung: Alters-Löschung + erzwungener Voll-Abgleich für lange abwesende Geräte (GitHub #89)
+
+- Eigene, hochgeladene Bereich-A-Event-Dateien (`peers/{gerät}/events/`)
+  werden jetzt nach 30 Tagen automatisch gelöscht
+  (`SyncExportService.raeumeAlteEigeneEventDateienAufFallsFaellig`), statt
+  unbegrenzt zu wachsen. Abgesichert durch `SyncAktualitaetsService`: ein
+  bereits etabliertes Gerät, das selbst länger als dieselbe Frist nicht
+  erfolgreich synchronisiert hat, erkennt das lokal und löst statt eines
+  additiven Merges einen erzwungenen Voll-Abgleich aus (Store leeren, aus
+  dem aktuellen Peer-Bestand neu aufbauen, bestehender
+  `SyncErsetzenService`-Mechanismus) — bewusst **kein**
+  Zusammenführen-Angebot, da additive Merges eigene Bereich-A-Karteileichen
+  nie entfernen würden. Neue Nutzer-Meldung „Sync-Abgleich nötig" in
+  `RootView`, kritische Voraussetzung: eigene ausstehende Änderungen werden
+  vor dem Abgleich zuerst exportiert. Details, verworfene Alternative
+  (Konsum-Quittung pro Peer) und Begründung in
+  `docs/SYNC_EVENT_BEREINIGUNG.md`.
+- Nebenbei zwei bereits vor dieser Session bestehende, latente Testfehler
+  gefunden und behoben (`SyncSnapshotExportServiceTests.nurGeaenderterTeilWirdNeuGeschrieben`/
+  `nurEinkaufslisteGeaendertLaesstStammJsonUnveraendert` prüften fälschlich
+  auf Datei-Nichtexistenz statt auf Inhaltsänderung — ein Paket-Teil wird
+  bereits beim allerersten Zyklus geschrieben, auch mit leerem Inhalt).
+
 ## v0.10 (Build 192) — Test-Fix Abschnitt-25-Guard (GitHub #79), DB-Debugging verschmolzen (GitHub #84), Preishistorie-Verdichtung in die Einstellungen (GitHub #83)
 
 - **GitHub #79.** `neuerEinkaufsvorgangVomPeerErhoehtNichtZusaetzlichDenZaehler`

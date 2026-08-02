@@ -29,20 +29,20 @@ enum SyncExportService {
     /// Sync-Ordner (``SyncOrdnerService/gewaehlterOrdner()`` liefert `nil`) ohne
     /// Wirkung — Synchronisation ist optional.
     ///
-    /// **Kein Aufräumen alter Event-Dateien** (Revert eines kurzzeitig
-    /// eingeführten, zeitbasierten Löschens): „hochgeladen" bedeutet nur, dass
-    /// DIESES Gerät die Datei geschrieben hat — nicht, dass ein Peer sie
-    /// bereits gelesen hat. Ein age-basiertes Löschen (unabhängig von der
-    /// gewählten Frist) kann dadurch einen noch nicht abgeholten Rückstand
-    /// löschen, sobald ein Peer länger als die Frist nicht synchronisiert hat
-    /// — real beobachtet: löschte zwischen zwei Geräten ausstehende
-    /// `artikelAbgehakt`-Events, bevor der zweite Peer sie je gelesen hatte,
-    /// wodurch dieser Artikel dort nie als abgehakt ankam. Ein sicheres
-    /// Aufräumen bräuchte eine echte Bestätigung, dass alle Peers eine Datei
-    /// bereits konsumiert haben (z.B. ein Zuletzt-gelesenes-Cursor pro Peer),
-    /// die es aktuell nicht gibt — siehe „Offene Alt-Datei-Frage" oben, jetzt
-    /// wieder bewusst offen statt mit einem unsicheren Heuristik-Ersatz
-    /// geschlossen.
+    /// **Aufräumen alter Event-Dateien seit GitHub #89 wieder eingeführt**
+    /// (siehe ``raeumeAlteEigeneEventDateienAufFallsFaellig()``) — ein früherer
+    /// Versuch (reine Alters-Heuristik ohne Sicherheitsnetz) wurde revertiert,
+    /// weil „hochgeladen" nur bedeutet, dass DIESES Gerät die Datei geschrieben
+    /// hat, nicht, dass ein Peer sie bereits gelesen hat: ein zu diesem
+    /// Zeitpunkt länger als die Frist abwesender Peer verlor dadurch
+    /// unwiederbringlich `artikelAbgehakt`-Events. Sicher ist die Alters-
+    /// Heuristik jetzt, weil ``SyncAktualitaetsService`` das komplementäre
+    /// Gegenstück liefert: ein Gerät, das selbst länger als dieselbe Frist
+    /// nicht erfolgreich synchronisiert hat, erkennt das lokal und löst einen
+    /// erzwungenen Voll-Abgleich statt eines additiven Merges aus (siehe
+    /// dort) — ein Peer verliert dadurch nie mehr unbemerkt eine Löschung, er
+    /// bekommt stattdessen sicher mitgeteilt, dass er sich nicht mehr auf sein
+    /// Event-Log verlassen darf.
     /// Rückgabewert meldet ausschließlich, ob der Ordnerzugriff (Berechtigung)
     /// geklappt hat, analog ``SyncSnapshotImportService/importiereSnapshots(context:)``.
     @discardableResult
@@ -76,6 +76,88 @@ enum SyncExportService {
 
         if context.hasChanges { try? context.save() }
         return true
+    }
+
+    /// Aufbewahrungsfrist für eigene, bereits hochgeladene Event-Dateien
+    /// (GitHub #89) — danach werden sie gelöscht, unabhängig davon, ob ein
+    /// Peer sie bereits gelesen hat (siehe
+    /// ``raeumeAlteEigeneEventDateienAufFallsFaellig()`` für die Begründung,
+    /// warum das jetzt sicher ist). Dieselbe Größenordnung wie
+    /// `SyncSnapshotImportService.maximalesSnapshotAlter` — beide beantworten
+    /// dieselbe Grundfrage („wie lange ist ein Gerät ohne echten Kontakt noch
+    /// Teil der Sync-Gruppe"), nur für unterschiedliche Datei-Arten. Von
+    /// ``SyncAktualitaetsService`` als Schwelle für „aus der Zeit gefallen"
+    /// mitgenutzt, statt eines eigenen, separat zu pflegenden Werts (Single
+    /// Source of Truth). `static var` statt Konstante, damit Tests sie
+    /// verkürzen können.
+    @MainActor static var eventAufbewahrungsfrist: TimeInterval = 30 * 24 * 60 * 60
+
+    private static let letzteEventBereinigungSchluessel = "syncEventBereinigungLetzteBereinigung"
+
+    /// Mindestabstand zwischen zwei automatischen Aufräumläufen, analog
+    /// `KaufEintragBereinigungService.automatischesIntervall` — verhindert,
+    /// dass jeder 5s/60s-Sync-Zyklus den eigenen `events/`-Ordner komplett
+    /// aufzählt.
+    static let automatischesBereinigungsintervall: TimeInterval = 60 * 60 * 24
+
+    static var letzteEventBereinigung: Date? {
+        get { UserDefaults.standard.object(forKey: letzteEventBereinigungSchluessel) as? Date }
+        set { UserDefaults.standard.set(newValue, forKey: letzteEventBereinigungSchluessel) }
+    }
+
+    /// Löscht eigene Event-Dateien, deren Datei-Änderungsdatum länger als
+    /// ``eventAufbewahrungsfrist`` zurückliegt — höchstens einmal pro
+    /// ``automatischesBereinigungsintervall`` tatsächlich ausgeführt (siehe
+    /// `RootView` für den Aufrufort, analog den übrigen
+    /// `automatisch…FallsFaellig`-Diensten).
+    ///
+    /// **Warum das Datei-Änderungsdatum statt eines Feldes im Event-Inhalt:**
+    /// Ein Alters-Check über `wallClock` würde jede Datei erst lesen/dekodieren
+    /// müssen — genau die Kosten, die der ID-Vorfilter beim Import (siehe
+    /// `SyncImportService`) gerade vermeidet. Das Dateisystem-Änderungsdatum
+    /// ist für diesen einmal-täglichen, groben Zweck (30-Tage-Schwelle)
+    /// präzise genug und kostet nur einen Verzeichnis-Listing-Aufruf.
+    ///
+    /// **Warum das jetzt sicher ist** (siehe auch ``SyncAktualitaetsService``):
+    /// ein Peer, der regelmäßig synchronisiert, liest eine neue Event-Datei
+    /// typischerweise innerhalb von Minuten — 30 Tage Puffer reichen dafür
+    /// bei Weitem. Nur ein Peer, der TATSÄCHLICH so lange abwesend war, dass
+    /// er eine Datei verpasst haben könnte, ist überhaupt betroffen — und
+    /// genau dieser Fall erkennt sich selbst (``SyncAktualitaetsService/istAusDerZeitGefallen(context:)``)
+    /// und löst einen erzwungenen Voll-Abgleich statt eines additiven Merges
+    /// aus, statt sich auf sein (dann lückenhaftes) Event-Log zu verlassen.
+    @MainActor
+    static func raeumeAlteEigeneEventDateienAufFallsFaellig() async {
+        if let letzte = letzteEventBereinigung, Date().timeIntervalSince(letzte) < automatischesBereinigungsintervall {
+            return
+        }
+        letzteEventBereinigung = Date()
+
+        guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return }
+        guard syncOrdner.startAccessingSecurityScopedResource() else {
+            SyncDebugLogger.log(.ordnerZugriffFehlgeschlagen, details: "raeumeAlteEigeneEventDateienAuf")
+            return
+        }
+        defer { syncOrdner.stopAccessingSecurityScopedResource() }
+
+        let eventsOrdner = eigenerEventsOrdner(in: syncOrdner)
+        guard let dateien = try? FileManager.default.contentsOfDirectory(
+            at: eventsOrdner, includingPropertiesForKeys: [.contentModificationDateKey]
+        ) else { return }
+
+        let stichtag = Date().addingTimeInterval(-eventAufbewahrungsfrist)
+        var geloeschteAnzahl = 0
+        for datei in dateien where datei.pathExtension == "json" {
+            guard let werte = try? datei.resourceValues(forKeys: [.contentModificationDateKey]),
+                  let geaendertAm = werte.contentModificationDate,
+                  geaendertAm < stichtag
+            else { continue }
+            guard (try? FileManager.default.removeItem(at: datei)) != nil else { continue }
+            geloeschteAnzahl += 1
+        }
+        if SyncDebugLogger.istAktiv, geloeschteAnzahl > 0 {
+            SyncDebugLogger.log(.eventDateienBereinigt, details: "anzahl=\(geloeschteAnzahl)")
+        }
     }
 
     /// Zehnstellig nullgepolsterter Lamport-Zähler sorgt für lexikografisch

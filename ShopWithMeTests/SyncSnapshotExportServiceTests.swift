@@ -201,7 +201,11 @@ struct SyncSnapshotExportServiceTests {
         await SyncSnapshotExportService.exportierePaket(context: context)
         let stammVorher = try Data(contentsOf: SyncSnapshotExportService.eigeneStammURL(in: syncOrdner))
         let vorgaengeURL = SyncSnapshotExportService.eigeneVorgaengeURL(in: syncOrdner)
-        #expect(!FileManager.default.fileExists(atPath: vorgaengeURL.path))
+        // `vorgaenge.json` existiert bereits nach dem ersten Zyklus (leeres
+        // Array, jeder Teil wird beim allerersten Schreiben unabhängig von
+        // seinem Inhalt angelegt) — die eigentliche Kernaussage ist deshalb
+        // ein Inhalts-, kein Existenz-Vergleich, siehe unten.
+        let vorgaengeVorher = try Data(contentsOf: vorgaengeURL)
 
         // Nur ein neuer Einkaufsvorgang — Stammdaten bleiben unverändert.
         context.insert(Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste))
@@ -209,8 +213,9 @@ struct SyncSnapshotExportServiceTests {
         await SyncSnapshotExportService.exportierePaket(context: context)
 
         let stammNachher = try Data(contentsOf: SyncSnapshotExportService.eigeneStammURL(in: syncOrdner))
+        let vorgaengeNachher = try Data(contentsOf: vorgaengeURL)
         #expect(stammVorher == stammNachher)
-        #expect(FileManager.default.fileExists(atPath: vorgaengeURL.path))
+        #expect(vorgaengeVorher != vorgaengeNachher)
     }
 
     /// Regressionstest für GitHub #85 (Analyse-Fund: `einkaufslistenEintraege`
@@ -242,7 +247,10 @@ struct SyncSnapshotExportServiceTests {
         await SyncSnapshotExportService.exportierePaket(context: context)
         let stammVorher = try Data(contentsOf: SyncSnapshotExportService.eigeneStammURL(in: syncOrdner))
         let listenURL = SyncSnapshotExportService.eigeneListenURL(in: syncOrdner)
-        #expect(!FileManager.default.fileExists(atPath: listenURL.path))
+        // `listen.json` existiert bereits nach dem ersten Zyklus (leeres
+        // Array) — Kernaussage ist ein Inhalts-, kein Existenz-Vergleich,
+        // siehe ``nurGeaenderterTeilWirdNeuGeschrieben()``.
+        let listenVorher = try Data(contentsOf: listenURL)
 
         // Nur ein neuer Einkaufslisten-Eintrag (z.B. Artikel zur Liste
         // hinzugefügt/abgehakt) — Geschäfte/Artikel/Kategorien bleiben
@@ -252,8 +260,9 @@ struct SyncSnapshotExportServiceTests {
         await SyncSnapshotExportService.exportierePaket(context: context)
 
         let stammNachher = try Data(contentsOf: SyncSnapshotExportService.eigeneStammURL(in: syncOrdner))
+        let listenNachher = try Data(contentsOf: listenURL)
         #expect(stammVorher == stammNachher)
-        #expect(FileManager.default.fileExists(atPath: listenURL.path))
+        #expect(listenVorher != listenNachher)
     }
 
     /// Regressionstest für einen Live-Test-Nachfolgefund (2026-08-01): der in

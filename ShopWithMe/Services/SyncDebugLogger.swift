@@ -53,6 +53,21 @@ enum SyncDebugLogger {
         /// übersprungen (unauflösbare Liste ohne bekannten ID-/Alias-Treffer,
         /// oder per Tombstone als gelöscht markiert).
         case einkaufsvorgangEintragUebersprungen = "sync_einkaufsvorgang_eintrag_uebersprungen"
+        /// GitHub #89: ``SyncExportService/raeumeAlteEigeneEventDateienAufFallsFaellig()``
+        /// hat eigene Event-Dateien gelöscht, die älter als
+        /// ``SyncExportService/eventAufbewahrungsfrist`` waren. Details:
+        /// `anzahl=N`.
+        case eventDateienBereinigt = "sync_event_dateien_bereinigt"
+        /// GitHub #89: ``SyncAktualitaetsService/istAusDerZeitGefallen(context:)``
+        /// hat zugeschlagen — ein bereits etabliertes Gerät war länger als
+        /// ``SyncExportService/eventAufbewahrungsfrist`` nicht erfolgreich
+        /// synchronisiert. Details: `zuletztErfolgreichAm=…`.
+        case ausDerZeitGefallenErkannt = "sync_aus_der_zeit_gefallen_erkannt"
+        /// GitHub #89: der erzwungene Voll-Abgleich für ein „aus der Zeit
+        /// gefallenes" Gerät wurde erfolgreich eingeleitet (eigener Export
+        /// abgeschlossen, „Ersetzen durch Peer" für den nächsten Start
+        /// vorgemerkt).
+        case vollAbgleichEingeleitet = "sync_voll_abgleich_eingeleitet"
     }
 
     private static let aktivSchluessel = "datensyncDebugModusAktiv"

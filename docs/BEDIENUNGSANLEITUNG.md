@@ -236,6 +236,13 @@ werden ausgetauscht.
   der automatische Abgleich — er läuft beim nächsten Öffnen sofort weiter.
 - **„Synchronisierung deaktivieren“** trennt die Verbindung zum Ordner wieder,
   ohne bereits ausgetauschte Daten zu löschen.
+- **„Sync-Abgleich nötig“:** War ein Gerät länger als 30 Tage nicht in
+  Betrieb (Urlaub, App lange nicht geöffnet), erscheint beim nächsten Start
+  eine Meldung, dass der Datenbestand einmal komplett neu abgeglichen werden
+  muss — „Jetzt abgleichen“ sichert zuerst eigene, noch nicht übertragene
+  Änderungen und fordert danach zu einem Neustart der App auf, um den
+  Abgleich abzuschließen. „Später erinnern“ verschiebt die Meldung auf den
+  nächsten App-Start.
 - **Sync-Debug-Modus** (Einstellungen → „Debugging“) — zeichnet zur
   Fehlersuche/Optimierung lokal auf, wie lange ein Abgleich dauert und wie
   aktuell empfangene Änderungen waren; im Normalbetrieb nicht nötig.

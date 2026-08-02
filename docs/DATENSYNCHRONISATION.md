@@ -411,15 +411,19 @@ kompletten `kaeufe/`-Ordners, aber ohne `events/` anzutasten.
   bevor Bereich-A-Events bzw. der volle Snapshot-Inhalt existierten, wurden
   nie als Event aufgezeichnet und stecken in keinem historischen Snapshot —
   sie lassen sich nicht rückwirkend zwischen Geräten abgleichen.
-- **Event-Dateien werden nie gelöscht** (`peers/{geraeteID}/events/` wächst
-  unbegrenzt) — ein früherer Versuch, sie nach einem Sicherheitsfenster zu
-  löschen, löschte dabei noch nicht von allen Peers abgeholte Events (siehe
-  `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 15) und wurde revertiert.
-  Die Speicherplatz-Grenze bleibt unadressiert (kleine JSON-Dateien, für den
-  aktuellen Umfang unkritisch); das wiederholte LESEN längst entschiedener
-  Dateien bei jedem Zyklus ist seit dem Performance-Fund „ID-Vorfilter aus
-  Dateinamen" (`SyncImportService.importiereNeueEvents`) aber kein
-  wachsendes Problem mehr — bereits bekannte Event-IDs werden anhand des
+- **Event-Dateien werden seit GitHub #89 wieder gelöscht** (siehe
+  `docs/SYNC_EVENT_BEREINIGUNG.md`) — ein früherer Versuch, sie nach einem
+  Sicherheitsfenster zu löschen, löschte dabei noch nicht von allen Peers
+  abgeholte Events (siehe `docs/DATENSYNCHRONISATION_VERLAUF.md`
+  Abschnitt 15) und wurde revertiert. Diesmal abgesichert durch
+  `SyncAktualitaetsService`: ein Gerät, das selbst länger als die
+  Aufbewahrungsfrist (30 Tage) nicht erfolgreich synchronisiert hat, erkennt
+  das lokal und löst statt eines additiven Merges einen erzwungenen
+  Voll-Abgleich aus (`SyncErsetzenService`) — ein Peer verliert dadurch nie
+  mehr unbemerkt eine Löschung. Das wiederholte LESEN längst entschiedener
+  Dateien bei jedem Zyklus bleibt zusätzlich seit dem Performance-Fund
+  „ID-Vorfilter aus Dateinamen" (`SyncImportService.importiereNeueEvents`)
+  kein wachsendes Problem — bereits bekannte Event-IDs werden anhand des
   Dateinamens erkannt und ihre Dateien gar nicht erst gelesen/dekodiert,
   ohne die Retry-Semantik für noch nicht auflösbare Events zu berühren.
 - **Kein echtes Hintergrund-Sync:** ein In-App-`Task`-Loop läuft nur im

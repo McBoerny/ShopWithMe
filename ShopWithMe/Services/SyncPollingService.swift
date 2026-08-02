@@ -105,7 +105,15 @@ final class SyncPollingService: ObservableObject {
         let dauer = start.duration(to: .now)
         SyncDebugLogger.log(.zyklusEnde, details: "dauer=\(dauer)")
 
-        return snapshotImportErfolgreich && eventImportErfolgreich && eventExportErfolgreich
+        let erfolgreich = snapshotImportErfolgreich && eventImportErfolgreich && eventExportErfolgreich
             && paketExportErfolgreich && kaeufeExportErfolgreich
+        // GitHub #89: Grundlage für ``SyncAktualitaetsService/istAusDerZeitGefallen(context:)``
+        // — nur bei tatsächlichem Erfolg vermerkt, ein fehlgeschlagener
+        // Ordnerzugriff (Berechtigung entzogen, Ordner kurzzeitig nicht
+        // erreichbar) darf die Uhr nicht weiterlaufen lassen.
+        if erfolgreich {
+            SyncAktualitaetsService.vermerkeErfolgreichenZyklus()
+        }
+        return erfolgreich
     }
 }
