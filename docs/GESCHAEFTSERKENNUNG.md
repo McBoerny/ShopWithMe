@@ -101,6 +101,73 @@ einer Fußgängerzone eher einen kleineren, um Verwechslungen zu vermeiden.
   `ignorierteEintraege`) betreffen kein konkretes `Geschaeft` und bleiben beim
   globalen Standardwert.
 
+## Strengere Regel für den automatischen Sync-Merge (GitHub #86)
+
+**Status: Umgesetzt.**
+
+`istGleicherOrt(...)` ist für die oben beschriebenen, interaktiven Fälle
+bewusst großzügig (Name exakt ODER Teilstring ODER Koordinaten allein) — der
+Nutzer sieht den Vorschlag und kann ihn ablehnen. Für den automatischen
+Sync-Merge (`SyncSnapshotImportService.mergeGeschaefte`) ist das zu riskant:
+er läuft ohne Bestätigung im Hintergrund und ignorierte dabei zusätzlich den
+individuellen `erkennungsradius` (immer nur der globale 75m-Standardwert).
+
+Zwei konkrete Fehlerbilder waren dadurch möglich:
+- Zwei dicht benachbarte, aber unterschiedlich benannte Läden (Bäckerei/
+  Blumenladen in einem Einkaufszentrum) wurden rein über die Koordinaten
+  fälschlich zusammengeführt — der individuelle, engere Radius griff nicht.
+- Zwei gleich oder überlappend benannte, aber tatsächlich unterschiedliche
+  Filialen derselben Kette an unterschiedlichen Orten wurden bereits über den
+  Namensvergleich zusammengeführt, noch bevor die Koordinaten überhaupt
+  geprüft wurden.
+
+`GeschaeftErkennungService.istGleicherOrtFuerSyncMerge(...)` ersetzt den
+Aufruf in `mergeGeschaefte` durch eine strengere UND-Regel statt der
+bisherigen ODER-Kette: Name muss EXAKT übereinstimmen (case-insensitive, kein
+Teilstring) UND beide Koordinaten müssen vorhanden UND innerhalb der
+strengeren (kleineren) der beiden individuellen `erkennungsradius`-Werte
+liegen. Ohne Koordinaten auf einer Seite: kein automatischer Merge.
+
+Bewusster Kompromiss: dadurch können gelegentlich zwei Geräte, die
+unabhängig voneinander (z.B. zeitgleich, vor dem nächsten Sync-Zyklus)
+denselben, leicht unterschiedlich benannten Laden anlegen, zwei getrennte
+`Geschaeft`-Einträge behalten — sichtbar und vom Nutzer selbst per normaler
+Löschfunktion bereinigbar (Tombstone propagiert die Löschung an alle Geräte),
+statt wie vorher unsichtbar und potenziell falsch automatisch vereint zu
+werden.
+
+## Aktive Rückfrage beim Sync-Ordner-Beitritt (GitHub #86, Teil 2)
+
+**Status: Umgesetzt.**
+
+Der Beitritt zu einem Sync-Ordner mit bestehenden Peer-Daten ist — anders als
+der laufende Hintergrund-Sync — ein einmaliger, klar abgegrenzter,
+nutzerinitiierter Moment (`SyncOrdnerSettingsView`, „Zusammenführen"-Wahl).
+Hier lohnt sich eine aktive Rückfrage, die im laufenden Betrieb (Kategorie
+"seltener Restfall", siehe oben) bewusst nicht eingeführt wurde:
+
+- `GeschaeftErkennungService.istMehrdeutigerBeitrittsKandidat(...)` markiert
+  jedes Paar, das nach der großzügigen `istGleicherOrt`-Regel (mit dem
+  größeren der beiden Radien als Toleranz) übereinstimmt, aber NICHT nach der
+  strengen `istGleicherOrtFuerSyncMerge`-Regel — genau die Differenzmenge, die
+  vor dem #86-Fix automatisch (und riskant) zusammengeführt worden wäre.
+- `SyncSnapshotImportService.mehrdeutigeGeschaeftsKandidatenBeimBeitritt(context:)`
+  liest dafür ausschließlich die Bereich-B-Stammdaten (`stamm.json`) aller
+  Peer-Ordner — reines Lesen, kein Merge, keine Zustandsänderung — und
+  vergleicht jedes remote `GeschaeftSnapshot` gegen den lokalen Bestand.
+- Gibt es Treffer, zeigt `GeschaeftsBeitrittsAbgleichSheet`
+  (`SyncOrdnerSettingsView.swift`) sie vor dem eigentlichen Merge zur
+  Entscheidung an: „gleicher Laden" (mit Wahl, welcher der beiden Namen
+  bleibt) oder „unterschiedliche Läden" (Standard bei Nichtentscheidung).
+- Eine „gleicher Laden"-Bestätigung registriert vorab einen
+  `SyncEntitaetsAlias` (`SyncSnapshotImportService.geschaeftsKandidatBestaetigen(_:gewaehlterName:context:)`)
+  und übernimmt den gewählten Namen — der danach laufende reguläre
+  `SyncPollingService.syncZyklus()` erkennt die `remoteID` dadurch bereits
+  über den ID-Fast-Path in `mergeGeschaefte`, ohne die strenge Regel erneut
+  zu bemühen.
+- Ohne gefundene Kandidaten entfällt der Zwischenschritt vollständig, der
+  Merge läuft wie gewohnt direkt.
+
 ## UI-Fluss
 
 - **Bekanntes Geschäft** (`.bekannt(Geschaeft)`): Banner-Button „Auswählen“ setzt es

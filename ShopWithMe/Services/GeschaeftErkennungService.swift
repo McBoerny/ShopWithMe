@@ -219,10 +219,14 @@ enum GeschaeftErkennungService {
     /// `toleranz` ist standardmäßig ``koordinatenTreffertoleranz``, aber für ein
     /// konkretes ``Geschaeft`` mit individuellem ``Geschaeft/erkennungsradius``
     /// überschreibbar (siehe ``istBekannterTreffer(_:fuer:)``, GitHub #41).
-    /// Bewusst `internal` statt `private` — ``SyncSnapshotImportService``
-    /// (Phase 3) nutzt dieselbe Logik für das Bereich-B-Matching zweier
-    /// ``Geschaeft``e ohne den Umweg über ein `MKMapItem`.
-    static func istGleicherOrt(
+    ///
+    /// **Bewusst NICHT für den automatischen Sync-Merge verwendet** (GitHub
+    /// #86) — dort nutzt ``istGleicherOrtFuerSyncMerge(nameA:koordinatenA:radiusA:nameB:koordinatenB:radiusB:)``
+    /// eine strengere Regel. Diese großzügige Variante bleibt nur für die
+    /// interaktiven, vom Nutzer bestätigbaren Fälle hier (Standort-Erkennung,
+    /// Ignorieren-Abgleich) — dort ist ein gelegentlicher falscher Vorschlag
+    /// unkritisch, weil ablehnbar.
+    private static func istGleicherOrt(
         nameA: String,
         koordinatenA: (breitengrad: Double, laengengrad: Double)?,
         nameB: String,
@@ -237,6 +241,70 @@ enum GeschaeftErkennungService {
             return ortA.distance(from: ortB) < toleranz
         }
         return false
+    }
+
+    /// Strengere Vergleichsregel speziell für den automatischen Sync-Merge
+    /// (``SyncSnapshotImportService``, GitHub #86) — anders als die
+    /// interaktiven Aufrufer von ``istGleicherOrt(nameA:koordinatenA:nameB:koordinatenB:toleranz:)``
+    /// oben passiert das Zusammenführen zweier Geräte-Bestände automatisch im
+    /// Hintergrund, ohne Bestätigungsmöglichkeit. Ein falscher Treffer dort
+    /// vermischt zwei echte, unterschiedliche Geschäfte unsichtbar und
+    /// dauerhaft — deshalb bewusst kein Teilstring-Namensvergleich (hätte z.B.
+    /// "Rewe" fälschlich mit "Rewe Center" gematcht) und kein reiner
+    /// Koordinatenvergleich ohne Namensgleichheit (hätte z.B. zwei
+    /// unterschiedliche Filialen derselben Kette an unterschiedlichen Orten
+    /// NICHT betroffen, aber umgekehrt zwei dicht benachbarte, unterschiedlich
+    /// benannte Läden wie Bäckerei/Blumenladen fälschlich zusammengeführt).
+    ///
+    /// Gilt nur als derselbe Ort, wenn der Name EXAKT übereinstimmt UND beide
+    /// Koordinaten vorhanden UND innerhalb der strengeren (kleineren) der
+    /// beiden individuellen ``Geschaeft/erkennungsradius``-Werte liegen —
+    /// analog dem für #41 eingeführten, aber hier auf beide Seiten bezogenen
+    /// Radius. Ohne Koordinaten auf einer Seite: kein Treffer, kein Fallback
+    /// auf reinen Namensvergleich.
+    static func istGleicherOrtFuerSyncMerge(
+        nameA: String,
+        koordinatenA: (breitengrad: Double, laengengrad: Double)?,
+        radiusA: CLLocationDistance,
+        nameB: String,
+        koordinatenB: (breitengrad: Double, laengengrad: Double)?,
+        radiusB: CLLocationDistance
+    ) -> Bool {
+        guard nameA.localizedCaseInsensitiveCompare(nameB) == .orderedSame else { return false }
+        guard let koordinatenA, let koordinatenB else { return false }
+        let ortA = CLLocation(latitude: koordinatenA.breitengrad, longitude: koordinatenA.laengengrad)
+        let ortB = CLLocation(latitude: koordinatenB.breitengrad, longitude: koordinatenB.laengengrad)
+        return ortA.distance(from: ortB) < min(radiusA, radiusB)
+    }
+
+    /// Kandidat für eine aktive Rückfrage beim Sync-Ordner-Beitritt (GitHub
+    /// #86, Teil 2): gilt nach der großzügigen, interaktiven Regel
+    /// (``istGleicherOrt(nameA:koordinatenA:nameB:koordinatenB:toleranz:)``,
+    /// mit dem größeren der beiden Radien als Toleranz) als möglicherweise
+    /// derselbe Ort, aber NICHT nach der strengeren automatischen
+    /// Sync-Merge-Regel (``istGleicherOrtFuerSyncMerge(nameA:koordinatenA:radiusA:nameB:koordinatenB:radiusB:)``).
+    /// Genau diese Differenzmenge lohnt eine bewusste Entscheidung beim
+    /// einmaligen, nutzerinitiierten Beitritt zu einem Sync-Ordner — danach
+    /// (laufender Betrieb) bleibt eine solche Konstellation absichtlich
+    /// unbeachtet stehen (siehe `docs/GESCHAEFTSERKENNUNG.md`).
+    static func istMehrdeutigerBeitrittsKandidat(
+        nameA: String,
+        koordinatenA: (breitengrad: Double, laengengrad: Double)?,
+        radiusA: CLLocationDistance,
+        nameB: String,
+        koordinatenB: (breitengrad: Double, laengengrad: Double)?,
+        radiusB: CLLocationDistance
+    ) -> Bool {
+        let grosszuegigerTreffer = istGleicherOrt(
+            nameA: nameA, koordinatenA: koordinatenA, nameB: nameB, koordinatenB: koordinatenB,
+            toleranz: max(radiusA, radiusB)
+        )
+        guard grosszuegigerTreffer else { return false }
+        let strengerTreffer = istGleicherOrtFuerSyncMerge(
+            nameA: nameA, koordinatenA: koordinatenA, radiusA: radiusA,
+            nameB: nameB, koordinatenB: koordinatenB, radiusB: radiusB
+        )
+        return !strengerTreffer
     }
 
     /// Baut aus einem per Ladenerkennung gefundenen, noch unbekannten Laden einen

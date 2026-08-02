@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.10 (Build 195) — Sync-Merge für Geschäfte korrigiert + aktive Rückfrage beim Ordner-Beitritt (GitHub #86)
+
+- **Bug-Fix.** `SyncSnapshotImportService.mergeGeschaefte` verglich Geschäfte
+  beim automatischen Hintergrund-Merge bisher mit der großzügigen,
+  interaktiven Regel (Name exakt ODER Teilstring ODER reine
+  Koordinaten-Nähe, immer mit dem globalen 75m-Standardwert statt des
+  individuellen `erkennungsradius`). Neue, strengere Regel nur für diesen
+  automatischen Pfad (`GeschaeftErkennungService.istGleicherOrtFuerSyncMerge`):
+  Name muss EXAKT übereinstimmen UND beide Koordinaten müssen innerhalb der
+  strengeren der beiden individuellen Radien liegen — behebt sowohl den
+  ursprünglich gemeldeten Radius-Bug als auch den Fund, dass gleicher/
+  überlappender Name allein schon reichte, unabhängig von der Distanz.
+- **Neu: aktive Rückfrage beim Sync-Ordner-Beitritt.** Der Beitritt zu einem
+  Ordner mit bestehenden Peer-Daten ist ein einmaliger, nutzerinitiierter
+  Moment — hier lohnt sich eine Rückfrage, die im laufenden Betrieb bewusst
+  nicht eingeführt wurde. `SyncSnapshotImportService.mehrdeutigeGeschaeftsKandidatenBeimBeitritt(context:)`
+  scannt vor dem eigentlichen Merge (reines Lesen, keine Zustandsänderung)
+  die Stammdaten aller Peers auf Kandidaten, die nach der alten, großzügigen
+  Regel übereinstimmen würden, aber nicht nach der neuen strengen — bei
+  Treffern fragt `GeschaeftsBeitrittsAbgleichSheet` aktiv nach („gleicher
+  Laden" mit Namenswahl, oder „unterschiedliche Läden").
+- Im laufenden Betrieb danach bleibt bewusst keine neue Zusammenführungs-
+  Funktion nötig: seltene, zeitgleich unabhängig angelegte Duplikate fallen
+  als zwei sichtbare Einträge auf und lassen sich über die bereits
+  bestehende Löschfunktion bereinigen (Tombstone propagiert die Löschung
+  automatisch an alle Geräte).
+
 ## v0.10 (Build 194) — Debug-Protokolle: drei Verbositätsstufen + Wiederholungs-Drosselung, Security-Scope-Zugriffsdiagnose
 
 - **Verbositätsstufen statt An/Aus.** `SyncDebugLogger`/`DatabaseDebugLogger`

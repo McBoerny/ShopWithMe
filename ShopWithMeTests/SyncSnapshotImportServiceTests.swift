@@ -99,8 +99,13 @@ struct SyncSnapshotImportServiceTests {
         #expect(alle.first?.id == lokalerTyp.id)
     }
 
+    /// GitHub #86: automatischer Merge verlangt EXAKTEN Namen (case-insensitive)
+    /// UND Distanz innerhalb der strengeren der beiden individuellen Radien —
+    /// bewusst kein Teilstring-Namensvergleich mehr (siehe
+    /// ``geschaeftMitAehnlichemNamenAberNaheKoordinatenWirdNichtGemergt`` für
+    /// den davon abgegrenzten Negativfall).
     @Test
-    func geschaeftWirdPerKoordinateGematchtUndKategorienVereinigt() async throws {
+    func geschaeftWirdPerNameUndKoordinateGematchtUndKategorienVereinigt() async throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
         let syncOrdner = macheTempSyncOrdner()
@@ -111,7 +116,7 @@ struct SyncSnapshotImportServiceTests {
         context.insert(typ)
         let eigeneKategorie = ArtikelKategorie(name: "Obst", standardSymbol: "carrot", standardFarbeHex: "#34C759")
         context.insert(eigeneKategorie)
-        let lokal = Geschaeft(name: "Mein Rewe", typen: [typ])
+        let lokal = Geschaeft(name: "Rewe", typen: [typ])
         lokal.breitengrad = 52.5200
         lokal.laengengrad = 13.4050
         lokal.kategorien = [eigeneKategorie]
@@ -125,7 +130,10 @@ struct SyncSnapshotImportServiceTests {
         ]
         snapshot.geschaefte = [
             GeschaeftSnapshot(
-                id: UUID(), name: "REWE Musterstadt", typIDs: [], adresse: nil,
+                // Groß-/Kleinschreibung darf abweichen (localizedCaseInsensitiveCompare),
+                // der Name selbst muss aber exakt übereinstimmen — anders als vorher
+                // reicht ein reiner Koordinatentreffer mit abweichendem Namen nicht mehr.
+                id: UUID(), name: "REWE", typIDs: [], adresse: nil,
                 breitengrad: 52.5201, laengengrad: 13.4051, erkennungsradius: 120,
                 kategorieIDs: [remoteKategorieID], ausgeschlosseneKategorieIDs: [], alternativeNamen: ["Rewe Center"],
                 ignorierteArtikelNamen: ["Pfand"], eigeneAnzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
@@ -137,11 +145,95 @@ struct SyncSnapshotImportServiceTests {
 
         let alleGeschaefte = try context.fetch(FetchDescriptor<Geschaeft>())
         #expect(alleGeschaefte.count == 1)
-        #expect(lokal.name == "Mein Rewe") // Name bleibt lokal, nicht überschrieben.
+        #expect(lokal.name == "Rewe") // Name bleibt lokal, nicht überschrieben.
         #expect(lokal.erkennungsradiusRaw == 120) // War lokal nil -> von Remote übernommen.
         #expect(lokal.kategorien.map(\.name).sorted() == ["Milchprodukte", "Obst"])
         #expect(lokal.alternativeNamen.contains("Rewe Center"))
         #expect(lokal.ignorierteArtikel.map(\.erkannterName) == ["Pfand"])
+    }
+
+    /// GitHub #86 (Kernfund): Zwei unterschiedlich benannte Geschäfte in
+    /// unmittelbarer Nähe (z.B. Bäckerei/Blumenladen in einem Einkaufszentrum)
+    /// dürfen beim automatischen Sync-Merge NIEMALS zusammengeführt werden,
+    /// selbst wenn ein Name im anderen enthalten ist ("Rewe" ⊂ "Rewe Nord") —
+    /// vor dem Fix hätte der reine Koordinatenvergleich/Teilstring-Vergleich
+    /// sie fälschlich vereint.
+    @Test
+    func geschaeftMitAehnlichemNamenAberNaheKoordinatenWirdNichtGemergt() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let lokal = Geschaeft(name: "Rewe", typen: [])
+        lokal.breitengrad = 52.5200
+        lokal.laengengrad = 13.4050
+        context.insert(lokal)
+        try context.save()
+
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.geschaefte = [
+            GeschaeftSnapshot(
+                id: UUID(), name: "Rewe Nord", typIDs: [], adresse: nil,
+                breitengrad: 52.5201, laengengrad: 13.4051, erkennungsradius: nil,
+                kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
+                ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
+            ),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        let alleGeschaefte = try context.fetch(FetchDescriptor<Geschaeft>())
+        #expect(alleGeschaefte.count == 2)
+        #expect(Set(alleGeschaefte.map(\.name)) == ["Rewe", "Rewe Nord"])
+    }
+
+    /// GitHub #86, Teil 2: Ein Kandidat, der genau die oben beschriebene Lücke
+    /// (großzügiger Treffer, aber nicht streng genug für den automatischen
+    /// Merge) trifft, muss beim Beitritts-Scan gefunden werden — und nach
+    /// aktiver Bestätigung mit dem gewählten Namen tatsächlich zusammengeführt
+    /// werden, statt wie im Test oben als zwei getrennte Geschäfte zu enden.
+    @Test
+    func mehrdeutigerBeitrittsKandidatWirdGefundenUndNachBestaetigungGemergt() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let lokal = Geschaeft(name: "Rewe", typen: [])
+        lokal.breitengrad = 52.5200
+        lokal.laengengrad = 13.4050
+        context.insert(lokal)
+        try context.save()
+
+        let remoteID = UUID()
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.geschaefte = [
+            GeschaeftSnapshot(
+                id: remoteID, name: "Rewe Nord", typIDs: [], adresse: nil,
+                breitengrad: 52.5201, laengengrad: 13.4051, erkennungsradius: nil,
+                kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
+                ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
+            ),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        let kandidaten = await SyncSnapshotImportService.mehrdeutigeGeschaeftsKandidatenBeimBeitritt(context: context)
+        #expect(kandidaten.count == 1)
+        let kandidat = try #require(kandidaten.first)
+        #expect(kandidat.lokalerName == "Rewe")
+        #expect(kandidat.remoteName == "Rewe Nord")
+        #expect(kandidat.remoteID == remoteID)
+
+        SyncSnapshotImportService.geschaeftsKandidatBestaetigen(kandidat, gewaehlterName: "Rewe Nord", context: context)
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        let alleGeschaefte = try context.fetch(FetchDescriptor<Geschaeft>())
+        #expect(alleGeschaefte.count == 1)
+        #expect(alleGeschaefte.first?.name == "Rewe Nord")
     }
 
     /// Prüft das grundlegende G-Counter-Verhalten (siehe

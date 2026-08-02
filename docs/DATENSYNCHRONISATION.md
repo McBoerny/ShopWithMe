@@ -173,7 +173,7 @@ haben. Matching-Strategie je Typ:
 |---|---|---|
 | `GeschaeftTyp` | Name (`GeschaeftTyp.mitNamen(_:symbolName:context:)`, fetch-or-create) | kein Alias-Register — Name ist bereits das eindeutige Merkmal |
 | `ArtikelKategorie` | case-insensitiver Name | Alias bei abweichender ID |
-| `Geschaeft` | Name ODER Koordinaten (`GeschaeftErkennungService.istGleicherOrt`) | Alias bei abweichender ID |
+| `Geschaeft` | Name UND Koordinaten (`GeschaeftErkennungService.istGleicherOrtFuerSyncMerge`, GitHub #86 — strenger als die interaktiven Aufrufer von `istGleicherOrt`) | Alias bei abweichender ID |
 | `Artikel` | case-insensitiver Name | Alias bei abweichender ID |
 | `Einkaufsliste` | case-insensitiver Name | Alias bei abweichender ID — **nicht** ID-basiert (siehe Grund unten) |
 | `Einkaufsvorgang` | ID **plus** „lokal noch offener Vorgang für dasselbe (Geschäft, Liste)-Paar gilt als derselbe" | Alias bei Zusammenführung; s. 4.3 |
@@ -317,10 +317,29 @@ passiert dadurch an einer einzigen Stelle für beide Auslöser.
    (`SyncOrdnerSettingsView.ordnerFestlegen(_:)`).
 3. Enthält der Ordner bereits fremde Peer-Daten
    (`SyncOrdnerService.hatVorhandenePeers(in:)`), fragt die App
-   „Zusammenführen" (Standard — derselbe additive Merge wie im laufenden
-   Betrieb, läuft sofort) vs. „Ersetzen" (verwirft den eigenen Bestand
-   zugunsten des Peer-Stands, siehe Abschnitt 8) vs. „Abbrechen".
-4. Kein separates Vertrauens-/Freigabemodell in der App — Zugriff auf den
+   „Zusammenführen" vs. „Ersetzen" (verwirft den eigenen Bestand zugunsten des
+   Peer-Stands, siehe Abschnitt 8) vs. „Abbrechen".
+4. **„Zusammenführen" (GitHub #86, Teil 2):** Anders als früher läuft danach
+   nicht sofort derselbe additive Merge wie im laufenden Betrieb — zuerst
+   scannt `SyncSnapshotImportService.mehrdeutigeGeschaeftsKandidatenBeimBeitritt(context:)`
+   die Bereich-B-Stammdaten aller Peers (reines Lesen, keine
+   Zustandsänderung) gegen den lokalen Geschäfts-Bestand und sammelt jeden
+   Kandidaten, der nach der großzügigen, aber nicht nach der strengen
+   automatischen Merge-Regel übereinstimmt (siehe
+   `docs/GESCHAEFTSERKENNUNG.md` → „Strengere Regel für den automatischen
+   Sync-Merge"). Gibt es welche, entscheidet die Person aktiv pro Kandidat
+   (`GeschaeftsBeitrittsAbgleichSheet`): „gleicher Laden" (mit Wahl, welcher
+   Name bleibt — registriert vorab einen `SyncEntitaetsAlias`, damit der
+   nachfolgende Merge die `remoteID` bereits über den ID-Fast-Path erkennt)
+   oder „unterschiedliche Läden" (keine Aktion, Standardverhalten). Erst
+   danach läuft der eigentliche `SyncPollingService.syncZyklus()`. Ohne
+   gefundene Kandidaten entfällt dieser Zwischenschritt, der normale Merge
+   läuft direkt.
+5. Diese aktive Rückfrage bleibt bewusst auf den einmaligen Beitritts-Moment
+   beschränkt — im laufenden Betrieb danach entscheidet ausschließlich die
+   strenge, deterministische Regel automatisch (kein wiederkehrender
+   Hintergrund-Dialog), siehe `docs/GESCHAEFTSERKENNUNG.md`.
+6. Kein separates Vertrauens-/Freigabemodell in der App — Zugriff auf den
    Ordner selbst (vom Betriebssystem/Cloud-Anbieter verwaltet) ist das
    Vertrauensmerkmal.
 

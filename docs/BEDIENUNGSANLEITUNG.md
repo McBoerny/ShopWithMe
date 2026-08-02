@@ -226,8 +226,12 @@ werden ausgetauscht.
 
 - **Einrichten:** Einstellungen → „Datensynchronisation“ → „Ordner wählen…“.
   Enthält der gewählte Ordner bereits Daten anderer Geräte (z.B. weil ein
-  Mitnutzer schon eingerichtet hat), werden sie direkt beim Verknüpfen mit
-  deinem eigenen Bestand zusammengeführt.
+  Mitnutzer schon eingerichtet hat), werden sie beim Verknüpfen mit deinem
+  eigenen Bestand zusammengeführt. Erkennt die App dabei Geschäfte, die
+  möglicherweise identisch sind (ähnlicher Name und/oder ganz in der Nähe),
+  fragt sie vor dem Zusammenführen einmalig nach: „Gleicher Laden“ (mit Wahl,
+  welcher der beiden Namen bleibt) oder „Unterschiedliche Läden“. Ohne
+  Entscheidung bleiben beide als getrennte Geschäfte bestehen.
 - **Läuft automatisch,** solange die App im Vordergrund ist — kein manueller
   Sync-Tap nötig. Ein zusätzlicher „Jetzt synchronisieren“-Button steht für den
   seltenen Fall bereit, dass du sofort statt in ein paar Sekunden abgleichen

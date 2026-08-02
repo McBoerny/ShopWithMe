@@ -166,6 +166,87 @@ enum SyncSnapshotImportService {
         try? context.save()
     }
 
+    /// Beim Sync-Ordner-Beitritt (GitHub #86, Teil 2) gefundener, mehrdeutiger
+    /// Geschäfts-Kandidat — siehe
+    /// ``GeschaeftErkennungService/istMehrdeutigerBeitrittsKandidat(nameA:koordinatenA:radiusA:nameB:koordinatenB:radiusB:)``.
+    /// Hält das lokale Geschäft nur über ``ModelReference`` (nicht als lebendige
+    /// Referenz), da zwischen dem Auffinden hier und der Nutzerentscheidung in
+    /// der UI beliebig viel Zeit vergehen kann (siehe
+    /// `docs/DATABASE_CONCURRENCY.md` → „Nachtrag: nebenläufige Löschung").
+    struct GeschaeftsAbgleichKandidat: Identifiable, Sendable {
+        let id = UUID()
+        let lokalesGeschaeft: ModelReference<Geschaeft>
+        let lokalerName: String
+        let remoteID: UUID
+        let remoteName: String
+    }
+
+    /// Liest ausschließlich die Bereich-B-Stammdaten aller Peers (keine
+    /// Zustandsänderung, kein Merge) und vergleicht deren Geschäfte gegen den
+    /// lokalen Bestand — Grundlage für die aktive Rückfrage beim Sync-Ordner-
+    /// Beitritt (GitHub #86, Teil 2), bevor ``importiereSnapshots(context:)``
+    /// den automatischen Merge ausführt. Ein leeres Ergebnis bedeutet: direkt
+    /// mit dem normalen Merge fortfahren, keine Rückfrage nötig.
+    @MainActor
+    static func mehrdeutigeGeschaeftsKandidatenBeimBeitritt(context: ModelContext) async -> [GeschaeftsAbgleichKandidat] {
+        guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return [] }
+        guard syncOrdner.startAccessingSecurityScopedResource() else { return [] }
+        defer { syncOrdner.stopAccessingSecurityScopedResource() }
+
+        let peersOrdner = syncOrdner.appendingPathComponent("peers", isDirectory: true)
+        let eigeneGeraeteID = DatabaseLeaseService.geraeteID
+        guard let peerVerzeichnisse = try? FileManager.default.contentsOfDirectory(
+            at: peersOrdner, includingPropertiesForKeys: nil
+        ) else { return [] }
+
+        let alleLokalen = (try? context.fetch(FetchDescriptor<Geschaeft>())) ?? []
+        var kandidaten: [GeschaeftsAbgleichKandidat] = []
+
+        for peerOrdner in peerVerzeichnisse where !PeerOrdnerName.gehoertZu(peerOrdner.lastPathComponent, geraeteID: eigeneGeraeteID) {
+            let peerName = peerOrdner.lastPathComponent
+            guard await ladeManifest(von: SyncSnapshotExportService.manifestURL(fuerPeer: peerName, in: syncOrdner)) != nil else { continue }
+            guard let stamm = await ladeTeil(
+                SyncStammSnapshot.self, von: SyncSnapshotExportService.stammURL(fuerPeer: peerName, in: syncOrdner)
+            ) else { continue }
+
+            for eintrag in stamm.geschaefte {
+                let remoteKoordinaten: (breitengrad: Double, laengengrad: Double)? = {
+                    guard let b = eintrag.breitengrad, let l = eintrag.laengengrad else { return nil }
+                    return (b, l)
+                }()
+                for lokal in alleLokalen {
+                    guard GeschaeftErkennungService.istMehrdeutigerBeitrittsKandidat(
+                        nameA: lokal.name, koordinatenA: koordinatenPaar(lokal), radiusA: lokal.erkennungsradius,
+                        nameB: eintrag.name, koordinatenB: remoteKoordinaten,
+                        radiusB: eintrag.erkennungsradius ?? GeschaeftErkennungService.koordinatenTreffertoleranz
+                    ) else { continue }
+                    kandidaten.append(GeschaeftsAbgleichKandidat(
+                        lokalesGeschaeft: ModelReference(lokal), lokalerName: lokal.name,
+                        remoteID: eintrag.id, remoteName: eintrag.name
+                    ))
+                }
+            }
+        }
+        return kandidaten
+    }
+
+    /// Wendet die Nutzer-Entscheidung „ja, derselbe Laden" für einen zuvor per
+    /// ``mehrdeutigeGeschaeftsKandidatenBeimBeitritt(context:)`` gefundenen
+    /// Kandidaten an: registriert einen Alias, damit der nachfolgende
+    /// ``importiereSnapshots(context:)``-Lauf `remoteID` als bereits bekannt
+    /// erkennt (ID-Fast-Path in ``mergeGeschaefte``, statt erneut über
+    /// ``GeschaeftErkennungService/istGleicherOrtFuerSyncMerge`` zu prüfen),
+    /// und übernimmt den vom Nutzer gewählten Namen. Stillschweigend
+    /// wirkungslos, falls das lokale Geschäft zwischenzeitlich gelöscht wurde.
+    @MainActor
+    static func geschaeftsKandidatBestaetigen(_ kandidat: GeschaeftsAbgleichKandidat, gewaehlterName: String, context: ModelContext) {
+        guard let lokal = kandidat.lokalesGeschaeft.resolved(in: context) else { return }
+        lokal.name = gewaehlterName
+        SyncEntitaetsAliasService.registriere(
+            entitaetsArt: SyncEntitaetsArt.geschaeft, fremdeID: kandidat.remoteID, lokaleID: lokal.id, context: context
+        )
+    }
+
     /// Diagnose für Fälle wie GitHub #52-Nachfolgefund (unsichtbare
     /// Einkaufslisten-Dublette): protokolliert nach jedem Merge-Durchlauf den
     /// kompletten lokalen Einkaufslisten-Bestand samt Eintrags-Anzahl, damit
@@ -485,7 +566,7 @@ enum SyncSnapshotImportService {
         // O(1) ID-Treffer statt linearem Scan — siehe Begründung in
         // ``mergeArtikelKategorien(_:typZuordnung:aliase:context:)`` (der
         // Orts-Fallback direkt darunter bleibt linear, da
-        // ``GeschaeftErkennungService/istGleicherOrt(nameA:koordinatenA:nameB:koordinatenB:)``
+        // ``GeschaeftErkennungService/istGleicherOrtFuerSyncMerge(nameA:koordinatenA:radiusA:nameB:koordinatenB:radiusB:)``
         // keine dictionary-taugliche Gleichheit ist).
         let alleLokalenNachID = Dictionary(alleLokalen.map { ($0.id, $0) }, uniquingKeysWith: { erster, _ in erster })
         let geloeschteIDs = SyncTombstoneService.geloeschteIDs(art: SyncEntitaetsArt.geschaeft, context: context)
@@ -500,9 +581,15 @@ enum SyncSnapshotImportService {
             if let bekanntes = alleLokalenNachID[aufgeloesteID] {
                 lokal = bekanntes
             } else if let vorhandenes = alleLokalen.first(where: {
-                GeschaeftErkennungService.istGleicherOrt(
-                    nameA: $0.name, koordinatenA: koordinatenPaar($0),
-                    nameB: eintrag.name, koordinatenB: remoteKoordinaten
+                // Strengere Regel als bei der interaktiven Standort-Erkennung
+                // (GitHub #86): automatischer Merge ohne Bestätigungsmöglichkeit
+                // erfordert exakten Namen UND Distanz innerhalb der strengeren
+                // der beiden individuellen ``Geschaeft/erkennungsradius``-Werte
+                // — kein Teilstring-, kein reiner Koordinatenvergleich.
+                GeschaeftErkennungService.istGleicherOrtFuerSyncMerge(
+                    nameA: $0.name, koordinatenA: koordinatenPaar($0), radiusA: $0.erkennungsradius,
+                    nameB: eintrag.name, koordinatenB: remoteKoordinaten,
+                    radiusB: eintrag.erkennungsradius ?? GeschaeftErkennungService.koordinatenTreffertoleranz
                 )
             }) {
                 if vorhandenes.id != eintrag.id {
