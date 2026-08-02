@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.10 (Build 187) — Einkaufslisten-Fortschritt im Titel (GitHub #74), Wischgesten am Standort-Vorschlag (GitHub #73)
+
+- **GitHub #74.** Der Bildschirmtitel beim Einkaufen (`EinkaufslisteView`) zeigt
+  jetzt zusätzlich zum Listennamen den Fortschritt für den laufenden
+  Einkaufsvorgang, Format „<Name> (<abgehakt>/<gesamt>)". Nutzt die bereits
+  vorhandenen `offeneArtikel`/`abgehakteArtikel`-Zähler, keine neue
+  Datengrundlage nötig.
+- **GitHub #73.** `GeschaeftVorschlagBanner` lässt sich jetzt zusätzlich zu den
+  bestehenden Buttons/dem „…“-Menü per Wischgeste bedienen: rechts = Haupt-
+  Aktion (auswählen/anlegen), links = dauerhaft ignorieren, hoch = einmalig
+  verwerfen. Reine zusätzliche Eingabe-Route auf dieselben, bereits
+  existierenden Aktionen — kein neues Verhalten.
+
 ## v0.10 (Build 186) — Sync-Performance: Event-Dateien werden anhand der ID im Dateinamen vorgefiltert
 
 - **Analyse-Fund, Abschnitt 9 „Bekannte Grenzen".** Event-Dateien werden nie
@@ -14,19 +27,6 @@
   als bekannt markiert — bleibt also außerhalb der Menge und wird weiterhin
   jeden Zyklus neu versucht, unverändert korrekt. Keine Migration, keine
   Verhaltensänderung an der Konfliktauflösung selbst.
-
-## v0.10 — Einkaufslisten-Fortschritt im Titel (GitHub #74), Wischgesten am Standort-Vorschlag (GitHub #73)
-
-- **GitHub #74.** Der Bildschirmtitel beim Einkaufen (`EinkaufslisteView`) zeigt
-  jetzt zusätzlich zum Listennamen den Fortschritt für den laufenden
-  Einkaufsvorgang, Format „<Name> (<abgehakt>/<gesamt>)". Nutzt die bereits
-  vorhandenen `offeneArtikel`/`abgehakteArtikel`-Zähler, keine neue
-  Datengrundlage nötig.
-- **GitHub #73.** `GeschaeftVorschlagBanner` lässt sich jetzt zusätzlich zu den
-  bestehenden Buttons/dem „…“-Menü per Wischgeste bedienen: rechts = Haupt-
-  Aktion (auswählen/anlegen), links = dauerhaft ignorieren, hoch = einmalig
-  verwerfen. Reine zusätzliche Eingabe-Route auf dieselben, bereits
-  existierenden Aktionen — kein neues Verhalten.
 
 ## v0.10 (Build 185) — Sync-Performance: Kaufhistorie-Export und Event-Konfliktcheck gebatcht
 

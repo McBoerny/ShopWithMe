@@ -642,12 +642,30 @@ private struct GeschaeftVorschlagBanner: View {
         }
         .glassCard()
         .padding(.horizontal)
+        // Wischgesten zusätzlich zu den obigen Buttons/dem Menü (GitHub #73):
+        // rechts = hinzufügen/aktivieren, links = dauerhaft ignorieren, hoch =
+        // temporär verwerfen. `minimumDistance` hoch genug, damit ein simpler
+        // Tap auf Button/Menu nicht als Wisch erkannt wird.
+        .gesture(DragGesture(minimumDistance: 24).onEnded(wischGesteAusgewertet))
     }
 
     private func aktion() {
         switch vorschlag {
         case .bekannt(let geschaeft): aktivieren(geschaeft)
         case .unbekannt(let mapItem): hinzufuegen(mapItem)
+        }
+    }
+
+    /// Wertet die dominante Achse/Richtung einer Wischgeste aus und löst die
+    /// jeweils passende, bereits über Button/Menü existierende Aktion aus
+    /// (GitHub #73) — keine neue Aktion, nur ein zusätzlicher Eingabeweg.
+    private func wischGesteAusgewertet(_ wert: DragGesture.Value) {
+        let dx = wert.translation.width
+        let dy = wert.translation.height
+        if abs(dx) > abs(dy) {
+            if dx > 0 { aktion() } else { ignorieren() }
+        } else if dy < 0 {
+            verwerfen()
         }
     }
 }
@@ -864,6 +882,12 @@ private struct EinkaufslisteView: View {
         return einkaufsvorgang.kaufEintraege.compactMap(\.artikel).filter { gesehen.insert($0.persistentModelID).inserted }
     }
 
+    /// Bildschirmtitel inkl. Fortschritt für diesen Einkaufsvorgang, Format
+    /// „<Titel> (<abgehakt>/<gesamt>)" (GitHub #74).
+    private var listenTitel: String {
+        "\(einkaufsliste.name) (\(abgehakteArtikel.count)/\(offeneArtikel.count + abgehakteArtikel.count))"
+    }
+
     /// Der „Einkauf abschließen“-Button am unteren Bildschirmrand: zeigt die Anzahl
     /// bereits abgehakter Artikel im Label und wechselt von neutral (kein Artikel
     /// abgehakt) zu akzentfarben (mindestens einer abgehakt), damit auf einen
@@ -1072,7 +1096,7 @@ private struct EinkaufslisteView: View {
         // Zeigt bewusst immer den Listennamen, nicht den Geschäftsnamen — der
         // erscheint stattdessen direkt neben dem Einkaufswagen-Icon im
         // `EinkaufenView`-Toolbar (siehe dort, GitHub #16).
-        .navigationTitle(einkaufsliste.name)
+        .navigationTitle(listenTitel)
         .toolbar {
             if geschaeft != nil {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -1411,7 +1435,7 @@ private struct ArtikelAbhakZeile: View {
 /// Sheet zum exakten Vorgeben der Menge, der Mengeneinheit und einer temporären
 /// Notiz für einen ``EinkaufslistenEintrag`` (Tap auf die Mengenangabe in
 /// ``ArtikelAbhakZeile``). Arbeitet mit lokalem Entwurfs-Zustand (analog
-/// `NeueKategorieSheet`) — die Übernahme ins Modell geschieht erst bei „Sichern“,
+/// `NeueWarengruppeSheet`) — die Übernahme ins Modell geschieht erst bei „Sichern“,
 /// gekapselt in einem einzelnen Micro-Lease.
 ///
 /// Die Einheit ist (anders als Menge/Notiz) kein Feld von

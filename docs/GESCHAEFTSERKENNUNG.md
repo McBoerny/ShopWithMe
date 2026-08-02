@@ -116,6 +116,13 @@ einer Fußgängerzone eher einen kleineren, um Verwechslungen zu vermeiden.
   verschwindet ohne Aktion, wird beim nächsten Aufruf ggf. erneut vorgeschlagen),
   „Diesen Laden ignorieren“ (siehe unten) und „Alle Geschäfte in der Nähe…“ (siehe
   unten).
+- **Wischgesten** (GitHub #73, zusätzlich zu den obigen Buttons/dem Menü):
+  `GeschaeftVorschlagBanner.wischGesteAusgewertet(_:)` wertet ein `DragGesture`
+  (`minimumDistance: 24`, hoch genug um einen Tap auf Button/Menü nicht als
+  Wisch misszuverstehen) nach dominanter Achse aus — rechts ruft dieselbe
+  `aktion()` wie der Haupt-Button auf, links `ignorieren()` (dauerhaft), hoch
+  `verwerfen()` (einmalig). Keine neuen Aktionen, nur ein zusätzlicher, zu den
+  bestehenden Buttons paralleler Eingabeweg.
 
 ## Vorschlag ignorieren
 
