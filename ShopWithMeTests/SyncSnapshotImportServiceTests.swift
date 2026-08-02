@@ -729,6 +729,66 @@ struct SyncSnapshotImportServiceTests {
         #expect(eigenerVorgang.kaufEintraege.contains { $0.artikel == lokalerApfel })
     }
 
+    /// Erweiterung von ``zweiUnabhaengigOffeneEinkaufsvorgaengeFuerDenselbenLadenWerdenZusammengefuehrt()``
+    /// um einen zweiten Sync-Zyklus: nachdem zwei unabhängig entstandene
+    /// Einkaufsvorgänge einmal per `offenerTreffer` zusammengeführt und
+    /// aliasiert wurden, muss ein SPÄTERER Zyklus, in dem der Peer seinen
+    /// Vorgang abschließt (`endZeit` gesetzt), diese `endZeit` über den
+    /// bereits registrierten Alias auf den lokalen Vorgang übertragen.
+    /// Regressionstest für einen Nutzerbericht (2026-08-02): "Abhaken
+    /// synchronisiert, Einkauf abschließen nicht" — die bestehenden Tests
+    /// deckten bislang nur den ID-gleichen Fall
+    /// (``bereitsAbgeschlossenerBekannterVorgangWirdBeiSnapshotMergeAufOffenenNachfolgerUmgeleitet()``
+    /// u.a.) ab, nicht den in der Praxis häufigeren Fall zweier unabhängig
+    /// entstandener, erst per Alias verknüpfter Vorgänge.
+    @Test
+    func abschlussEinesUeberOffenenTrefferAliasiertenVorgangsWirdBeimZweitenZyklusUebernommen() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
+        // Gerät legt selbst einen offenen Einkaufsvorgang an, bevor je
+        // synchronisiert wurde — ohne Geschäft (Einkauf ohne gewählten Laden
+        // ist der Normalfall).
+        let eigenerVorgang = Einkaufsvorgang(einkaufsliste: liste)
+        context.insert(eigenerVorgang)
+        try context.save()
+
+        // Peer hat für DIESELBE Liste unabhängig einen eigenen, noch offenen
+        // Einkaufsvorgang mit ANDERER ID.
+        let remoteVorgangID = UUID()
+        var ersterSnapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        ersterSnapshot.einkaufslisten = [EinkaufslisteSnapshot(id: liste.id, name: "Einkaufsliste", erstelltAm: liste.erstelltAm)]
+        ersterSnapshot.einkaufsvorgaenge = [
+            EinkaufsvorgangSnapshot(id: remoteVorgangID, geschaeftID: nil, einkaufslisteID: liste.id, startZeit: eigenerVorgang.startZeit, endZeit: nil),
+        ]
+        try schreibeFremdenSnapshot(ersterSnapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        // Vorbedingung wie im Nachbartest: keine Dublette, Alias registriert,
+        // noch kein Abschluss.
+        #expect(try context.fetch(FetchDescriptor<Einkaufsvorgang>()).count == 1)
+        #expect(eigenerVorgang.endZeit == nil)
+
+        // Peer schließt SEINEN Einkauf ab und synchronisiert erneut —
+        // dieselbe remoteVorgangID, jetzt mit endZeit.
+        let abschlusszeit = Date()
+        var zweiterSnapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        zweiterSnapshot.einkaufslisten = [EinkaufslisteSnapshot(id: liste.id, name: "Einkaufsliste", erstelltAm: liste.erstelltAm)]
+        zweiterSnapshot.einkaufsvorgaenge = [
+            EinkaufsvorgangSnapshot(id: remoteVorgangID, geschaeftID: nil, einkaufslisteID: liste.id, startZeit: eigenerVorgang.startZeit, endZeit: abschlusszeit),
+        ]
+        try schreibeFremdenSnapshot(zweiterSnapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        #expect(try context.fetch(FetchDescriptor<Einkaufsvorgang>()).count == 1)
+        #expect(eigenerVorgang.endZeit == abschlusszeit)
+    }
+
     /// Regressionstest für einen echten Zwei-Geräte-Live-Test-Fund
     /// (2026-07-31): Enthält ein einzelner Peer-Snapshot MEHRERE Einträge, die
     /// alle denselben, für dieses Gerät noch unbekannten offenen Vorgang für
