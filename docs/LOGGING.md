@@ -285,6 +285,13 @@ keinen Anwendungsfall mehr, bei dem die Store-Datei selbst in einem geteilten
 Ordner liegt. Die oben beschriebene Log-Spiegelung "zusätzlich im gemeinsamen
 DB-Ordner" (`DatabaseDebugLogger.geteilterWriter`/`konfiguriere(geteilterOrdner:)`)
 ergab nur in diesem Szenario Sinn und wurde mitentfernt. `DatabaseDebugLogger`
-protokolliert seitdem ausschließlich lokal je Gerät (`db-debug.log`) — die
+protokolliert seitdem ausschließlich lokal je Gerät — die
 geräteübergreifende Auswertung aus dem "Noch offen"-Punkt oben ist damit
 hinfällig.
+
+**GitHub #84:** Der Dateiname trägt seither den gesetzten Gerätenamen (siehe
+`DatabaseLeaseService.eigenerGeraeteNameOverride`), z.B. „Küche DB Debug.log"
+statt des vorherigen generischen `db-debug.log` — ohne eigenen Override
+generisch „Gerät DB Debug.log". Zusätzlich sind Sync- und DB-Debug-Modus in der
+UI (`DebuggingView`) zu einem gemeinsamen „Debug-Modus"-Abschnitt mit zwei
+Unteroptionen verschmolzen, statt zwei fast identischer Sektionen.

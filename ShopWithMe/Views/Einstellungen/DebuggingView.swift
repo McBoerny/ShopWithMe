@@ -6,55 +6,39 @@ import SwiftData
 /// (Sync-Debug-Modus, DB-Debug-Modus, Debug-Einstellungen).
 struct DebuggingView: View {
     @State private var syncDebugAktiv = SyncDebugLogger.istAktiv
-    @State private var syncLogGroesse = SyncDebugLogger.gesamtGroesse()
-    @State private var zeigeSyncTeilen = false
-
     @State private var dbDebugAktiv = DatabaseDebugLogger.istAktiv
-    @State private var dbLogGroesse = DatabaseDebugLogger.gesamtGroesse()
-    @State private var zeigeDbTeilen = false
+    @State private var gesamtGroesse = SyncDebugLogger.gesamtGroesse() + DatabaseDebugLogger.gesamtGroesse()
+    @State private var zeigeTeilen = false
 
     var body: some View {
         Form {
+            // GitHub #84: Sync- und DB-Debug-Modus zu einem Setting mit zwei
+            // Unteroptionen verschmolzen (zuvor zwei fast identische Sektionen
+            // mit je eigenem Protokollgröße-/Teilen-/Leeren-Block).
             Section {
-                Toggle("Debug-Modus", isOn: $syncDebugAktiv)
+                Toggle("Sync-Protokoll", isOn: $syncDebugAktiv)
                     .onChange(of: syncDebugAktiv) { _, neuerWert in
                         SyncDebugLogger.istAktiv = neuerWert
                     }
-                LabeledContent("Protokollgröße", value: syncLogGroesse.formatted(.byteCount(style: .file)))
-                Button("Protokoll teilen…") {
-                    zeigeSyncTeilen = true
-                }
-                .disabled(syncLogGroesse == 0)
-                Button("Protokoll leeren", role: .destructive) {
-                    SyncDebugLogger.leeren()
-                    syncLogGroesse = SyncDebugLogger.gesamtGroesse()
-                }
-                .disabled(syncLogGroesse == 0)
-            } header: {
-                Text("Sync-Debug-Modus")
-            } footer: {
-                Text("Protokolliert lokal, wie alt empfangene Updates beim Eintreffen waren und wie lange ein Sync-Zyklus dauert — Grundlage, um die Sync-Intervalle später mit echten Messwerten zu optimieren. Nur für gezielte Testphasen aktivieren.")
-            }
-
-            Section {
-                Toggle("Debug-Modus", isOn: $dbDebugAktiv)
+                Toggle("Datenbank-Protokoll", isOn: $dbDebugAktiv)
                     .onChange(of: dbDebugAktiv) { _, neuerWert in
                         DatabaseDebugLogger.istAktiv = neuerWert
                     }
-                LabeledContent("Protokollgröße", value: dbLogGroesse.formatted(.byteCount(style: .file)))
+                LabeledContent("Protokollgröße", value: gesamtGroesse.formatted(.byteCount(style: .file)))
                 Button("Protokoll teilen…") {
-                    zeigeDbTeilen = true
+                    zeigeTeilen = true
                 }
-                .disabled(dbLogGroesse == 0)
+                .disabled(gesamtGroesse == 0)
                 Button("Protokoll leeren", role: .destructive) {
+                    SyncDebugLogger.leeren()
                     DatabaseDebugLogger.leeren()
-                    dbLogGroesse = DatabaseDebugLogger.gesamtGroesse()
+                    aktualisiereGesamtGroesse()
                 }
-                .disabled(dbLogGroesse == 0)
+                .disabled(gesamtGroesse == 0)
             } header: {
-                Text("DB-Debug-Modus")
+                Text("Debug-Modus")
             } footer: {
-                Text("Protokolliert Probleme rund um den Mehrbenutzerzugriff auf die Datenbank (Sync, Sperren, Öffnen, Speichern) lokal und zusätzlich im gemeinsamen Datenbank-Ordner, falls einer gewählt ist. Nur für gezielte Testphasen aktivieren.")
+                Text("Sync-Protokoll: wie alt empfangene Updates beim Eintreffen waren und wie lange ein Sync-Zyklus dauert. Datenbank-Protokoll: Probleme rund um den Mehrbenutzerzugriff (Sperren, Öffnen, Speichern). Beide nur lokal auf diesem Gerät, nicht geteilt. Nur für gezielte Testphasen aktivieren.")
             }
 
             BekannteSyncPeersSection()
@@ -63,24 +47,22 @@ struct DebuggingView: View {
 
             DatenintegritaetSection()
 
-            PreispunktVerdichtungSection()
-
             #if DEBUG
             SuchradiusUeberschreibungSection()
             #endif
         }
         .navigationTitle("Debugging")
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $zeigeSyncTeilen) {
-            DebugLogTeilenView(urls: SyncDebugLogger.exportURLs)
-        }
-        .sheet(isPresented: $zeigeDbTeilen) {
-            DebugLogTeilenView(urls: DatabaseDebugLogger.exportURLs)
+        .sheet(isPresented: $zeigeTeilen) {
+            DebugLogTeilenView(urls: SyncDebugLogger.exportURLs + DatabaseDebugLogger.exportURLs)
         }
         .onAppear {
-            syncLogGroesse = SyncDebugLogger.gesamtGroesse()
-            dbLogGroesse = DatabaseDebugLogger.gesamtGroesse()
+            aktualisiereGesamtGroesse()
         }
+    }
+
+    private func aktualisiereGesamtGroesse() {
+        gesamtGroesse = SyncDebugLogger.gesamtGroesse() + DatabaseDebugLogger.gesamtGroesse()
     }
 }
 
@@ -389,67 +371,6 @@ private struct DatenintegritaetSection: View {
         } catch {
             resetFehlermeldung = error.localizedDescription
         }
-    }
-}
-
-/// Einstellbare Schwellwerte für ``PreispunktVerdichtungService`` (GitHub
-/// #76-Folgearbeit) — läuft automatisch für alle Nutzer, diese Sektion dient nur
-/// zum Nachjustieren/Testen der drei Stufen, nicht zum Ein-/Ausschalten des
-/// Features selbst. Gilt global für alle Geschäfte einheitlich.
-private struct PreispunktVerdichtungSection: View {
-    @Environment(\.modelContext) private var modelContext
-    @State private var maxProTag = PreispunktVerdichtungService.maxPunkteProTag
-    @State private var tageBisWoche = PreispunktVerdichtungService.tageBisWochenVerdichtung
-    @State private var tageBisMonat = PreispunktVerdichtungService.tageBisMonatsVerdichtung
-    @State private var letzteVerdichtung = PreispunktVerdichtungService.letzteVerdichtung
-    @State private var laeuft = false
-    @State private var letztesErgebnis: Int?
-
-    var body: some View {
-        Section {
-            Stepper("Max. Preispunkte pro Tag: \(maxProTag)", value: $maxProTag, in: 1...10)
-                .onChange(of: maxProTag) { _, neuerWert in
-                    PreispunktVerdichtungService.maxPunkteProTag = neuerWert
-                }
-            Stepper("Wochenverdichtung nach \(tageBisWoche) Tagen", value: $tageBisWoche, in: 1...90)
-                .onChange(of: tageBisWoche) { _, neuerWert in
-                    PreispunktVerdichtungService.tageBisWochenVerdichtung = neuerWert
-                }
-            Stepper("Monatsverdichtung nach \(tageBisMonat) Tagen", value: $tageBisMonat, in: 30...1095)
-                .onChange(of: tageBisMonat) { _, neuerWert in
-                    PreispunktVerdichtungService.tageBisMonatsVerdichtung = neuerWert
-                }
-
-            if let letzteVerdichtung {
-                LabeledContent("Letzte Verdichtung", value: letzteVerdichtung.formatted(date: .abbreviated, time: .shortened))
-            }
-            Button {
-                Task { await jetztVerdichten() }
-            } label: {
-                if laeuft {
-                    ProgressView()
-                } else {
-                    Text("Jetzt verdichten")
-                }
-            }
-            .disabled(laeuft)
-
-            if let letztesErgebnis {
-                Text(letztesErgebnis == 0 ? "Nichts zu verdichten gefunden." : "\(letztesErgebnis) Preispunkte verdichtet.")
-                    .foregroundStyle(.secondary)
-            }
-        } header: {
-            Text("Preishistorie-Verdichtung")
-        } footer: {
-            Text("Läuft automatisch für alle Nutzer im Hintergrund (kein Ein-/Ausschalter, nur die drei Schwellwerte hier). Pro Artikel/Geschäft und Tag bleiben höchstens so viele Preispunkte wie oben eingestellt (überzählige: nur die zuletzt beobachteten bleiben). Nach der Wochen-Frist werden ältere Tagespunkte pro Kalenderwoche auf den höchsten Preis reduziert, nach der Monats-Frist entsprechend pro Kalendermonat.")
-        }
-    }
-
-    private func jetztVerdichten() async {
-        laeuft = true
-        defer { laeuft = false }
-        letztesErgebnis = await PreispunktVerdichtungService.jetztVerdichten(context: modelContext)
-        letzteVerdichtung = PreispunktVerdichtungService.letzteVerdichtung
     }
 }
 

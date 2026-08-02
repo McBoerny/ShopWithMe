@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.10 (Build 192) — Test-Fix Abschnitt-25-Guard (GitHub #79), DB-Debugging verschmolzen (GitHub #84), Preishistorie-Verdichtung in die Einstellungen (GitHub #83)
+
+- **GitHub #79.** `neuerEinkaufsvorgangVomPeerErhoehtNichtZusaetzlichDenZaehler`
+  war seit dem Abschnitt-25-Guard (siehe `mergeEinkaufsvorgaenge`) veraltet: der
+  Test konstruierte bewusst eine unauflösbare `einkaufslisteID`, genau den Fall,
+  den der Guard jetzt korrekt überspringt. Fix: Snapshot referenziert jetzt eine
+  lokal vorab angelegte `Einkaufsliste` (analog benachbarter Tests) — prüft
+  wieder den ursprünglich beabsichtigten Fall. Reiner Test-Fix, kein
+  Produktionscode geändert.
+- **GitHub #84.** `DebuggingView`s bisher zwei fast identische Sektionen
+  (Sync-Debug-Modus, DB-Debug-Modus) zu einem gemeinsamen „Debug-Modus"-
+  Abschnitt mit zwei Unteroptionen verschmolzen — ein Protokollgröße-/Teilen-/
+  Leeren-Block statt zwei. Der DB-Debug-Log-Dateiname trägt jetzt zusätzlich den
+  gesetzten Gerätenamen (`DatabaseLeaseService.eigenerGeraeteNameOverride`),
+  z.B. „Küche DB Debug.log" statt des generischen `db-debug.log`. Dabei auch
+  eine stale Footer-Behauptung korrigiert (Datenbank-Protokoll wurde laut
+  `docs/LOGGING.md` schon länger nicht mehr in einen gemeinsamen Ordner
+  gespiegelt).
+- **GitHub #83.** Die Schwellwert-Einstellungen der automatischen
+  Preishistorie-Verdichtung (`PreispunktVerdichtungSection`) von „Debugging"
+  nach „Einstellungen → Preishistorie" verschoben — gehören fachlich dorthin,
+  nicht zur Diagnose.
+
 ## v0.10 (Build 191) — Diagnose-Logging für Einkaufsvorgang-Abschluss-Übernahme
 
 - **Nutzerbericht (2026-08-02):** "Abhaken synchronisiert, Einkauf

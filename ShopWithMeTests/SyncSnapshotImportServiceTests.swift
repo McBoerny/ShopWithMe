@@ -1015,6 +1015,8 @@ struct SyncSnapshotImportServiceTests {
         context.insert(typ)
         let geschaeft = Geschaeft(name: "Rewe", typen: [typ])
         context.insert(geschaeft)
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
         try context.save()
 
         let remoteGeschaeftID = UUID()
@@ -1026,8 +1028,14 @@ struct SyncSnapshotImportServiceTests {
                 ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 1, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
             ),
         ]
+        // Auflösbare `einkaufslisteID` (Abschnitt-25-Guard, GitHub #79): ohne
+        // bereits bekannten ID-/Alias-Treffer wird ein Eintrag mit unauflösbarer
+        // Liste absichtlich übersprungen statt angelegt — dieser Test prüft
+        // gezielt den regulären Neuanlage-Fall, also referenziert der Snapshot
+        // eine lokal bereits vorhandene Liste (analog benachbarter Tests).
+        snapshot.einkaufslisten = [EinkaufslisteSnapshot(id: liste.id, name: liste.name, erstelltAm: liste.erstelltAm)]
         snapshot.einkaufsvorgaenge = [
-            EinkaufsvorgangSnapshot(id: UUID(), geschaeftID: remoteGeschaeftID, einkaufslisteID: nil, startZeit: Date(), endZeit: Date()),
+            EinkaufsvorgangSnapshot(id: UUID(), geschaeftID: remoteGeschaeftID, einkaufslisteID: liste.id, startZeit: Date(), endZeit: Date()),
         ]
         try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
 

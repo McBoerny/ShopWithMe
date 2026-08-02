@@ -42,11 +42,23 @@ enum DatabaseDebugLogger {
         }
     }
 
-    private static let lokalerWriter = DebugLogWriter(
-        kategorie: "DatabaseConcurrency",
-        dateiURL: FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("db-debug.log")
-    )
+    /// Dateiname trägt den gesetzten Gerätenamen (GitHub #84), z.B.
+    /// „Küche DB Debug.log" — ohne eigenen Override (siehe
+    /// ``DatabaseLeaseService/eigenerGeraeteNameOverride``) generisch „Gerät DB
+    /// Debug.log". Bewusst nur der Override, nicht ``DatabaseLeaseService/geraeteName``
+    /// (der zusätzlich auf `UIDevice.current.name` zurückfällt) — dessen
+    /// `@MainActor`-Isolation würde diesen synchron über jeden Aufrufkontext
+    /// erreichbaren Dateinamen unnötig verkomplizieren, und „der gesetzte
+    /// Gerätename" aus der Anforderung meint ohnehin den Override.
+    private static var lokalerWriter: DebugLogWriter {
+        let override = DatabaseLeaseService.eigenerGeraeteNameOverride?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let praefix = (override?.isEmpty == false ? override! : nil) ?? "Gerät"
+        return DebugLogWriter(
+            kategorie: "DatabaseConcurrency",
+            dateiURL: FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("\(praefix) DB Debug.log")
+        )
+    }
 
     static func log(_ ereignis: Ereignis, details: String) {
         guard istAktiv else { return }

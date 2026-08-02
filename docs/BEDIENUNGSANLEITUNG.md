@@ -259,14 +259,18 @@ werden ausgetauscht.
   „Typ“) ein neuer, eigener Geschäftstyp (inkl. Symbol/Farbe) anlegen.
 - **Preishistorie** — Aufbewahrungsdauer/Bereinigung alter Preiseinträge; räumt ab
   derselben Frist zusätzlich alte, abgeschlossene Einkäufe ohne verbleibende
-  Preiseinträge mit auf.
+  Preiseinträge mit auf. Zusätzlich die Schwellwerte der automatischen
+  Preishistorie-Verdichtung (wie viele Preispunkte pro Tag/Woche/Monat maximal
+  aufgehoben werden) — läuft immer im Hintergrund, hier nur zum Nachjustieren.
 - **Datenbank & Speicherort** — verlegt deine Daten in einen selbst gewählten
   Ordner, z.B. einen lokal gespiegelten Cloud-Ordner. Kein automatischer
   Mehrgeräte-Sync (kein iCloud-Sync) — bei einem Cloud-Ordner die App bewusst nur
   auf einem Gerät gleichzeitig aktiv nutzen, um Konflikte zu vermeiden. Wirkt erst
   nach einem Neustart der App.
-- **Debugging** — bündelt alle Diagnose-Einstellungen (DB-Debug-Modus,
-  Sync-Debug-Modus, sowie in Debug-Builds den Standort-Suchradius) in einer
-  Ansicht; im Normalbetrieb nicht nötig.
+- **Debugging** — bündelt alle Diagnose-Einstellungen in einer Ansicht; im
+  Normalbetrieb nicht nötig. Ein gemeinsamer „Debug-Modus“-Abschnitt mit den
+  Unteroptionen „Sync-Protokoll“ und „Datenbank-Protokoll“ (je einzeln
+  ein-/ausschaltbar, gemeinsame Protokollgröße/Teilen/Leeren), sowie in
+  Debug-Builds zusätzlich der Standort-Suchradius.
 - **Datensynchronisation** — siehe eigener Abschnitt „Datensynchronisation
   (gemeinsam einkaufen)“ oben.
