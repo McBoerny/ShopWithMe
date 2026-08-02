@@ -190,6 +190,17 @@ gleicher Anzahl, hat sich ein Feld eines bestehenden Eintrags geändert (z.B.
 `endZeit` gesetzt, ein additiver Zähler erhöht) — siehe
 `SyncSnapshotExportService.diagnoseText(of:)`), `debug_mode_{enabled,disabled}`.
 
+**Diagnose für `Einkaufsvorgang`-Abschluss-Übernahme** (2026-08-02, Nutzerbericht
+„Einkauf abschließen synchronisiert nicht"): `sync_einkaufsvorgang_abschluss_uebernommen`/
+`sync_einkaufsvorgang_abschluss_nicht_uebernommen` (Details:
+`vorgangID=… grund=…`, `grund` eines von `umgeleitetAufNachfolger`/
+`bereitsAbgeschlossen`/`endZeitVorStartZeit` beim Nicht-Übernehmen — siehe
+`SyncSnapshotImportService.mergeEinkaufsvorgaenge`, Guard-Kaskade um
+`vorhandener.endZeit`), `sync_einkaufsvorgang_eintrag_uebersprungen` (Details:
+`vorgangID=… grund=…`, `grund` eines von `unaufloesbareListe`/`tombstone` —
+der Eintrag wurde ohne jeden Matching-Versuch verworfen, bevor die
+Abschluss-Prüfung überhaupt erreicht wurde).
+
 **Bewusste Wiederverwendung von `wallClock`/`erzeugtAm` für die
 Latenzmessung:** Diese Felder sind in `SyncEvent`/`SyncSnapshot` als „nur
 informativ, nie für Ordnung zwischen Geräten verwendet" dokumentiert (siehe

@@ -41,6 +41,18 @@ enum SyncDebugLogger {
         case eventAufgegeben = "sync_event_aufgegeben"
         case debugModeEnabled = "debug_mode_enabled"
         case debugModeDisabled = "debug_mode_disabled"
+        /// Diagnose für einen Nutzerbericht (2026-08-02, "Einkauf abschließen
+        /// synchronisiert nicht"): ``SyncSnapshotImportService.mergeEinkaufsvorgaenge``
+        /// protokolliert damit explizit, WARUM eine vom Peer gemeldete `endZeit`
+        /// NICHT auf den lokalen Einkaufsvorgang übertragen wurde.
+        case einkaufsvorgangAbschlussNichtUebernommen = "sync_einkaufsvorgang_abschluss_nicht_uebernommen"
+        /// Gegenstück zu ``einkaufsvorgangAbschlussNichtUebernommen`` — die
+        /// `endZeit` wurde tatsächlich übernommen (Erfolgsfall zur Kontrolle).
+        case einkaufsvorgangAbschlussUebernommen = "sync_einkaufsvorgang_abschluss_uebernommen"
+        /// Ein Einkaufsvorgang-Eintrag wurde ohne jeden Matching-Versuch
+        /// übersprungen (unauflösbare Liste ohne bekannten ID-/Alias-Treffer,
+        /// oder per Tombstone als gelöscht markiert).
+        case einkaufsvorgangEintragUebersprungen = "sync_einkaufsvorgang_eintrag_uebersprungen"
     }
 
     private static let aktivSchluessel = "datensyncDebugModusAktiv"

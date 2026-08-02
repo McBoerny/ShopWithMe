@@ -835,6 +835,9 @@ enum SyncSnapshotImportService {
                 // bekannten ID-Treffer ist ein Eintrag ohne Liste hier
                 // grundsätzlich nicht sinnvoll verarbeitbar — überspringen,
                 // bevor überhaupt ein Matching-Versuch stattfindet.
+                if SyncDebugLogger.istAktiv {
+                    SyncDebugLogger.log(.einkaufsvorgangEintragUebersprungen, details: "vorgangID=\(eintrag.id) grund=unaufloesbareListe")
+                }
                 continue
             } else if let offenerTreffer = alleLokalen.first(where: {
                 $0.endZeit == nil && $0.geschaeft == remoteGeschaeft && $0.einkaufsliste == remoteListe
@@ -851,6 +854,9 @@ enum SyncSnapshotImportService {
                 // eines Peers, der ihn selbst noch führt — Tombstone
                 // verhindert die sonst destruktionslose Wiederbelebung
                 // (analog ``mergeGeschaefte``/``mergeArtikel``).
+                if SyncDebugLogger.istAktiv {
+                    SyncDebugLogger.log(.einkaufsvorgangEintragUebersprungen, details: "vorgangID=\(eintrag.id) grund=tombstone")
+                }
                 continue
             } else {
                 // Live-Test-Fund (Abschnitt 20): `remoteListe` ist an dieser
@@ -887,9 +893,43 @@ enum SyncSnapshotImportService {
             // die `endZeit` eines völlig anderen, bereits abgeschlossenen Vorgangs
             // übernehmen — beobachtet als mehrere lokale Vorgänge mit identischer
             // `endZeit`, obwohl ihr `startZeit` klar danach lag.
-            if !umgeleitetAufNachfolger, vorhandener.endZeit == nil, let remoteEndZeit = eintrag.endZeit,
-               remoteEndZeit >= vorhandener.startZeit {
-                vorhandener.endZeit = remoteEndZeit
+            //
+            // Diagnose (2026-08-02, Nutzerbericht „Einkauf abschließen
+            // synchronisiert nicht"): jeder der drei möglichen Gründe, warum
+            // eine vorhandene Remote-`endZeit` NICHT übernommen wird, wird
+            // hier einzeln protokolliert — Guard-Kaskade unverändert, nur um
+            // die Log-Aufrufe erweitert.
+            if let remoteEndZeit = eintrag.endZeit {
+                if umgeleitetAufNachfolger {
+                    if SyncDebugLogger.istAktiv {
+                        SyncDebugLogger.log(
+                            .einkaufsvorgangAbschlussNichtUebernommen,
+                            details: "vorgangID=\(eintrag.id) grund=umgeleitetAufNachfolger"
+                        )
+                    }
+                } else if let lokaleEndZeit = vorhandener.endZeit {
+                    if SyncDebugLogger.istAktiv {
+                        SyncDebugLogger.log(
+                            .einkaufsvorgangAbschlussNichtUebernommen,
+                            details: "vorgangID=\(eintrag.id) grund=bereitsAbgeschlossen lokaleEndZeit=\(lokaleEndZeit)"
+                        )
+                    }
+                } else if remoteEndZeit < vorhandener.startZeit {
+                    if SyncDebugLogger.istAktiv {
+                        SyncDebugLogger.log(
+                            .einkaufsvorgangAbschlussNichtUebernommen,
+                            details: "vorgangID=\(eintrag.id) grund=endZeitVorStartZeit remoteEndZeit=\(remoteEndZeit) startZeit=\(vorhandener.startZeit)"
+                        )
+                    }
+                } else {
+                    vorhandener.endZeit = remoteEndZeit
+                    if SyncDebugLogger.istAktiv {
+                        SyncDebugLogger.log(
+                            .einkaufsvorgangAbschlussUebernommen,
+                            details: "vorgangID=\(eintrag.id) lokaleID=\(vorhandener.id) endZeit=\(remoteEndZeit)"
+                        )
+                    }
+                }
             }
             zuordnung[eintrag.id] = vorhandener
         }

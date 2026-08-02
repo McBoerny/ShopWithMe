@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.10 (Build 191) — Diagnose-Logging für Einkaufsvorgang-Abschluss-Übernahme
+
+- **Nutzerbericht (2026-08-02):** "Abhaken synchronisiert, Einkauf
+  abschließen nicht." Ein neuer Regressionstest
+  (`abschlussEinesUeberOffenenTrefferAliasiertenVorgangsWirdBeimZweitenZyklusUebernommen`)
+  bestätigt, dass der zugrundeliegende Merge-Mechanismus im isolierten Test
+  korrekt funktioniert — die reale Ursache bleibt offen. Damit sie beim
+  nächsten Reproduzieren mit aktivem Sync-Debug-Modus eindeutig sichtbar
+  wird, protokolliert `SyncSnapshotImportService.mergeEinkaufsvorgaenge`
+  jetzt explizit, ob und warum eine vom Peer gemeldete `endZeit`
+  übernommen/nicht übernommen wurde (`sync_einkaufsvorgang_abschluss_uebernommen`/
+  `_nicht_uebernommen`, Grund: `umgeleitetAufNachfolger`/`bereitsAbgeschlossen`/
+  `endZeitVorStartZeit`) sowie wenn ein Eintrag ganz ohne Matching-Versuch
+  übersprungen wird (`sync_einkaufsvorgang_eintrag_uebersprungen`, Grund:
+  `unaufloesbareListe`/`tombstone`). Reine Diagnose-Ergänzung, keine
+  Verhaltensänderung.
+
 ## v0.10 (Build 189) — Sync-Performance: einkaufslistenEintraege aus stamm.json in listen.json ausgelagert (GitHub #85)
 
 - **Analyse-Fund.** `stamm.json` enthielt neben den echten (seltenen)
