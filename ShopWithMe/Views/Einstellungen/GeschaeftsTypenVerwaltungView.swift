@@ -8,7 +8,7 @@ import SwiftData
 /// mit passendem Typ als verfügbar (siehe
 /// ``Geschaeft/verfuegbareKategorien(alleKategorien:)``), ohne dass sie dem
 /// einzelnen Geschäft manuell zugeordnet werden muss. Die manuelle Zuordnung
-/// einzelner Kategorien zu einem konkreten Geschäft (``KategorieHinzufuegenSheet``)
+/// einzelner Kategorien zu einem konkreten Geschäft (``WarengruppeHinzufuegenSheet``)
 /// bleibt davon unabhängig weiterhin möglich.
 struct GeschaeftsTypenVerwaltungView: View {
     @Environment(\.modelContext) private var modelContext
@@ -115,7 +115,7 @@ private struct GeschaeftsTypKategorienView: View {
                 Button {
                     zeigeNeueKategorie = true
                 } label: {
-                    Label("Neue Kategorie anlegen", systemImage: "plus")
+                    Label("Neue Warengruppe anlegen", systemImage: "plus")
                 }
 
                 if AISuggestionService.istVerfuegbar {
@@ -146,7 +146,7 @@ private struct GeschaeftsTypKategorienView: View {
         .navigationTitle(typ.name)
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $zeigeNeueKategorie) {
-            NeueKategorieSheet(naechsterSortIndex: (alleKategorien.map(\.sortIndex).max() ?? -1) + 1) { kategorie in
+            NeueWarengruppeSheet(naechsterSortIndex: (alleKategorien.map(\.sortIndex).max() ?? -1) + 1) { kategorie in
                 kategorie.geschaeftsTypen = kategorie.geschaeftsTypen + [typ]
             }
         }

@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.10 (Build 188) — Umbenennung Kategorie → Warengruppe in GUI und internen Bezeichnern (GitHub #62)
+
+- Alle sichtbaren GUI-Texte ("Kategorie(n)" → "Warengruppe(n)") in Views,
+  Hilfetexten (`HelpView`) und der Bedienungsanleitung umbenannt.
+- Vier dedizierte Verwaltungs-Views inkl. Dateien umbenannt:
+  `KategorienVerwaltungView` → `WarengruppenVerwaltungView`,
+  `NeueKategorieSheet` → `NeueWarengruppeSheet`,
+  `KategorieHinzufuegenSheet` → `WarengruppeHinzufuegenSheet`,
+  `GeschaeftKategorienSektion` → `GeschaeftWarengruppenSektion`, sowie das rein
+  private `KategorieBearbeitenView` → `WarengruppeBearbeitenView`.
+- **Bewusst NICHT angefasst** (siehe Rückfrage/Entscheidung in der Session vom
+  2026-08-02): der `@Model`-Typ `ArtikelKategorie` selbst, alle davon
+  persistierten Relationship-/Attribut-Namen (`Artikel.kategorie(n)`,
+  `Geschaeft.kategorien`/`ausgeschlosseneKategorien`, `KaufEintrag.kategorie`,
+  `WarengruppenDistanz.kategorieA/B`, `GeschaeftTyp.standardKategorien`) sowie
+  alle Codable-Feldnamen der Sync-Snapshots (`SyncSnapshot.swift`) und der
+  `SyncEntitaetsArt`-Bezeichner. Eine echte Modell-Umbenennung wäre die erste
+  strukturelle SwiftData-Migration dieses Projekts überhaupt und müsste wegen
+  der Relationship-Kopplung mindestens sechs Modelltypen einfrieren (siehe
+  `docs/DECISIONS.md` → „Duplicate version checksums"-Vorfall) — bewusst als
+  eigener, separat zu planender Schritt zurückgestellt, GitHub #62 bleibt dafür
+  offen.
+
 ## v0.10 (Build 187) — Einkaufslisten-Fortschritt im Titel (GitHub #74), Wischgesten am Standort-Vorschlag (GitHub #73)
 
 - **GitHub #74.** Der Bildschirmtitel beim Einkaufen (`EinkaufslisteView`) zeigt

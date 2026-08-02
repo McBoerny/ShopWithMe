@@ -140,7 +140,7 @@ enum MilkForUsImportService {
     /// Übernimmt die Gruppen (nach ggf. manueller Korrektur von ``zuordnung``/
     /// ``artikelNamen`` durch den Nutzer) in einem einzigen Lease-geschützten
     /// Schreibvorgang: legt neue Kategorien an (Default-Symbol/-Farbe, siehe
-    /// ``NeueKategorieSheet``), findet oder erstellt je Artikelname einen ``Artikel``
+    /// ``NeueWarengruppeSheet``), findet oder erstellt je Artikelname einen ``Artikel``
     /// (bestehende Artikel bleiben inklusive ihrer Kategorie unangetastet und werden
     /// nur auf ``einkaufsliste`` gesetzt) und ruft dafür
     /// ``Einkaufsliste/artikelHinzufuegen(_:context:)`` auf. Gruppen ohne verbliebene

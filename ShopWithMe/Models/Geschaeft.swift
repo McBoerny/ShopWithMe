@@ -71,7 +71,7 @@ final class Geschaeft {
     /// Geschäft ausgeschlossen sind (GitHub #43) — eine Negativliste zusätzlich
     /// zur Positivliste ``kategorien``. Wird eine hier gelistete Kategorie
     /// später direkt zu ``kategorien`` hinzugefügt (z.B. über
-    /// ``KategorieHinzufuegenSheet``), sticht das den Ausschluss (siehe
+    /// ``WarengruppeHinzufuegenSheet``), sticht das den Ausschluss (siehe
     /// ``verfuegbareKategorien(alleKategorien:)``).
     var ausgeschlosseneKategorien: [ArtikelKategorie] = []
     /// Operative Einkaufs-Buchungszeilen (``KaufEintrag``) in diesem Geschäft — seit

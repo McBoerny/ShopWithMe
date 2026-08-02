@@ -213,7 +213,7 @@ enum DatabaseLeaseService {
     /// ``release(context:)`` (z.B. in `.onDisappear`).
     ///
     /// Referenzgezählt über ``aktiveHalterZaehler``, damit verschachtelte
-    /// Bearbeitungs-Bildschirme desselben Geräts (z.B. `KategorieHinzufuegenSheet`
+    /// Bearbeitungs-Bildschirme desselben Geräts (z.B. `WarengruppeHinzufuegenSheet`
     /// über einem bereits offenen `GeschaeftDetailView`) sich denselben Lease teilen,
     /// statt dass der innere Bildschirm ihn beim Schließen fälschlich freigibt,
     /// während der äußere noch aktiv ist.

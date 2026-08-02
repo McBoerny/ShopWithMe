@@ -2,11 +2,11 @@ import SwiftUI
 import SwiftData
 
 /// Sheet zum Hinzufügen einer ``ArtikelKategorie`` zu einem ``Geschaeft``, aufrufbar
-/// aus ``GeschaeftKategorienSektion``.
+/// aus ``GeschaeftWarengruppenSektion``.
 ///
 /// Eine Kategorie wird beim Antippen direkt diesem Geschäft zugeordnet
 /// (``Geschaeft/kategorien``) und damit sofort verfügbar.
-struct KategorieHinzufuegenSheet: View {
+struct WarengruppeHinzufuegenSheet: View {
     let geschaeft: Geschaeft
 
     @Environment(\.dismiss) private var dismiss
@@ -42,15 +42,15 @@ struct KategorieHinzufuegenSheet: View {
                     Button {
                         zeigeNeueKategorie = true
                     } label: {
-                        Label("Neue Kategorie anlegen", systemImage: "plus")
+                        Label("Neue Warengruppe anlegen", systemImage: "plus")
                     }
                 } header: {
-                    Text("Verfügbare Kategorien")
+                    Text("Verfügbare Warengruppen")
                 } footer: {
-                    Text("Bereits in diesem Geschäft verfügbare Kategorien werden hier nicht angeboten.")
+                    Text("Bereits in diesem Geschäft verfügbare Warengruppen werden hier nicht angeboten.")
                 }
             }
-            .navigationTitle("Kategorie hinzufügen")
+            .navigationTitle("Warengruppe hinzufügen")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -58,7 +58,7 @@ struct KategorieHinzufuegenSheet: View {
                 }
             }
             .sheet(isPresented: $zeigeNeueKategorie) {
-                NeueKategorieSheet(naechsterSortIndex: (alleKategorien.map(\.sortIndex).max() ?? -1) + 1) { kategorie in
+                NeueWarengruppeSheet(naechsterSortIndex: (alleKategorien.map(\.sortIndex).max() ?? -1) + 1) { kategorie in
                     kategorieHinzufuegen(kategorie)
                 }
             }
@@ -76,6 +76,6 @@ struct KategorieHinzufuegenSheet: View {
 }
 
 #Preview {
-    KategorieHinzufuegenSheet(geschaeft: Geschaeft(name: "Rewe", typen: [GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")]))
+    WarengruppeHinzufuegenSheet(geschaeft: Geschaeft(name: "Rewe", typen: [GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")]))
         .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self, ArtikelKategorie.self], inMemory: true)
 }

@@ -117,3 +117,14 @@ vollständig umgesetzt; weitere Ideen siehe „Zukünftig“ unten.
   laufenden Betriebs.
 - ~~**`export.json` als Paket statt Monolith**~~ ([#82](https://github.com/McBoerny/ShopWithMe/issues/82))
   — umgesetzt, siehe `docs/EXPORT_PAKET_UMBAU.md`.
+- **`ArtikelKategorie` → `Warengruppe`, vollständige Modell-Umbenennung**
+  ([#62](https://github.com/McBoerny/ShopWithMe/issues/62), Rest nach
+  GUI-/Bezeichner-Umbenennung 2026-08-02): der `@Model`-Typ selbst sowie alle
+  davon persistierten Relationship-/Attribut-Namen bleiben bewusst
+  unverändert, bis eine echte strukturelle SwiftData-Migration geplant wird —
+  wegen der Relationship-Kopplung zu `Artikel`, `Geschaeft`, `KaufEintrag`,
+  `WarengruppenDistanz` und `GeschaeftTyp` müssten mindestens sechs
+  Modelltypen pro Schema-Version eingefroren werden (erste echte strukturelle
+  Migration dieses Projekts überhaupt, siehe `docs/DECISIONS.md` →
+  „Duplicate version checksums"-Vorfall). Größerer, eigenständiger Umbau,
+  nicht Teil des laufenden Betriebs.
