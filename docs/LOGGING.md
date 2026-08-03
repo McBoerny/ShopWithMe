@@ -286,6 +286,52 @@ Geräteuhr hingegen genau der richtige Wert.
   (siehe oben) — für einen Vergleich mehrerer Geräte müssen die Protokolle
   aktuell manuell nebeneinandergelegt werden (z.B. Teilen-Button je Gerät).
 
+## FAQ: Warum zwei getrennte Protokolldateien statt einer gemeinsamen?
+
+Wiederkehrende Nachfrage, weil Sync- und DB-Debug-Modus in der UI längst zu
+einem gemeinsamen „Debug-Modus"-Abschnitt verschmolzen sind (siehe „Nachtrag
+GitHub #84" unten) — warum dann noch zwei Log-*Dateien* statt einer?
+
+- **Die Implementierung ist bereits gemeinsam, nur die Log-Datei nicht.**
+  `SyncDebugLogger` und `DatabaseDebugLogger` sind beide nur dünne Wrapper
+  (siehe „Gemeinsamer Baustein: `DebugLogWriter`" oben) um denselben
+  Schreib-/Rotations-/`os.Logger`-Mechanismus, dieselbe
+  `Protokollstufe`-Logik und dieselbe UI-Sektion. Es gibt also keine
+  doppelte Infrastruktur mehr, die eine Zusammenlegung einsparen würde —
+  diese Dopplung wurde bereits mit `DebugLogWriter` (Build 30) und der
+  UI-Fusion (GitHub #84) beseitigt.
+- **Getrennt sind bewusst nur die Ereignisvokabulare und die Datei selbst**,
+  weil beide Mechanismen unterschiedliche Fragen zu unterschiedlichen
+  Subsystemen beantworten: das Sync-Protokoll misst Zyklusdauer/Latenz des
+  geräteübergreifenden Sync-Protokolls, das DB-Protokoll den
+  Lease-/Lock-Ablauf des rein lokalen Micro-Lease-Verfahrens (siehe
+  `docs/DATABASE_CONCURRENCY.md`). Beim gezielten Auswerten eines konkreten
+  Problems (z.B. „warum synchronisiert Gerät X nicht") will man genau dieses
+  eine Protokoll lesen, ohne die Zeilen des jeweils anderen Mechanismus
+  manuell herausfiltern zu müssen.
+- **Eine gemeinsame Datei würde neue Kosten verursachen, ohne bestehende
+  Dopplung abzubauen:** entweder ein Kategorie-Präfix je Zeile zum
+  nachträglichen Filtern (zusätzliche Lese-Logik) oder Verzicht auf die
+  getrennte Größenrotation je Mechanismus — dann könnte ein sehr aktiver
+  Mechanismus (z.B. `sync_snapshot_unveraendert_uebersprungen`, feuert 6× pro
+  Zyklus) die Einträge des ruhigeren DB-Protokolls vorzeitig aus der
+  Rotation verdrängen.
+- **Ein historischer Unterschied bestätigt die Trennung zusätzlich:** die
+  Spiegelung in einen geteilten Ordner war ausschließlich für den
+  DB-Debug-Modus relevant, nie für den Sync-Debug-Modus (siehe „Abweichung
+  vom DB-Debug-Modus: nur lokal, keine Spiegelung" oben bzw. „Nachtrag
+  GitHub #54") — ein weiteres Indiz, dass beide Mechanismen trotz
+  gemeinsamer Bausteine unterschiedliche Anforderungen an ihr jeweiliges Log
+  haben.
+
+**Fazit:** Die einzige verbliebene Dopplung liegt im Boilerplate innerhalb
+von `SyncDebugLogger`/`DatabaseDebugLogger` selbst (UserDefaults-Migration,
+Stufen-Cache, eigene `WiederholungsFilter`-Instanz — je Datei ca. 30–40
+Zeilen), nicht in den Protokolldateien oder der UI. Eine denkbare, bisher
+nicht umgesetzte Verfeinerung wäre ein gemeinsamer generischer Basistyp für
+genau dieses Boilerplate; das würde aber nichts an der bewusst getrennten
+Protokolldatei je Mechanismus ändern.
+
 ## Mechanismus: Datenintegrität (Reperaturlauf gegen baumelnde Referenzen)
 
 Anders als die beiden Mechanismen oben **nicht** an einen Debug-Schalter
