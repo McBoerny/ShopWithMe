@@ -164,26 +164,38 @@ extension Artikel {
     /// Sync-Import empfangener Bereich-A-Events — siehe
     /// ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:indexFuerDistanzlernen:kategorie:)``,
     /// deren `kategorie`-Parameter für die reguläre Einkaufsliste bevorzugt
-    /// genutzt wird). **Kein "Gewinner" mehr im Sinne der EinkaufenView-Anzeige**
-    /// (die zeigt einen Artikel mit mehreren Kategorien inzwischen gleichzeitig
-    /// in allen zugehörigen Abschnitten, GitHub-Nachfolgefund zu #36 — zwei
-    /// Geräte/Nutzer können pro Artikel und Geschäft unterschiedliche, jeweils
-    /// tatsächlich zutreffende Kategorien lernen, z.B. Sojasauce bei Edeka unter
-    /// "Soßen", bei Aldi unter "Asia").
+    /// genutzt wird).
     ///
-    /// Priorität: eine im Geschäft tatsächlich verfügbare Kategorie > die erste
-    /// zugeordnete Kategorie (ohne `geschaeft`, z.B. in der geschäftsunabhängigen
-    /// Artikel-Verwaltung). Kandidaten werden vor der Auswahl deterministisch
-    /// sortiert (``sortIndex``, dann `id` als letzter Tiebreaker) — `kategorien`
-    /// selbst ist eine ungeordnete SwiftData-Relationship, deren Aufzählungs-
-    /// reihenfolge sich zwischen Fetches/Sync-Merges ändern kann; ohne diese
-    /// Sortierung hätte ein mehrfach kategorisierter Artikel bei jedem Sync-
-    /// Zyklus zufällig eine andere Kategorie liefern können.
+    /// Priorität: die aus der Kaufhistorie **gelernte** Kategorie
+    /// (``WarengruppenDistanzService/gelernteKategorie(fuer:in:context:)``, sobald
+    /// genug Käufe vorliegen) > eine im Geschäft tatsächlich verfügbare Kategorie >
+    /// die erste zugeordnete Kategorie (ohne `geschaeft`, z.B. in der
+    /// geschäftsunabhängigen Artikel-Verwaltung). Kandidaten werden vor der Auswahl
+    /// deterministisch sortiert (``sortIndex``, dann `id` als letzter Tiebreaker) —
+    /// `kategorien` selbst ist eine ungeordnete SwiftData-Relationship, deren
+    /// Aufzählungsreihenfolge sich zwischen Fetches/Sync-Merges ändern kann; ohne
+    /// diese Sortierung hätte ein mehrfach kategorisierter Artikel vor Erreichen
+    /// der Lernschwelle bei jedem Sync-Zyklus zufällig eine andere Kategorie
+    /// liefern können.
+    ///
+    /// **Bis zur Lernschwelle weiterhin kein "Gewinner" im Sinne der
+    /// EinkaufenView-Anzeige** (die zeigt einen Artikel mit mehreren, noch nicht
+    /// geschäftsspezifisch gelernten Kategorien gleichzeitig in allen zugehörigen
+    /// Abschnitten, GitHub-Nachfolgefund zu #36 — zwei Geräte/Nutzer können pro
+    /// Artikel und Geschäft unterschiedliche, jeweils tatsächlich zutreffende
+    /// Kategorien lernen, z.B. Sojasauce bei Edeka unter "Soßen", bei Aldi unter
+    /// "Asia"; `EinkaufenView` fragt dafür direkt bei
+    /// ``WarengruppenDistanzService/gelernteKategorie(fuer:in:context:)`` nach,
+    /// nicht über diese Funktion hier).
     func fuehrendeKategorie(inGeschaeft geschaeft: Geschaeft?, context: ModelContext) -> ArtikelKategorie {
         let kandidaten = effektiveKategorien(context: context).sorted { a, b in
             a.sortIndex != b.sortIndex ? a.sortIndex < b.sortIndex : a.id.uuidString < b.id.uuidString
         }
         guard let geschaeft else { return kandidaten[0] }
+        if kandidaten.count > 1,
+           let gelernt = WarengruppenDistanzService.gelernteKategorie(fuer: self, in: geschaeft, context: context) {
+            return gelernt
+        }
         let alleKategorien = (try? context.fetch(FetchDescriptor<ArtikelKategorie>())) ?? []
         let verfuegbareKategorien = geschaeft.verfuegbareKategorien(alleKategorien: alleKategorien)
         if let verfuegbar = kandidaten.first(where: { verfuegbareKategorien.contains($0) }) {

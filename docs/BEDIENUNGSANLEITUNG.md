@@ -111,6 +111,19 @@ automatisch beim Öffnen des Tabs, kein manueller Start nötig.
 Der Bildschirmtitel zeigt neben dem Listennamen deinen Fortschritt für diesen
 Einkauf, Format „<Name> (<abgehakt>/<gesamt>)“, z.B. „Wocheneinkauf (3/8)“.
 
+Ein Artikel, der mehreren Kategorien zugeordnet ist, erscheint zunächst in
+jedem passenden Abschnitt der Liste — erkennbar am kleinen Symbol neben dem
+Namen. Der Fortschritt im Titel zählt jeden Artikel trotzdem nur einmal; die
+Anzahl sichtbarer Zeilen kann in diesem Fall also höher sein als die Zahl
+nach dem Schrägstrich. Sobald du diesen Artikel in einem bestimmten Geschäft
+überwiegend aus derselben Kategorie abgehakt hast, merkt sich die App das und
+zeigt ihn dort künftig nur noch in dieser einen Kategorie — das Symbol
+verschwindet dann wieder. Kauf ihn dort später doch mal aus einem anderen
+Abschnitt, blendet sich die Mehrfachanzeige bei Bedarf automatisch wieder
+ein. Im Lernmodus (siehe unten) siehst du immer alle zugeordneten
+Kategorien, auch wenn die App sich schon auf eine festgelegt hat — praktisch,
+um eine falsch gelernte Zuordnung zu korrigieren.
+
 Die Liste sortiert sich mit der Zeit selbst: ShopWithMe lernt aus der
 Reihenfolge, in der du Artikel abhakst, welche Warengruppen in diesem Geschäft
 nah beieinanderliegen, und passt die Reihenfolge nach jeder Abhakung automatisch

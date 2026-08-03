@@ -370,3 +370,29 @@ Empfohlene Reihenfolge — jede Phase einzeln build- und testbar, damit die App 
 **Kernargument:** `Regal` ist eine manuell zu pflegende Zwischenschicht (Anlegen, Umbenennen, Kategorien zuordnen, Reihenfolge ziehen) für genau das Problem, das die adaptive Sortierung aus Abschnitt 2–4 automatisch und ohne Pflegeaufwand löst — und zwar auf einer feineren, dynamischen Ebene (paarweise Distanzen statt starrer Gruppen). Nach Einführung der Warengruppen-Distanzmatrix hat `Regal` keinen Zweck mehr, den die neue Sortierung nicht besser abdeckt.
 
 **Umfang der Entfernung** (Bestandsaufnahme, 26 betroffene Dateien): `Models/Regal.swift`, `RegalSortierModus`, `Geschaeft.regale`/`regalSortierModus`(Raw)/`regal(fuer:)`, `ArtikelKategorie.regale`, `Artikel.fuehrendeKategorie`s Regal-Priorität, `Views/Geschaefte/RegalDetailView.swift`, `GeschaeftDetailView`s Regal-Sektion samt bedingtem `EditButton` (GitHub #28), `EinkaufenView.gruppen`/`sonstigeArtikel` (Regal-Pfad entfällt, `sonstigeGruppen`-Pfad wird der einzige), `NeueKategorieSheet`/`KategorieHinzufuegenSheet`/`ArtikelEditView`/`PreisschildScanView`/`AISuggestionService`/`ArtikelVerfuegbarkeitService`-Erwähnungen, `SchemaDefinition.swift`, sowie 6 betroffene Testdateien.
+
+---
+
+## 14. Geschäftsspezifisch gelernte Kategorie (GitHub-Nachfolgefund zu #36)
+
+**Separates GitHub-Issue: [#93](https://github.com/McBoerny/ShopWithMe/issues/93).** Diese Sektion dokumentiert die Kurzfassung; Motivation und Diskussion stehen im Issue.
+
+**Ausgangslage:** Seit Abschnitt 13/`fedf96b` (v0.9) zeigt `EinkaufenView` einen Artikel mit mehreren Kategorien gleichzeitig in allen zugehörigen Abschnitten — bewusst, weil eine frühere Einzelauswahl über eine ungeordnete SwiftData-Relationship zwischen Sync-Zyklen sichtbar zwischen Abschnitten sprang. Nebeneffekt: der Fortschritts-Zähler im Titel (`<abgehakt>/<gesamt>`) zählt eindeutige Artikel, während die sichtbare Zeilenzahl durch die Mehrfachanzeige höher sein kann — Auslöser war ein Nutzerbericht „5 Artikel angezeigt, aber Zähler 0/4" auf der Liste „Urlaub".
+
+**Beobachtung:** Seit derselben Änderung speichert jeder `KaufEintrag` bereits, aus welcher Kategorie tatsächlich abgehakt wurde (`kategorie`) sowie in welchem Geschäft (`geschaeft`) — die Rohdaten für eine geschäftsspezifische Auswertung lagen also vor, wurden aber nicht ausgewertet.
+
+**Algorithmus** (`WarengruppenDistanzService.gelernteKategorie(fuer:in:context:)`): zählt für ein (Artikel, Geschäft)-Paar die Häufigkeit je Kategorie über alle zugehörigen `KaufEintrag`e. Ergebnis nur, wenn:
+- mindestens `mindestKaeufeFuerGelernteKategorie` (5) Käufe vorliegen, UND
+- die häufigste Kategorie mindestens `mehrheitsschwelleGelernteKategorie` (80%) davon ausmacht.
+
+Bewusst nicht rein prozentual ab dem ersten Kauf: ein einzelner Kauf wäre immer "100% Mehrheit" und würde einen einzelnen Fehltap (falsche Kategorie versehentlich angetippt) sofort ungefiltert übernehmen — die Mindestzahl von 5 zusammen mit der 80%-Schwelle filtert einen solchen Ausreißer heraus (5 Käufe mit 1 Fehltap ergeben 80% — genau an der Schwelle; 2 Fehltaps ergeben 60%, deutlich darunter). Bewusst kein gleitender Durchschnitt wie bei der Distanzmatrix (Abschnitt 4.1) — hier soll das Ergebnis jederzeit exakt der aktuellen Kaufhistorie entsprechen. Bewusst auch keine dauerhafte Speicherung: die Auswertung läuft bei jedem Aufruf neu über die aktuellen `KaufEintrag`e, sodass sich eine einmal fälschlich erkannte Mehrheit durch weitere (auch über Sync eintreffende) Käufe von selbst wieder korrigiert — zusätzlich zur manuellen Korrekturmöglichkeit über den Lernmodus (siehe Integrationspunkte).
+
+**Herleitung der Schwellenwerte** (pragmatische Abschätzung, keine strenge Signifikanzprüfung — bei Haushalts-Kauffrequenz einzelner Artikel wäre eine klassische Stichprobengröße von ~30 unrealistisch, das würde Jahre dauern):
+- Echte Vorliebe + ca. 10% gelegentliche Fehltap-Rate: P(≥4 von 5 korrekt) ≈ 92% — die Schwelle wird bei echtem Muster meist schon nach 5 Käufen erreicht.
+- Tatsächlich 50/50 mehrdeutiger Artikel (kein echtes Muster): P(eine Seite erreicht ≥4/5 rein zufällig) ≈ 19% — ein spürbarer, aber tolerierbarer Anteil falscher Früh-Treffer. Bewusst in Kauf genommen: die Neuberechnung bei jedem Aufruf löst so einen Fehltreffer mit wachsendem `n` von selbst wieder auf, UND der Lernmodus bietet zusätzlich eine sofortige manuelle Korrekturmöglichkeit.
+
+**Integrationspunkte:**
+1. `EinkaufenView.kategorienFuerAnzeige(_:)`: bei gewähltem Geschäft und gelernter Kategorie nur noch diese eine statt `Artikel.effektiveKategorien(context:)` vollständig — außer im Lernmodus (`zeigeAlleArtikel`, langer Tap auf die Schnellauswahl): dort bewusst immer ungefiltert wie alle zugeordneten Kategorien, analog zum bestehenden Bypass in `verfuegbarkeitsgefiltert(_:)`. Der Lernmodus ist damit die manuelle Korrekturmöglichkeit, falls die gelernte Kategorie (noch) nicht (mehr) stimmt.
+2. `Artikel.fuehrendeKategorie(inGeschaeft:context:)`: gelernte Kategorie als Top-Priorität vor der bisherigen, rein statischen `sortIndex`-Sortierung — wirkt sich auf Belegscan-/Preisschild-Scan-/Sync-Import-Zuordnung aus, die ohne konkret getappten Abschnitt auskommen müssen. Kein Lernmodus-Bypass hier, da diese Aufrufer keinen Bezug zu diesem UI-Zustand haben.
+
+Rein anzeigeseitig/lesend: `Artikel.kategorien` (die globalen Tags) bleiben unverändert, nichts wird automatisch umgeschrieben oder gelöscht — bei fehlender/nicht mehr ausreichender Datenlage oder aktivem Lernmodus blendet sich die Mehrfachanzeige einfach wieder ein.

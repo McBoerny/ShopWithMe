@@ -99,18 +99,29 @@ manuell gepflegte Struktur (früher: `Regal`), sondern wird von
 Kategorie-Paar und Geschäft, siehe
 `docs/ARCHITEKTURVORSCHLAG_ADAPTIVE_SORTIERUNG.md`).
 
-Ein Artikel mit mehreren Kategorien erscheint beim Einkaufen gleichzeitig in
-JEDEM zugehörigen Abschnitt (`EinkaufenView.kategorieGruppen(fuer:)`, v0.9,
-GitHub-Nachfolgefund zu #36) — keine Duplizierung mehr vermeidende
+Ein Artikel mit mehreren Kategorien erscheint beim Einkaufen zunächst
+gleichzeitig in JEDEM zugehörigen Abschnitt (`EinkaufenView.kategorieGruppen(fuer:)`,
+v0.9, GitHub-Nachfolgefund zu #36) — keine Duplizierung mehr vermeidende
 Einzelauswahl. Abgehakt wird überall zugleich (ein `KaufEintrag`); die
 Kategorie des tatsächlich getappten Abschnitts wird explizit an
 `Einkaufsvorgang.artikelAbhaken(_:context:kategorie:)` übergeben und im
-`KaufEintrag` gespeichert — Grundlage dafür, dass `WarengruppenDistanzService`
-pro Geschäft lernt, in welcher der mehreren Kategorien ein Artikel dort
-tatsächlich steht (z.B. Sojasauce bei Edeka unter „Soßen", bei Aldi unter
-„Asia"). `Artikel.fuehrendeKategorie(inGeschaeft:context:)` bleibt als
-deterministisch sortierter Fallback für Kontexte ohne konkret getappten
-Abschnitt (Belegscan, Preisschild-Scan, Sync-Import).
+`KaufEintrag` gespeichert.
+
+Seit v0.11 (GitHub #93) wertet `WarengruppenDistanzService.gelernteKategorie(fuer:in:context:)`
+genau diese Historie aus: liegen für (Artikel, Geschäft) mindestens 5 Käufe mit
+mindestens 80% Mehrheit für eine Kategorie vor (z.B. Sojasauce bei Edeka unter
+„Soßen", bei Aldi unter „Asia"), zeigt `EinkaufenView` (über
+`kategorienFuerAnzeige(_:)`) nur noch diese eine Kategorie statt aller
+zugeordneten — die Mehrfachanzeige bleibt der Fallback für noch nicht
+eindeutig gelernte Artikel, die geschäftsunabhängige Ansicht, sowie den
+aktiven Lernmodus (`zeigeAlleArtikel`, bewusst immer ungefiltert, damit eine
+falsch gelernte Zuordnung sichtbar korrigierbar bleibt). Details inkl. der
+statistischen Herleitung der Schwellenwerte:
+`docs/ARCHITEKTURVORSCHLAG_ADAPTIVE_SORTIERUNG.md` Abschnitt 14.
+`Artikel.fuehrendeKategorie(inGeschaeft:context:)` nutzt dieselbe gelernte
+Kategorie jetzt ebenfalls als Top-Priorität, bevor sie auf den
+deterministisch sortierten Fallback für Kontexte ohne konkret getappten
+Abschnitt zurückfällt (Belegscan, Preisschild-Scan, Sync-Import).
 
 ## Services
 

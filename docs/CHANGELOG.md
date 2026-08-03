@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.11 (Build 220) — GitHub #93: Geschäftsspezifisch gelernte Kategorie reduziert Mehrfachkategorie-Anzeige
+
+- Neu: `WarengruppenDistanzService.gelernteKategorie(fuer:in:context:)` wertet
+  `KaufEintrag.kategorie` je (Artikel, Geschäft) aus und liefert ab mindestens 5
+  Käufen mit mindestens 80% Mehrheit eine eindeutige Kategorie
+  (GitHub-Nachfolgefund zu #36).
+- `EinkaufenView` zeigt einen mehrfach kategorisierten Artikel bei gewähltem
+  Geschäft nur noch im gelernten Abschnitt statt gleichzeitig in allen
+  zugeordneten — vorher weiterhin (kein Geschäft gewählt, noch nicht genug
+  Kaufhistorie oder Lernmodus aktiv), jetzt mit kleinem Hinweis-Symbol
+  markiert. Im Lernmodus (`zeigeAlleArtikel`) bewusst weiter ungefiltert, damit
+  eine falsch gelernte Zuordnung sichtbar korrigierbar bleibt.
+- `Artikel.fuehrendeKategorie(inGeschaeft:context:)` nutzt die gelernte
+  Kategorie jetzt als Top-Priorität vor dem bisherigen sortIndex-Fallback
+  (wirkt sich auf Belegscan-/Preisschild-Scan-/Sync-Import-Zuordnung aus).
+- Auslöser: Nutzerbericht „Zähler stimmt nicht, 5 Artikel angezeigt aber 0/4"
+  auf der Liste „Urlaub" — Ursache war die gewollte Mehrfachanzeige aus #36,
+  vom Fortschritts-Zähler (zählt eindeutige Artikel) nicht berücksichtigt.
+
 ## v0.11 (Build 218) — GitHub #92: startDownloadingUbiquitousItem-Fix + experimenteller Dokumenten-Picker-Trigger
 
 - Recherche zu #91s nur temporärer Wirkung ergab eine seit iOS 18.4

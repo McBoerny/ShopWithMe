@@ -31,6 +31,22 @@ enum WarengruppenDistanzService {
     /// Zeitfenster, innerhalb dessen der zeitliche Abstand zweier Besuche noch als
     /// Signal gilt — größere Abstände (z.B. durch eine Pause) werden verworfen.
     static let zeitfenster: TimeInterval = 5 * 60
+    /// Ab wie vielen ``KaufEintrag``en desselben Artikels in einem Geschäft
+    /// ``gelernteKategorie(fuer:in:context:)`` überhaupt eine Aussage trifft (siehe
+    /// dort) — darunter bleibt das Ergebnis `nil`. Bewusst nicht rein prozentual
+    /// ab dem ersten Kauf: ein einzelner Kauf wäre immer "100% Mehrheit" und würde
+    /// einen einzelnen Fehltap (falsche Kategorie versehentlich angetippt) sofort
+    /// ungefiltert übernehmen. Bei einer echten Vorliebe mit ca. 10% gelegentlicher
+    /// Fehltap-Rate erreicht die 80%-Schwelle
+    /// (``mehrheitsschwelleGelernteKategorie``) bereits nach 5 Käufen mit ca. 92%
+    /// Wahrscheinlichkeit; bei einem tatsächlich 50/50 mehrdeutigen Artikel liegt
+    /// die Wahrscheinlichkeit eines rein zufälligen Früh-Treffers bei ca. 19% —
+    /// siehe `docs/ARCHITEKTURVORSCHLAG_ADAPTIVE_SORTIERUNG.md` Abschnitt 14 für
+    /// die vollständige Herleitung.
+    static let mindestKaeufeFuerGelernteKategorie = 5
+    /// Ab welchem Anteil der häufigsten Kategorie an allen Käufen
+    /// ``gelernteKategorie(fuer:in:context:)`` sie als eindeutig genug wertet.
+    static let mehrheitsschwelleGelernteKategorie = 0.8
 
     /// Ein einzelner Warengruppen-Besuch innerhalb eines Einkaufs — eine Zeile pro
     /// distinktem ``KaufEintrag/kategorieBesuchsIndex``, mit dem frühesten
@@ -264,6 +280,44 @@ enum WarengruppenDistanzService {
             }
         }
         return pfad
+    }
+
+    // MARK: - Gelernte Kategorie je Artikel und Geschäft (GitHub-Nachfolgefund zu #36)
+
+    /// Die aus der Kaufhistorie gelernte Kategorie von `artikel` in `geschaeft` —
+    /// `nil`, solange nicht eindeutig genug (siehe
+    /// ``mindestKaeufeFuerGelernteKategorie``/``mehrheitsschwelleGelernteKategorie``).
+    /// Grundlage: jeder ``KaufEintrag`` hält bereits fest, aus welchem Abschnitt er
+    /// tatsächlich abgehakt wurde (siehe `Einkaufsvorgang.artikelAbhaken(_:context:kategorie:)`).
+    /// Zählt schlicht die Häufigkeit je Kategorie — bewusst kein gleitender
+    /// Durchschnitt wie bei der Distanzmatrix, da hier (anders als bei der
+    /// Reihenfolge) nicht "wandern" soll, was einmal stabil gelernt ist: ein
+    /// einzelner untypischer Kauf soll das Ergebnis nicht sofort kippen, sondern
+    /// erst eine wiederholte Häufung in eine andere Kategorie.
+    ///
+    /// Absichtlich nicht dauerhaft zwischengespeichert, sondern bei jedem Aufruf neu
+    /// aus den aktuellen ``KaufEintrag``en berechnet: verschiebt sich die Mehrheit
+    /// durch neue Käufe (oder durch über den Sync eintreffende Käufe eines anderen
+    /// Geräts) wieder unter die Schwelle, blendet die Anzeige automatisch wieder
+    /// alle Kategorien ein, statt an einer veralteten Entscheidung festzuhalten.
+    static func gelernteKategorie(fuer artikel: Artikel, in geschaeft: Geschaeft, context: ModelContext) -> ArtikelKategorie? {
+        let artikelID = artikel.persistentModelID
+        let geschaeftID = geschaeft.persistentModelID
+        let deskriptor = FetchDescriptor<KaufEintrag>(
+            predicate: #Predicate<KaufEintrag> {
+                $0.artikel?.persistentModelID == artikelID && $0.geschaeft?.persistentModelID == geschaeftID
+            }
+        )
+        let kategorien = ((try? context.fetch(deskriptor)) ?? []).compactMap(\.kategorie)
+        guard kategorien.count >= mindestKaeufeFuerGelernteKategorie else { return nil }
+
+        var haeufigkeit: [PersistentIdentifier: (kategorie: ArtikelKategorie, anzahl: Int)] = [:]
+        for kategorie in kategorien {
+            haeufigkeit[kategorie.persistentModelID, default: (kategorie, 0)].anzahl += 1
+        }
+        guard let fuehrende = haeufigkeit.values.max(by: { $0.anzahl < $1.anzahl }) else { return nil }
+        let anteil = Double(fuehrende.anzahl) / Double(kategorien.count)
+        return anteil >= mehrheitsschwelleGelernteKategorie ? fuehrende.kategorie : nil
     }
 
     // MARK: - Gemeinsame Schlüssel-Erzeugung

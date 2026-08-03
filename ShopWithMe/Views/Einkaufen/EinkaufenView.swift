@@ -1149,14 +1149,38 @@ private struct EinkaufslisteView: View {
     /// (``WarengruppenDistanzService/genuegendDatenVerfuegbar(fuer:)``) bleibt es
     /// bei alphabetischer Reihenfolge.
     ///
+    /// Kategorien, unter denen `artikel` in dieser Liste angezeigt wird: normalerweise
+    /// alle zugeordneten (``Artikel/effektiveKategorien(context:)``) — außer bei
+    /// gewähltem ``geschaeft`` liegt für `artikel` bereits eine eindeutig genug
+    /// gelernte Kategorie vor
+    /// (``WarengruppenDistanzService/gelernteKategorie(fuer:in:context:)``, GitHub-
+    /// Nachfolgefund zu #36): dann nur noch diese eine, statt weiter alle
+    /// zugeordneten Abschnitte zu duplizieren. Ohne Geschäft (globale
+    /// Listenansicht) bleibt es bei allen zugeordneten Kategorien, da dort keine
+    /// geschäftsspezifische Kaufhistorie zur Auswahl herangezogen werden kann.
+    ///
+    /// Bei aktivem ``zeigeAlleArtikel`` (Lernmodus) bewusst immer ungefiltert —
+    /// derselbe Bypass wie in ``verfuegbarkeitsgefiltert(_:)``: der Lernmodus soll
+    /// gezielt ALLES zeigen, auch um eine zuvor gelernte, aber inzwischen falsche
+    /// Zuordnung sichtbar korrigieren zu können.
+    private func kategorienFuerAnzeige(_ artikel: Artikel) -> [ArtikelKategorie] {
+        let alle = artikel.effektiveKategorien(context: modelContext)
+        guard !zeigeAlleArtikel, alle.count > 1, let geschaeft,
+              let gelernt = WarengruppenDistanzService.gelernteKategorie(fuer: artikel, in: geschaeft, context: modelContext)
+        else { return alle }
+        return [gelernt]
+    }
+
     /// Ein Artikel mit mehreren Kategorien (``Artikel/effektiveKategorien(context:)``,
-    /// z.B. Ohropax unter "Drogerie" UND "Reisebedarf") landet bewusst in JEDER
-    /// zugehörigen Gruppe statt nur in einer einzigen "führenden" — vorherige
-    /// Architektur-Revision: eine Duplizierung ist hier gewollt (der Nutzer tappt
-    /// ihn dort ab, wo er im jeweiligen Geschäft tatsächlich steht), außerdem
-    /// hing die frühere Einzelauswahl von der nicht ordnungsgarantierten
-    /// SwiftData-Relationship ``Artikel/kategorien`` ab und sprang dadurch
-    /// zwischen Sync-Zyklen sichtbar zwischen Abschnitten hin und her.
+    /// z.B. Ohropax unter "Drogerie" UND "Reisebedarf") landet in JEDER
+    /// zugehörigen Gruppe statt nur in einer einzigen "führenden" — solange
+    /// ``kategorienFuerAnzeige(_:)`` für dieses Geschäft noch keine eindeutig
+    /// gelernte Kategorie liefert (siehe dort): eine Duplizierung ist bis dahin
+    /// gewollt (der Nutzer tappt ihn dort ab, wo er im jeweiligen Geschäft
+    /// tatsächlich steht), außerdem hing die frühere Einzelauswahl von der nicht
+    /// ordnungsgarantierten SwiftData-Relationship ``Artikel/kategorien`` ab und
+    /// sprang dadurch zwischen Sync-Zyklen sichtbar zwischen Abschnitten hin und
+    /// her.
     ///
     /// Als Funktion statt als computed property, damit `body` sie einmal pro
     /// Render mit einer bereits berechneten `artikelListe` aufruft, statt sie
@@ -1165,7 +1189,7 @@ private struct EinkaufslisteView: View {
     private func kategorieGruppen(fuer artikelListe: [Artikel]) -> [KategorieGruppe] {
         var nachKategorie: [PersistentIdentifier: KategorieGruppe] = [:]
         for artikel in artikelListe {
-            for kategorie in artikel.effektiveKategorien(context: modelContext) {
+            for kategorie in kategorienFuerAnzeige(artikel) {
                 nachKategorie[kategorie.persistentModelID, default: KategorieGruppe(kategorie: kategorie, artikel: [])].artikel.append(artikel)
             }
         }
@@ -1268,6 +1292,7 @@ private struct EinkaufslisteView: View {
                             eintrag: einkaufsliste.eintrag(fuer: artikel),
                             mengeAnzeige: menge(fuer: artikel),
                             istAbgehakt: istAbgehakt(artikel),
+                            mehrfachKategorisiert: kategorienFuerAnzeige(artikel).count > 1,
                             abhaken: { umschalten(artikel, kategorie: kategorie) },
                             mengeErhoehen: { mengeErhoehen(artikel) },
                             mengeVerringern: { mengeVerringern(artikel) },
@@ -1614,6 +1639,11 @@ private struct ArtikelAbhakZeile: View {
     let eintrag: EinkaufslistenEintrag?
     let mengeAnzeige: Double
     let istAbgehakt: Bool
+    /// `true`, wenn ``artikel`` mehreren Kategorien angehört und deshalb (siehe
+    /// `kategorieGruppen(fuer:)`) in mehr als einem Abschnitt dieser Liste
+    /// erscheint — blendet ein kleines Hinweis-Symbol neben dem Namen ein, damit
+    /// das nicht wie ein doppelter Eintrag wirkt.
+    let mehrfachKategorisiert: Bool
     let abhaken: () -> Void
     let mengeErhoehen: () -> Void
     let mengeVerringern: () -> Void
@@ -1624,9 +1654,17 @@ private struct ArtikelAbhakZeile: View {
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(artikel.name)
-                    .strikethrough(istAbgehakt)
-                    .foregroundStyle(istAbgehakt ? .secondary : .primary)
+                HStack(spacing: 4) {
+                    Text(artikel.name)
+                        .strikethrough(istAbgehakt)
+                        .foregroundStyle(istAbgehakt ? .secondary : .primary)
+                    if mehrfachKategorisiert {
+                        Image(systemName: "rectangle.on.rectangle")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel("Artikel gehört mehreren Kategorien an und erscheint in mehreren Abschnitten")
+                    }
+                }
                 if let notiz = eintrag?.notiz, !notiz.isEmpty {
                     Text(notiz)
                         .font(.caption)
