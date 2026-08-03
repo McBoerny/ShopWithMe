@@ -2818,4 +2818,31 @@ of Truth).
 keine neuen Warnungen. Beide Fixes sind reine Ergänzungen ohne
 Verhaltensänderung im Fehlerfall — kein Unit-Test nötig (Live-Test-only,
 wie der Rest von #91/#92: keine automatisierte Prüfung kann iCloud-Sync-
-Latenz simulieren). Live-Test-Ergebnis steht noch aus.
+Latenz simulieren).
+
+**Live-Test-Ergebnis (2026-08-03), zwei Szenarien:**
+
+1. **Kernfrage aus §42 direkt geprüft** — nach einer bewussten Pause von
+   über 30 Minuten (genau das Szenario, das §42 als "wirkt nur temporär"
+   beschrieb) fanden sich beide Geräte im selben WLAN von selbst wieder und
+   glichen ab, **ohne** manuellen Trigger. Das spricht dafür, dass der
+   `startDownloadingUbiquitousItem`-Fix (oder das Zusammenspiel mit dem
+   bereits bestehenden `SyncICloudAenderungsBeobachter` aus §42) das
+   eigentliche §42-Problem behebt.
+2. **Manueller Button über 5G-Hotspot:** gefühlt nochmals kürzere
+   Abgleichszeit nach explizitem Tap auf "Jetzt synchronisieren" (inkl.
+   Dokumenten-Picker-Flash) gegenüber dem Warten auf den nächsten
+   automatischen Zyklus.
+
+**Einordnung, bewusst vorsichtig:** Szenario 1 ist ein sauberer Test genau
+der ursprünglichen Beschwerde und deutlich der aussagekräftigere Beleg.
+Szenario 2 bleibt subjektiv ("gefühlt") und lässt sich nicht vom
+Picker-Trigger isolieren — ein manueller Sync-Zyklus wäre über denselben
+Button auch ganz ohne Picker sofort statt erst beim nächsten Intervall
+gelaufen, das allein würde bereits schneller wirken. Beide Fixes liefen im
+selben Build (218), eine saubere A/B-Trennung fand nicht statt. Nutzer
+stuft den Befund dennoch als ausreichend ein, um dieses Issue zu schließen
+— der Picker-Trigger bleibt als risikoarme, aber in ihrer eigenständigen
+Wirkung unbestätigte Ergänzung im Code, für einen späteren gezielten
+Vergleichstest (Picker kurz deaktivieren, sonst gleiche Bedingungen)
+offen.

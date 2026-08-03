@@ -515,7 +515,10 @@ eigentlichen Koordination zusätzlich `FileManager.startDownloadingUbiquitousIte
 auf — koordiniertes Lesen allein löst laut Apples Doku zuverlässig nur den
 Erstdownload eines noch nie materialisierten Platzhalters aus, nicht das
 Nachziehen einer neueren Version einer bereits lokal vorhandenen Datei (ein
-seit iOS 18.4 dokumentiertes Verhalten). Details, Quellen und Einordnung
+seit iOS 18.4 dokumentiertes Verhalten). **Live-Test-bestätigt (2026-08-03):**
+nach über 30 Minuten Pause fanden sich zwei Geräte im selben WLAN wieder von
+selbst ab, ohne manuellen Trigger — genau das Szenario, das zuvor als
+dauerhaft hängenbleibend beobachtet wurde. Details, Quellen und Einordnung
 gegenüber den übrigen Optionen: `docs/DATENSYNCHRONISATION_VERLAUF.md`
 Abschnitt 43.
 
@@ -526,8 +529,13 @@ automatisch wieder (``ICloudSyncTriggerPicker``,
 `SyncOrdnerSettingsView.swift`) — Testidee, dass dieselbe
 File-Provider-Enumeration wie beim manuellen Öffnen in der Files-App auch
 hier einen Abgleich anstößt. Bewusst nur hinter diesem einen expliziten
-Button-Tap, nie im automatischen Hintergrund-Poll. Wirkung noch nicht durch
-einen Live-Test bestätigt.
+Button-Tap, nie im automatischen Hintergrund-Poll. **Eigenständige Wirkung
+weiterhin unbestätigt:** ein Live-Test (2026-08-03) berichtete zwar einen
+subjektiv schnelleren Abgleich über einen 5G-Hotspot nach Tap auf "Jetzt
+synchronisieren", das lässt sich aber nicht vom `startDownloadingUbiquitousItem`-
+Fix und dem ohnehin sofortigen (statt auf das nächste Intervall wartenden)
+manuellen Sync-Zyklus isolieren — siehe
+`docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 43.
 
 ## 6. Gruppen-Beitritt (Bootstrap)
 
