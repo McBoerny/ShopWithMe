@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.11 (Build 213) — Fix: iCloud-Weckimpuls (GitHub #91) crashte mit API-Misuse
+
+- Live-Test-Fund direkt nach Einführung: Crash `[CRIT] API MISUSE: running a
+  NSMetadataQuery with maxConcurrentOperationCount != 1 is not supported`.
+  `NSMetadataQuery.operationQueue` verlangt eine serielle Queue, ein
+  unkonfiguriertes `OperationQueue()` hat aber unbegrenzte Nebenläufigkeit.
+  Fix: `maxConcurrentOperationCount = 1` vor der Zuweisung setzen. Details in
+  `docs/DATENSYNCHRONISATION_VERLAUF.md`, Abschnitt 39 (Nachtrag).
+
 ## v0.11 (Build 211) — GitHub #91: Aktiver iCloud-Weckimpuls vor jedem Sync-Zyklus
 
 - Neu: `SyncICloudWeckerService.wecke(ordner:)` läuft als erster Schritt

@@ -2492,6 +2492,13 @@ Bei solchen Ordnern liefert die Query einfach nichts, das Timeout greift
 wirkungslos — bestätigt gegen aktuelle Apple-Dokumentation/-Foren, nicht nur
 angenommen.
 
+**Nachtrag (Live-Test-Fund direkt nach Einführung):** Crash mit `[CRIT] API
+MISUSE: running a NSMetadataQuery with maxConcurrentOperationCount != 1 is not
+supported`. `NSMetadataQuery.operationQueue` verlangt zwingend eine serielle
+Queue — ein unkonfiguriertes `OperationQueue()` hat aber standardmäßig
+unbegrenzte Nebenläufigkeit (`maxConcurrentOperationCount == -1`). Fix: die
+Queue vor der Zuweisung explizit auf `maxConcurrentOperationCount = 1` setzen.
+
 **Verifikationsstand:** `xcodegen generate` + `xcodebuild build` grün. Ein
 echter Zwei-Geräte-Live-Test (insbesondere: verkürzt sich die beobachtete
 Verzögerung bis zum Sichtbarwerden einer Peer-Änderung tatsächlich?) steht
