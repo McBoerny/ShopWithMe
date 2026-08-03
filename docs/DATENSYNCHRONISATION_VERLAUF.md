@@ -2720,7 +2720,15 @@ Export-Datei-Updates (die bleiben bei `options: []`).
 **Verifikationsstand:** `xcodegen generate` + `xcodebuild build`/
 `build-for-testing` grün, keine neuen Warnungen. Neue Debug-Events
 `sync_icloud_beobachter_ausgeloest`/`sync_icloud_beobachter_scope_aktualisiert`
-als Beleg, ob die Query im nächsten Live-Test tatsächlich feuert. Ein echter
-Zwei-Geräte-Live-Test steht noch aus — nach zwei vorherigen Fehlschlägen
-bewusst zurückhaltend formuliert: dieser dritte Anlauf ist diesmal
-dokumentations-verifiziert, aber kein garantierter Fix.
+als Beleg, ob die Query im nächsten Live-Test tatsächlich feuert.
+
+**Live-Test-Ergebnis (2026-08-03, nach Löschen alter Testdaten auf beiden
+Geräten):** Sieht laut Nutzer „tatsächlich ganz gut aus" — deutliche
+Verbesserung gegenüber den beiden vorherigen, wirkungslosen Anläufen
+(Abschnitt 39/40). Bewusst vorsichtig formuliert: das Löschen alter
+Testdaten VOR diesem Lauf ist ein nicht ausgeschlossener Nebenfaktor (z.B.
+weniger/kleinere zu übertragende Dateien, kein Ballast aus vorherigen
+Fehlversuchen) — ein weiterer, gezielter Vergleichstest ohne diese
+Variable stünde noch aus, um den Effekt eindeutig auf den
+`NSMetadataQuery`-Beobachter zurückzuführen. Für den Moment als
+vorläufig funktionierend eingestuft, Untersuchung hier abgeschlossen.
