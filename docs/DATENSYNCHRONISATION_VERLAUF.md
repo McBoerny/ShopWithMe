@@ -2203,3 +2203,85 @@ Issue offen für die verbleibende, rein kosmetische Container-Gruppierungsfrage.
 „kein Geschäft ausgewählt"-Fall abdeckt). Kein eigenständiger
 `xcodebuild test`-Lauf durch Claude (Projektkonvention) — nicht auf echten
 Geräten nachverifiziert.
+
+## 35. Einkaufsvorgang entkoppeln: keine geteilte Vorgangs-Identität mehr nötig
+
+**Auslöser:** Nutzerfrage zur Architektur, nach Abschnitt 33/34: „Brauchen wir
+überhaupt das Konzept eines Einkaufsvorgangs, der geteilt werden muss, oder
+reicht es, diesen nur lokal pro Benutzer zu führen?"
+
+**Erkenntnis:** `Einkaufsvorgang` spielt mehrere Rollen (Behälter für
+`KaufEintrag`e, Lerngrundlage fürs Distanzlernen, Besuchszähler, historischer
+Protokolleintrag, „aktuell laufende Sitzung" für die Live-Ansicht). Bei
+genauer Prüfung brauchen alle Rollen außer der Live-Ansicht überhaupt keine
+geräteübergreifend übereinstimmende Vorgangs-Identität — Distanzlernen
+schließt Fremdeinträge ohnehin aus, der Besuchszähler läuft über einen
+unabhängigen G-Counter, Besuchsprotokoll und -häufigkeit zählen bereits pro
+Vorgangs-*Objekt*. Nur die Live-Ansicht „was ist gerade abgehakt" brauchte
+bislang eine geteilte Identität — und genau dafür existierte die gesamte
+„Vorgangs-Umleitung" (`offenerNachfolger`, `aufOffenenNachfolgerUmgeleitet`,
+der `bekannter`-geschlossen-Zweig in `mergeEinkaufsvorgaenge`): historisch mit
+Abstand der fehleranfälligste Teil der gesamten Synchronisation (Abschnitt
+11/11a, 15, 16, 19, 20, 21, 22, 25 — „Geister"-Einkaufsvorgänge,
+`endZeit`-Verfälschung, Phantom-Zähler) und Auslöser für #66/#67/#69.
+
+**Fix:** Die Live-Ansicht löst sich stattdessen über die **Einkaufsliste**
+(die ist ohnehin schon geteilt) statt über einen von allen Geräten
+übereinstimmend gewählten Vorgang — siehe
+`docs/DATENSYNCHRONISATION.md` Abschnitt 4.3 für den vollständigen neuen
+Mechanismus (`Einkaufsvorgang.abgehakteKaufEintraege(fuerListe:seit:unter:)`).
+Damit entfällt die komplette Umleitungs-Maschinerie ersatzlos:
+`Einkaufsvorgang.offenerNachfolger`, `SyncImportService.aufOffenenNachfolgerUmgeleitet`
+und der `aufOffenenNachfolgerUmleiten`-Parameter sind gelöscht;
+`.artikelAbgehakt` löst sich in `SyncImportService.materialisiere` jetzt
+identisch zu `.artikelAbgewaehlt`/`.artikelDauerhaftEntfernt` auf (einfacher
+ID-/Alias-Lookup). `SyncSnapshotImportService.istBereitsAbgehakt` vereinfacht
+sich analog (kein `context`-Parameter, kein `offenerNachfolger`-Aufruf mehr
+nötig). Übrig bleibt einzig `offenerTreffer` (Identitäts-Abgleich beim
+erstmaligen Zusammentreffen zweier unabhängig angelegter Vorgänge, s.
+Abschnitt 4.3) — der bleibt unverändert bestehen, weil er weiterhin
+Doppelzählung im Besuchszähler/-protokoll verhindert; `kanonischer(unter:)`
+bleibt ebenfalls bestehen (jetzt für `offenerTreffer` und den lokalen Anker
+`aktuellerEinkauf`, nicht mehr für die Live-Sichtbarkeit).
+
+`EinkaufenView.umschalten(_:kategorie:)`/`entferneDauerhaft(_:)` mussten dafür
+zusätzlich angepasst werden: sie dürfen die Mutation nicht mehr blind auf dem
+lokalen Anker-Vorgang aufrufen, sondern müssen per frischem, liste- und
+zeitfenster-beschränktem Fetch den tatsächlichen Besitzer-Vorgang des
+`KaufEintrag`s ermitteln — sonst würde `entferneDauerhaft` bei einem fremd
+materialisierten Eintrag still nichts tun (kein Treffer in
+`self.kaufEintraege`) bzw. `umschalten` fälschlich einen zweiten Eintrag für
+denselben Artikel anlegen.
+
+**Warum die historischen Bugs aus Abschnitt 11/11a/15/16/19/20/21/22/25 dadurch
+nicht wieder auftreten können:** Keine dieser Stellen betraf `offenerTreffer`
+selbst — der bleibt exakt unverändert bestehen. Die entfernte Umleitung war
+eine zusätzliche, zur Live-Sichtbarkeit gedachte Sicherung, die durch die neue
+listenbasierte Anzeige komplett überflüssig geworden ist, nicht durch eine
+robustere Variante ersetzt werden musste. Weniger bewegliche Teile statt eines
+komplexeren Ersatzes.
+
+**Tests:** `SyncImportServiceTests.artikelAbgehaktFuerBereitsAbgeschlossenenVorgangLandetAufOffenemNachfolger`
+→ umbenannt zu `.artikelAbgehaktFuerBereitsAbgeschlossenenVorgangBleibtAufDiesemVorgang`,
+Erwartung umgedreht (Eintrag bleibt am ursprünglichen Vorgang).
+`.artikelAbgehaktFuerBereitsAbgeschlossenenVorgangBehaeltUrspruenglichesGeschaeft`
+(Abschnitt 34) → umbenannt zu `.artikelAbgehaktBehaeltUrspruenglichesGeschaeftAusDerNutzlast`,
+Fixture vereinfacht (kein Nachfolger mehr nötig).
+`.beiMehrerenOffenenNachfolgernWirdDerMitGleichemGeschaeftBevorzugt` → gelöscht
+(testete ausschließlich die entfernte Umleitung).
+`SyncSnapshotImportServiceTests.bereitsAbgeschlossenerBekannterVorgangWirdBeiSnapshotMergeAufOffenenNachfolgerUmgeleitet`
+→ umbenannt zu `.bereitsAbgeschlossenerBekannterVorgangBehaeltKaufEintragBeiSnapshotMerge`,
+Erwartung umgedreht. `EinkaufsvorgangTests.offenerNachfolgerWaehltBeiMehrerenKandidatenDenAeltesten`
+(Abschnitt 33) → gelöscht (testete die gelöschte Funktion); neuer Test
+`.abgehakteKaufEintraegeFiltertNachListeUndZeitfenster` für die neue
+liste-/zeitfenster-basierte Anzeigelogik. Alle `offenerTreffer`-bezogenen
+Tests unverändert.
+
+**Verifikationsstand:** `xcodegen generate` + `xcodebuild build`/
+`build-for-testing` grün. Kein eigenständiger `xcodebuild test`-Lauf durch
+Claude (Projektkonvention). **Wichtiger Vorbehalt:** Dies ist der historisch
+mit Abstand fehleranfälligste Teil der gesamten Synchronisation — ein echter
+Zwei-Geräte-Test (ein Gerät schließt „Einkauf abschließen" mitten im
+gemeinsamen Einkauf, während das andere weiter abhakt) sollte vor
+endgültigem Vertrauen in diese Änderung real durchgeführt werden, wie bei
+allen bisherigen Änderungen an dieser Stelle in diesem Projekt.

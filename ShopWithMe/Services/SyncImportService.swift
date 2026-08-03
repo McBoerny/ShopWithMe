@@ -275,11 +275,7 @@ enum SyncImportService {
             liste.artikelEntfernenOhneEventAufzeichnung(artikel, context: context)
             return true
         case .artikelAbgehakt:
-            // aufOffenenNachfolgerUmleiten: true — ein Abhaken MATERIALISIERT einen
-            // neuen KaufEintrag; landet der bezeichnete Vorgang inzwischen auf einem
-            // geschlossenen, ist die Umleitung auf den offenen Nachfolger korrekt
-            // (siehe `einkaufsvorgang(mitID:context:aufOffenenNachfolgerUmleiten:)`).
-            guard let vorgang = einkaufsvorgang(mitID: nutzlast.bezugsID, context: context, aufOffenenNachfolgerUmleiten: true),
+            guard let vorgang = einkaufsvorgang(mitID: nutzlast.bezugsID, context: context),
                   let artikel = artikel(mitID: nutzlast.artikelID, context: context)
             else { return false }
             // indexFuerDistanzlernen: false — dieses Abhaken beschreibt die
@@ -289,12 +285,12 @@ enum SyncImportService {
             // Position für diesen Nutzer füttern.
             //
             // geschaeft: explizit aus der Nutzlast statt aus `vorgang.geschaeft`
-            // (GitHub #66) — nach einer Umleitung auf einen offenen Nachfolger
-            // wäre `vorgang.geschaeft` sonst das Geschäft des NACHFOLGERS, nicht
-            // das Geschäft, an dem dieser Kauf laut sendendem Gerät tatsächlich
-            // stattfand. `geschaeftUeberschreibung` ist bewusst als bereits
-            // typisierter `Geschaeft?`-Wert übergeben (nicht der Literal `nil`),
-            // damit Swift ihn korrekt in die äußere Optionalität hebt — auch ein
+            // (GitHub #66) — der Kaufeintrag soll das Geschäft tragen, an dem
+            // dieser Kauf laut sendendem Gerät tatsächlich stattfand, nicht das
+            // (ggf. abweichende) Geschäft des Container-Vorgangs.
+            // `geschaeftUeberschreibung` ist bewusst als bereits typisierter
+            // `Geschaeft?`-Wert übergeben (nicht der Literal `nil`), damit Swift
+            // ihn korrekt in die äußere Optionalität hebt — auch ein
             // `nil`-Ergebnis (kein Geschäft ausgewählt) gilt so als expliziter
             // Override, nicht als „kein Override, self.geschaeft gilt".
             let geschaeftUeberschreibung: Geschaeft? = nutzlast.geschaeftID.flatMap { geschaeft(mitID: $0, context: context) }
@@ -303,23 +299,12 @@ enum SyncImportService {
             )
             return true
         case .artikelAbgewaehlt:
-            // KEINE Umleitung: Abwählen muss den bereits existierenden KaufEintrag
-            // FINDEN, der auf dem ursprünglich referenzierten (ggf. inzwischen
-            // geschlossenen) Vorgang liegt — nicht auf dessen offenem Nachfolger, wo
-            // gar kein passender Eintrag existiert. Eine Umleitung würde
-            // `artikelAbwaehlenOhneEventAufzeichnung` hier verlässlich ins Leere
-            // laufen lassen (kein Treffer, `false`), das Event trotzdem als
-            // materialisiert gelten (unten `return true`) und den eigentlichen
-            // Abwähl-Wunsch des Peers dauerhaft verwerfen.
             guard let vorgang = einkaufsvorgang(mitID: nutzlast.bezugsID, context: context),
                   let artikel = artikel(mitID: nutzlast.artikelID, context: context)
             else { return false }
             vorgang.artikelAbwaehlenOhneEventAufzeichnung(artikel, context: context)
             return true
         case .artikelDauerhaftEntfernt:
-            // KEINE Umleitung — dieselbe Begründung wie bei .artikelAbgewaehlt: der
-            // zu löschende KaufEintrag liegt auf dem ursprünglich referenzierten
-            // Vorgang, nicht auf einem offenen Nachfolger.
             guard let vorgang = einkaufsvorgang(mitID: nutzlast.bezugsID, context: context),
                   let artikel = artikel(mitID: nutzlast.artikelID, context: context)
             else { return false }
@@ -371,65 +356,11 @@ enum SyncImportService {
     /// Bereich-B-Matching kann einen fremden Einkaufsvorgang mit einem anderen
     /// lokalen zusammengeführt haben, GitHub #52-Nachfolgefund), bevor direkt
     /// per `id` gesucht wird — analog ``einkaufsliste(mitID:context:)``.
-    ///
-    /// `aufOffenenNachfolgerUmleiten: true` leitet zusätzlich auf den aktuell
-    /// offenen Nachfolge-Einkaufsvorgang um, falls der so aufgelöste bereits
-    /// abgeschlossen ist (siehe ``aufOffenenNachfolgerUmgeleitet(_:fremdeID:context:)``)
-    /// — **nur** für Events sinnvoll, die einen NEUEN `KaufEintrag` anlegen
-    /// (`.artikelAbgehakt`). Events, die einen bereits bestehenden `KaufEintrag`
-    /// FINDEN müssen (`.artikelAbgewaehlt`/`.artikelDauerhaftEntfernt`), dürfen
-    /// nicht umgeleitet werden — der gesuchte Eintrag liegt auf dem ursprünglich
-    /// referenzierten Vorgang, nicht auf dessen offenem Nachfolger; eine
-    /// Umleitung ließe sie dort verlässlich ins Leere laufen (siehe
-    /// ``materialisiere(_:nutzlast:context:)``).
-    private static func einkaufsvorgang(
-        mitID id: UUID, context: ModelContext, aufOffenenNachfolgerUmleiten: Bool = false
-    ) -> Einkaufsvorgang? {
+    private static func einkaufsvorgang(mitID id: UUID, context: ModelContext) -> Einkaufsvorgang? {
         let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(fuer: id, art: SyncEntitaetsArt.einkaufsvorgang, context: context)
         var deskriptor = FetchDescriptor<Einkaufsvorgang>(predicate: #Predicate { $0.id == aufgeloesteID })
         deskriptor.fetchLimit = 1
-        guard let vorgang = try? context.fetch(deskriptor).first else { return nil }
-        guard aufOffenenNachfolgerUmleiten else { return vorgang }
-        return aufOffenenNachfolgerUmgeleitet(vorgang, fremdeID: id, context: context)
-    }
-
-    /// **Bug (Absturz-Loop-Serie, dieselbe Ursachen-Familie wie GitHub
-    /// #52-Nachfolgefund — hier: „dangling Einkaufsvorgang" statt „dangling
-    /// Geschaeft"):** Ein Peer, der ``Einkaufsvorgang/artikelAbhaken(_:context:)``
-    /// noch für einen gerade auf einem ANDEREN Gerät per „Einkauf abschließen"
-    /// beendeten Vorgang aufzeichnet (weil er dessen ``Einkaufsvorgang/endZeit``
-    /// beim Senden noch nicht kannte), lieferte hier bislang den bereits
-    /// geschlossenen, für die aktuelle Einkaufsansicht unsichtbaren
-    /// ``Einkaufsvorgang`` zurück — sichtbar als: abgehakte Artikel erscheinen
-    /// auf dem anderen Gerät nicht, UND landen (weil
-    /// ``SyncSnapshotImportService/istBereitsAbgehakt(_:aufListe:alleVorgaenge:context:)``
-    /// nur offene Vorgänge prüft) beim nächsten Snapshot-Merge wieder
-    /// fälschlich auf der offenen Liste.
-    ///
-    /// Sucht dafür einen offenen Nachfolger für dieselbe ``Einkaufsliste`` —
-    /// bevorzugt mit demselben ``Geschaeft`` (zwei Geräte können gleichzeitig
-    /// an unterschiedlichen Geschäften für dieselbe Liste einkaufen, analog
-    /// ``SyncSnapshotImportService/mergeEinkaufsvorgaenge(_:geschaeftZuordnung:listeZuordnung:context:)``),
-    /// sonst irgendeinen offenen Vorgang für die Liste. **Bewusst kein
-    /// Geschäft-Zwang:** „Einkauf abschließen" setzt die Geschäftsauswahl des
-    /// schließenden Geräts zurück (GitHub #51), der direkt danach neu
-    /// angelegte Nachfolger hat also fast immer `geschaeft == nil` — ein
-    /// harter Geschäft-Abgleich hätte hier NIE gegriffen und genau den Fall
-    /// verfehlt, für den diese Umleitung gedacht ist. Wird ein Nachfolger
-    /// gefunden, wird zusätzlich ein Alias registriert, damit künftige Events
-    /// derselben `fremdeID` direkt dorthin auflösen.
-    private static func aufOffenenNachfolgerUmgeleitet(
-        _ vorgang: Einkaufsvorgang, fremdeID: UUID, context: ModelContext
-    ) -> Einkaufsvorgang {
-        guard vorgang.istAbgeschlossen, let einkaufsliste = vorgang.einkaufsliste else { return vorgang }
-        guard let offenerNachfolger = Einkaufsvorgang.offenerNachfolger(
-            fuerListe: einkaufsliste, bevorzugtesGeschaeft: vorgang.geschaeft, context: context
-        ) else { return vorgang }
-
-        SyncEntitaetsAliasService.registriere(
-            entitaetsArt: SyncEntitaetsArt.einkaufsvorgang, fremdeID: fremdeID, lokaleID: offenerNachfolger.id, context: context
-        )
-        return offenerNachfolger
+        return try? context.fetch(deskriptor).first
     }
 
     /// Löst zuerst einen bekannten Alias auf (siehe ``SyncEntitaetsAlias`` —

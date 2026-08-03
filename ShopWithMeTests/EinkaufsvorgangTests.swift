@@ -455,12 +455,15 @@ struct EinkaufsvorgangTests {
         #expect(Einkaufsvorgang.kanonischer(unter: [b, a])?.id == erwarteterGewinner.id)
     }
 
-    /// Regressionstest für die eigentliche Fund-Situation (GitHub #67-
-    /// Erweiterung): `offenerNachfolger` muss bei zwei passenden Kandidaten
-    /// (gleiches Geschäft, gleiche Liste, beide offen) deterministisch immer
-    /// denselben liefern, egal welcher zuerst angelegt/gefetcht wurde.
+    /// Regressionstest für die Live-Ansicht nach Ablösung der
+    /// Vorgangs-Umleitung (Session 2026-08-03): ein auf einem alten, bereits
+    /// geschlossenen Vorgang materialisierter Kaufeintrag zählt als „gerade
+    /// abgehakt", solange sein ``KaufEintrag/datum`` nicht vor `seit` liegt —
+    /// ein legitim erneut hinzugefügter, tatsächlich alter Kauf (Datum davor)
+    /// dagegen nicht. Einträge anderer Listen werden unabhängig vom Datum
+    /// ausgeschlossen.
     @Test
-    func offenerNachfolgerWaehltBeiMehrerenKandidatenDenAeltesten() throws {
+    func abgehakteKaufEintraegeFiltertNachListeUndZeitfenster() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
@@ -468,14 +471,48 @@ struct EinkaufsvorgangTests {
         context.insert(geschaeft)
         let liste = Einkaufsliste(name: "Einkaufsliste")
         context.insert(liste)
+        let andereListe = Einkaufsliste(name: "Andere Liste")
+        context.insert(andereListe)
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759")
+        context.insert(apfel)
+        let birne = Artikel(name: "Birne", symbolName: "carrot.fill", farbeHex: "#34C759")
+        context.insert(birne)
+        let kirsche = Artikel(name: "Kirsche", symbolName: "carrot.fill", farbeHex: "#34C759")
+        context.insert(kirsche)
 
-        let neuer = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste, startZeit: Date())
-        let aelterer = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste, startZeit: Date(timeIntervalSinceNow: -60))
-        context.insert(neuer)
-        context.insert(aelterer)
+        let start = Date()
+
+        // Alter, bereits geschlossener Vorgang — ein knapp danach von einem
+        // Peer materialisierter Kaufeintrag muss trotzdem sichtbar werden.
+        let geschlossenerVorgang = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste, startZeit: start.addingTimeInterval(-3600))
+        context.insert(geschlossenerVorgang)
+        geschlossenerVorgang.abschliessen()
+        let neuerNachEintrag = geschlossenerVorgang.artikelAbhakenOhneEventAufzeichnung(
+            apfel, context: context, indexFuerDistanzlernen: false
+        )
+        _ = neuerNachEintrag
+
+        // Derselbe Vorgang, aber ein Kaufeintrag von VOR dem Zeitfenster
+        // (ein tatsächlich alter, legitim erneut hinzugefügter Kauf) darf
+        // nicht mitgezählt werden.
+        let alterEintrag = KaufEintrag(artikel: birne, geschaeft: geschaeft, kategorie: nil, menge: 1, datum: start.addingTimeInterval(-120))
+        context.insert(alterEintrag)
+        alterEintrag.einkaufsvorgang = geschlossenerVorgang
+
+        // Ein Vorgang für eine ANDERE Liste — dessen Einträge dürfen trotz
+        // passendem Zeitfenster nicht mitgezählt werden.
+        let vorgangAndereListe = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: andereListe, startZeit: start)
+        context.insert(vorgangAndereListe)
+        _ = vorgangAndereListe.artikelAbhakenOhneEventAufzeichnung(kirsche, context: context, indexFuerDistanzlernen: false)
+
         try context.save()
 
-        let ergebnis = Einkaufsvorgang.offenerNachfolger(fuerListe: liste, bevorzugtesGeschaeft: geschaeft, context: context)
-        #expect(ergebnis?.id == aelterer.id)
+        let ergebnis = Einkaufsvorgang.abgehakteKaufEintraege(
+            fuerListe: liste, seit: start, unter: [geschlossenerVorgang, vorgangAndereListe]
+        )
+
+        #expect(ergebnis.contains { $0.artikel == apfel })
+        #expect(!ergebnis.contains { $0.artikel == birne })
+        #expect(!ergebnis.contains { $0.artikel == kirsche })
     }
 }

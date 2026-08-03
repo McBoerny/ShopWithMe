@@ -79,16 +79,33 @@ struct EinkaufenView: View {
     /// Kandidaten (z.B. nach einer Race-Anlage durch zwei Geräte vor dem
     /// ersten Sync-Zyklus) entscheidet ``Einkaufsvorgang/kanonischer(unter:)``
     /// deterministisch, statt eines beliebigen, per Fetch-Reihenfolge nicht
-    /// garantierten Treffers (GitHub #67-Erweiterung) — sonst könnte dieses
-    /// Gerät dauerhaft auf einem vom Merge bereits „verlorenen" Kandidaten
-    /// hängen bleiben und vom anderen Gerät abgehakte Artikel nie als
-    /// abgehakt sehen.
+    /// garantierten Treffers (GitHub #67-Erweiterung) — dieser Vorgang ist
+    /// der Anker, an dem NEUE eigene Häkchen landen, und legt über seine
+    /// ``Einkaufsvorgang/startZeit`` das Zeitfenster für
+    /// ``abgehakteKaufEintraegeFuerAktuelleListe`` fest; eine nicht
+    /// deterministische Wahl würde dieses Zeitfenster zwischen Geräten
+    /// auseinanderlaufen lassen.
     private var aktuellerEinkauf: Einkaufsvorgang? {
         guard let ausgewaehlteListe else { return nil }
         let kandidaten = offeneEinkaufsvorgaenge.filter {
             $0.geschaeft == ausgewaehltesGeschaeft && $0.einkaufsliste == ausgewaehlteListe
         }
         return Einkaufsvorgang.kanonischer(unter: kandidaten)
+    }
+
+    /// Alle für die Live-Ansicht relevanten Kaufeinträge dieser Liste — siehe
+    /// ``Einkaufsvorgang/abgehakteKaufEintraege(fuerListe:seit:unter:)`` für
+    /// die Begründung. NICHT auf ``aktuellerEinkauf`` beschränkt: welcher
+    /// konkrete Vorgang einen Kaufeintrag „besitzt", ist seit der Entkopplung
+    /// der Live-Ansicht von der Vorgangs-Identität (Session 2026-08-03,
+    /// Ablösung der Vorgangs-Umleitung) irrelevant für die Anzeige — nur
+    /// ``aktuellerEinkauf``s ``Einkaufsvorgang/startZeit`` legt das
+    /// Zeitfenster fest.
+    private var abgehakteKaufEintraegeFuerAktuelleListe: [KaufEintrag] {
+        guard let ausgewaehlteListe, let start = aktuellerEinkauf?.startZeit else { return [] }
+        return Einkaufsvorgang.abgehakteKaufEintraege(
+            fuerListe: ausgewaehlteListe, seit: start, unter: offeneEinkaufsvorgaenge + abgeschlosseneEinkaufsvorgaenge
+        )
     }
 
     /// Meistgenutzte Geschäfte für die priorisierte Anzeige im Geschäfts-Menü
@@ -201,6 +218,7 @@ struct EinkaufenView: View {
         if let ausgewaehlteListe, let einkauf = aktuellerEinkauf {
             EinkaufslisteView(
                 geschaeft: ausgewaehltesGeschaeft, einkaufsliste: ausgewaehlteListe, einkaufsvorgang: einkauf,
+                abgehakteKaufEintraege: abgehakteKaufEintraegeFuerAktuelleListe,
                 geschaeftZuruecksetzen: { ausgewaehltesGeschaeft = nil },
                 interaktionRegistrieren: { letzteInteraktion = .now }
             )
@@ -826,6 +844,13 @@ private struct EinkaufslisteView: View {
     let geschaeft: Geschaeft?
     let einkaufsliste: Einkaufsliste
     let einkaufsvorgang: Einkaufsvorgang
+    /// Alle für die Live-Ansicht relevanten Kaufeinträge dieser Liste, von
+    /// EGAL welchem Vorgang (eigenem oder synchronisiertem, offenem oder
+    /// bereits geschlossenem) — siehe
+    /// ``EinkaufenView/abgehakteKaufEintraegeFuerAktuelleListe``. Ersetzt seit
+    /// der Ablösung der Vorgangs-Umleitung (Session 2026-08-03) die frühere,
+    /// auf ``einkaufsvorgang`` allein beschränkte Sicht.
+    let abgehakteKaufEintraege: [KaufEintrag]
     /// Setzt nach Abschluss die Geschäftsauswahl in ``EinkaufenView`` zurück
     /// (GitHub #51) — der nächste Einkauf soll nicht automatisch am zuletzt
     /// genutzten Geschäft weiterlaufen.
@@ -868,8 +893,11 @@ private struct EinkaufslisteView: View {
     /// nach kurzer Zeit von selbst wieder aus (``ueberkaufHinweisAnzeigen(fuer:)``).
     @State private var ueberkaufHinweisText: String?
 
+    /// Bewusst aus ``abgehakteKaufEintraege`` (liste-weit, EGAL welcher
+    /// Vorgang) statt aus ``einkaufsvorgang.kaufEintraege`` allein — siehe
+    /// Typ-Doku dort.
     private var abgehakteArtikelIDs: Set<PersistentIdentifier> {
-        Set(einkaufsvorgang.kaufEintraege.compactMap { $0.artikel?.persistentModelID })
+        Set(abgehakteKaufEintraege.compactMap { $0.artikel?.persistentModelID })
     }
 
     /// Artikel, die noch auf ``einkaufsliste`` stehen — schließt bewusst
@@ -881,14 +909,15 @@ private struct EinkaufslisteView: View {
         einkaufsliste.eintraege.compactMap(\.artikel).filter { !abgehakteArtikelIDs.contains($0.persistentModelID) }
     }
 
-    /// Artikel, die in diesem Einkaufsvorgang bereits abgehakt wurden —
-    /// dedupliziert nach Artikel-Identität, falls (z.B. durch bereits vor
-    /// einem Sync-Fix entstandene doppelte ``KaufEintrag``e) mehrere Einträge
-    /// auf denselben Artikel verweisen; sonst tauchte er in der Ansicht doppelt
-    /// auf (GitHub #52-Nachfolgefund).
+    /// Artikel, die für diese Liste bereits abgehakt wurden (an EGAL welchem
+    /// Vorgang, siehe ``abgehakteKaufEintraege``) — dedupliziert nach
+    /// Artikel-Identität, falls (z.B. durch bereits vor einem Sync-Fix
+    /// entstandene doppelte ``KaufEintrag``e) mehrere Einträge auf denselben
+    /// Artikel verweisen; sonst tauchte er in der Ansicht doppelt auf (GitHub
+    /// #52-Nachfolgefund).
     private var abgehakteArtikel: [Artikel] {
         var gesehen = Set<PersistentIdentifier>()
-        return einkaufsvorgang.kaufEintraege.compactMap(\.artikel).filter { gesehen.insert($0.persistentModelID).inserted }
+        return abgehakteKaufEintraege.compactMap(\.artikel).filter { gesehen.insert($0.persistentModelID).inserted }
     }
 
     /// Bildschirmtitel inkl. Fortschritt für diesen Einkaufsvorgang, Format
@@ -1015,6 +1044,14 @@ private struct EinkaufslisteView: View {
     /// Einkaufsvorgangs — impliziter aktueller Standort für die dynamische
     /// Neusortierung (Architekturvorschlag Abschnitt 4.3). `nil` vor dem ersten
     /// Abhaken.
+    ///
+    /// **Bewusst weiterhin nur ``einkaufsvorgang.kaufEintraege`` (NICHT die
+    /// liste-weite ``abgehakteKaufEintraege``):** Das hier ist der eigene,
+    /// physische Standort im Laden für die Lauf-Reihenfolge-Sortierung — ein
+    /// von einem Mitkäufer abgehakter Artikel beschreibt DESSEN Position im
+    /// Laden, nicht die eigene. Beim Verwenden der breiteren Menge würde die
+    /// Sortierung fälschlich versuchen, sich am Standort einer anderen Person
+    /// zu orientieren.
     private var zuletztAbgehakteKategorie: ArtikelKategorie? {
         einkaufsvorgang.kaufEintraege.max { $0.datum < $1.datum }?.kategorie
     }
@@ -1050,8 +1087,11 @@ private struct EinkaufslisteView: View {
         return kaufEintrag(fuer: artikel)?.menge ?? artikel.mengenSchritt
     }
 
+    /// Bewusst aus ``abgehakteKaufEintraege`` (liste-weit) statt nur
+    /// ``einkaufsvorgang`` — die Menge eines von einem Mitkäufer abgehakten
+    /// Artikels muss genauso anzeigbar/anpassbar bleiben.
     private func kaufEintrag(fuer artikel: Artikel) -> KaufEintrag? {
-        einkaufsvorgang.kaufEintraege.first { $0.artikel == artikel }
+        abgehakteKaufEintraege.first { $0.artikel == artikel }
     }
 
     var body: some View {
@@ -1187,8 +1227,10 @@ private struct EinkaufslisteView: View {
         .onDisappear { syncPollingService.einkaufAktiv = false }
     }
 
+    /// Bewusst aus ``abgehakteKaufEintraege`` (liste-weit) statt nur
+    /// ``einkaufsvorgang`` — siehe Typ-Doku dort.
     private func istAbgehakt(_ artikel: Artikel) -> Bool {
-        einkaufsvorgang.kaufEintraege.contains { $0.artikel == artikel }
+        abgehakteKaufEintraege.contains { $0.artikel == artikel }
     }
 
     /// `kategorie`: die Sektion, aus der heraus getappt wurde (siehe
@@ -1200,25 +1242,42 @@ private struct EinkaufslisteView: View {
         interaktionRegistrieren()
         // Nur die Identitäten über die `await`-Grenze hinweg sichern (siehe
         // ``ModelReference``) — während des Micro-Lease-Erwerbs kann ein
-        // nebenläufiger Sync-Zyklus genau diesen Artikel, Einkaufsvorgang oder
-        // diese Kategorie (z.B. per Peer-Zusammenführung/Löschung) verändert
-        // haben.
+        // nebenläufiger Sync-Zyklus genau diesen Artikel, Einkaufsvorgang,
+        // diese Kategorie oder Liste (z.B. per Peer-Zusammenführung/Löschung)
+        // verändert haben. `startZeit` ist ein reiner Wert (kein Objekt),
+        // sicher direkt zu erfassen.
         let artikelReferenz = ModelReference(artikel)
         let einkaufsvorgangReferenz = ModelReference(einkaufsvorgang)
         let kategorieReferenz = ModelReference(kategorie)
+        let einkaufslisteReferenz = ModelReference(einkaufsliste)
+        let zeitfensterStart = einkaufsvorgang.startZeit
         Task {
             var abhakErgebnis: AbhakErgebnis?
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
                 guard let artikelFrisch = artikelReferenz.resolved(in: modelContext),
-                      let einkaufsvorgangFrisch = einkaufsvorgangReferenz.resolved(in: modelContext)
+                      let einkaufsvorgangFrisch = einkaufsvorgangReferenz.resolved(in: modelContext),
+                      let einkaufslisteFrisch = einkaufslisteReferenz.resolved(in: modelContext)
                 else { return }
-                // Bewusst `einkaufsvorgangFrisch.kaufEintraege` statt
-                // `istAbgehakt(artikelFrisch)` (liest `self.einkaufsvorgang`, die
-                // View-Property von VOR dem `await` oben) — dieselbe
-                // baumelnde-Referenz-Gefahr, vor der `einkaufsvorgangReferenz`
-                // gerade erst geschützt hat.
-                if einkaufsvorgangFrisch.kaufEintraege.contains(where: { $0.artikel == artikelFrisch }) {
-                    einkaufsvorgangFrisch.artikelAbwaehlen(artikelFrisch, context: modelContext)
+                // Bewusst ein frischer, artikel-/zeitfenster-beschränkter Fetch
+                // statt `self.abgehakteKaufEintraege` (View-Property von VOR
+                // dem `await` oben, dieselbe baumelnde-Referenz-Gefahr) — UND
+                // der eigentliche Grund dafür: seit die Live-Ansicht liste-weit
+                // statt nur vorgangs-weit gilt (siehe
+                // ``EinkaufenView/abgehakteKaufEintraegeFuerAktuelleListe``),
+                // kann der Artikel an einem ANDEREN Vorgang als
+                // `einkaufsvorgangFrisch` abgehakt worden sein — genau DORT
+                // muss `artikelAbwaehlen` aufgerufen werden (die Methode sucht
+                // nur unter `self.kaufEintraege`), sonst bliebe der Tap auf
+                // "Abwählen" wirkungslos.
+                let artikelID = artikelFrisch.persistentModelID
+                let deskriptor = FetchDescriptor<KaufEintrag>(predicate: #Predicate {
+                    $0.artikel?.persistentModelID == artikelID && $0.datum >= zeitfensterStart
+                })
+                let vorhandenerEintrag = (try? modelContext.fetch(deskriptor))?.first {
+                    $0.einkaufsvorgang?.einkaufsliste?.persistentModelID == einkaufslisteFrisch.persistentModelID
+                }
+                if let besitzer = vorhandenerEintrag?.einkaufsvorgang {
+                    besitzer.artikelAbwaehlen(artikelFrisch, context: modelContext)
                 } else {
                     // `nil`, falls die Kategorie inzwischen gelöscht wurde — fällt
                     // dann auf `Artikel/fuehrendeKategorie(inGeschaeft:context:)`
@@ -1254,9 +1313,27 @@ private struct EinkaufslisteView: View {
 
     private func entferneDauerhaft(_ artikel: Artikel) {
         interaktionRegistrieren()
+        // Siehe ``umschalten(_:kategorie:)`` — derselbe Grund für den frischen,
+        // liste-/zeitfenster-beschränkten Fetch statt eines Aufrufs auf
+        // `einkaufsvorgang` allein: `artikelDauerhaftEntfernen` sucht nur unter
+        // `self.kaufEintraege` und bliebe sonst ein stiller No-op, falls der
+        // Eintrag an einem anderen Vorgang hängt.
+        let artikelReferenz = ModelReference(artikel)
+        let einkaufslisteReferenz = ModelReference(einkaufsliste)
+        let zeitfensterStart = einkaufsvorgang.startZeit
         Task {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
-                einkaufsvorgang.artikelDauerhaftEntfernen(artikel, context: modelContext)
+                guard let artikelFrisch = artikelReferenz.resolved(in: modelContext),
+                      let einkaufslisteFrisch = einkaufslisteReferenz.resolved(in: modelContext)
+                else { return }
+                let artikelID = artikelFrisch.persistentModelID
+                let deskriptor = FetchDescriptor<KaufEintrag>(predicate: #Predicate {
+                    $0.artikel?.persistentModelID == artikelID && $0.datum >= zeitfensterStart
+                })
+                let vorhandenerEintrag = (try? modelContext.fetch(deskriptor))?.first {
+                    $0.einkaufsvorgang?.einkaufsliste?.persistentModelID == einkaufslisteFrisch.persistentModelID
+                }
+                vorhandenerEintrag?.einkaufsvorgang?.artikelDauerhaftEntfernen(artikelFrisch, context: modelContext)
             }
         }
     }

@@ -1033,16 +1033,17 @@ struct SyncSnapshotImportServiceTests {
         #expect(vorgaenge.first?.endZeit == nil)
     }
 
-    /// Regressionstest (Code-Review-Fund): dieselbe „dangling Einkaufsvorgang"-
-    /// Ursachen-Familie wie die Bereich-A-Umleitung in `SyncImportService`,
-    /// hier für den Bereich-C-Snapshot-Merge. Ein Snapshot referenziert per ID
-    /// exakt den Vorgang, den dieses Gerät zwischenzeitlich per „Einkauf
+    /// Seit der Entkopplung der Live-Ansicht von der Vorgangs-Identität
+    /// (Session 2026-08-03, `docs/DATENSYNCHRONISATION.md` Abschnitt 4.3)
+    /// gibt es keine Umleitung mehr: Ein Snapshot referenziert per ID exakt
+    /// den Vorgang, den dieses Gerät zwischenzeitlich per „Einkauf
     /// abschließen" geschlossen hat (der Peer kennt dessen `endZeit` beim
-    /// Export noch nicht) — der zugehörige `KaufEintrag` muss auf den offenen
-    /// Nachfolger für dieselbe Liste umgeleitet werden, nicht auf dem
-    /// geschlossenen (für die Einkaufsansicht unsichtbaren) landen.
+    /// Export noch nicht) — der zugehörige `KaufEintrag` bleibt einfach an
+    /// diesem (bereits geschlossenen) Vorgang hängen. Sichtbar wird er trotzdem
+    /// sofort, weil `EinkaufenView.abgehakteKaufEintraegeFuerAktuelleListe`
+    /// alle Vorgänge der Liste einbezieht.
     @Test
-    func bereitsAbgeschlossenerBekannterVorgangWirdBeiSnapshotMergeAufOffenenNachfolgerUmgeleitet() async throws {
+    func bereitsAbgeschlossenerBekannterVorgangBehaeltKaufEintragBeiSnapshotMerge() async throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
         let syncOrdner = macheTempSyncOrdner()
@@ -1088,8 +1089,8 @@ struct SyncSnapshotImportServiceTests {
 
         await SyncSnapshotImportService.importiereSnapshots(context: context)
 
-        #expect(alterVorgang.kaufEintraege.isEmpty)
-        #expect(neuerVorgang.kaufEintraege.contains { $0.artikel == apfel })
+        #expect(alterVorgang.kaufEintraege.contains { $0.artikel == apfel })
+        #expect(neuerVorgang.kaufEintraege.isEmpty)
         // Der bereits gesetzte Abschluss darf durch den (aus Sicht des Peers
         // noch offenen) Remote-Stand NICHT verlorengehen.
         #expect(alterVorgang.endZeit != nil)

@@ -776,7 +776,7 @@ enum SyncSnapshotImportService {
             guard let liste = listeZuordnung[eintrag.einkaufslisteID],
                   let artikel = artikelZuordnung[eintrag.artikelID],
                   !liste.enthaelt(artikel),
-                  !istBereitsAbgehakt(artikel, aufListe: liste, alleVorgaenge: alleVorgaenge, context: context)
+                  !istBereitsAbgehakt(artikel, aufListe: liste, alleVorgaenge: alleVorgaenge)
             else { continue }
             context.insert(EinkaufslistenEintrag(einkaufsliste: liste, artikel: artikel, menge: eintrag.menge, notiz: eintrag.notiz))
         }
@@ -786,30 +786,29 @@ enum SyncSnapshotImportService {
     /// ist (siehe Warnung in
     /// ``mergeEinkaufslistenEintraege(_:listeZuordnung:artikelZuordnung:context:)``).
     ///
-    /// **Dieselbe „dangling Einkaufsvorgang"-Ursachen-Familie wie
-    /// `SyncImportService.aufOffenenNachfolgerUmgeleitet` /
-    /// `mergeEinkaufsvorgaenge` (siehe dort), hier im Bereich-A-Sicherheitsnetz:**
-    /// Ein rein auf offene Vorgänge beschränkter Check verliert den bereits
-    /// abgehakten Artikel genau in dem Moment, in dem „Einkauf abschließen"
-    /// den Vorgang mit seinem `KaufEintrag` schließt — das Sicherheitsnetz
-    /// hätte ihn dann beim nächsten (noch nicht aktuellen) Peer-Snapshot
-    /// fälschlich wieder auf die offene Liste geholt. Ein geschlossener
-    /// Vorgang zählt deshalb ebenfalls, aber NUR solange es für dieselbe
-    /// Liste aktuell einen offenen Nachfolger gibt (über den gemeinsamen
-    /// ``Einkaufsvorgang/offenerNachfolger(fuerListe:bevorzugtesGeschaeft:context:)``-Helfer)
-    /// — sonst könnte ein Artikel, der vor Wochen einmal gekauft und später
-    /// legitim neu zur Liste hinzugefügt wurde, nie wieder über dieses
-    /// Sicherheitsnetz zurückkommen.
-    @MainActor
+    /// Ein rein auf offene Vorgänge beschränkter Check würde den bereits
+    /// abgehakten Artikel genau in dem Moment verlieren, in dem „Einkauf
+    /// abschließen" den Vorgang mit seinem `KaufEintrag` schließt — das
+    /// Sicherheitsnetz hätte ihn dann beim nächsten (noch nicht aktuellen)
+    /// Peer-Snapshot fälschlich wieder auf die offene Liste geholt. Ein
+    /// geschlossener Vorgang zählt deshalb ebenfalls, aber NUR solange
+    /// irgendein Vorgang für dieselbe Liste noch offen ist — sonst könnte ein
+    /// Artikel, der vor Wochen einmal gekauft und später legitim neu zur
+    /// Liste hinzugefügt wurde, nie wieder über dieses Sicherheitsnetz
+    /// zurückkommen.
+    ///
+    /// **Vereinfacht seit der Ablösung der Vorgangs-Umleitung (Session
+    /// 2026-08-03):** Die frühere Fassung suchte für einen bereits
+    /// geschlossenen Treffer-Vorgang explizit dessen offenen Nachfolger
+    /// (`Einkaufsvorgang.offenerNachfolger`). Das ist gleichwertig zu „existiert
+    /// unter den Vorgängen dieser Liste überhaupt ein offener" — hier
+    /// direkt so geprüft, ohne den (jetzt gelöschten) Umweg.
     private static func istBereitsAbgehakt(
-        _ artikel: Artikel, aufListe liste: Einkaufsliste, alleVorgaenge: [Einkaufsvorgang], context: ModelContext
+        _ artikel: Artikel, aufListe liste: Einkaufsliste, alleVorgaenge: [Einkaufsvorgang]
     ) -> Bool {
         let vorgaengeFuerListe = alleVorgaenge.filter { $0.einkaufsliste == liste }
-        return vorgaengeFuerListe.contains { vorgang in
-            guard vorgang.kaufEintraege.contains(where: { $0.artikel == artikel }) else { return false }
-            guard vorgang.endZeit != nil else { return true }
-            return Einkaufsvorgang.offenerNachfolger(fuerListe: liste, bevorzugtesGeschaeft: vorgang.geschaeft, context: context) != nil
-        }
+        guard vorgaengeFuerListe.contains(where: { $0.kaufEintraege.contains { $0.artikel == artikel } }) else { return false }
+        return vorgaengeFuerListe.contains { $0.endZeit == nil }
     }
 
     // MARK: - Einkaufsvorgang (Bereich C)
@@ -823,26 +822,25 @@ enum SyncSnapshotImportService {
     /// Gerät legt lokal (``EinkaufenView/einkaufSicherstellen()``) einen
     /// eigenen, zufällig-IDten Einkaufsvorgang an, sobald es selbst keinen
     /// offenen für das gewählte Geschäft/Liste kennt — noch bevor ein Sync
-    /// stattfinden konnte. Ohne diesen Abgleich blieben zwei unabhängige
-    /// Einkaufsvorgänge für denselben Einkauf bestehen: Abhaken auf Gerät A
-    /// landete auf einem für Gerät B unsichtbaren Einkaufsvorgang, während
-    /// parallel auf B eigene ``KaufEintrag``e für dieselben Artikel entstanden
-    /// — die sich dann als Dubletten summierten. Alias analog
-    /// ``mergeEinkaufslisten(_:context:)``. Ein bereits lokal abgeschlossener
-    /// Einkauf wird nie durch einen (älteren) Remote-Stand wieder geöffnet —
-    /// nur eine noch fehlende ``Einkaufsvorgang/endZeit`` wird nachgetragen.
+    /// stattfinden konnte. Ohne diesen Abgleich (`offenerTreffer` unten)
+    /// blieben zwei unabhängige Einkaufsvorgänge für denselben Einkauf
+    /// bestehen — sichtbar als doppelt gezählter Besuch
+    /// (`Geschaeft.eigeneAnzahlEinkaufsvorgaenge`) und doppelte Zeile im
+    /// Besuchsprotokoll. Alias analog ``mergeEinkaufslisten(_:context:)``.
+    /// Ein bereits lokal abgeschlossener Einkauf wird nie durch einen
+    /// (älteren) Remote-Stand wieder geöffnet — nur eine noch fehlende
+    /// ``Einkaufsvorgang/endZeit`` wird nachgetragen.
     ///
-    /// **Dieselbe „dangling Einkaufsvorgang"-Ursachen-Familie wie die
-    /// Bereich-A-Umleitung in `SyncImportService`:** Ist der per ID/Alias
-    /// gefundene `bekannter`-Vorgang selbst inzwischen abgeschlossen (dieses
-    /// Gerät hat zwischenzeitlich "Einkauf abschließen" getippt), würde ein
-    /// per Snapshot nachgereichter `KaufEintrag` sonst auf diesem
-    /// geschlossenen, für die Einkaufsansicht unsichtbaren Vorgang landen —
-    /// wird stattdessen per ``Einkaufsvorgang/offenerNachfolger(fuerListe:bevorzugtesGeschaeft:context:)``
-    /// auf den aktuell offenen Nachfolger umgeleitet. Die `endZeit`-Nachtrag-
-    /// Regel unten gilt in diesem Fall bewusst NICHT (das wäre die `endZeit`
-    /// des ALTEN Vorgangs, fälschlich auf den neuen, offenen Nachfolger
-    /// übertragen).
+    /// **Bewusst NICHT (mehr) Aufgabe dieser Funktion (Session 2026-08-03,
+    /// Ablösung der Vorgangs-Umleitung):** Ist der per ID/Alias gefundene
+    /// `bekannter`-Vorgang selbst inzwischen abgeschlossen, wird ein per
+    /// Snapshot nachgereichter `KaufEintrag` NICHT mehr auf einen offenen
+    /// Nachfolger umgeleitet — er bleibt einfach an `bekannter` hängen. Die
+    /// Live-Ansicht braucht das nicht mehr: sie zeigt inzwischen alle
+    /// Kaufeinträge einer Liste unabhängig vom Vorgang an (siehe
+    /// `docs/DATENSYNCHRONISATION.md` Abschnitt 4.3). Nur der eigentliche
+    /// Identitäts-Abgleich beim erstmaligen Zusammentreffen (`offenerTreffer`,
+    /// s.u.) bleibt bestehen — der dient weiterhin dem Besuchszähler/-protokoll.
     ///
     /// **Bug (Live-Test-Fund, 2026-07-31): mehrfach eigenständig offene
     /// Vorgänge für dieselbe Liste innerhalb eines einzigen Merge-Durchlaufs.**
@@ -857,17 +855,10 @@ enum SyncSnapshotImportService {
     /// identischer `endZeit`, obwohl ihr `startZeit` klar danach lag — ein
     /// später verarbeiteter Eintrag traf per `offenerTreffer` auf einen
     /// dieser überzähligen offenen Duplikate und übertrug ihm die `endZeit`
-    /// eines völlig anderen, längst abgeschlossenen Vorgangs. Für den
-    /// Anwender sichtbar als: ein Artikel erscheint kurz als korrekt
-    /// abgehakt/synchronisiert, verschwindet dann aber wieder von der
-    /// abgehakten Liste (das Sicherheitsnetz in
-    /// ``mergeEinkaufslistenEintraege(_:listeZuordnung:artikelZuordnung:context:)``
-    /// verlangt für einen bereits geschlossenen Vorgang einen aktuell
-    /// offenen Nachfolger — ein Vorgang mit fälschlich übernommener, längst
-    /// vergangener `endZeit` erfüllt diese Bedingung nicht mehr). Fix: neu
+    /// eines völlig anderen, längst abgeschlossenen Vorgangs. Fix: neu
     /// angelegte Vorgänge werden jetzt sofort in `alleLokalen` nachgetragen,
-    /// zusätzlich verwirft eine neue Plausibilitätsprüfung jede `endZeit`,
-    /// die vor dem eigenen `startZeit` läge.
+    /// zusätzlich verwirft eine Plausibilitätsprüfung jede `endZeit`, die vor
+    /// dem eigenen `startZeit` läge.
     @MainActor
     private static func mergeEinkaufsvorgaenge(
         _ remote: [EinkaufsvorgangSnapshot], geschaeftZuordnung: [UUID: Geschaeft], listeZuordnung: [UUID: Einkaufsliste],
@@ -895,21 +886,8 @@ enum SyncSnapshotImportService {
             let remoteListe = eintrag.einkaufslisteID.flatMap { listeZuordnung[$0] }
 
             let vorhandener: Einkaufsvorgang
-            let umgeleitetAufNachfolger: Bool
             if let bekannter = alleLokalenNachID[aufgeloesteID] {
-                if bekannter.istAbgeschlossen, let liste = bekannter.einkaufsliste,
-                   let offenerNachfolger = Einkaufsvorgang.offenerNachfolger(
-                       fuerListe: liste, bevorzugtesGeschaeft: bekannter.geschaeft, context: context
-                   ) {
-                    SyncEntitaetsAliasService.registriere(
-                        entitaetsArt: SyncEntitaetsArt.einkaufsvorgang, fremdeID: eintrag.id, lokaleID: offenerNachfolger.id, context: context
-                    )
-                    vorhandener = offenerNachfolger
-                    umgeleitetAufNachfolger = true
-                } else {
-                    vorhandener = bekannter
-                    umgeleitetAufNachfolger = false
-                }
+                vorhandener = bekannter
             } else if remoteListe == nil {
                 // Audit-Fund (Abschnitt 25): OHNE bereits bekannten ID-/Alias-
                 // Treffer darf ein Eintrag mit unauflösbarer `remoteListe` (auf
@@ -940,7 +918,6 @@ enum SyncSnapshotImportService {
                     )
                 }
                 vorhandener = offenerTreffer
-                umgeleitetAufNachfolger = false
             } else if geloeschteIDs.contains(aufgeloesteID) {
                 // Retention-gelöschter (oder anderweitig entfernter) Vorgang
                 // eines Peers, der ihn selbst noch führt — Tombstone
@@ -955,10 +932,10 @@ enum SyncSnapshotImportService {
                 // Stelle bereits durch den Guard oben als nicht-nil
                 // garantiert — ein neu angelegter Vorgang braucht immer eine
                 // konkrete Liste, sonst wäre er für die gesamte App
-                // unerreichbar (``EinkaufenView/aktuellerEinkauf`` und
-                // ``offenerNachfolger(fuerListe:...)`` verlangen beide immer
-                // eine konkrete Liste). Ein `remoteGeschaeft == nil` bleibt
-                // legitim (Einkauf ohne gewähltes Geschäft ist Normalfall).
+                // unerreichbar (``EinkaufenView/aktuellerEinkauf`` verlangt
+                // immer eine konkrete Liste). Ein `remoteGeschaeft == nil`
+                // bleibt legitim (Einkauf ohne gewähltes Geschäft ist
+                // Normalfall).
                 let remoteListe = remoteListe!
                 // Bewusst kein `abschliessen()` (würde zusätzlich
                 // `Geschaeft.anzahlEinkaufsvorgaenge` erhöhen — das übernimmt
@@ -975,7 +952,6 @@ enum SyncSnapshotImportService {
                 alleLokalen.append(neuer)
                 alleLokalenNachID[neuer.id] = neuer
                 vorhandener = neuer
-                umgeleitetAufNachfolger = false
             }
 
             // `remoteEndZeit >= vorhandener.startZeit`: defensive Plausibilitätsprüfung
@@ -987,19 +963,14 @@ enum SyncSnapshotImportService {
             // `endZeit`, obwohl ihr `startZeit` klar danach lag.
             //
             // Diagnose (2026-08-02, Nutzerbericht „Einkauf abschließen
-            // synchronisiert nicht"): jeder der drei möglichen Gründe, warum
-            // eine vorhandene Remote-`endZeit` NICHT übernommen wird, wird
-            // hier einzeln protokolliert — Guard-Kaskade unverändert, nur um
-            // die Log-Aufrufe erweitert.
+            // synchronisiert nicht"): jeder der verbleibenden zwei Gründe, warum
+            // eine vorhandene Remote-`endZeit` NICHT übernommen wird, wird hier
+            // einzeln protokolliert — Guard-Kaskade unverändert (nur der
+            // frühere `umgeleitetAufNachfolger`-Grund entfiel mit der Ablösung
+            // der Vorgangs-Umleitung, Session 2026-08-03), nur um die
+            // Log-Aufrufe erweitert.
             if let remoteEndZeit = eintrag.endZeit {
-                if umgeleitetAufNachfolger {
-                    if SyncDebugLogger.istAktiv {
-                        SyncDebugLogger.log(
-                            .einkaufsvorgangAbschlussNichtUebernommen,
-                            details: "vorgangID=\(eintrag.id) grund=umgeleitetAufNachfolger"
-                        )
-                    }
-                } else if let lokaleEndZeit = vorhandener.endZeit {
+                if let lokaleEndZeit = vorhandener.endZeit {
                     if SyncDebugLogger.istAktiv {
                         SyncDebugLogger.log(
                             .einkaufsvorgangAbschlussNichtUebernommen,

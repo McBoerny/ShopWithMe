@@ -122,8 +122,9 @@ eine der beiden Ausnahmen greift:
    gelöscht und wird nie entstehen — sofort als bekannt markiert, kein Retry.
 2. **Altersgrenze** (`SyncImportService.maximalesEventAlterFuerRetry`,
    Standard 48h): eine Referenz kann auch **ohne** Tombstone dauerhaft
-   unauflösbar bleiben (z.B. wenn sie durch eine Nachfolger-Umleitung ersetzt
-   wurde, bevor ihre ID je Teil eines Snapshots wurde) — nach Ablauf der Frist
+   unauflösbar bleiben (z.B. wenn ihre `Einkaufsvorgang`-ID über einen
+   `offenerTreffer`-Abgleich, s. 4.3, auf eine andere lokale ID aliasiert
+   wurde, bevor sie je Teil eines Snapshots wurde) — nach Ablauf der Frist
    wird das Event aufgegeben statt endlos weiterversucht.
 
 ## 4. Bereich B/C/D — Sync-Paket
@@ -208,29 +209,38 @@ Zuordnungstabellen früherer): `GeschaeftTyp` → `ArtikelKategorie` →
 `Einkaufsvorgang` → `KaufEintrag` → `Preispunkt` → `ArtikelAlias` →
 `WarengruppenDistanz`.
 
-### 4.3 Einkaufsvorgang — Erkennung „ist das derselbe reale Einkauf"
+### 4.3 Einkaufsvorgang — keine geteilte Vorgangs-Identität mehr nötig
 
-Zusätzlich zum ID-/Alias-Abgleich gilt ein lokal noch **offener**
-Einkaufsvorgang für dasselbe (`Geschaeft`, `Einkaufsliste`)-Paar als derselbe
-realweltliche Einkauf wie ein zeitgleich von einem Peer begonnener — jedes
-Gerät legt beim gemeinsamen Einkaufen sonst unabhängig einen eigenen,
-zufällig-IDten Vorgang an (`EinkaufenView.einkaufSicherstellen()`), noch bevor
-ein Sync stattfinden konnte.
+`Einkaufsvorgang` (ein Ladenbesuch) spielt mehrere Rollen: Behälter für
+`KaufEintrag`e, Lerngrundlage fürs Distanzlernen, Besuchszähler pro Geschäft,
+historischer Eintrag fürs Besuchsprotokoll, und „aktuell laufende Sitzung" für
+die Live-Ansicht beim Einkaufen. Nur die letzte Rolle braucht überhaupt eine
+geräteübergreifende Sicht — und die löst seit Session 2026-08-03 **die
+Einkaufsliste**, nicht mehr eine zwischen Geräten übereinstimmend gewählte
+Vorgangs-Identität.
 
-Ist der per ID/Alias gefundene Vorgang bereits lokal abgeschlossen (dieses
-Gerät hat zwischenzeitlich „Einkauf abschließen" getippt), wird ein
-referenzierender `KaufEintrag`/ein nachträgliches Bereich-A-Event stattdessen
-auf den aktuell **offenen Nachfolger** für dieselbe Liste umgeleitet
-(`Einkaufsvorgang.offenerNachfolger(fuerListe:bevorzugtesGeschaeft:context:)`,
-gemeinsam genutzt von `SyncImportService` und `SyncSnapshotImportService`) —
-bevorzugt mit gleichem Geschäft, sonst irgendein offener Vorgang für die
-Liste (kein Geschäft-Zwang: „Einkauf abschließen" setzt die Geschäftsauswahl
-zurück, der direkt danach neu angelegte Nachfolger hat also fast immer
-`geschaeft == nil`). **Nur für `.artikelAbgehakt`** (materialisiert einen
-NEUEN Eintrag) — `.artikelAbgewaehlt`/`.artikelDauerhaftEntfernt` müssen einen
-bereits BESTEHENDEN Eintrag auf dem ursprünglichen Vorgang finden und dürfen
-nicht umgeleitet werden, sonst liefe die Umleitung dort still ins Leere,
-während das Event trotzdem als erledigt gälte.
+**Live-Ansicht: liste- und zeitfensterbasiert statt vorgangsbasiert.**
+`EinkaufenView.abgehakteKaufEintraegeFuerAktuelleListe` (auf
+`Einkaufsvorgang.abgehakteKaufEintraege(fuerListe:seit:unter:)` delegiert)
+zeigt alle Kaufeinträge der aktuell gewählten Liste an — von EGAL welchem
+Vorgang (eigenem oder synchronisiertem, offenem oder bereits geschlossenem),
+solange ihr `KaufEintrag.datum` nicht vor dem `startZeit` des eigenen
+aktuellen Vorgangs liegt (sonst zählte ein legitim erneut hinzugefügter,
+tatsächlich lange zurückliegender Kauf fälschlich als „gerade abgehakt"). Der
+lokale `aktuellerEinkauf` bleibt als Anker bestehen, an dem NEUE eigene
+Häkchen landen, und legt über seine `startZeit` das Zeitfenster fest — er ist
+aber nicht mehr die alleinige Quelle für „was zeige ich als abgehakt an".
+
+Ein `.artikelAbgehakt`-Event materialisiert den `KaufEintrag` deshalb immer
+auf dem in der Nutzlast referenzierten Vorgang selbst — **keine Umleitung auf
+einen offenen Nachfolger mehr**, auch wenn dieser Vorgang beim Empfänger
+bereits lokal abgeschlossen ist. Genauso in `SyncSnapshotImportService`: ein
+per Snapshot nachgereichter `KaufEintrag` für einen bereits bekannten, aber
+inzwischen geschlossenen Vorgang bleibt einfach an diesem hängen. Die
+Live-Ansicht braucht die Umleitung nicht mehr, weil sie ohnehin alle Vorgänge
+der Liste einbezieht. Damit lösen sich `.artikelAbgehakt` und
+`.artikelAbgewaehlt`/`.artikelDauerhaftEntfernt` jetzt identisch auf (einfacher
+ID-/Alias-Lookup, kein Sonderfall mehr).
 
 Ein so oder per Snapshot-Merge fremd materialisierter `KaufEintrag` bekommt
 bewusst **keinen** `kategorieBesuchsIndex` — er beschreibt die Laufreihenfolge
@@ -241,44 +251,36 @@ bei der Suche nach einem bereits vergebenen Index für dieselbe Kategorie.
 
 **Geschäft kommt aus der Nutzlast, nicht aus dem Container-Vorgang (GitHub
 #66):** `SyncEventNutzlast.geschaeftID` (additiv-optional) trägt das beim
-SENDENDEN Gerät zum Zeitpunkt des Abhakens aktive Geschäft mit. Ohne dieses
-Feld hätte der beim Umleiten neu materialisierte `KaufEintrag` das Geschäft
-des NACHFOLGE-Vorgangs geerbt (`self.geschaeft` in
+SENDENDEN Gerät zum Zeitpunkt des Abhakens aktive Geschäft mit — ohne dieses
+Feld würde der materialisierte `KaufEintrag` das Geschäft des
+Container-Vorgangs erben (`self.geschaeft` in
 `Einkaufsvorgang.artikelAbhakenOhneEventAufzeichnung`) statt des Geschäfts,
 an dem der Kauf tatsächlich stattfand — z.B. wenn „Einkauf abschließen" die
-Geschäftsauswahl zurücksetzt (GitHub #51) oder der Nachfolger an einem
+Geschäftsauswahl zurücksetzt (GitHub #51) oder der Container-Vorgang an einem
 anderen Geschäft läuft. `geschaeft geschaeftUeberschreibung: Geschaeft??`
 (bewusst doppelt optional, analog dem bereits bestehenden
 `kategorie`-Override) unterscheidet „kein Override, `self.geschaeft` gilt"
 (Standardfall beim lokalen Abhaken) von „Override auf explizit KEIN
 Geschäft" (Sender hatte keins ausgewählt) — beides muss unterscheidbar
-bleiben.
+bleiben. Diese Korrektur bleibt auch nach der Entkopplung nötig, unabhängig
+vom ursprünglichen Umleitungs-Anwendungsfall.
 
-**Auswirkung auf #69:** Da der Kaufeintrag jetzt unabhängig vom
-Container-Vorgang immer das korrekte Geschäft trägt, kann der store-lose
-Umleitungs-Fallback (kein offener Vorgang mit passendem Geschäft, siehe
-GitHub #69) keine zwei Einkäufe an unterschiedlichen Geschäften mehr
-inhaltlich vermischen — er könnte höchstens noch einen Kaufeintrag am
-„falschen" Container-Vorgang gruppieren, was für Distanzlernen (immer
-indexlos bei Fremdherkunft), Listenzustand (listenbasiert, nicht
-vorgangsbasiert) und Preishistorie (seit GitHub #76 komplett von
-`KaufEintrag` entkoppelt) folgenlos bleibt.
-
-**Deterministische Kanon-Wahl bei mehreren passenden Kandidaten (GitHub
-#67-Erweiterung):** Legen zwei Geräte kurz nacheinander (vor dem ersten
-Sync-Zyklus) unabhängig je einen eigenen offenen Vorgang für dieselbe
-(Geschäft, Liste)-Kombination an, existieren lokal kurzzeitig zwei
-gleichwertige Kandidaten. `Einkaufsvorgang.kanonischer(unter:)` (gemeinsam
-genutzt von `offenerNachfolger`, `EinkaufenView.aktuellerEinkauf` und
-`SyncSnapshotImportService.mergeEinkaufsvorgaenge`s `offenerTreffer`-Zweig)
-entscheidet dabei immer nach demselben Kriterium: ältester `startZeit`
-gewinnt, bei exaktem Gleichstand die lexikographisch kleinere `id` als
-stabiler Tiebreaker (analog `LamportTimestamp`). Da `startZeit` beim Sync
-unverändert übernommen wird, kommen alle Geräte nach der Synchronisation
-zuverlässig auf denselben Vorgang — vorher konnte ein beliebiger, per
-Fetch-Reihenfolge nicht garantierter Treffer dazu führen, dass ein Gerät
-dauerhaft auf seinem eigenen, vom Merge bereits „verlorenen" Vorgang
-hängen blieb und vom anderen Gerät abgehakte Artikel nie als abgehakt sah.
+**`offenerTreffer` bleibt — als reine Identitäts-/Zähl-Frage, entkoppelt von
+der Live-Sichtbarkeit:** Legen zwei Geräte kurz nacheinander (vor dem ersten
+Sync-Zyklus) unabhängig je einen eigenen offenen Vorgang für dasselbe
+(Geschäft, Liste)-Paar an (`EinkaufenView.einkaufSicherstellen()`), müssen
+sich beide Geräte nach der Synchronisation auf EINEN Vorgang einigen — sonst
+zählt der G-Counter (`Geschaeft.eigeneAnzahlEinkaufsvorgaenge`) doppelt und
+`GeschaeftBesuchsProtokollView` zeigt zwei Zeilen für einen realen Besuch.
+`SyncSnapshotImportService.mergeEinkaufsvorgaenge`s `offenerTreffer`-Zweig
+matcht dafür weiterhin einen lokal noch offenen Vorgang für dasselbe Paar.
+Existieren dabei mehrere gleichwertige Kandidaten, entscheidet
+`Einkaufsvorgang.kanonischer(unter:)` (auch von `EinkaufenView.aktuellerEinkauf`
+genutzt) immer nach demselben Kriterium: ältester `startZeit` gewinnt, bei
+exaktem Gleichstand die lexikographisch kleinere `id` als stabiler Tiebreaker
+(analog `LamportTimestamp`) — vorher konnte ein beliebiger, per
+Fetch-Reihenfolge nicht garantierter Treffer zu inkonsistenten Zeitfenstern
+zwischen Geräten führen.
 
 **Neu anzulegender Vorgang braucht eine auflösbare Liste:** Referenziert ein
 empfangener Snapshot-Eintrag weder ein bekanntes Geschäft noch eine bekannte

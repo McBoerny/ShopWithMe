@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.10 (Build 199) — Einkaufsvorgang entkoppelt: Live-Ansicht braucht keine geteilte Vorgangs-Identität mehr
+
+- Architektur-Vereinfachung: die Live-Ansicht „was ist gerade abgehakt" löst
+  sich jetzt über die **Einkaufsliste** (ohnehin bereits geteilt) statt über
+  einen von allen Geräten übereinstimmend gewählten `Einkaufsvorgang`.
+  `EinkaufenView.abgehakteKaufEintraegeFuerAktuelleListe` zeigt alle
+  Kaufeinträge der aktuellen Liste, unabhängig davon, an welchem (auch
+  bereits geschlossenen) Vorgang sie hängen — solange ihr Datum nicht vor
+  dem Start des eigenen aktuellen Einkaufs liegt.
+- Damit entfällt die gesamte „Vorgangs-Umleitung" ersatzlos —
+  `Einkaufsvorgang.offenerNachfolger`, `SyncImportService.aufOffenenNachfolgerUmgeleitet`
+  sowie der `bekannter`-geschlossen-Zweig in
+  `SyncSnapshotImportService.mergeEinkaufsvorgaenge` sind gelöscht. Das war
+  historisch der mit Abstand fehleranfälligste Teil der gesamten
+  Synchronisation und Auslöser für GitHub #66/#67/#69. `offenerTreffer`
+  (verhindert doppelt gezählte Besuche) und `Einkaufsvorgang.kanonischer(unter:)`
+  bleiben unverändert bestehen.
+- `EinkaufenView.umschalten(_:kategorie:)`/`entferneDauerhaft(_:)` ermitteln
+  den tatsächlichen Besitzer-Vorgang eines Kaufeintrags jetzt per frischem,
+  liste-/zeitfenster-beschränktem Fetch, statt blind auf dem lokalen
+  Anker-Vorgang zu operieren.
+- Details, Begründung und Testabdeckung: `docs/DATENSYNCHRONISATION.md`
+  Abschnitt 4.3, `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 35.
+- **Hinweis:** wie bei allen bisherigen Änderungen an dieser Stelle sollte
+  vor endgültigem Vertrauen ein echter Zwei-Geräte-Test erfolgen (ein Gerät
+  schließt „Einkauf abschließen" mitten im gemeinsamen Einkauf, während das
+  andere weiter abhakt).
+
 ## v0.10 (Build 198) — Geschäft kommt bei umgeleiteten Abhaken-Ereignissen aus der Nutzlast statt aus dem Container-Vorgang (GitHub #66)
 
 - `Einkaufsvorgang.artikelAbhakenOhneEventAufzeichnung` legte einen neuen

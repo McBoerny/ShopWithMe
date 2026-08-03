@@ -236,19 +236,29 @@ extension Einkaufsvorgang {
     /// bei exaktem Gleichstand die lexikographisch kleinere ``id`` als
     /// stabiler Tiebreaker (analog `LamportTimestamp`).
     ///
+    /// **Zwei verbleibende Anwendungsfälle** (seit der Entkopplung der
+    /// Live-Ansicht von der Vorgangs-Identität, Session 2026-08-03, nicht
+    /// mehr für die Anzeige „was ist abgehakt" gebraucht — siehe
+    /// ``SyncImportService`` und `docs/DATENSYNCHRONISATION.md` Abschnitt
+    /// 4.3):
+    /// - ``SyncSnapshotImportService/mergeEinkaufsvorgaenge(_:geschaeftZuordnung:listeZuordnung:context:)``
+    ///   (`offenerTreffer`): verhindert Doppelzählung im Besuchszähler/
+    ///   -protokoll, wenn zwei Geräte unabhängig je einen Vorgang für
+    ///   denselben (Geschäft, Liste) anlegen, bevor sie das erste Mal
+    ///   synchronisieren.
+    /// - `EinkaufenView.aktuellerEinkauf`: wählt deterministisch den lokalen
+    ///   Anker-Vorgang, an dem NEUE eigene Häkchen landen, falls lokal
+    ///   mehrere offene Kandidaten für dieselbe Kombination existieren.
+    ///
     /// **Hintergrund:** Zwei Geräte, die kurz nacheinander (vor dem ersten
     /// Sync-Zyklus) unabhängig je einen eigenen Vorgang für dieselbe
     /// Kombination anlegen (Race beim gleichzeitigen Betreten desselben
     /// Ladens), hatten vorher keine gemeinsame Regel, WELCHEN der beiden
     /// jedes Gerät als „den aktuellen" behandelt — jede Stelle wählte einen
-    /// beliebigen, per Fetch-Reihenfolge nicht garantierten Treffer. Ohne
-    /// gemeinsame Regel konnte Gerät B dauerhaft auf seinem eigenen,
-    /// inzwischen vom Merge zugunsten von Gerät A's Vorgang „verlorenen"
-    /// Kandidaten hängen bleiben — vom anderen Gerät abgehakte Artikel wären
-    /// dann in B's aktiver Ansicht nie als abgehakt erschienen, obwohl der
-    /// Sync sie korrekt verarbeitet hat. Da ``startZeit`` beim Sync
-    /// unverändert übernommen wird (nie lokal neu gesetzt), kommen alle
-    /// Geräte nach der Synchronisation zuverlässig auf denselben Vorgang.
+    /// beliebigen, per Fetch-Reihenfolge nicht garantierten Treffer. Da
+    /// ``startZeit`` beim Sync unverändert übernommen wird (nie lokal neu
+    /// gesetzt), kommen alle Geräte nach der Synchronisation zuverlässig auf
+    /// denselben Vorgang.
     static func kanonischer(unter kandidaten: [Einkaufsvorgang]) -> Einkaufsvorgang? {
         kandidaten.min { a, b in
             if a.startZeit != b.startZeit { return a.startZeit < b.startZeit }
@@ -256,23 +266,19 @@ extension Einkaufsvorgang {
         }
     }
 
-    /// Sucht einen lokal noch offenen Einkaufsvorgang für `liste` — bevorzugt
-    /// mit `bevorzugtesGeschaeft` (zwei Geräte können gleichzeitig an
-    /// unterschiedlichen Geschäften für dieselbe Liste einkaufen), sonst
-    /// irgendeinen offenen für die Liste. Gemeinsam genutzt von
-    /// `SyncImportService` (Umleitung eines Bereich-A-Events, dessen Vorgang
-    /// inzwischen abgeschlossen wurde) und
-    /// `SyncSnapshotImportService.mergeEinkaufsvorgaenge` (dieselbe
-    /// Ursachen-Familie im Bereich-C-Snapshot-Merge) — vorher unabhängig
-    /// dupliziert, jetzt eine einzige Quelle für „was zählt als derselbe noch
-    /// laufende Einkauf". Bei mehreren passenden Kandidaten entscheidet
-    /// ``kanonischer(unter:)`` deterministisch (GitHub #67-Erweiterung).
-    static func offenerNachfolger(
-        fuerListe liste: Einkaufsliste, bevorzugtesGeschaeft: Geschaeft?, context: ModelContext
-    ) -> Einkaufsvorgang? {
-        let deskriptor = FetchDescriptor<Einkaufsvorgang>(predicate: #Predicate { $0.endZeit == nil })
-        let offeneFuerListe = ((try? context.fetch(deskriptor)) ?? []).filter { $0.einkaufsliste == liste }
-        let passende = offeneFuerListe.filter { $0.geschaeft == bevorzugtesGeschaeft }
-        return kanonischer(unter: passende) ?? kanonischer(unter: offeneFuerListe)
+    /// Alle für die Live-Ansicht relevanten Kaufeinträge von `liste` — von
+    /// EGAL welchem der übergebenen `vorgaenge` (eigenem oder
+    /// synchronisiertem, offenem oder bereits geschlossenem), solange
+    /// ``KaufEintrag/datum`` nicht vor `seit` liegt (sonst zählte ein legitim
+    /// erneut hinzugefügter, tatsächlich lange zurückliegender Kauf fälschlich
+    /// als „gerade abgehakt"). Verwendet von ``EinkaufenView`` als Ersatz für
+    /// die frühere Vorgangs-Umleitung (Session 2026-08-03, siehe
+    /// `docs/DATENSYNCHRONISATION.md` Abschnitt 4.3): ein von einem anderen
+    /// Gerät abgehakter Artikel muss dafür nicht mehr auf „meinen" aktuell
+    /// offenen Vorgang umgeleitet werden.
+    static func abgehakteKaufEintraege(
+        fuerListe liste: Einkaufsliste, seit start: Date, unter vorgaenge: [Einkaufsvorgang]
+    ) -> [KaufEintrag] {
+        vorgaenge.filter { $0.einkaufsliste == liste }.flatMap(\.kaufEintraege).filter { $0.datum >= start }
     }
 }
