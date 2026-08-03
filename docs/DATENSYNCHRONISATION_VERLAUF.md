@@ -2117,3 +2117,52 @@ roten Hinweis. Ein teilweiser Rückgang bleibt bewusst nur informativ, da
 `SyncErsetzenServiceTests.fuehreAusstehendeAktionAusRolltBeiKomplettLeeremNeuaufbauAutomatischZurueck`.
 Kein eigenständiger `xcodebuild test`-Lauf durch Claude (Projektkonvention) —
 nicht auf echten Geräten nachverifiziert.
+
+## 33. GitHub #67-Erweiterung: deterministische Kanon-Wahl bei mehreren offenen Vorgangs-Kandidaten
+
+**Auslöser:** Nutzerfrage, ob abgehakte Artikel während eines noch laufenden
+gemeinsamen Einkaufs für alle Geräte konsistent als durchgestrichen
+erscheinen. Antwort: das Entfernen von der Einkaufsliste selbst
+(„ich muss es nicht mehr kaufen") war schon immer sicher, unabhängig davon,
+an welchem `Einkaufsvorgang` ein `KaufEintrag` technisch hängt — aber die
+Live-Anzeige während des Einkaufs (`zeigeAbgehakteArtikel`-Umschalter) hing
+an einer tieferen, bis dahin unentdeckten Lücke.
+
+**Fund:** Drei unabhängige Stellen —
+`Einkaufsvorgang.offenerNachfolger(fuerListe:bevorzugtesGeschaeft:context:)`,
+`EinkaufenView.aktuellerEinkauf` und `SyncSnapshotImportService.mergeEinkaufsvorgaenge`s
+`offenerTreffer`-Zweig — wählten bei MEHREREN gleichzeitig passenden offenen
+Kandidaten für dieselbe (Geschäft, Liste)-Kombination jeweils per `.first(where:)`
+einen beliebigen, von der (nicht garantierten) SwiftData-Fetch-Reihenfolge
+abhängigen Treffer, statt einer für alle Geräte identischen Regel zu folgen.
+
+**Konkretes Szenario:** Zwei Geräte betreten fast gleichzeitig denselben
+Laden mit derselben gemeinsamen Liste, vor dem ersten Sync-Zyklus — beide
+legen unabhängig ihren eigenen offenen Vorgang an (V-A, V-B). Nach dem ersten
+Sync erkennt `mergeEinkaufsvorgaenge`s `offenerTreffer`-Zweig das zwar und
+registriert einen Alias V-B→V-A — aber `EinkaufenView.aktuellerEinkauf` fragt
+diese Zuordnung nie ab und kann bei Gerät B weiterhin dessen eigenen,
+inzwischen vom Merge "verlorenen" V-B liefern. Neue Häkchen landen über den
+Sync-Pfad korrekt bei V-A, Gerät B schaut aber auf V-B und sieht sie nie.
+
+**Fix:** Neue gemeinsame Regel `Einkaufsvorgang.kanonischer(unter:)` — unter
+mehreren Kandidaten gewinnt immer der älteste `startZeit`, bei exaktem
+Gleichstand die lexikographisch kleinere `id` als stabiler Tiebreaker (analog
+`LamportTimestamp`). Da `startZeit` beim Sync unverändert übernommen wird
+(nie lokal neu gesetzt), kommen alle Geräte nach der Synchronisation
+zuverlässig auf denselben Vorgang, unabhängig von lokaler Fetch-Reihenfolge.
+An allen drei betroffenen Stellen eingesetzt.
+
+**Bewusst nicht abgedeckt:** #69 (store-loser Fallback bei fehlendem
+passendem Geschäft) bleibt eigenständig offen — die neue Regel macht die
+Auswahl unter bereits mehrdeutigen Kandidaten nur deterministisch/konsistent,
+löst aber nicht das Kernproblem, dass der Fallback ein Geschäft treffen kann,
+das gar nicht passt.
+
+**Verifikationsstand:** `xcodegen generate` + `xcodebuild build`/
+`build-for-testing` grün. Neue Tests:
+`EinkaufsvorgangTests.kanonischerWaehltImmerDenAeltestenUnabhaengigVonDerReihenfolge`,
+`.kanonischerEntscheidetBeiGleicherStartZeitUeberDieId`,
+`.offenerNachfolgerWaehltBeiMehrerenKandidatenDenAeltesten`. Kein
+eigenständiger `xcodebuild test`-Lauf durch Claude (Projektkonvention) —
+nicht auf echten Geräten nachverifiziert.

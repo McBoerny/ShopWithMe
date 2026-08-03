@@ -239,6 +239,22 @@ des SENDENDEN Geräts durchs Geschäft, nicht die dieses Geräts, und würde
 `Einkaufsvorgang.naechsterKategorieBesuchsIndex` ignoriert indexlose Einträge
 bei der Suche nach einem bereits vergebenen Index für dieselbe Kategorie.
 
+**Deterministische Kanon-Wahl bei mehreren passenden Kandidaten (GitHub
+#67-Erweiterung):** Legen zwei Geräte kurz nacheinander (vor dem ersten
+Sync-Zyklus) unabhängig je einen eigenen offenen Vorgang für dieselbe
+(Geschäft, Liste)-Kombination an, existieren lokal kurzzeitig zwei
+gleichwertige Kandidaten. `Einkaufsvorgang.kanonischer(unter:)` (gemeinsam
+genutzt von `offenerNachfolger`, `EinkaufenView.aktuellerEinkauf` und
+`SyncSnapshotImportService.mergeEinkaufsvorgaenge`s `offenerTreffer`-Zweig)
+entscheidet dabei immer nach demselben Kriterium: ältester `startZeit`
+gewinnt, bei exaktem Gleichstand die lexikographisch kleinere `id` als
+stabiler Tiebreaker (analog `LamportTimestamp`). Da `startZeit` beim Sync
+unverändert übernommen wird, kommen alle Geräte nach der Synchronisation
+zuverlässig auf denselben Vorgang — vorher konnte ein beliebiger, per
+Fetch-Reihenfolge nicht garantierter Treffer dazu führen, dass ein Gerät
+dauerhaft auf seinem eigenen, vom Merge bereits „verlorenen" Vorgang
+hängen blieb und vom anderen Gerät abgehakte Artikel nie als abgehakt sah.
+
 **Neu anzulegender Vorgang braucht eine auflösbare Liste:** Referenziert ein
 empfangener Snapshot-Eintrag weder ein bekanntes Geschäft noch eine bekannte
 Liste (weil beide Referenzen bereits auf dem sendenden Gerät baumelten und

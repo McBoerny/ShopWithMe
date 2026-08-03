@@ -214,6 +214,33 @@ final class Einkaufsvorgang {
 }
 
 extension Einkaufsvorgang {
+    /// Wählt aus mehreren gleichzeitig offenen Kandidaten für dieselbe
+    /// (Geschäft, Liste)-Kombination deterministisch DEN einen kanonischen
+    /// aus, den alle Geräte nach einer Synchronisation übereinstimmend
+    /// wählen (GitHub #67-Erweiterung): der älteste ``startZeit`` gewinnt,
+    /// bei exaktem Gleichstand die lexikographisch kleinere ``id`` als
+    /// stabiler Tiebreaker (analog `LamportTimestamp`).
+    ///
+    /// **Hintergrund:** Zwei Geräte, die kurz nacheinander (vor dem ersten
+    /// Sync-Zyklus) unabhängig je einen eigenen Vorgang für dieselbe
+    /// Kombination anlegen (Race beim gleichzeitigen Betreten desselben
+    /// Ladens), hatten vorher keine gemeinsame Regel, WELCHEN der beiden
+    /// jedes Gerät als „den aktuellen" behandelt — jede Stelle wählte einen
+    /// beliebigen, per Fetch-Reihenfolge nicht garantierten Treffer. Ohne
+    /// gemeinsame Regel konnte Gerät B dauerhaft auf seinem eigenen,
+    /// inzwischen vom Merge zugunsten von Gerät A's Vorgang „verlorenen"
+    /// Kandidaten hängen bleiben — vom anderen Gerät abgehakte Artikel wären
+    /// dann in B's aktiver Ansicht nie als abgehakt erschienen, obwohl der
+    /// Sync sie korrekt verarbeitet hat. Da ``startZeit`` beim Sync
+    /// unverändert übernommen wird (nie lokal neu gesetzt), kommen alle
+    /// Geräte nach der Synchronisation zuverlässig auf denselben Vorgang.
+    static func kanonischer(unter kandidaten: [Einkaufsvorgang]) -> Einkaufsvorgang? {
+        kandidaten.min { a, b in
+            if a.startZeit != b.startZeit { return a.startZeit < b.startZeit }
+            return a.id.uuidString < b.id.uuidString
+        }
+    }
+
     /// Sucht einen lokal noch offenen Einkaufsvorgang für `liste` — bevorzugt
     /// mit `bevorzugtesGeschaeft` (zwei Geräte können gleichzeitig an
     /// unterschiedlichen Geschäften für dieselbe Liste einkaufen), sonst
@@ -223,12 +250,14 @@ extension Einkaufsvorgang {
     /// `SyncSnapshotImportService.mergeEinkaufsvorgaenge` (dieselbe
     /// Ursachen-Familie im Bereich-C-Snapshot-Merge) — vorher unabhängig
     /// dupliziert, jetzt eine einzige Quelle für „was zählt als derselbe noch
-    /// laufende Einkauf".
+    /// laufende Einkauf". Bei mehreren passenden Kandidaten entscheidet
+    /// ``kanonischer(unter:)`` deterministisch (GitHub #67-Erweiterung).
     static func offenerNachfolger(
         fuerListe liste: Einkaufsliste, bevorzugtesGeschaeft: Geschaeft?, context: ModelContext
     ) -> Einkaufsvorgang? {
         let deskriptor = FetchDescriptor<Einkaufsvorgang>(predicate: #Predicate { $0.endZeit == nil })
         let offeneFuerListe = ((try? context.fetch(deskriptor)) ?? []).filter { $0.einkaufsliste == liste }
-        return offeneFuerListe.first(where: { $0.geschaeft == bevorzugtesGeschaeft }) ?? offeneFuerListe.first
+        let passende = offeneFuerListe.filter { $0.geschaeft == bevorzugtesGeschaeft }
+        return kanonischer(unter: passende) ?? kanonischer(unter: offeneFuerListe)
     }
 }

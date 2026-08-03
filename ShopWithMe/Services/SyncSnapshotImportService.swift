@@ -931,9 +931,9 @@ enum SyncSnapshotImportService {
                     SyncDebugLogger.log(.einkaufsvorgangEintragUebersprungen, details: "vorgangID=\(eintrag.id) grund=unaufloesbareListe")
                 }
                 continue
-            } else if let offenerTreffer = alleLokalen.first(where: {
+            } else if let offenerTreffer = Einkaufsvorgang.kanonischer(unter: alleLokalen.filter({
                 $0.endZeit == nil && $0.geschaeft == remoteGeschaeft && $0.einkaufsliste == remoteListe
-            }) {
+            })) {
                 if offenerTreffer.id != eintrag.id {
                     SyncEntitaetsAliasService.registriere(
                         entitaetsArt: SyncEntitaetsArt.einkaufsvorgang, fremdeID: eintrag.id, lokaleID: offenerTreffer.id, context: context

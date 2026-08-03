@@ -403,4 +403,79 @@ struct EinkaufsvorgangTests {
         #expect(apfelEintrag?.kategorieBesuchsIndex == 0)
         #expect(kirscheEintrag?.kategorieBesuchsIndex == 0)
     }
+
+    /// GitHub #67-Erweiterung: Zwei gleichzeitig offene Vorgänge für dieselbe
+    /// (Geschäft, Liste)-Kombination (Race zweier Geräte vor dem ersten
+    /// Sync-Zyklus) müssen von jedem Gerät auf denselben kanonischen Vorgang
+    /// aufgelöst werden — unabhängig von der Reihenfolge, in der sie
+    /// übergeben werden (unterschiedliche lokale Fetch-Reihenfolgen auf
+    /// unterschiedlichen Geräten dürfen zu keinem unterschiedlichen Ergebnis
+    /// führen). Der ältere ``Einkaufsvorgang/startZeit`` gewinnt.
+    @Test
+    func kanonischerWaehltImmerDenAeltestenUnabhaengigVonDerReihenfolge() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let geschaeft = Geschaeft(name: "Testladen", typen: [lebensmittelTyp()])
+        context.insert(geschaeft)
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
+
+        let neuer = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste, startZeit: Date())
+        let aelterer = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste, startZeit: Date(timeIntervalSinceNow: -60))
+        context.insert(neuer)
+        context.insert(aelterer)
+
+        #expect(Einkaufsvorgang.kanonischer(unter: [neuer, aelterer])?.id == aelterer.id)
+        #expect(Einkaufsvorgang.kanonischer(unter: [aelterer, neuer])?.id == aelterer.id)
+    }
+
+    /// Bei exaktem Gleichstand der ``Einkaufsvorgang/startZeit`` (praktisch nur
+    /// bei einem echten Zeitgleichheits-Rennen zweier Geräte) muss die Wahl
+    /// trotzdem für alle Geräte identisch ausfallen — die `id` als stabiler
+    /// Tiebreaker leistet das, ein zufälliger `.first`-Treffer nicht.
+    @Test
+    func kanonischerEntscheidetBeiGleicherStartZeitUeberDieId() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let geschaeft = Geschaeft(name: "Testladen", typen: [lebensmittelTyp()])
+        context.insert(geschaeft)
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
+
+        let zeitpunkt = Date()
+        let a = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste, startZeit: zeitpunkt)
+        let b = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste, startZeit: zeitpunkt)
+        context.insert(a)
+        context.insert(b)
+
+        let erwarteterGewinner = a.id.uuidString < b.id.uuidString ? a : b
+        #expect(Einkaufsvorgang.kanonischer(unter: [a, b])?.id == erwarteterGewinner.id)
+        #expect(Einkaufsvorgang.kanonischer(unter: [b, a])?.id == erwarteterGewinner.id)
+    }
+
+    /// Regressionstest für die eigentliche Fund-Situation (GitHub #67-
+    /// Erweiterung): `offenerNachfolger` muss bei zwei passenden Kandidaten
+    /// (gleiches Geschäft, gleiche Liste, beide offen) deterministisch immer
+    /// denselben liefern, egal welcher zuerst angelegt/gefetcht wurde.
+    @Test
+    func offenerNachfolgerWaehltBeiMehrerenKandidatenDenAeltesten() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let geschaeft = Geschaeft(name: "Testladen", typen: [lebensmittelTyp()])
+        context.insert(geschaeft)
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
+
+        let neuer = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste, startZeit: Date())
+        let aelterer = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste, startZeit: Date(timeIntervalSinceNow: -60))
+        context.insert(neuer)
+        context.insert(aelterer)
+        try context.save()
+
+        let ergebnis = Einkaufsvorgang.offenerNachfolger(fuerListe: liste, bevorzugtesGeschaeft: geschaeft, context: context)
+        #expect(ergebnis?.id == aelterer.id)
+    }
 }

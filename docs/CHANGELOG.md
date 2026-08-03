@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.10 (Build 197) — Deterministische Kanon-Wahl bei mehreren offenen Einkaufsvorgang-Kandidaten (GitHub #67-Erweiterung)
+
+- Legten zwei Geräte kurz nacheinander (vor dem ersten Sync-Zyklus)
+  unabhängig je einen eigenen offenen Einkaufsvorgang für dieselbe
+  (Geschäft, Liste)-Kombination an, wählten `offenerNachfolger`,
+  `EinkaufenView.aktuellerEinkauf` und `mergeEinkaufsvorgaenge`s
+  `offenerTreffer`-Zweig jeweils einen beliebigen, von der SwiftData-
+  Fetch-Reihenfolge abhängigen Treffer — ein Gerät konnte dadurch dauerhaft
+  auf seinem eigenen, vom Merge bereits „verlorenen" Vorgang hängen bleiben
+  und vom anderen Gerät abgehakte Artikel während des laufenden Einkaufs nie
+  als abgehakt sehen (das eigentliche „nicht mehr kaufen"-Verhalten war
+  davon nicht betroffen, nur die Live-Anzeige).
+- Neue gemeinsame Regel `Einkaufsvorgang.kanonischer(unter:)`: ältester
+  `startZeit` gewinnt, bei Gleichstand die kleinere `id` als Tiebreaker
+  (analog `LamportTimestamp`) — an allen drei Stellen eingesetzt. Da
+  `startZeit` beim Sync unverändert übernommen wird, kommen alle Geräte
+  danach zuverlässig auf denselben Vorgang.
+- Deckt bewusst nicht #69 ab (store-loser Fallback bei fehlendem passendem
+  Geschäft) — das bleibt eigenständig offen.
+
 ## v0.10 (Build 196) — Härtung: automatischer Rollback bei eindeutig fehlgeschlagenem Neuaufbau
 
 - `SyncErsetzenService.fuehreAusstehendeAktionAus` zeigte einen Rückgang nach

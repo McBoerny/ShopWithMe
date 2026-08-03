@@ -75,11 +75,20 @@ struct EinkaufenView: View {
     /// dem alle Aufrufer laufen, ist das race-frei.
     @State private var einkaufSicherstellenLaeuft = false
 
+    /// Bei mehreren lokal bekannten, gleichzeitig passenden offenen
+    /// Kandidaten (z.B. nach einer Race-Anlage durch zwei Geräte vor dem
+    /// ersten Sync-Zyklus) entscheidet ``Einkaufsvorgang/kanonischer(unter:)``
+    /// deterministisch, statt eines beliebigen, per Fetch-Reihenfolge nicht
+    /// garantierten Treffers (GitHub #67-Erweiterung) — sonst könnte dieses
+    /// Gerät dauerhaft auf einem vom Merge bereits „verlorenen" Kandidaten
+    /// hängen bleiben und vom anderen Gerät abgehakte Artikel nie als
+    /// abgehakt sehen.
     private var aktuellerEinkauf: Einkaufsvorgang? {
         guard let ausgewaehlteListe else { return nil }
-        return offeneEinkaufsvorgaenge.first {
+        let kandidaten = offeneEinkaufsvorgaenge.filter {
             $0.geschaeft == ausgewaehltesGeschaeft && $0.einkaufsliste == ausgewaehlteListe
         }
+        return Einkaufsvorgang.kanonischer(unter: kandidaten)
     }
 
     /// Meistgenutzte Geschäfte für die priorisierte Anzeige im Geschäfts-Menü
