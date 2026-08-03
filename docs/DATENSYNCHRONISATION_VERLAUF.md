@@ -2393,3 +2393,60 @@ unabhängig vom Status ausgeschlossen bleiben.
 abschließen, prüfen dass abgehakte Artikel auf Gerät B — sowohl in der
 ursprünglichen Geschäftsansicht als auch geschäftsneutral — konsistent
 verschwinden) bleibt vor endgültigem Vertrauen empfohlen.
+
+## 38. Live-Test-Fund (2026-08-03, in unterschiedlichen Läden eingekauft): Dedupe-Schutz galt nur pro Vorgang statt listenweit — Artikel ließ sich nicht mehr reaktivieren
+
+**Auslöser:** Zwei-Geräte-Test, Fortsetzung von Abschnitt 36/37: „in
+unterschiedlichen Läden eingekauft, Artikel können nicht wieder aktiviert
+werden … das ist eigentlich für den Fall da: ich habe mich vertippt, Artikel
+wurde fälschlicherweise als gekauft markiert." Bestätigt per Rückfrage: das
+Problem trat erst NACH Sync eines von einem anderen Gerät abgehakten
+Artikels auf — nicht rein lokal auf einem Gerät ohne Sync. Meine erste
+Vermutung (Vorgang war bereits „Einkauf abschließen"-abgeschlossen) wurde
+per Log widerlegt: im fraglichen Zeitfenster fand keine einzige neue
+Vorgangs-Abschluss-Übernahme statt.
+
+**Root Cause:** `Einkaufsvorgang.artikelAbhakenOhneEventAufzeichnung`s
+Dedupe-Schutz gegen doppeltes Abhaken prüfte nur `self.kaufEintraege` — also
+PRO VORGANG, nicht listenweit. Seit die „abgehakt"-Anzeige listenweit über
+alle offenen Vorgänge gilt (Abschnitt 35/37), konnte derselbe Artikel
+unabhängig unter zwei unterschiedlichen, beide offenen Vorgängen (hier: zwei
+Geschäften, „Edeka" und „Rewe") abgehakt werden — das erzeugte ZWEI separate
+`KaufEintrag`e für denselben Artikel. Die Anzeige zeigte trotzdem nur eine
+(deduplizierte) Zeile, aber `EinkaufenView.umschalten(_:kategorie:)`/
+`kaufEintrag(fuer:)` griffen nur auf den per `.first` zufällig ERSTEN Treffer
+zu — ein „Abwählen" entfernte nur einen der beiden Einträge, der andere
+blieb bestehen, der Artikel erschien weiterhin „abgehakt". Aus Nutzersicht:
+Tippen auf „Abwählen" schien wirkungslos.
+
+**Fix, zwei Ebenen:**
+1. **Root Cause behoben:** Der Dedupe-Schutz in
+   `artikelAbhakenOhneEventAufzeichnung` prüft jetzt listenweit über alle
+   noch offenen Vorgänge (`$0.einkaufsvorgang?.einkaufsliste == einkaufsliste
+   && $0.einkaufsvorgang?.endZeit == nil`) statt nur gegen `self` — ein
+   zweiter Abhak-Versuch für denselben Artikel unter einem ANDEREN offenen
+   Vorgang derselben Liste wird jetzt korrekt als `.bereitsAbgehaktVon`
+   erkannt, kein zweiter `KaufEintrag` entsteht mehr. Der
+   Überkauf-Hinweis-Gewinner (`SyncEventService.aktuellerGewinner`) wird
+   dabei mit der `bezugsID` des TATSÄCHLICHEN Besitzer-Vorgangs abgefragt,
+   nicht mehr blind mit `self.id`.
+2. **Selbstheilend gegen bereits bestehende Duplikate:**
+   `EinkaufenView.umschalten(_:kategorie:)`/`entferneDauerhaft(_:)` nutzen
+   jetzt `alleAbgehaktenEintraege(fuer:)` (statt `kaufEintrag(fuer:)`, das nur
+   den ersten Treffer liefert) und wirken auf ALLE gefundenen Einträge — ein
+   einzelner Tap räumt damit auch schon bestehende Duplikate (z.B. aus der
+   Testphase vor diesem Fix) vollständig auf, statt mehrere Taps zu
+   erfordern.
+
+**Tests:** Neuer Test
+`EinkaufsvorgangTests.abhakenInZweitemOffenemVorgangDerselbenListeErzeugtKeinDuplikat`:
+Artikel wird in einem offenen Edeka-Vorgang abgehakt (liefert `.abgehakt`),
+ein zweiter Abhak-Versuch im ebenfalls offenen Rewe-Vorgang derselben Liste
+liefert `.bereitsAbgehaktVon`, erzeugt keinen zweiten `KaufEintrag`, und ein
+einzelnes Abwählen setzt den Artikel vollständig zurück.
+
+**Verifikationsstand:** `xcodegen generate` + `xcodebuild build`/
+`build-for-testing` grün. Ein erneuter Zwei-Geräte-Test mit genau diesem
+Szenario (Artikel in zwei unterschiedlichen Läden für dieselbe Liste
+abhaken, danach auf einem Gerät wieder abwählen) bleibt vor endgültigem
+Vertrauen empfohlen.

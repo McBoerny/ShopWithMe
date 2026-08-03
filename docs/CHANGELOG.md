@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.10 (Build 202) — Live-Test-Fund: Dedupe-Schutz beim Abhaken galt nur pro Vorgang statt listenweit
+
+- Im Zwei-Geräte-Test gefunden: Artikel, die in unterschiedlichen Läden für
+  dieselbe Liste eingekauft wurden, ließen sich nach dem Sync auf dem
+  anderen Gerät nicht mehr abwählen/reaktivieren (z.B. um ein versehentliches
+  Abhaken rückgängig zu machen).
+- Ursache: der Schutz gegen doppeltes Abhaken prüfte nur den aktuellen
+  Einkaufsvorgang, nicht die ganze Liste. Da die "abgehakt"-Anzeige seit
+  Kurzem listenweit über alle offenen Vorgänge gilt, konnte derselbe Artikel
+  unter zwei verschiedenen offenen Vorgängen (zwei Geschäften) unabhängig
+  abgehakt werden — zwei Kaufeinträge entstanden, von denen ein einzelnes
+  Abwählen nur einen entfernte.
+- Fix: Dedupe-Schutz prüft jetzt listenweit über alle offenen Vorgänge.
+  Zusätzlich räumen `Abwählen`/`dauerhaft entfernen` jetzt alle passenden
+  Einträge auf einmal auf, nicht nur den ersten Treffer — das behebt auch
+  bereits bestehende Duplikate aus der Testphase. Details:
+  `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 38.
+
 ## v0.10 (Build 201) — Live-Test-Fund: Sichtbarkeit „abgehakt“ hing am falschen Kriterium (Zeitfenster statt Vorgangs-Status)
 
 - Im fortgesetzten Zwei-Geräte-Test gefunden: nach „Einkauf abschließen“ auf

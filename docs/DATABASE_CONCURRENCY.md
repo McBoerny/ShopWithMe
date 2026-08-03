@@ -166,9 +166,15 @@ langen Session-Lease, braucht es einen technischen Auffangmechanismus statt
 reiner Fenster-Minimierung:
 
 - **Eindeutigkeits-/Dedupe-Prüfung** beim Anlegen eines `KaufEintrag`: pro
-  (`Einkaufsvorgang`, `Artikel`) darf nur ein aktiver Eintrag entstehen. Haken
-  zwei Geräte im seltenen Kollisionsfall denselben Artikel „gleichzeitig" ab,
-  wird der zweite Schreibversuch beim Speichern als Duplikat erkannt und
+  (`Einkaufsliste`, `Artikel`) darf unter allen noch **offenen** Vorgängen nur
+  ein aktiver Eintrag entstehen — bewusst listenweit, nicht nur pro
+  `Einkaufsvorgang` (Live-Test-Fund, Nachtrag Session 2026-08-03: eine
+  Prüfung nur pro Vorgang ließ denselben Artikel unter zwei unterschiedlichen,
+  beide offenen Vorgängen — z.B. zwei Geschäften — unabhängig voneinander
+  abhaken, was zwei Kaufeinträge erzeugte und den Artikel für ein einzelnes
+  „Abwählen" scheinbar dauerhaft „abgehakt" hängen ließ). Haken zwei Geräte
+  im seltenen Kollisionsfall denselben Artikel „gleichzeitig" ab, wird der
+  zweite Schreibversuch beim Speichern als Duplikat erkannt und
   verworfen/zusammengeführt, statt einen inkonsistenten Doppel-Eintrag zu
   erzeugen. Das ist die eigentliche Absicherung gegen dieses Restrisiko — nicht
   die Lease an sich.

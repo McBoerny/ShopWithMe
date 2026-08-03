@@ -1087,6 +1087,21 @@ private struct EinkaufslisteView: View {
         abgehakteKaufEintraege.first { $0.artikel == artikel }
     }
 
+    /// ALLE (nicht nur den ersten) offenen Kaufeinträge für `artikel` auf
+    /// dieser Liste — Grundlage für ``umschalten(_:kategorie:)``/
+    /// ``entferneDauerhaft(_:)``. Vor dem Live-Test-Fund (Nachtrag Session
+    /// 2026-08-03) konnte derselbe Artikel unter zwei unterschiedlichen,
+    /// beide offenen Vorgängen abgehakt sein (Dedupe-Schutz galt nur pro
+    /// Vorgang, nicht listenweit) — ein `Abwählen`/`entfernen`, das nur den
+    /// per `kaufEintrag(fuer:)` zufällig ERSTEN Treffer bearbeitet, hätte den
+    /// Artikel dann scheinbar dauerhaft „abgehakt" hängen lassen. Der
+    /// Dedupe-Schutz selbst ist inzwischen listenweit gefixt (verhindert
+    /// NEUE Duplikate), diese Funktion räumt zusätzlich robust auf, falls
+    /// trotzdem mehrere Einträge existieren (z.B. aus der Zeit vor dem Fix).
+    private func alleAbgehaktenEintraege(fuer artikel: Artikel) -> [KaufEintrag] {
+        abgehakteKaufEintraege.filter { $0.artikel == artikel }
+    }
+
     var body: some View {
         let artikelListe = artikelAufListe
         let gruppen = kategorieGruppen(fuer: artikelListe)
@@ -1239,29 +1254,34 @@ private struct EinkaufslisteView: View {
         // diese Kategorie oder den Kaufeintrag (z.B. per Peer-Zusammenführung/
         // Löschung) verändert haben.
         //
-        // Der TATSÄCHLICHE Besitzer-Vorgang eines ggf. bereits abgehakten
-        // Eintrags kommt bewusst direkt aus ``kaufEintrag(fuer:)`` (derselben
-        // Quelle, die auch ``istAbgehakt(_:)``/die Sichtbarkeit dieses
-        // Buttons bestimmt hat) — NICHT über einen neuen, zeitfenster-
+        // Die TATSÄCHLICHEN Besitzer-Vorgänge eines ggf. bereits abgehakten
+        // Eintrags kommen bewusst direkt aus ``alleAbgehaktenEintraege(fuer:)``
+        // (dieselbe Quelle, die auch ``istAbgehakt(_:)``/die Sichtbarkeit
+        // dieses Buttons bestimmt hat) — NICHT über einen neuen, zeitfenster-
         // beschränkten Fetch relativ zu `einkaufsvorgang.startZeit` erneut
-        // geraten: seit die Live-Ansicht liste-weit statt nur vorgangs-weit
-        // gilt, rotiert `einkaufsvorgang` bei jedem „Einkauf abschließen"
-        // auf einen NEUEN, späteren Vorgang — ein zeitfenster-basierter Fetch
-        // hätte den echten, ÄLTEREN Eintrag dann verfehlt (Regressionsfund:
-        // machte „Abwählen"/„dauerhaft entfernen" zum stillen No-op, sobald
-        // der Vorgang seit dem Abhaken bereits rotiert war).
+        // geraten (Regressionsfund: machte „Abwählen" zum stillen No-op nach
+        // einer Vorgangs-Rotation). Bewusst ALLE (nicht nur der erste)
+        // Treffer: vor dem listenweiten Dedupe-Fix (Live-Test-Fund, Nachtrag
+        // Session 2026-08-03) konnte derselbe Artikel unter zwei
+        // unterschiedlichen, beide offenen Vorgängen abgehakt sein — ein
+        // Abwählen, das nur den ersten Treffer bearbeitet, hätte den Artikel
+        // wegen des verbleibenden zweiten Eintrags scheinbar dauerhaft
+        // „abgehakt" hängen lassen.
         let artikelReferenz = ModelReference(artikel)
         let einkaufsvorgangReferenz = ModelReference(einkaufsvorgang)
         let kategorieReferenz = ModelReference(kategorie)
-        let vorhandenerEintragReferenz = ModelReference(kaufEintrag(fuer: artikel))
+        let vorhandeneEintragReferenzen = alleAbgehaktenEintraege(fuer: artikel).map(ModelReference.init)
         Task {
             var abhakErgebnis: AbhakErgebnis?
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
                 guard let artikelFrisch = artikelReferenz.resolved(in: modelContext),
                       let einkaufsvorgangFrisch = einkaufsvorgangReferenz.resolved(in: modelContext)
                 else { return }
-                if let besitzer = vorhandenerEintragReferenz?.resolved(in: modelContext)?.einkaufsvorgang {
-                    besitzer.artikelAbwaehlen(artikelFrisch, context: modelContext)
+                let besitzer = vorhandeneEintragReferenzen.compactMap { $0.resolved(in: modelContext)?.einkaufsvorgang }
+                if !besitzer.isEmpty {
+                    for vorgang in besitzer {
+                        vorgang.artikelAbwaehlen(artikelFrisch, context: modelContext)
+                    }
                 } else {
                     // `nil`, falls die Kategorie inzwischen gelöscht wurde — fällt
                     // dann auf `Artikel/fuehrendeKategorie(inGeschaeft:context:)`
@@ -1297,20 +1317,23 @@ private struct EinkaufslisteView: View {
 
     private func entferneDauerhaft(_ artikel: Artikel) {
         interaktionRegistrieren()
-        // Siehe ``umschalten(_:kategorie:)`` — derselbe Grund, den
-        // TATSÄCHLICHEN Besitzer-Vorgang direkt aus ``kaufEintrag(fuer:)``
-        // zu nehmen statt über einen zeitfenster-beschränkten Fetch relativ
-        // zu `einkaufsvorgang.startZeit` erneut zu raten (Regressionsfund:
-        // war nach einer Vorgangs-Rotation, z.B. durch „Einkauf abschließen“,
-        // ein stiller No-op — der Eintrag blieb bestehen und `artikelDauerhaftEntfernt`
-        // wurde nie aufgezeichnet, sichtbar als weiterhin „abgehakt“ auf
-        // anderen Geräten/Ansichten).
+        // Siehe ``umschalten(_:kategorie:)`` — derselbe Grund, ALLE
+        // TATSÄCHLICHEN Besitzer-Vorgänge direkt aus
+        // ``alleAbgehaktenEintraege(fuer:)`` zu nehmen statt über einen
+        // zeitfenster-beschränkten Fetch erneut zu raten, und bewusst ALLE
+        // (nicht nur den ersten) Treffer zu entfernen — sonst bliebe bei
+        // einem doppelt abgehakten Artikel (zwei offene Vorgänge, siehe
+        // ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:indexFuerDistanzlernen:kategorie:geschaeft:)``)
+        // der zweite Eintrag bestehen und der Artikel scheinbar weiterhin
+        // „abgehakt".
         let artikelReferenz = ModelReference(artikel)
-        let vorhandenerEintragReferenz = ModelReference(kaufEintrag(fuer: artikel))
+        let vorhandeneEintragReferenzen = alleAbgehaktenEintraege(fuer: artikel).map(ModelReference.init)
         Task {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
                 guard let artikelFrisch = artikelReferenz.resolved(in: modelContext) else { return }
-                vorhandenerEintragReferenz?.resolved(in: modelContext)?.einkaufsvorgang?.artikelDauerhaftEntfernen(artikelFrisch, context: modelContext)
+                for referenz in vorhandeneEintragReferenzen {
+                    referenz.resolved(in: modelContext)?.einkaufsvorgang?.artikelDauerhaftEntfernen(artikelFrisch, context: modelContext)
+                }
             }
         }
     }

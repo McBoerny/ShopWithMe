@@ -112,21 +112,29 @@ final class Einkaufsvorgang {
     ) -> AbhakErgebnis {
         // Dedupe-Schutz gegen das in `docs/DATABASE_CONCURRENCY.md` dokumentierte
         // Restrisiko (Sync-Latenz-Kollisionsfenster bei zeitgleichem Abhaken auf zwei
-        // Geräten): pro (Einkaufsvorgang, Artikel) darf nur ein `KaufEintrag`
-        // entstehen. Existiert bereits einer (z.B. weil das andere Gerät knapp vor
-        // uns synchronisiert hat), kein Duplikat anlegen.
-        let einkaufsvorgangID = persistentModelID
+        // Geräten) — bewusst LISTE-weit über alle noch offenen Vorgänge geprüft,
+        // nicht nur `self` (Live-Test-Fund, Nachtrag Session 2026-08-03): seit die
+        // „abgehakt"-Ansicht listenweit über alle offenen Vorgänge gilt (Abschnitt
+        // 35/37), muss auch dieser Schutz auf derselben Ebene greifen. Eine
+        // Prüfung nur gegen `self` ließ denselben Artikel unter zwei
+        // unterschiedlichen, beide offenen Vorgängen (z.B. zwei verschiedenen
+        // Geschäften) unabhängig voneinander abhaken — zwei separate
+        // `KaufEintrag`e, von denen „Abwählen" pro Tap nur EINEN entfernte; der
+        // Artikel blieb scheinbar dauerhaft „abgehakt" hängen.
         let artikelID = artikel.persistentModelID
-        let deskriptor = FetchDescriptor<KaufEintrag>(
-            predicate: #Predicate { $0.einkaufsvorgang?.persistentModelID == einkaufsvorgangID && $0.artikel?.persistentModelID == artikelID }
-        )
+        let deskriptor = FetchDescriptor<KaufEintrag>(predicate: #Predicate { $0.artikel?.persistentModelID == artikelID })
         let listenEintrag = einkaufsliste?.eintrag(fuer: artikel)
-        if let anzahl = try? context.fetchCount(deskriptor), anzahl > 0 {
+        let bereitsVorhanden = ((try? context.fetch(deskriptor)) ?? []).first {
+            $0.einkaufsvorgang?.einkaufsliste?.persistentModelID == einkaufsliste?.persistentModelID
+                && $0.einkaufsvorgang?.endZeit == nil
+        }
+        if let bereitsVorhanden {
             DatabaseDebugLogger.log(.dedupeConflictDetected, details: "artikelAbhaken: \(artikel.name)")
             if let listenEintrag {
                 context.delete(listenEintrag)
             }
-            let gewinner = SyncEventService.aktuellerGewinner(bezugsID: id, artikelID: artikel.id, context: context)
+            let besitzerID = bereitsVorhanden.einkaufsvorgang?.id ?? id
+            let gewinner = SyncEventService.aktuellerGewinner(bezugsID: besitzerID, artikelID: artikel.id, context: context)
             return .bereitsAbgehaktVon(geraeteID: gewinner?.autorGeraeteID)
         }
 

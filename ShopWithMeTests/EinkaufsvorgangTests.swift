@@ -177,6 +177,53 @@ struct EinkaufsvorgangTests {
         #expect(liste.enthaelt(apfel) == false)
     }
 
+    /// Regressionstest für den Live-Test-Fund (Nachtrag Session 2026-08-03,
+    /// „in unterschiedlichen Läden eingekauft, Artikel kann nicht wieder
+    /// aktiviert werden"): der Dedupe-Schutz griff bisher nur PRO VORGANG —
+    /// derselbe Artikel konnte unter zwei unterschiedlichen, beide offenen
+    /// Vorgängen (hier: zwei Geschäften) unabhängig voneinander abgehakt
+    /// werden. Seit die Anzeige listenweit gilt, muss auch der Dedupe-Schutz
+    /// listenweit über alle offenen Vorgänge prüfen — sonst entstehen zwei
+    /// `KaufEintrag`e, von denen ein einzelnes „Abwählen" nur einen entfernt.
+    @Test
+    func abhakenInZweitemOffenemVorgangDerselbenListeErzeugtKeinDuplikat() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
+        let edeka = Geschaeft(name: "Edeka", typen: [lebensmittelTyp()])
+        context.insert(edeka)
+        let rewe = Geschaeft(name: "Rewe", typen: [lebensmittelTyp()])
+        context.insert(rewe)
+        let milch = Artikel(name: "H-Milch", symbolName: "drop.fill", farbeHex: "#34C759")
+        context.insert(milch)
+        liste.artikelHinzufuegen(milch, context: context)
+
+        let einkaufEdeka = Einkaufsvorgang(geschaeft: edeka, einkaufsliste: liste)
+        context.insert(einkaufEdeka)
+        let einkaufRewe = Einkaufsvorgang(geschaeft: rewe, einkaufsliste: liste)
+        context.insert(einkaufRewe)
+
+        let ersteAbhakung = einkaufEdeka.artikelAbhaken(milch, context: context)
+        try context.save()
+        let zweiteAbhakung = einkaufRewe.artikelAbhaken(milch, context: context)
+        try context.save()
+
+        #expect(ersteAbhakung == .abgehakt)
+        #expect(zweiteAbhakung == .bereitsAbgehaktVon(geraeteID: nil))
+        #expect(einkaufEdeka.kaufEintraege.count == 1)
+        #expect(einkaufRewe.kaufEintraege.isEmpty)
+        #expect(liste.enthaelt(milch) == false)
+
+        // Ein einzelnes Abwählen (auf welchem der beiden Vorgänge auch immer
+        // aufgerufen, hier bewusst über den tatsächlichen Besitzer) muss den
+        // Artikel vollständig zurücksetzen.
+        einkaufEdeka.artikelAbwaehlen(milch, context: context)
+        #expect(einkaufEdeka.kaufEintraege.isEmpty)
+        #expect(liste.enthaelt(milch))
+    }
+
     @Test
     func artikelAbhakenLiefertAbgehaktBeimErstenUndBereitsAbgehaktVonBeimZweitenAufruf() throws {
         let (container, context) = try machtLeerenContainer()
