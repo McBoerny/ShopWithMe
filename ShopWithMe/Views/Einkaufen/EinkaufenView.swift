@@ -83,12 +83,23 @@ struct EinkaufenView: View {
     /// NUR der Anker, an dem NEUE eigene Häkchen landen. Er bestimmt NICHT
     /// (mehr), was als „gerade abgehakt" angezeigt wird — siehe
     /// ``abgehakteKaufEintraegeFuerAktuelleListe``.
-    private var aktuellerEinkauf: Einkaufsvorgang? {
-        guard let ausgewaehlteListe else { return nil }
-        let kandidaten = offeneEinkaufsvorgaenge.filter {
+    /// Alle offenen Vorgänge für die aktuell gewählte Kombination aus Geschäft und
+    /// Liste — bei einer Race-Anlage (zwei Geräte legen kurz nacheinander je einen
+    /// eigenen Vorgang für dieselbe Kombination an, bevor sie synchronisiert
+    /// haben) oder nach einem unvollständigen Abschluss-Versuch (siehe
+    /// ``EinkaufslisteView/einkaufAbschliessen()``) können das mehr als einer sein.
+    /// ``aktuellerEinkauf`` wählt daraus den kanonischen Anker für NEUE eigene
+    /// Häkchen; ``EinkaufslisteView/einkaufAbschliessen()`` braucht zusätzlich die
+    /// vollständige Liste, um beim Abschließen KEINEN davon übrig zu lassen.
+    private var vorgaengeDerAktuellenKombination: [Einkaufsvorgang] {
+        guard let ausgewaehlteListe else { return [] }
+        return offeneEinkaufsvorgaenge.filter {
             $0.geschaeft == ausgewaehltesGeschaeft && $0.einkaufsliste == ausgewaehlteListe
         }
-        return Einkaufsvorgang.kanonischer(unter: kandidaten)
+    }
+
+    private var aktuellerEinkauf: Einkaufsvorgang? {
+        Einkaufsvorgang.kanonischer(unter: vorgaengeDerAktuellenKombination)
     }
 
     /// Alle für die Live-Ansicht relevanten Kaufeinträge dieser Liste — siehe
@@ -211,6 +222,7 @@ struct EinkaufenView: View {
         if let ausgewaehlteListe, let einkauf = aktuellerEinkauf {
             EinkaufslisteView(
                 geschaeft: ausgewaehltesGeschaeft, einkaufsliste: ausgewaehlteListe, einkaufsvorgang: einkauf,
+                weitereOffeneVorgaengeDerKombination: vorgaengeDerAktuellenKombination.filter { $0.persistentModelID != einkauf.persistentModelID },
                 abgehakteKaufEintraege: abgehakteKaufEintraegeFuerAktuelleListe,
                 geschaeftZuruecksetzen: { ausgewaehltesGeschaeft = nil },
                 interaktionRegistrieren: { letzteInteraktion = .now }
@@ -242,16 +254,27 @@ struct EinkaufenView: View {
         guard Date.now.timeIntervalSince(letzteInteraktion) >= schwelle else { return }
 
         let hatteGeschaeft = ausgewaehltesGeschaeft != nil
-        // Nur die Identität über die `await`-Grenze hinweg sichern (siehe
+        // Nur die Identitäten über die `await`-Grenze hinweg sichern (siehe
         // ``ModelReference``) — während des Micro-Lease-Erwerbs kann ein
-        // nebenläufiger Sync-Zyklus diesen Vorgang bereits geschlossen oder
-        // gelöscht haben.
+        // nebenläufiger Sync-Zyklus diese Vorgänge bereits geschlossen oder
+        // gelöscht haben. Schließt bewusst ALLE offenen Vorgänge derselben
+        // Kombination mit (nicht nur den Anker) — siehe
+        // ``EinkaufslisteView/einkaufAbschliessen()`` für die Begründung
+        // (Live-Test-Fund, Session 2026-08-03): dieselbe Lücke bestand hier
+        // beim automatischen Abschließen nach Inaktivität.
         let referenz = ModelReference(einkauf)
+        let weitereReferenzen = vorgaengeDerAktuellenKombination
+            .filter { $0.persistentModelID != einkauf.persistentModelID }
+            .map(ModelReference.init)
         Task {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
                 guard let einkauf = referenz.resolved(in: modelContext), !einkauf.istAbgeschlossen else { return }
                 einkauf.abschliessen()
                 WarengruppenDistanzService.verarbeiteEinkauf(einkauf, context: modelContext)
+                for weitereReferenz in weitereReferenzen {
+                    guard let weiterer = weitereReferenz.resolved(in: modelContext), !weiterer.istAbgeschlossen else { continue }
+                    weiterer.abschliessen(zaehleAlsBesuch: false)
+                }
             }
         }
         if hatteGeschaeft {
@@ -837,6 +860,15 @@ private struct EinkaufslisteView: View {
     let geschaeft: Geschaeft?
     let einkaufsliste: Einkaufsliste
     let einkaufsvorgang: Einkaufsvorgang
+    /// Weitere offene Vorgänge derselben Kombination aus Geschäft und Liste
+    /// (siehe ``EinkaufenView/vorgaengeDerAktuellenKombination``, OHNE
+    /// ``einkaufsvorgang`` selbst) — entstehen durch eine Race-Anlage (zwei
+    /// Geräte vor dem ersten Sync-Zyklus) oder nach einem unvollständigen
+    /// Abschluss-Versuch. ``einkaufAbschliessen()`` schließt sie zusammen mit
+    /// ``einkaufsvorgang`` mit (Live-Test-Fund, Session 2026-08-03) — sonst
+    /// bleiben listenweit sichtbare (``abgehakteKaufEintraege``) abgehakte
+    /// Artikel an ihnen hängen, obwohl der Einkauf scheinbar abgeschlossen wurde.
+    let weitereOffeneVorgaengeDerKombination: [Einkaufsvorgang]
     /// Alle für die Live-Ansicht relevanten Kaufeinträge dieser Liste, von
     /// EGAL welchem Vorgang (eigenem oder synchronisiertem, offenem oder
     /// bereits geschlossenem) — siehe
@@ -973,7 +1005,22 @@ private struct EinkaufslisteView: View {
         )
     }
 
+    /// Schließt ``einkaufsvorgang`` UND alle ``weitereOffeneVorgaengeDerKombination``
+    /// mit ab (Live-Test-Fund, Session 2026-08-03, siehe DB-Debug-Log-Analyse
+    /// im dazugehörigen Diagnose-Ereignis): die listenweite Sichtbarkeit
+    /// abgehakter Artikel (``abgehakteKaufEintraege``) kennt keinen einzelnen
+    /// „zuständigen" Vorgang — schließt „Einkauf abschließen" nur
+    /// ``einkaufsvorgang`` selbst, bleiben Artikel an einem übrig gebliebenen,
+    /// weiterhin offenen Duplikat-Vorgang derselben Kombination hängen und
+    /// tauchen nach dem vermeintlichen Abschluss unverändert weiter als
+    /// abgehakt auf. Der Besuchszähler (``Geschaeft/eigeneAnzahlEinkaufsvorgaenge``)
+    /// wird dabei bewusst nur für ``einkaufsvorgang`` erhöht (``zaehleAlsBesuch``)
+    /// — alle Duplikate repräsentieren denselben physischen Ladenbesuch.
     private func einkaufAbschliessen() {
+        // Nur die Identitäten über die `await`-Grenze hinweg sichern (siehe
+        // ``ModelReference``) — während des Micro-Lease-Erwerbs kann ein
+        // nebenläufiger Sync-Zyklus einen dieser Vorgänge bereits verändert haben.
+        let weitereReferenzen = weitereOffeneVorgaengeDerKombination.map(ModelReference.init)
         Task {
             // Abschließen + Lernschritt sind fachlich eine Aktion → ein
             // gemeinsamer Micro-Lease statt zwei getrennter (siehe
@@ -983,6 +1030,10 @@ private struct EinkaufslisteView: View {
                 protokolliereAbschlussDiagnose()
                 einkaufsvorgang.abschliessen()
                 umbauNeuErkannt = WarengruppenDistanzService.verarbeiteEinkauf(einkaufsvorgang, context: modelContext)
+                for referenz in weitereReferenzen {
+                    guard let weiterer = referenz.resolved(in: modelContext), !weiterer.istAbgeschlossen else { continue }
+                    weiterer.abschliessen(zaehleAlsBesuch: false)
+                }
             }
             // Bewusst der Rückgabewert (nur beim erstmaligen Erkennen `true`)
             // statt des rohen `geschaeft.umbauVerdacht`-Felds, das über mehrere

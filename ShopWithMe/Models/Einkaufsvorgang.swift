@@ -49,12 +49,21 @@ final class Einkaufsvorgang {
     var istAbgeschlossen: Bool { endZeit != nil }
 
     /// Beendet den Einkaufsvorgang zum angegebenen Zeitpunkt (Standard: jetzt) und
-    /// erhöht — falls ``geschaeft`` gesetzt ist — dessen rein lokalen Anteil
-    /// ``Geschaeft/eigeneAnzahlEinkaufsvorgaenge`` (GitHub #30; der über alle
-    /// Geräte gemergte ``Geschaeft/anzahlEinkaufsvorgaenge`` ergibt sich daraus
-    /// automatisch beim Lesen).
-    func abschliessen(am zeitpunkt: Date = Date()) {
+    /// erhöht — falls ``geschaeft`` gesetzt UND `zaehleAlsBesuch` `true` ist —
+    /// dessen rein lokalen Anteil ``Geschaeft/eigeneAnzahlEinkaufsvorgaenge``
+    /// (GitHub #30; der über alle Geräte gemergte
+    /// ``Geschaeft/anzahlEinkaufsvorgaenge`` ergibt sich daraus automatisch beim
+    /// Lesen).
+    ///
+    /// `zaehleAlsBesuch: false` für zusätzliche, zur selben Kombination aus
+    /// Geschäft und Liste gehörende Duplikat-Vorgänge, die zusammen mit dem
+    /// eigentlichen Vorgang geschlossen werden (Live-Test-Fund, Session
+    /// 2026-08-03, siehe ``EinkaufenView/EinkaufslisteView/einkaufAbschliessen()``)
+    /// — sie repräsentieren denselben physischen Ladenbesuch und dürfen ihn
+    /// nicht zusätzlich mitzählen.
+    func abschliessen(am zeitpunkt: Date = Date(), zaehleAlsBesuch: Bool = true) {
         endZeit = zeitpunkt
+        guard zaehleAlsBesuch else { return }
         geschaeft?.eigeneAnzahlEinkaufsvorgaenge += 1
     }
 

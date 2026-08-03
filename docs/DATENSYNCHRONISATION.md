@@ -243,6 +243,32 @@ Artikel dadurch nicht zuverlässig auf. Der ursprüngliche Auftrag lautete
 des Vorgangs, kein Zeitpunkt-Vergleich. Fix: einfacher Filter auf
 `Einkaufsvorgang.endZeit == nil`, kein Zeitfenster mehr nötig.
 
+**Live-Test-Fund, zweiter Nachtrag (2026-08-03): Sichtbarkeit gefixt, Abschließen
+nicht.** Der Fix oben löste nur, WAS als abgehakt angezeigt wird — nicht, WELCHER
+Vorgang beim Tippen auf „Einkauf abschließen" tatsächlich geschlossen wird. Das
+blieb weiterhin nur `EinkaufenView.aktuellerEinkauf` (der lokale Anker der
+aktuellen Geschäft+Liste-Auswahl). Existierten für dieselbe Kombination mehrere
+offene Vorgänge — durch dieselbe Race-Anlage wie beim `offenerTreffer`-Fall unten,
+oder weil ein vorheriger unvollständiger Abschluss-Versuch sofort einen neuen
+leeren Anker erzeugte (`einkaufSicherstellen()` reagiert auf
+`offeneEinkaufsvorgaenge.count`) —, schloss „Einkauf abschließen" nur den Anker;
+die tatsächlichen `KaufEintrag`e blieben am anderen, weiterhin offenen Vorgang
+hängen und erschienen unverändert weiter als abgehakt, ohne dass sich der Zustand
+mit „alles nochmal abhaken" dauerhaft reparieren ließ (jeder neue Sync brachte
+den alten, unvollständig abgeschlossenen Bestand zurück). Bestätigt per
+`DatabaseDebugLogger`-Diagnose-Ereignis `einkauf_abschluss_ausgeloest`
+(`docs/LOGGING.md`): `offeneVorgaengeFuerListe=4`,
+`andereOffeneVorgaengeMitEintraegen=2`, `eigeneEintraege=1` bei
+`listenweitAbgehaktGesamt=5`. Fix: `EinkaufslisteView.einkaufAbschliessen()`
+schließt jetzt alle offenen Vorgänge derselben Geschäft+Liste-Kombination
+(`EinkaufenView.vorgaengeDerAktuellenKombination`) — nicht nur den Anker.
+`Einkaufsvorgang.abschliessen(zaehleAlsBesuch:)` erhöht
+`Geschaeft.eigeneAnzahlEinkaufsvorgaenge` dabei bewusst nur für den Anker, damit
+mehrere geschlossene Datensätze nicht denselben physischen Ladenbesuch mehrfach
+zählen. Dieselbe Lücke bestand auch beim automatischen Abschließen nach
+Inaktivität (`EinkaufenView.inaktivitaetPruefen()`) und wurde dort identisch
+mitgefixt.
+
 Ein `.artikelAbgehakt`-Event materialisiert den `KaufEintrag` deshalb immer
 auf dem in der Nutzlast referenzierten Vorgang selbst — **keine Umleitung auf
 einen offenen Nachfolger mehr**, auch wenn dieser Vorgang beim Empfänger
