@@ -322,24 +322,12 @@ eines identischen Symptoms, siehe §30) von einem rein extern verursachten
 Ordner-Ausfall unterscheidbar. Nur bei ``Protokollstufe/ausfuehrlich``, da es
 pro Aufrufstelle bei jedem Zyklus feuert.
 
-**`sync_icloud_wecker_abgeschlossen`** (GitHub #91, ``SyncICloudWeckerService``):
-protokolliert nach jedem aktiven iCloud-Weckimpuls (kurz laufende
-`NSMetadataQuery`, gescoped auf den Sync-Ordner, vor den eigentlichen
-Import-/Export-Schritten jedes Zyklus) `rechtzeitig=<Bool>
-dauer=<Duration>` — `rechtzeitig=true`, wenn
-`.NSMetadataQueryDidFinishGathering` innerhalb von
-`SyncICloudWeckerService.timeout` eintraf, sonst `false` (Timeout griff). Bei
-Ordnern anderer Anbieter (Synology Drive, lokal) läuft die Query leer durch,
-`rechtzeitig` ist dann immer `false` — erwartetes Verhalten, kein Fehler.
-Grundlage, um den Timeout-Wert später anhand echter Beobachtungswerte statt
-einer Annahme nachzujustieren.
-
 **Stufen-Einordnung** (siehe „Gemeinsamer Baustein: `Protokollstufe`" oben):
 `Ausführlich` für `sync_snapshot_unveraendert_uebersprungen` (feuert 6× pro
 Zyklus unbedingt, größter Volumentreiber im Normalbetrieb) und
 `sync_scope_zugriff`; `Standard` für `sync_zyklus_{start,ende}`,
 `sync_event_empfangen`, `sync_snapshot_empfangen`, `sync_einkaufslisten_stand`,
-`sync_snapshot_geschrieben`, `sync_icloud_wecker_abgeschlossen`; `Fehler` für
+`sync_snapshot_geschrieben`; `Fehler` für
 den Rest (u.a. `sync_ordner_zugriff_fehlgeschlagen`,
 `sync_event_nicht_anwendbar`, `sync_peer_verworfen_altersgrenze`,
 `sync_event_aufgegeben`).

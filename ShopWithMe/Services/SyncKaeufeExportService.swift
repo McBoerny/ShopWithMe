@@ -66,7 +66,9 @@ enum SyncKaeufeExportService {
         }
 
         let vorhandeneDateinamen = Set(
-            (try? FileManager.default.contentsOfDirectory(at: ordner, includingPropertiesForKeys: nil))?.map(\.lastPathComponent) ?? []
+            (await Task.detached(priority: .utility, operation: {
+                SyncDateiZugriff.listeKoordiniert(ordner)
+            }).value)?.map(\.lastPathComponent) ?? []
         )
         let fehlende = alleLokalen.filter { !vorhandeneDateinamen.contains("\($0.id.uuidString).json") }
         guard !fehlende.isEmpty else { return true }

@@ -88,9 +88,9 @@ enum SyncImportService {
 
         let peersOrdner = syncOrdner.appendingPathComponent("peers", isDirectory: true)
         let eigeneGeraeteID = DatabaseLeaseService.geraeteID
-        guard let peerVerzeichnisse = try? FileManager.default.contentsOfDirectory(
-            at: peersOrdner, includingPropertiesForKeys: nil
-        ) else { return true }
+        guard let peerVerzeichnisse = await Task.detached(priority: .utility, operation: {
+            SyncDateiZugriff.listeKoordiniert(peersOrdner)
+        }).value else { return true }
 
         // Einmal für den gesamten Zyklus aufgebaut statt pro eingehendem Event
         // per ``SyncEventService/aktuellerGewinner(bezugsID:artikelID:context:)``
@@ -102,9 +102,9 @@ enum SyncImportService {
 
         for peerOrdner in peerVerzeichnisse where !PeerOrdnerName.gehoertZu(peerOrdner.lastPathComponent, geraeteID: eigeneGeraeteID) {
             let eventsOrdner = SyncExportService.eventsOrdner(fuerPeer: peerOrdner.lastPathComponent, in: syncOrdner)
-            guard let dateien = try? FileManager.default.contentsOfDirectory(
-                at: eventsOrdner, includingPropertiesForKeys: nil
-            ) else { continue }
+            guard let dateien = await Task.detached(priority: .utility, operation: {
+                SyncDateiZugriff.listeKoordiniert(eventsOrdner)
+            }).value else { continue }
 
             // Vorfilter gegen die im Dateinamen kodierte ID (Performance-Fund,
             // siehe Typ-Doku „Bekannte Grenze" oben und

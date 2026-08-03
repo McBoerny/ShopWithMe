@@ -151,9 +151,9 @@ enum SyncExportService {
         }
 
         let eventsOrdner = eigenerEventsOrdner(in: syncOrdner)
-        guard let dateien = try? FileManager.default.contentsOfDirectory(
-            at: eventsOrdner, includingPropertiesForKeys: [.contentModificationDateKey]
-        ) else { return }
+        guard let dateien = await Task.detached(priority: .utility, operation: {
+            SyncDateiZugriff.listeKoordiniert(eventsOrdner)
+        }).value else { return }
 
         let stichtag = Date().addingTimeInterval(-eventAufbewahrungsfrist)
         var geloeschteAnzahl = 0

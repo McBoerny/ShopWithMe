@@ -28,4 +28,33 @@ enum SyncDateiZugriff {
         }
         return fehler == nil ? ergebnis : nil
     }
+
+    /// Listet ein Verzeichnis über `NSFileCoordinator`, statt direkt per
+    /// `FileManager.contentsOfDirectory` (GitHub #91-Nachfolgefund: Live-Test
+    /// zeigte, dass neue Peer-Dateien in einem iCloud-Drive-Sync-Ordner auch
+    /// nach mehreren Zyklen nicht auftauchten, obwohl sie auf dem
+    /// Herkunftsgerät längst geschrieben waren — erst manuelles Öffnen des
+    /// Ordners in der Files-App zeigte sie). Ein ungeschütztes
+    /// `contentsOfDirectory` liest offenbar nur einen lokal bereits bekannten
+    /// Verzeichnis-Stand; ein koordinierter Lesezugriff gibt der
+    /// File-Provider-Erweiterung (iCloud Drive, Synology Drive, …) dieselbe
+    /// Gelegenheit, vor der Rückgabe einen frischen Stand zu liefern, wie sie
+    /// ``leseKoordiniert(_:)`` bereits für einzelne Dateien nutzt — analog zum
+    /// dortigen GitHub #52-Fund, nur eine Ebene höher (Verzeichnis-Listing
+    /// statt Dateiinhalt).
+    ///
+    /// Blockierender Aufruf, aus denselben Gründen wie ``leseKoordiniert(_:)``
+    /// bewusst `nonisolated` — Aufrufer aus `@MainActor`-Kontext sollten ihn
+    /// per `Task.detached` vom `MainActor` fernhalten.
+    nonisolated static func listeKoordiniert(_ url: URL) -> [URL]? {
+        let coordinator = NSFileCoordinator()
+        var fehler: NSError?
+        var ergebnis: [URL]?
+        coordinator.coordinate(readingItemAt: url, options: [], error: &fehler) { koordinierteURL in
+            ergebnis = try? FileManager.default.contentsOfDirectory(
+                at: koordinierteURL, includingPropertiesForKeys: nil
+            )
+        }
+        return fehler == nil ? ergebnis : nil
+    }
 }

@@ -1,23 +1,6 @@
 # Changelog
 
-## v0.11 (Build 214) — Fix: WarengruppenDistanz-Merge reihenfolgeabhängig (GitHub #87)
-
-- `SyncSnapshotImportService.mergeWarengruppenDistanzen` mittelte bei einem
-  bereits vorhandenen lokalen Eintrag bisher naiv 50/50 mit dem Peer-Wert,
-  unabhängig davon, wie viele Beobachtungen hinter jeder Seite steckten —
-  reihenfolgeabhängig, anfällig für Einzel-Ausreißer. Jetzt ein echter
-  gewichteter Mittelwert nach Beobachtungsanzahl (G-Counter-Muster, analog
-  `Geschaeft.anzahlEinkaufsvorgaenge`), gedeckelt auf `WarengruppenDistanz.maximaleMergeGewichtung`
-  (≈ `1 / WarengruppenDistanzService.lernrate`, da das lokale Lernen selbst
-  nur ein begrenztes EMA-Gedächtnis hat) und idempotent bei wiederholtem
-  Sync desselben Peer-Standes (nur der tatsächliche Zuwachs seit dem
-  zuletzt bekannten Stand fließt ein, kein erneutes Mischen bereits
-  bekannter Information). Neues Modell `WarengruppenDistanzPeerZaehlerStand`.
-  `SyncSnapshot.aktuelleFormatVersion` auf 5 angehoben
-  (`WarengruppenDistanzSnapshot.eigeneAnzahlBeobachtungen` neu). Details in
-  `docs/DATENSYNCHRONISATION_VERLAUF.md`, Abschnitt 41.
-
-## v0.11 — GitHub #91 (Fortsetzung): iCloud-Weckimpuls wirkungslos, Root Cause jetzt koordinierte Verzeichnis-Listings
+## v0.11 (Build 215) — GitHub #91 (Fortsetzung): iCloud-Weckimpuls wirkungslos, Root Cause jetzt koordinierte Verzeichnis-Listings
 
 - Zwei-Geräte-Live-Test zeigte: der `NSMetadataQuery`-Weckimpuls aus der
   vorherigen Version brachte keine Verbesserung — Geräte synchronisierten
@@ -35,6 +18,23 @@
   `FileManager.contentsOfDirectory`.
 - Details in `docs/DATENSYNCHRONISATION_VERLAUF.md`, Abschnitte 39 (Nachtrag)
   und 40.
+
+## v0.11 (Build 214) — Fix: WarengruppenDistanz-Merge reihenfolgeabhängig (GitHub #87)
+
+- `SyncSnapshotImportService.mergeWarengruppenDistanzen` mittelte bei einem
+  bereits vorhandenen lokalen Eintrag bisher naiv 50/50 mit dem Peer-Wert,
+  unabhängig davon, wie viele Beobachtungen hinter jeder Seite steckten —
+  reihenfolgeabhängig, anfällig für Einzel-Ausreißer. Jetzt ein echter
+  gewichteter Mittelwert nach Beobachtungsanzahl (G-Counter-Muster, analog
+  `Geschaeft.anzahlEinkaufsvorgaenge`), gedeckelt auf `WarengruppenDistanz.maximaleMergeGewichtung`
+  (≈ `1 / WarengruppenDistanzService.lernrate`, da das lokale Lernen selbst
+  nur ein begrenztes EMA-Gedächtnis hat) und idempotent bei wiederholtem
+  Sync desselben Peer-Standes (nur der tatsächliche Zuwachs seit dem
+  zuletzt bekannten Stand fließt ein, kein erneutes Mischen bereits
+  bekannter Information). Neues Modell `WarengruppenDistanzPeerZaehlerStand`.
+  `SyncSnapshot.aktuelleFormatVersion` auf 5 angehoben
+  (`WarengruppenDistanzSnapshot.eigeneAnzahlBeobachtungen` neu). Details in
+  `docs/DATENSYNCHRONISATION_VERLAUF.md`, Abschnitt 41.
 
 ## v0.11 (Build 213) — Fix: iCloud-Weckimpuls (GitHub #91) crashte mit API-Misuse
 

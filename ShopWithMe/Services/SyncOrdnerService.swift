@@ -116,9 +116,7 @@ enum SyncOrdnerService {
         defer { ordner.stopAccessingSecurityScopedResource() }
 
         let peersOrdner = ordner.appendingPathComponent("peers", isDirectory: true)
-        guard let peerVerzeichnisse = try? FileManager.default.contentsOfDirectory(
-            at: peersOrdner, includingPropertiesForKeys: nil
-        ) else { return false }
+        guard let peerVerzeichnisse = SyncDateiZugriff.listeKoordiniert(peersOrdner) else { return false }
 
         let eigeneGeraeteID = DatabaseLeaseService.geraeteID
         return peerVerzeichnisse.contains { !PeerOrdnerName.gehoertZu($0.lastPathComponent, geraeteID: eigeneGeraeteID) }

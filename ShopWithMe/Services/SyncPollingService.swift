@@ -36,11 +36,17 @@ import SwiftData
 /// Ersatz-Sicherheitsnetz vor unentdeckten Deadlocks in genau dieser
 /// Konstellation).
 ///
-/// **Aktiver iCloud-Weckimpuls stattdessen über `NSMetadataQuery`** (GitHub
-/// #91, ``SyncICloudWeckerService``): anders als der verworfene
-/// `NSFilePresenter`-Ansatz läuft dessen `operationQueue` bewusst nicht auf
-/// `.main`, was den obigen Deadlock-Mechanismus vermeidet. Ergänzt weiterhin
-/// nur das Zeit-Polling, ersetzt es nicht.
+/// **`NSMetadataQuery`-Weckimpuls ausprobiert und wieder entfernt** (GitHub
+/// #91): Ein kurz laufender `NSMetadataQuery`-Aufruf vor jedem Zyklus sollte
+/// iCloud aktiv zum Abgleich anstoßen. Live-Test zeigte keinerlei Wirkung —
+/// laut Recherche danach zu Recht: `NSMetadataQuery` triggert selbst keinen
+/// Download unbekannter Objekte (das ist explizit Aufgabe der App über
+/// `startDownloadingUbiquitousItem`) und beobachtet zuverlässig ohnehin nur
+/// die Wurzel des gescopten Ordners, nicht tiefer liegende Unterordner wie
+/// `peers/<Gerät>/…`, wo die eigentlichen Sync-Dateien liegen. Der
+/// tatsächliche Fix (koordinierte Verzeichnis-Listings statt ungeschütztem
+/// `contentsOfDirectory`) steht in ``SyncDateiZugriff/listeKoordiniert(_:)``,
+/// siehe `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 40.
 @MainActor
 final class SyncPollingService: ObservableObject {
     /// `static var` statt `let`, damit Tests sie auf sehr kurze Werte setzen
@@ -96,15 +102,6 @@ final class SyncPollingService: ObservableObject {
         guard let context else { return true }
         SyncDebugLogger.log(.zyklusStart, details: einkaufAktiv ? "einkaufAktiv" : "ruhend")
         let start = ContinuousClock.now
-
-        // GitHub #91: aktiver iCloud-Weckimpuls VOR den eigentlichen
-        // Import-/Export-Schritten, damit deren `contentsOfDirectory`-Aufrufe
-        // möglichst frische Metadaten sehen, statt nur lokal bereits
-        // gecachte. Kein Sonderfall für andere Ordner-Anbieter nötig — siehe
-        // ``SyncICloudWeckerService``-Typ-Dokumentation.
-        if let syncOrdner = SyncOrdnerService.gewaehlterOrdner() {
-            await SyncICloudWeckerService.wecke(ordner: syncOrdner)
-        }
 
         let snapshotImportErfolgreich = await SyncSnapshotImportService.importiereSnapshots(context: context)
         let eventImportErfolgreich = await SyncImportService.importiereNeueEvents(context: context)

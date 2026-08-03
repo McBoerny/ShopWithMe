@@ -82,15 +82,6 @@ enum SyncDebugLogger {
         /// Aufrufstelle bei jedem Zyklus).
         case scopeZugriff = "sync_scope_zugriff"
 
-        /// GitHub #91: ``SyncICloudWeckerService`` hat den aktiven
-        /// iCloud-Weckimpuls für den Sync-Ordner abgeschlossen — entweder
-        /// weil `.NSMetadataQueryDidFinishGathering` rechtzeitig eintraf oder
-        /// weil das Timeout griff. Details: `rechtzeitig=<Bool>
-        /// dauer=<Duration>` — Grundlage, um ``SyncICloudWeckerService/timeout``
-        /// später anhand echter Beobachtungswerte statt einer Annahme
-        /// nachzujustieren.
-        case iCloudWeckerAbgeschlossen = "sync_icloud_wecker_abgeschlossen"
-
         /// Mindest-Protokollstufe, ab der dieses Ereignis geschrieben wird
         /// (siehe ``Protokollstufe``-Typ-Doku für die Einteilungskriterien).
         var mindestStufe: Protokollstufe {
@@ -102,7 +93,7 @@ enum SyncDebugLogger {
                  .vollAbgleichEingeleitet:
                 return .fehler
             case .zyklusStart, .zyklusEnde, .eventEmpfangen, .snapshotEmpfangen, .einkaufslistenStand,
-                 .snapshotGeschrieben, .iCloudWeckerAbgeschlossen:
+                 .snapshotGeschrieben:
                 return .standard
             case .snapshotUnveraendertUebersprungen, .scopeZugriff:
                 return .ausfuehrlich
