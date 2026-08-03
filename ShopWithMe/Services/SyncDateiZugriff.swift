@@ -19,7 +19,25 @@ enum SyncDateiZugriff {
     /// bewusst `nonisolated`, damit Aufrufer ihn per `Task.detached` vom
     /// `MainActor` fernhalten können, statt die UI während des Downloads zu
     /// blockieren.
+    ///
+    /// **Expliziter `startDownloadingUbiquitousItem`-Aufruf davor** (GitHub
+    /// #92-Recherche): eine seit iOS 18.4 dokumentierte Regression lässt eine
+    /// bereits einmal heruntergeladene Datei dauerhaft im Status
+    /// `NSMetadataUbiquitousItemDownloadingStatusDownloaded` verharren, ohne
+    /// automatisch eine neuere Remote-Version nachzuladen (Apple-Forum
+    /// #785030, FB17662379, unbeantwortet) — koordiniertes Lesen allein löst
+    /// laut Apples Doku zuverlässig nur den ERSTdownload eines noch nie
+    /// materialisierten Platzhalters aus, nicht das Nachziehen einer neueren
+    /// Version einer bereits lokal vorhandenen Datei. Passt zum beobachteten
+    /// Symptom aus #91/#92 ("Sync läuft eine Weile, bleibt dann hängen").
+    /// Fire-and-forget ohne Abschluss-Callback (kein API dafür) — Ergebnis
+    /// wirkt sich bestenfalls erst im nächsten Zyklus aus, was zum ohnehin
+    /// bestehenden Best-Effort-Design ohne Fehler-Backoff passt. `try?`, da
+    /// die Methode für Nicht-iCloud-Ordner (Synology Drive u.ä.) einen Fehler
+    /// liefert, was hier kein Sonderfall sein muss.
     nonisolated static func leseKoordiniert(_ url: URL) -> Data? {
+        try? FileManager.default.startDownloadingUbiquitousItem(at: url)
+
         let coordinator = NSFileCoordinator()
         var fehler: NSError?
         var ergebnis: Data?
@@ -47,6 +65,10 @@ enum SyncDateiZugriff {
     /// bewusst `nonisolated` — Aufrufer aus `@MainActor`-Kontext sollten ihn
     /// per `Task.detached` vom `MainActor` fernhalten.
     nonisolated static func listeKoordiniert(_ url: URL) -> [URL]? {
+        // Gleicher Grund wie in ``leseKoordiniert(_:)`` — auch ein
+        // Verzeichnis kann als bereits "heruntergeladen" hängen bleiben.
+        try? FileManager.default.startDownloadingUbiquitousItem(at: url)
+
         let coordinator = NSFileCoordinator()
         var fehler: NSError?
         var ergebnis: [URL]?

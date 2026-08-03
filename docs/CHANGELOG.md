@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.11 (Build 218) — GitHub #92: startDownloadingUbiquitousItem-Fix + experimenteller Dokumenten-Picker-Trigger
+
+- Recherche zu #91s nur temporärer Wirkung ergab eine seit iOS 18.4
+  dokumentierte Regression: bereits als "downloaded" markierte Dateien
+  laden neuere Remote-Versionen nicht mehr automatisch nach.
+  `SyncDateiZugriff.leseKoordiniert(_:)`/`.listeKoordiniert(_:)` rufen
+  deshalb jetzt vor jedem koordinierten Zugriff zusätzlich
+  `FileManager.startDownloadingUbiquitousItem(at:)` auf.
+- Nutzeridee als bewusst unbelegtes Experiment umgesetzt: der manuelle
+  "Jetzt synchronisieren"-Button blendet kurz einen
+  `UIDocumentPickerViewController` auf den Sync-Ordner ein und schließt ihn
+  automatisch wieder (``ICloudSyncTriggerPicker``) — Testidee, dieselbe
+  File-Provider-Enumeration wie beim Öffnen in der Files-App auszulösen.
+  Wirkung noch nicht durch Live-Test bestätigt.
+
 ## v0.11 (Build 216) — GitHub #91 (Fortsetzung): Langlebiger NSMetadataQuery-Beobachter + koordinierte Schreibzugriffe
 
 - Der koordinierte-Listings-Fix aus der letzten Version brachte laut

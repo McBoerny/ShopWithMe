@@ -299,6 +299,22 @@ gleicher Anzahl, hat sich ein Feld eines bestehenden Eintrags geändert (z.B.
 `endZeit` gesetzt, ein additiver Zähler erhöht) — siehe
 `SyncSnapshotExportService.diagnoseText(of:)`), `debug_mode_{enabled,disabled}`.
 
+**GitHub #91 (dritter Anlauf) — `SyncICloudAenderungsBeobachter`:**
+`sync_icloud_beobachter_ausgeloest` (feuert bei jeder über die langlebige
+`NSMetadataQuery` erkannten Fremdänderung — Beleg dafür, dass die Query
+tatsächlich reagiert, nicht nur läuft) und
+`sync_icloud_beobachter_scope_aktualisiert` (Details: `peers=N scopes=M` —
+die Query wurde neu aufgebaut, initial oder weil sich die bekannte
+Peer-Liste geändert hat).
+
+**GitHub #92 (experimentell):** `sync_icloud_picker_trigger_ausgeloest` —
+der manuelle "Jetzt synchronisieren"-Button hat kurz einen
+`UIDocumentPickerViewController` auf den Sync-Ordner eingeblendet
+(``ICloudSyncTriggerPicker``). Reiner Beleg, dass der Trigger ausgelöst
+wurde, keine Aussage über dessen Wirkung — dafür der zeitliche Abstand zu
+nachfolgenden `sync_event_empfangen`/`sync_snapshot_empfangen`-Zeilen im
+selben Protokoll heranziehen.
+
 **Diagnose für `Einkaufsvorgang`-Abschluss-Übernahme** (2026-08-02, Nutzerbericht
 „Einkauf abschließen synchronisiert nicht"): `sync_einkaufsvorgang_abschluss_uebernommen`/
 `sync_einkaufsvorgang_abschluss_nicht_uebernommen` (Details:
@@ -327,7 +343,9 @@ pro Aufrufstelle bei jedem Zyklus feuert.
 Zyklus unbedingt, größter Volumentreiber im Normalbetrieb) und
 `sync_scope_zugriff`; `Standard` für `sync_zyklus_{start,ende}`,
 `sync_event_empfangen`, `sync_snapshot_empfangen`, `sync_einkaufslisten_stand`,
-`sync_snapshot_geschrieben`; `Fehler` für
+`sync_snapshot_geschrieben`, `sync_icloud_beobachter_ausgeloest`,
+`sync_icloud_beobachter_scope_aktualisiert`,
+`sync_icloud_picker_trigger_ausgeloest`; `Fehler` für
 den Rest (u.a. `sync_ordner_zugriff_fehlgeschlagen`,
 `sync_event_nicht_anwendbar`, `sync_peer_verworfen_altersgrenze`,
 `sync_event_aufgegeben`).

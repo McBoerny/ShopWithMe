@@ -2732,3 +2732,90 @@ Fehlversuchen) — ein weiterer, gezielter Vergleichstest ohne diese
 Variable stünde noch aus, um den Effekt eindeutig auf den
 `NSMetadataQuery`-Beobachter zurückzuführen. Für den Moment als
 vorläufig funktionierend eingestuft, Untersuchung hier abgeschlossen.
+
+## 43. GitHub #92: #91-Fix wirkt nur temporär — Recherche + `startDownloadingUbiquitousItem`-Fix + experimenteller Dokumenten-Picker-Trigger
+
+**Praxisbeobachtung nach §42:** Der langlebige `NSMetadataQuery`-Beobachter
+half laut Nutzer nur vorübergehend — nach einer Weile blieb der Sync wieder
+hängen, obwohl die Implementierung (dauerhaft laufende Query, korrekt
+gescopt, `enableUpdates()` nach `.gatheringComplete`) soweit erkennbar
+korrekt war. Statt weiter zu spekulieren: gezielte Recherche gegen aktuelle
+Apple-Doku, Entwicklerforen und einen einschlägigen Deep-Dive-Blogpost.
+Vollständiges Ergebnis als Kommentar an [Issue
+#92](https://github.com/McBoerny/ShopWithMe/issues/92#issuecomment-5170742717)
+dokumentiert, hier nur die für die Umsetzung relevanten Punkte.
+
+**Bestätigt, keine Änderung nötig:**
+- Keine offizielle Force-Sync-API existiert — Sync-Timing bleibt
+  vollständig system-/ML-gesteuert.
+- `NSMetadataQuery` beobachtet bei externen (Bookmark-)Ordnern zuverlässig
+  nur die Wurzel jedes gescopten Pfads, nie Unterordner — unabhängig
+  bestätigt durch Apple-Forum-Thread #783958 (exakt unser Szenario). Der
+  bestehende Scope-pro-Peer-Ordner-Ansatz (§42) ist damit strukturell
+  bereits die richtige Antwort.
+- `NSFilePresenter` bleibt ungeeignet — der Blogpost bestätigt unabhängig
+  den bereits in `SyncPollingService.swift` dokumentierten Deadlock-Fund
+  (teure IPC-Objekte, Hauptthread-Deadlock-Risiko).
+- `BackgroundTasks`/`BGAppRefreshTask` bleibt kein tragfähiger Weg (30s-Cap,
+  bis zu 7 Tage ML-Anlaufzeit, keine Weckung nach Force-Quit) — die
+  bestehende bewusste Beschränkung auf Vordergrund-Sync (Abschnitt 9 in
+  `docs/DATENSYNCHRONISATION.md`) bleibt richtig.
+
+**Neuer, umgesetzter Fund:** Ein Apple-Forum-Thread (#785030, FB17662379,
+unbeantwortet) beschreibt eine seit iOS 18.4 beobachtete Regression — eine
+Datei kann dauerhaft im Status
+`NSMetadataUbiquitousItemDownloadingStatusDownloaded` verharren, ohne dass
+eine neuere Remote-Version automatisch nachgeladen wird, obwohl das laut
+Doku automatisch passieren sollte. Einziger dokumentierter Workaround:
+explizit `FileManager.startDownloadingUbiquitousItem(at:)` aufrufen, auch
+für eine bereits als "downloaded" geltende Datei. Codeabgleich: die
+bestehenden koordinierten Zugriffe in `SyncDateiZugriff` riefen diese
+Methode nirgends auf — koordiniertes Lesen erzwingt laut Apples Doku
+zuverlässig nur den Erstdownload eines noch nie materialisierten
+Platzhalters, nicht das Nachziehen einer neueren Version einer bereits
+lokal vorhandenen Datei. Das passt gut zum beobachteten Muster "läuft eine
+Weile, bleibt dann hängen": Peer-Datei einmal gelesen → lokal als
+"downloaded" markiert → spätere Remote-Änderungen wurden nicht mehr
+zuverlässig nachgezogen.
+
+**Umgesetzt:** `SyncDateiZugriff.leseKoordiniert(_:)`/`.listeKoordiniert(_:)`
+rufen jetzt vor der Koordination `try? FileManager.default.startDownloadingUbiquitousItem(at: url)`
+auf — Fire-and-forget ohne Abschluss-Callback (die API bietet keinen),
+wirkt sich also bestenfalls erst im nächsten Zyklus aus. Passt zum ohnehin
+bestehenden Best-Effort-Design ohne Fehler-Backoff (Abschnitt 5). `try?`
+verträgt sich mit Nicht-iCloud-Ordnern (Synology Drive u.ä.), für die die
+Methode fehlschlägt, ohne dass das ein Sonderfall sein muss.
+
+**Nutzeridee, umgesetzt als bewusst unbelegtes Experiment:** Der manuelle
+„Jetzt synchronisieren"-Button blendet jetzt zusätzlich kurz (0,4s) einen
+`UIDocumentPickerViewController` auf den Sync-Ordner ein und schließt ihn
+automatisch wieder (``ICloudSyncTriggerPicker`` in
+`SyncOrdnerSettingsView.swift`) — Testidee: das Öffnen des Sync-Ordners in
+der Files-App löst nachweislich einen Abgleich aus (§39/42), ein
+`UIDocumentPickerViewController` nutzt dieselbe
+File-Provider-Enumerationslogik wie die Files-App. Weder Apple-Doku noch
+Entwicklerforen noch der Deep-Dive-Blogpost bestätigen oder widerlegen den
+Effekt — bleibt ein zu verifizierendes Experiment, kein bekanntes Pattern.
+
+Bewusst nur hinter diesem einen expliziten Button-Tap (nicht in den übrigen
+internen Aufrufstellen von `SyncOrdnerSettingsView.jetztSynchronisieren()`
+wie dem Bootstrap-Sync nach Ordnerauswahl oder dem Beitritts-Abgleich, und
+nie im automatischen Hintergrund-Poll aus `SyncPollingService`) — ein
+Sheet, das ohne Nutzerinteraktion von selbst wieder verschwindet, ist nur
+als Reaktion auf einen expliziten Tap vertretbar (Accessibility-/App-Review-
+Risiko sonst, siehe Issue #92). Neues Debug-Event
+`sync_icloud_picker_trigger_ausgeloest` (`docs/LOGGING.md`) als Beleg, dass
+der Trigger ausgelöst wurde — keine Aussage über dessen Wirkung, dafür der
+zeitliche Abstand zu nachfolgenden Empfangs-Ereignissen im selben Protokoll
+heranzuziehen.
+
+**Nachträglich dokumentiert:** `sync_icloud_beobachter_ausgeloest`/
+`sync_icloud_beobachter_scope_aktualisiert` (§42 eingeführt) fehlten bisher
+in `docs/LOGGING.md` — bei dieser Gelegenheit nachgetragen (Single Source
+of Truth).
+
+**Verifikationsstand:** `xcodegen generate` + `xcodebuild clean build` grün,
+keine neuen Warnungen. Beide Fixes sind reine Ergänzungen ohne
+Verhaltensänderung im Fehlerfall — kein Unit-Test nötig (Live-Test-only,
+wie der Rest von #91/#92: keine automatisierte Prüfung kann iCloud-Sync-
+Latenz simulieren). Live-Test-Ergebnis steht noch aus.

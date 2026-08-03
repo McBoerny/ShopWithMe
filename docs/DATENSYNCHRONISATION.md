@@ -509,6 +509,26 @@ Schreib-Muster für Dateiinhalte.
 für „Jetzt synchronisieren" wie das automatische Polling — Protokollierung
 passiert dadurch an einer einzigen Stelle für beide Auslöser.
 
+**Expliziter Download-Anstoß gegen eine iOS-18.4+-Regression (GitHub #92):**
+`SyncDateiZugriff.leseKoordiniert(_:)`/`.listeKoordiniert(_:)` rufen vor der
+eigentlichen Koordination zusätzlich `FileManager.startDownloadingUbiquitousItem(at:)`
+auf — koordiniertes Lesen allein löst laut Apples Doku zuverlässig nur den
+Erstdownload eines noch nie materialisierten Platzhalters aus, nicht das
+Nachziehen einer neueren Version einer bereits lokal vorhandenen Datei (ein
+seit iOS 18.4 dokumentiertes Verhalten). Details, Quellen und Einordnung
+gegenüber den übrigen Optionen: `docs/DATENSYNCHRONISATION_VERLAUF.md`
+Abschnitt 43.
+
+**Experimenteller Dokumenten-Picker-Trigger (GitHub #92, unbelegt):** Der
+manuelle „Jetzt synchronisieren"-Button blendet zusätzlich kurz einen
+`UIDocumentPickerViewController` auf den Sync-Ordner ein und schließt ihn
+automatisch wieder (``ICloudSyncTriggerPicker``,
+`SyncOrdnerSettingsView.swift`) — Testidee, dass dieselbe
+File-Provider-Enumeration wie beim manuellen Öffnen in der Files-App auch
+hier einen Abgleich anstößt. Bewusst nur hinter diesem einen expliziten
+Button-Tap, nie im automatischen Hintergrund-Poll. Wirkung noch nicht durch
+einen Live-Test bestätigt.
+
 ## 6. Gruppen-Beitritt (Bootstrap)
 
 1. Person A wählt/erstellt einen geteilten Ordner.

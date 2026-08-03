@@ -235,7 +235,9 @@ werden ausgetauscht.
 - **Läuft automatisch,** solange die App im Vordergrund ist — kein manueller
   Sync-Tap nötig. Ein zusätzlicher „Jetzt synchronisieren“-Button steht für den
   seltenen Fall bereit, dass du sofort statt in ein paar Sekunden abgleichen
-  möchtest.
+  möchtest. Dabei blitzt kurz ein Dateiauswahl-Fenster auf den Sync-Ordner
+  auf und schließt sich von selbst wieder — ein experimenteller Versuch, den
+  Systemabgleich zusätzlich anzustoßen, keine Fehlfunktion.
 - **Nur im Vordergrund:** Bei gesperrtem Gerät oder geschlossener App pausiert
   der automatische Abgleich — er läuft beim nächsten Öffnen sofort weiter.
 - **„Synchronisierung deaktivieren“** trennt die Verbindung zum Ordner wieder,

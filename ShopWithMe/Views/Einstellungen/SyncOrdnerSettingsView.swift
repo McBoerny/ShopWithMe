@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
+import UIKit
 
 /// Einstellung für den geteilten Sync-Ordner (Datensynchronisation, GitHub #39).
 ///
@@ -23,6 +24,9 @@ struct SyncOrdnerSettingsView: View {
     @State private var ausgewaehlterOrdner: URL? = SyncOrdnerService.gewaehlterOrdner()
     @State private var wirdSynchronisiert = false
     @State private var letzterSyncErfolgreich = false
+    /// GitHub #92 (experimentell): kurz einen Dokumenten-Picker auf den
+    /// Sync-Ordner einblenden, siehe ``ICloudSyncTriggerPicker``.
+    @State private var zeigeSyncTriggerPicker = false
 
     @State private var zeigeBeitrittsWahl = false
     @State private var zeigeAustrittsWahl = false
@@ -84,6 +88,12 @@ struct SyncOrdnerSettingsView: View {
             if ausgewaehlterOrdner != nil {
                 Section {
                     Button {
+                        // GitHub #92 (experimentell): nur bei diesem
+                        // expliziten Nutzer-Tap, nicht bei den übrigen
+                        // internen Aufrufstellen von ``jetztSynchronisieren()``
+                        // (Bootstrap nach Ordnerauswahl, Beitritts-Abgleich) —
+                        // siehe Accessibility-/Review-Erwägung in #92.
+                        zeigeSyncTriggerPicker = true
                         jetztSynchronisieren()
                     } label: {
                         if wirdSynchronisiert {
@@ -163,6 +173,15 @@ struct SyncOrdnerSettingsView: View {
         }
         .sheet(isPresented: $zeigeBeitrittsAbgleich) {
             GeschaeftsBeitrittsAbgleichSheet(kandidaten: beitrittsKandidaten, onFertig: jetztSynchronisieren)
+        }
+        // GitHub #92 (experimentell, unbelegt — siehe Issue-Kommentar zur
+        // Recherche): kein `.fileImporter` wie bei der Ordnerauswahl oben,
+        // weil der hier bewusst NICHT zur Auswahl gedacht ist, sondern nur
+        // kurz erscheinen und automatisch wieder verschwinden soll.
+        .sheet(isPresented: $zeigeSyncTriggerPicker) {
+            if let ausgewaehlterOrdner {
+                ICloudSyncTriggerPicker(ordner: ausgewaehlterOrdner, isPresented: $zeigeSyncTriggerPicker)
+            }
         }
         .overlay {
             if pruefeBeitrittsAbgleich {
@@ -385,6 +404,65 @@ private struct EigenerGeraeteNameSection: View {
             Text("Gerätename")
         } footer: {
             Text("Damit dieses Gerät bei anderen Peers nicht einfach als „\(UIDevice.current.name)“ erscheint. Leer lassen, um den Gerätenamen zu verwenden.")
+        }
+    }
+}
+
+/// Kurzes, automatisch wieder ausgeblendetes Einblenden eines
+/// `UIDocumentPickerViewController` auf den Sync-Ordner (GitHub #92,
+/// **experimentell, unbelegt**). Testidee: das Öffnen des Sync-Ordners in
+/// der Files-App löst nachweislich einen iCloud-Abgleich aus
+/// (`docs/DATENSYNCHRONISATION_VERLAUF.md` §39/42) — ein Picker nutzt
+/// dieselbe File-Provider-Enumeration wie die Files-App. Weder Apple-Doku
+/// noch Entwicklerforen bestätigen oder widerlegen den Effekt (siehe
+/// Recherche-Kommentar an Issue #92) — ob das überhaupt etwas bewirkt, muss
+/// der Live-Test zeigen.
+///
+/// Bewusst nur hinter dem manuellen "Jetzt synchronisieren"-Button, nie im
+/// automatischen Hintergrund-Poll: ein Sheet, das ohne Nutzerinteraktion von
+/// selbst wieder verschwindet, ist nur als Reaktion auf einen expliziten Tap
+/// vertretbar (Accessibility-/App-Review-Risiko sonst).
+private struct ICloudSyncTriggerPicker: UIViewControllerRepresentable {
+    let ordner: URL
+    @Binding var isPresented: Bool
+
+    /// Wie lange der Picker sichtbar bleibt, bevor er sich selbst wieder
+    /// schließt — kurz genug, um als "Flash" statt als echte UI wahrgenommen
+    /// zu werden, aber lang genug, um dem System eine Chance zu geben, die
+    /// Ordner-Enumeration tatsächlich anzustoßen.
+    private static let automatischSchliessenNach: TimeInterval = 0.4
+
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.folder])
+        picker.directoryURL = ordner
+        picker.delegate = context.coordinator
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.automatischSchliessenNach) {
+            isPresented = false
+        }
+        SyncDebugLogger.log(.iCloudPickerTriggerAusgeloest, details: "")
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(isPresented: $isPresented) }
+
+    /// Reagiert nur auf den unwahrscheinlichen Fall, dass der Picker vor dem
+    /// automatischen Schließen doch noch eine Nutzerinteraktion bekommt
+    /// (Abbrechen-Tap) — schließt dann sofort statt auf den Timer zu warten.
+    final class Coordinator: NSObject, UIDocumentPickerDelegate {
+        @Binding var isPresented: Bool
+
+        init(isPresented: Binding<Bool>) {
+            self._isPresented = isPresented
+        }
+
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            isPresented = false
+        }
+
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+            isPresented = false
         }
     }
 }

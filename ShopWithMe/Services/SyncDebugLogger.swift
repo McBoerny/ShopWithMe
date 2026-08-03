@@ -95,6 +95,15 @@ enum SyncDebugLogger {
         /// `peers=N scopes=M`.
         case iCloudBeobachterScopeAktualisiert = "sync_icloud_beobachter_scope_aktualisiert"
 
+        /// GitHub #92 (experimentell): der manuelle "Jetzt
+        /// synchronisieren"-Button hat kurz einen `UIDocumentPickerViewController`
+        /// auf den Sync-Ordner eingeblendet (Testidee: dieselbe
+        /// File-Provider-Enumeration wie beim Öffnen in der Files-App, siehe
+        /// `docs/DATENSYNCHRONISATION_VERLAUF.md` §39/42, auslösen). Unbelegt,
+        /// dieses Ereignis macht im Live-Test sichtbar, ob sich danach
+        /// tatsächlich etwas am Sync-Verhalten ändert.
+        case iCloudPickerTriggerAusgeloest = "sync_icloud_picker_trigger_ausgeloest"
+
         /// Mindest-Protokollstufe, ab der dieses Ereignis geschrieben wird
         /// (siehe ``Protokollstufe``-Typ-Doku für die Einteilungskriterien).
         var mindestStufe: Protokollstufe {
@@ -106,7 +115,8 @@ enum SyncDebugLogger {
                  .vollAbgleichEingeleitet:
                 return .fehler
             case .zyklusStart, .zyklusEnde, .eventEmpfangen, .snapshotEmpfangen, .einkaufslistenStand,
-                 .snapshotGeschrieben, .iCloudBeobachterAusgeloest, .iCloudBeobachterScopeAktualisiert:
+                 .snapshotGeschrieben, .iCloudBeobachterAusgeloest, .iCloudBeobachterScopeAktualisiert,
+                 .iCloudPickerTriggerAusgeloest:
                 return .standard
             case .snapshotUnveraendertUebersprungen, .scopeZugriff:
                 return .ausfuehrlich
