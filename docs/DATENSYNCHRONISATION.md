@@ -475,20 +475,35 @@ iOS die App suspendiert) und kein Fehler-Backoff (alle Sync-Funktionen sind
 heute best-effort mit stillem Fehlschlagen, `try?`, ohne auswertbares
 Erfolgs-/Fehlersignal).
 
-**Koordinierte Verzeichnis-Listings statt ungeschütztem `contentsOfDirectory`
-(GitHub #91):** Ein reines `FileManager.contentsOfDirectory` auf den
-Sync-Ordner sah nur, was iCloud auf diesem Gerät bereits lokal
-zwischengespeichert hatte — Live-Tests zeigten teils deutlich verzögerte oder
-komplett ausbleibende Peer-Änderungen, bis der Ordner manuell in der
-Files-App geöffnet wurde. Ein zunächst versuchter aktiver
-`NSMetadataQuery`-Weckimpuls vor jedem Zyklus zeigte im Live-Test keinerlei
-Wirkung (siehe `docs/DATENSYNCHRONISATION_VERLAUF.md` §39, dort auch die
-Begründung, warum das zu erwarten war). Alle Verzeichnis-Listings innerhalb
-des Sync-Ordners (`peers/`, je Peer `events/`/`kaeufe/`/Paket-Ordner) laufen
-seitdem über ``SyncDateiZugriff/listeKoordiniert(_:)`` — ein
-`NSFileCoordinator`-Lesezugriff, analog zum bereits bestehenden
-`leseKoordiniert(_:)` für einzelne Dateien (GitHub #52), nur eine Ebene höher.
-Details in `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 40.
+**Verzögerte/ausbleibende Peer-Erkennung, drei Anläufe (GitHub #91):** Live-
+Tests zeigten teils deutlich verzögerte oder komplett ausbleibende
+Peer-Änderungen, bis der Sync-Ordner manuell in der Files-App geöffnet
+wurde. Ein aktiver `NSMetadataQuery`-Weckimpuls vor jedem Zyklus (erster
+Anlauf) und koordinierte Verzeichnis-Listings statt ungeschütztem
+`contentsOfDirectory` (zweiter Anlauf, ``SyncDateiZugriff/listeKoordiniert(_:)``,
+weiterhin aktiv) zeigten beide im Live-Test keine Verbesserung. Dritter
+Anlauf, diesmal gegen Apples offiziellen „Designing for Documents in
+iCloud"-Guide verifiziert: ``SyncICloudAenderungsBeobachter`` — eine
+**langlebige** `NSMetadataQuery` (nicht wie beim ersten Anlauf pro Zyklus neu
+erzeugt), gescoped auf den `peers/`-Ordner sowie je bekanntem Peer dessen
+Ordner plus `events/`/`kaeufe/`-Unterordner (die Query beobachtet
+zuverlässig nur die Wurzel jedes gescopten Ordners, nicht Unterordner —
+Grund für den Scope pro Peer statt nur der Sync-Ordner-Wurzel). Reagiert
+dauerhaft auf `NSMetadataQueryDidUpdateNotification` und stößt dann einen
+zusätzlichen Sync-Zyklus an; Lifecycle an
+`SyncPollingService.starten(context:)`/`stoppen()` gekoppelt. Details und
+Recherche-Belege in `docs/DATENSYNCHRONISATION_VERLAUF.md`, Abschnitte
+39/40/42.
+
+**Koordinierte Schreibzugriffe:** Wie schon für Lesezugriffe gilt Apples
+iCloud-Dokumentation zufolge Koordinationspflicht für JEDEN Dateizugriff.
+Verzeichnisse anlegen/löschen/verschieben im Sync-Ordner laufen deshalb über
+``SyncDateiZugriff/erstelleVerzeichnisKoordiniert(_:)``/`.loescheKoordiniert(_:)`/
+`.verschiebeKoordiniert(von:nach:)` (Letztere nach dem in
+`NSFileCoordinator.h` dokumentierten Move-Pattern: Quelle mit `.forMoving`,
+Ziel mit `.forReplacing`), analog zu ``SyncExportService``s/
+``SyncSnapshotExportService``s bereits bestehendem koordiniertem
+Schreib-Muster für Dateiinhalte.
 
 `SyncOrdnerSettingsView` nutzt denselben `SyncPollingService.syncZyklus()`
 für „Jetzt synchronisieren" wie das automatische Polling — Protokollierung

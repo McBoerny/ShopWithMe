@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.11 (Build 216) — GitHub #91 (Fortsetzung): Langlebiger NSMetadataQuery-Beobachter + koordinierte Schreibzugriffe
+
+- Der koordinierte-Listings-Fix aus der letzten Version brachte laut
+  Live-Test ebenfalls keine Verbesserung. Neuer, gegen Apples offiziellen
+  „Designing for Documents in iCloud"-Guide verifizierter dritter Anlauf:
+  `SyncICloudAenderungsBeobachter` — eine **langlebige** `NSMetadataQuery`
+  (statt wie beim ersten Anlauf jeden Zyklus neu erzeugt und nach 2s
+  gestoppt), gescoped auf den `peers/`-Ordner sowie je bekanntem Peer dessen
+  Ordner plus `events/`/`kaeufe/`-Unterordner (nicht nur die
+  Sync-Ordner-Wurzel — die Query beobachtet zuverlässig nur die Wurzel jedes
+  gescopten Ordners). Reagiert dauerhaft auf
+  `NSMetadataQueryDidUpdateNotification` und stößt dann einen zusätzlichen
+  Sync-Zyklus an.
+- Dabei geprüft, ob auch alle Schreibzugriffe auf den Sync-Ordner koordiniert
+  sind (Apples iCloud-Doku verlangt das für jeden Zugriff, nicht nur Lesen):
+  sechs unkoordinierte Stellen gefunden und auf neue gemeinsame Funktionen
+  `SyncDateiZugriff.erstelleVerzeichnisKoordiniert(_:)`/`.loescheKoordiniert(_:)`/
+  `.verschiebeKoordiniert(von:nach:)` umgestellt.
+- Details in `docs/DATENSYNCHRONISATION_VERLAUF.md`, Abschnitt 42.
+
 ## v0.11 (Build 215) — GitHub #91 (Fortsetzung): iCloud-Weckimpuls wirkungslos, Root Cause jetzt koordinierte Verzeichnis-Listings
 
 - Zwei-Geräte-Live-Test zeigte: der `NSMetadataQuery`-Weckimpuls aus der

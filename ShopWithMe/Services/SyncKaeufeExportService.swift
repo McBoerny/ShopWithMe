@@ -61,7 +61,9 @@ enum SyncKaeufeExportService {
         }
 
         let ordner = SyncSnapshotExportService.eigenerKaeufeOrdner(in: syncOrdner)
-        guard (try? FileManager.default.createDirectory(at: ordner, withIntermediateDirectories: true)) != nil else {
+        guard await Task.detached(priority: .utility, operation: {
+            SyncDateiZugriff.erstelleVerzeichnisKoordiniert(ordner)
+        }).value else {
             return true
         }
 
@@ -141,7 +143,7 @@ enum SyncKaeufeExportService {
         }
         let ordner = SyncSnapshotExportService.eigenerKaeufeOrdner(in: syncOrdner)
         for id in ids {
-            try? FileManager.default.removeItem(at: ordner.appendingPathComponent("\(id.uuidString).json"))
+            SyncDateiZugriff.loescheKoordiniert(ordner.appendingPathComponent("\(id.uuidString).json"))
         }
     }
 }

@@ -68,9 +68,9 @@ enum SyncExportService {
         }
 
         let eventsOrdner = eigenerEventsOrdner(in: syncOrdner)
-        guard (try? FileManager.default.createDirectory(
-            at: eventsOrdner, withIntermediateDirectories: true
-        )) != nil else { return true }
+        guard await Task.detached(priority: .utility, operation: {
+            SyncDateiZugriff.erstelleVerzeichnisKoordiniert(eventsOrdner)
+        }).value else { return true }
 
         for event in ausstehende {
             guard let daten = try? JSONEncoder().encode(event.exportDarstellung) else { continue }
@@ -156,15 +156,19 @@ enum SyncExportService {
         }).value else { return }
 
         let stichtag = Date().addingTimeInterval(-eventAufbewahrungsfrist)
-        var geloeschteAnzahl = 0
-        for datei in dateien where datei.pathExtension == "json" {
-            guard let werte = try? datei.resourceValues(forKeys: [.contentModificationDateKey]),
-                  let geaendertAm = werte.contentModificationDate,
-                  geaendertAm < stichtag
-            else { continue }
-            guard (try? FileManager.default.removeItem(at: datei)) != nil else { continue }
-            geloeschteAnzahl += 1
+        let zuLoeschende = dateien.filter { datei in
+            guard datei.pathExtension == "json",
+                  let werte = try? datei.resourceValues(forKeys: [.contentModificationDateKey]),
+                  let geaendertAm = werte.contentModificationDate
+            else { return false }
+            return geaendertAm < stichtag
         }
+        await Task.detached(priority: .utility, operation: {
+            for datei in zuLoeschende {
+                SyncDateiZugriff.loescheKoordiniert(datei)
+            }
+        }).value
+        let geloeschteAnzahl = zuLoeschende.count
         if SyncDebugLogger.istAktiv, geloeschteAnzahl > 0 {
             SyncDebugLogger.log(.eventDateienBereinigt, details: "anzahl=\(geloeschteAnzahl)")
         }

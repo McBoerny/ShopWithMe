@@ -37,16 +37,23 @@ import SwiftData
 /// Konstellation).
 ///
 /// **`NSMetadataQuery`-Weckimpuls ausprobiert und wieder entfernt** (GitHub
-/// #91): Ein kurz laufender `NSMetadataQuery`-Aufruf vor jedem Zyklus sollte
-/// iCloud aktiv zum Abgleich anstoßen. Live-Test zeigte keinerlei Wirkung —
-/// laut Recherche danach zu Recht: `NSMetadataQuery` triggert selbst keinen
-/// Download unbekannter Objekte (das ist explizit Aufgabe der App über
-/// `startDownloadingUbiquitousItem`) und beobachtet zuverlässig ohnehin nur
-/// die Wurzel des gescopten Ordners, nicht tiefer liegende Unterordner wie
-/// `peers/<Gerät>/…`, wo die eigentlichen Sync-Dateien liegen. Der
-/// tatsächliche Fix (koordinierte Verzeichnis-Listings statt ungeschütztem
-/// `contentsOfDirectory`) steht in ``SyncDateiZugriff/listeKoordiniert(_:)``,
-/// siehe `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 40.
+/// #91, erster Anlauf): Ein kurz laufender `NSMetadataQuery`-Aufruf vor jedem
+/// Zyklus sollte iCloud aktiv zum Abgleich anstoßen. Live-Test zeigte
+/// keinerlei Wirkung. Der zweite Anlauf (koordinierte Verzeichnis-Listings,
+/// ``SyncDateiZugriff/listeKoordiniert(_:)``) half laut Live-Test ebenfalls
+/// nicht. Details zu beiden in `docs/DATENSYNCHRONISATION_VERLAUF.md`
+/// Abschnitt 39/40.
+///
+/// **Dritter Anlauf: langlebige `NSMetadataQuery`** (``SyncICloudAenderungsBeobachter``):
+/// Apples „Designing for Documents in iCloud"-Guide dokumentiert
+/// `NSMetadataQuery` explizit als korrekten iOS-Weg, neue Fremd-Dateien zu
+/// entdecken — aber nur, wenn sie früh gestartet und dauerhaft am Laufen
+/// gehalten wird (`enableUpdates()` + `NSMetadataQueryDidUpdateNotification`),
+/// nicht als kurzer Einzelaufruf wie beim ersten Anlauf. Zusätzlich diesmal
+/// pro Peer-Unterordner gescoped, nicht nur auf die Sync-Ordner-Wurzel
+/// (unbeantworteter Apple-Forenthread #783958: die Query beobachtet
+/// zuverlässig nur die Wurzel jedes gescopten Ordners). Details in
+/// `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 41.
 @MainActor
 final class SyncPollingService: ObservableObject {
     /// `static var` statt `let`, damit Tests sie auf sehr kurze Werte setzen
@@ -60,12 +67,18 @@ final class SyncPollingService: ObservableObject {
 
     private var context: ModelContext?
     private var schleife: Task<Void, Never>?
+    private let icloudBeobachter = SyncICloudAenderungsBeobachter()
 
     /// Startet den Polling-Loop (wirkungslos, falls bereits gestartet) — führt
     /// sofort einen ersten Sync-Zyklus aus, bevor das erste Intervall
     /// abgewartet wird.
     func starten(context: ModelContext) {
         self.context = context
+        icloudBeobachter.starten { [weak self] in
+            Task { @MainActor [weak self] in
+                await self?.syncZyklus()
+            }
+        }
         guard schleife == nil else { return }
         // Niedrige Priorität (GitHub #55): der Loop startet direkt beim
         // App-Start bzw. bei jeder Rückkehr aus dem Hintergrund, exakt dann,
@@ -88,6 +101,7 @@ final class SyncPollingService: ObservableObject {
     func stoppen() {
         schleife?.cancel()
         schleife = nil
+        icloudBeobachter.stoppen()
     }
 
     /// Rückgabewert meldet, ob der Ordnerzugriff in allen fünf Teilschritten
@@ -102,6 +116,12 @@ final class SyncPollingService: ObservableObject {
         guard let context else { return true }
         SyncDebugLogger.log(.zyklusStart, details: einkaufAktiv ? "einkaufAktiv" : "ruhend")
         let start = ContinuousClock.now
+
+        // Periodische Reaktivierung zusätzlich zur reaktiven (bei jeder
+        // eigenen Benachrichtigung) — schließt die Lücke, dass ein gerade
+        // erst gewechselter Sync-Ordner sonst erst nach der ersten
+        // Fremdänderung im NEUEN Ordner erkannt würde.
+        icloudBeobachter.aktualisiereScopeFallsNoetig()
 
         let snapshotImportErfolgreich = await SyncSnapshotImportService.importiereSnapshots(context: context)
         let eventImportErfolgreich = await SyncImportService.importiereNeueEvents(context: context)

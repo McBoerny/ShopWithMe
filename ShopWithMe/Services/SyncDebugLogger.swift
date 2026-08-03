@@ -82,6 +82,19 @@ enum SyncDebugLogger {
         /// Aufrufstelle bei jedem Zyklus).
         case scopeZugriff = "sync_scope_zugriff"
 
+        /// GitHub #91 (dritter Anlauf): ``SyncICloudAenderungsBeobachter``
+        /// hat eine `NSMetadataQueryDidUpdateNotification` erhalten und
+        /// einen zusätzlichen Sync-Zyklus angestoßen — Beleg dafür, dass die
+        /// langlebige Query tatsächlich Fremdänderungen bemerkt (statt nur
+        /// beim ersten, wirkungslosen Einzelaufruf-Versuch zu verharren).
+        case iCloudBeobachterAusgeloest = "sync_icloud_beobachter_ausgeloest"
+
+        /// ``SyncICloudAenderungsBeobachter`` hat die Query mit
+        /// aktualisierten Scopes neu aufgebaut (initial oder weil sich die
+        /// bekannte Peer-Liste geändert hat). Details:
+        /// `peers=N scopes=M`.
+        case iCloudBeobachterScopeAktualisiert = "sync_icloud_beobachter_scope_aktualisiert"
+
         /// Mindest-Protokollstufe, ab der dieses Ereignis geschrieben wird
         /// (siehe ``Protokollstufe``-Typ-Doku für die Einteilungskriterien).
         var mindestStufe: Protokollstufe {
@@ -93,7 +106,7 @@ enum SyncDebugLogger {
                  .vollAbgleichEingeleitet:
                 return .fehler
             case .zyklusStart, .zyklusEnde, .eventEmpfangen, .snapshotEmpfangen, .einkaufslistenStand,
-                 .snapshotGeschrieben:
+                 .snapshotGeschrieben, .iCloudBeobachterAusgeloest, .iCloudBeobachterScopeAktualisiert:
                 return .standard
             case .snapshotUnveraendertUebersprungen, .scopeZugriff:
                 return .ausfuehrlich

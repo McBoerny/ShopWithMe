@@ -1271,24 +1271,14 @@ enum SyncSnapshotImportService {
                 SyncSnapshotExportService.vorgaengeURL(fuerPeer: peerName, in: syncOrdner),
                 SyncSnapshotExportService.preiseURL(fuerPeer: peerName, in: syncOrdner),
             ] {
-                loescheKoordiniert(url)
+                SyncDateiZugriff.loescheKoordiniert(url)
             }
-            // `loescheKoordiniert` entfernt via `FileManager.removeItem`, das
-            // auch einen kompletten (Unter-)Ordner rekursiv löscht — kein
-            // separates Verzeichnis-Löschwerkzeug nötig.
-            loescheKoordiniert(SyncSnapshotExportService.kaeufeOrdner(fuerPeer: peerName, in: syncOrdner))
+            // `SyncDateiZugriff.loescheKoordiniert` entfernt via
+            // `FileManager.removeItem`, das auch einen kompletten
+            // (Unter-)Ordner rekursiv löscht — kein separates
+            // Verzeichnis-Löschwerkzeug nötig.
+            SyncDateiZugriff.loescheKoordiniert(SyncSnapshotExportService.kaeufeOrdner(fuerPeer: peerName, in: syncOrdner))
         }
         return true
-    }
-
-    /// Löscht über `NSFileCoordinator`, damit File-Provider-Erweiterungen
-    /// (iCloud Drive/Synology Drive/…) von der Änderung erfahren — analog zum
-    /// bestehenden Schreib-Muster in ``SyncSnapshotExportService``.
-    nonisolated private static func loescheKoordiniert(_ url: URL) {
-        let coordinator = NSFileCoordinator()
-        var coordinatorFehler: NSError?
-        coordinator.coordinate(writingItemAt: url, options: .forDeleting, error: &coordinatorFehler) { zielURL in
-            try? FileManager.default.removeItem(at: zielURL)
-        }
     }
 }

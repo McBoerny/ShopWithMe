@@ -2654,3 +2654,73 @@ identisch zur alten 50/50-Mittelung; unterschiedliche Beobachtungsanzahl →
 Gewichtung statt 50/50; wiederholter Sync desselben Peer-Standes →
 idempotent, keine erneute Verschiebung). `xcodegen generate`/Build noch
 ausständig.
+
+## 42. GitHub #91 (Fortsetzung): Koordinierte Verzeichnis-Listings wirkungslos, langlebiger `NSMetadataQuery`-Beobachter + koordinierte Schreibzugriffe
+
+**Live-Test-Fund:** Auch der Abschnitt-40-Fix (koordinierte Verzeichnis-
+Listings statt ungeschütztem `contentsOfDirectory`) brachte laut Live-Test
+keine Verbesserung. Nutzer erinnerte sich an eine frühere Beobachtung: Gerät
+A fügte einen Artikel hinzu, Gerät B bemerkte nichts — bis B selbst ebenfalls
+etwas hinzufügte, danach lief der Sync.
+
+**Root Cause (jetzt gegen Apples offiziellen „Designing for Documents in
+iCloud"-Guide verifiziert, nicht nur vermutet):** Der erste `NSMetadataQuery`-
+Versuch (Abschnitt 39) erzeugte jeden Sync-Zyklus eine NEUE Query, ließ sie
+maximal 2s laufen und stoppte sie sofort wieder — erreichte dadurch nie
+`enableUpdates()` und bekam praktisch nie eine echte
+`NSMetadataQueryDidUpdateNotification`. Apples Guide dokumentiert stattdessen
+explizit: „In iOS, employ an `NSMetadataQuery` object … to actively track the
+locations of your documents" — früh erzeugen, **dauerhaft laufen lassen**,
+auf `NSMetadataQueryDidUpdateNotification` reagieren. Zusätzlich bestätigt
+(unbeantworteter Apple-Forenthread #783958, exakt unser Szenario — externer,
+per Dokumenten-Picker gewählter Ordner): die Query beobachtet zuverlässig nur
+die WURZEL jedes gescopten Ordners, nicht dessen Unterordner — der erste
+Versuch scopte nur die Sync-Ordner-Wurzel, nicht `peers/<Gerät>/…`, wo die
+eigentlichen Dateien liegen.
+
+**Fix, zwei Teile:**
+
+1. **Neuer ``SyncICloudAenderungsBeobachter``** (langlebig, kein
+   Einzelaufruf mehr): gescoped auf den `peers/`-Ordner selbst sowie je
+   bekanntem Peer dessen Ordner plus `events/`/`kaeufe/`-Unterordner.
+   `enableUpdates()` nach dem ersten Gathering, danach dauerhaft auf
+   `NSMetadataQueryDidUpdateNotification` reagieren und einen zusätzlichen
+   Sync-Zyklus anstoßen. Neue Peers/ein gewechselter Sync-Ordner werden
+   sowohl reaktiv (bei jeder eigenen Benachrichtigung) als auch periodisch
+   (bei jedem regulären Sync-Zyklus) neu abgeglichen. Lifecycle an
+   `SyncPollingService.starten(context:)`/`stoppen()` gekoppelt.
+2. **Bei der Gelegenheit geprüft, ob auch alle SCHREIBzugriffe koordiniert
+   sind** (Apples iCloud-Doku verlangt das für JEDEN Dateizugriff, nicht nur
+   Lesen) — sechs Lücken gefunden und behoben: `createDirectory` (eigener
+   `events/`-, `kaeufe/`-, Paket-Ordner) und `removeItem`/`moveItem` (alte
+   eigene Event-Dateien aufräumen, eigene Kauf-Dateien löschen, eigenen
+   Peer-Ordner bei Geräteumbenennung verschieben) liefen bisher direkt über
+   `FileManager`, ungeschützt. Neue gemeinsame Funktionen
+   ``SyncDateiZugriff/erstelleVerzeichnisKoordiniert(_:)``,
+   ``SyncDateiZugriff/loescheKoordiniert(_:)``,
+   ``SyncDateiZugriff/verschiebeKoordiniert(von:nach:)`` — Letztere nutzt
+   exakt das im `NSFileCoordinator.h`-Header dokumentierte Move-Pattern
+   (Quelle mit `.forMoving`, Ziel mit `.forReplacing`, ein einziger
+   Koordinationsaufruf). Die bereits vorhandene private
+   `loescheKoordiniert`-Dublette in `SyncSnapshotImportService` auf die neue
+   gemeinsame Funktion umgestellt (Single Source of Truth).
+
+**Gegen aktuellste SDK-Doku statt veralteter Quellen verifiziert:** API-Namen
+(`startQuery`/`stopQuery` → Swift `start()`/`stop()`, `enableUpdates`/
+`disableUpdates` nesten, exakter Wortlaut der `WritingOptions`-Fälle) direkt
+gegen den lokal installierten `iPhoneOS26.5.sdk`-Header geprüft, nicht gegen
+einen veralteten iOS-13-Header-Mirror — siehe `ios-swift-engineering`-Skill,
+Abschnitt „Bei weniger gebräuchlichen APIs vorher aktuelle Dokumentation
+prüfen". Dabei auch eine Nutzer-Vermutung (`.forReplacing` für normale
+Inhalts-Updates) widerlegt: der Header sagt explizit "Don't use this when
+simply updating the contents of a file" — `.forReplacing` ist nur für
+Move-Ziele bzw. Save-As-artiges Ersetzen vorgesehen, nicht für unsere
+Export-Datei-Updates (die bleiben bei `options: []`).
+
+**Verifikationsstand:** `xcodegen generate` + `xcodebuild build`/
+`build-for-testing` grün, keine neuen Warnungen. Neue Debug-Events
+`sync_icloud_beobachter_ausgeloest`/`sync_icloud_beobachter_scope_aktualisiert`
+als Beleg, ob die Query im nächsten Live-Test tatsächlich feuert. Ein echter
+Zwei-Geräte-Live-Test steht noch aus — nach zwei vorherigen Fehlschlägen
+bewusst zurückhaltend formuliert: dieser dritte Anlauf ist diesmal
+dokumentations-verifiziert, aber kein garantierter Fix.

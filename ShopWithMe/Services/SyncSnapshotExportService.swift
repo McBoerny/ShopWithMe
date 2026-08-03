@@ -389,7 +389,9 @@ enum SyncSnapshotExportService {
         }
 
         let eigenerOrdner = peerOrdner(fuer: SyncOrdnerService.eigenerPeerOrdnerName(in: syncOrdner), in: syncOrdner)
-        guard (try? FileManager.default.createDirectory(at: eigenerOrdner, withIntermediateDirectories: true)) != nil else {
+        guard await Task.detached(priority: .utility, operation: {
+            SyncDateiZugriff.erstelleVerzeichnisKoordiniert(eigenerOrdner)
+        }).value else {
             return true
         }
 

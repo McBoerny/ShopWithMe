@@ -143,7 +143,7 @@ enum SyncOrdnerService {
             let alterOrdner = peersOrdner.appendingPathComponent(alterName, isDirectory: true)
             let neuerOrdner = peersOrdner.appendingPathComponent(ziel, isDirectory: true)
             if FileManager.default.fileExists(atPath: alterOrdner.path) {
-                try? FileManager.default.moveItem(at: alterOrdner, to: neuerOrdner)
+                SyncDateiZugriff.verschiebeKoordiniert(von: alterOrdner, nach: neuerOrdner)
             }
         }
         UserDefaults.standard.set(ziel, forKey: eigenerPeerOrdnerNameCacheSchluessel)
