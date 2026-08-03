@@ -402,6 +402,47 @@ jeder Zyklus fälschlich als inhaltliche Änderung. Ohne diese Prüfung erzwang
 jeder Sync-Zyklus (5s/60s) einen echten `context.save()` auf jedem
 empfangenden Peer, selbst ohne inhaltliche Änderung.
 
+### 4.7 `EinkaufslistenEintrag` — Sicherheitsnetz für verpasste Bereich-A-Events
+
+`SyncSnapshotImportService.mergeEinkaufslistenEintraege` ergänzt additiv
+fehlende Einkaufslisten-Mitgliedschaften aus dem Bereich-B-„listen"-Snapshot
+— ein Fallback für den Fall, dass ein Peer das eigentlich zuständige,
+Lamport-geordnete Bereich-A-Event (`artikelHinzugefuegt`/-`entfernt`,
+`artikelAbgehakt`/-`abgewaehlt`/-`dauerhaftEntfernt`) verpasst hat (z.B.
+Event bereits bereinigt, siehe `SyncExportService/eventAufbewahrungsfrist`),
+NICHT der primäre Weg für normale Listen-Änderungen — die laufen weiterhin
+über die direkten Events aus Abschnitt 3.
+
+**Live-Test-Fund, dritter Nachtrag (Session 2026-08-03): Sicherheitsnetz
+holte bereits gekaufte Artikel zurück auf die offene Liste.**
+`istBereitsAbgehakt(_:aufListe:alleVorgaenge:)` (der Schutz gegen genau
+dieses Zurückholen, GitHub #52-Nachfolgefund) prüfte bisher „gibt es für
+diese Liste irgendeinen noch offenen `Einkaufsvorgang`" als Näherung für
+„kenne ich diesen Kauf schon sicher genug". Das funktionierte zufällig,
+solange „Einkauf abschließen" nie ALLE offenen Vorgänge einer Liste auf
+einmal schloss. Der Fix in 4.3 (`weitereOffeneVorgaengeDerListe`) kann das
+jetzt aber gezielt — sobald keine Liste mehr offen ist, lieferte die Prüfung
+für JEDEN bereits gekauften Artikel `false`, und ein noch nicht aktueller
+Peer-Snapshot holte ihn zurück. Bestätigt per Live-Test: der
+`Einkaufsliste`-Bestand sprang bei beiden Geräten unabhängig voneinander
+kurz nach einem Abschluss deutlich nach oben und blieb auf unterschiedlichen
+Endständen stehen — sichtbare Dissonanz zwischen den Geräten.
+
+**Fix:** Ein legitimes Neu-Hinzufügen Wochen nach dem Kauf (der ursprüngliche
+Grund für die alte Ausnahme) läuft ohnehin über das eigene, direkte
+`artikelHinzugefuegt`-Event, nicht über dieses Sicherheitsnetz — ein normal
+synchronisierendes Gerät hat ein solches Neu-Hinzufügen also längst über den
+direkten Event-Pfad erfahren. „Ich habe irgendwann einen `KaufEintrag`
+dafür" ist für ein normal synchronisierendes Gerät deshalb ein **dauerhaft
+belastbares Faktum**, unabhängig vom aktuellen Vorgangs-Status. Nur ein
+Gerät, das laut ``SyncAktualitaetsService/istAusDerZeitGefallen(context:)``
+tatsächlich lange genug nicht synchronisiert hat, um das direkte Ereignis
+verpasst haben zu können, fällt weiterhin auf die alte, offene-Vorgänge-
+basierte Ausnahme zurück — bewusst kein neu geratener Zeitschwellwert,
+sondern Wiederverwendung des bereits für genau diese Frage („kann ich mich
+noch auf mein eigenes Event-Lesen verlassen") gebauten Mechanismus aus
+Abschnitt 9a.
+
 ## 5. Sync-Zyklus und adaptives Polling
 
 `SyncPollingService` führt einen vollständigen Zyklus (Import Bereich A →

@@ -772,11 +772,14 @@ enum SyncSnapshotImportService {
         // NACH dieser Funktion an (siehe Aufrufreihenfolge in `mergePaket`), der
         // Bestand ist während dieses gesamten Durchlaufs also bereits vollständig.
         let alleVorgaenge = (try? context.fetch(FetchDescriptor<Einkaufsvorgang>())) ?? []
+        // Einmal pro Merge-Durchlauf berechnet statt pro Artikel — siehe
+        // Begründung in ``istBereitsAbgehakt(_:aufListe:alleVorgaenge:istAusDerZeitGefallen:)``.
+        let istAusDerZeitGefallen = SyncAktualitaetsService.istAusDerZeitGefallen(context: context)
         for eintrag in remote {
             guard let liste = listeZuordnung[eintrag.einkaufslisteID],
                   let artikel = artikelZuordnung[eintrag.artikelID],
                   !liste.enthaelt(artikel),
-                  !istBereitsAbgehakt(artikel, aufListe: liste, alleVorgaenge: alleVorgaenge)
+                  !istBereitsAbgehakt(artikel, aufListe: liste, alleVorgaenge: alleVorgaenge, istAusDerZeitGefallen: istAusDerZeitGefallen)
             else { continue }
             context.insert(EinkaufslistenEintrag(einkaufsliste: liste, artikel: artikel, menge: eintrag.menge, notiz: eintrag.notiz))
         }
@@ -786,16 +789,32 @@ enum SyncSnapshotImportService {
     /// ist (siehe Warnung in
     /// ``mergeEinkaufslistenEintraege(_:listeZuordnung:artikelZuordnung:context:)``).
     ///
-    /// Ein rein auf offene Vorgänge beschränkter Check würde den bereits
-    /// abgehakten Artikel genau in dem Moment verlieren, in dem „Einkauf
-    /// abschließen" den Vorgang mit seinem `KaufEintrag` schließt — das
-    /// Sicherheitsnetz hätte ihn dann beim nächsten (noch nicht aktuellen)
-    /// Peer-Snapshot fälschlich wieder auf die offene Liste geholt. Ein
-    /// geschlossener Vorgang zählt deshalb ebenfalls, aber NUR solange
-    /// irgendein Vorgang für dieselbe Liste noch offen ist — sonst könnte ein
-    /// Artikel, der vor Wochen einmal gekauft und später legitim neu zur
-    /// Liste hinzugefügt wurde, nie wieder über dieses Sicherheitsnetz
-    /// zurückkommen.
+    /// **Live-Test-Fund, dritter Nachtrag (Session 2026-08-03): dauerhafter
+    /// Schutz im Regelfall statt „irgendein Vorgang noch offen".** Ein
+    /// legitimes Neu-Hinzufügen Wochen nach dem Kauf (der ursprüngliche Grund
+    /// für die Ausnahme unten) läuft über das eigene, Lamport-geordnete
+    /// `SyncEventArt.artikelHinzugefuegt`-Ereignis — NICHT über dieses
+    /// Sicherheitsnetz, das laut eigener Typ-Doku nur verpasste Ereignisse
+    /// auffangen soll. Ein normal synchronisierendes Gerät hat ein solches
+    /// Neu-Hinzufügen also längst über den direkten Event-Pfad erfahren;
+    /// „ich habe irgendwann einen `KaufEintrag` dafür" ist für dieses Gerät
+    /// deshalb ein dauerhaft belastbares Faktum, kein Zeitfenster nötig. Erst
+    /// seit ein Fix (``EinkaufenView/weitereOffeneVorgaengeDerListe``) auch
+    /// den letzten offenen Vorgang einer Liste schließen kann, gab es
+    /// überhaupt Momente ohne offenen Vorgang — und genau dann hätte die
+    /// alte, rein auf `endZeit == nil` gestützte Prüfung bereits gekaufte
+    /// Artikel reihenweise wieder auf die offene Liste zurückgeholt
+    /// (bestätigt per Live-Test: `Urlaub`-Listenstand sprang bei beiden
+    /// Geräten kurz nach einem „Einkauf abschließen" unabhängig voneinander
+    /// hoch und blieb auf unterschiedlichen Endständen stehen).
+    ///
+    /// Nur ein Gerät, das laut ``SyncAktualitaetsService/istAusDerZeitGefallen(context:)``
+    /// tatsächlich lange genug nicht synchronisiert hat, um das direkte
+    /// Ereignis verpasst haben zu können, fällt auf die alte, schwächere
+    /// Ausnahme zurück: ein geschlossener Vorgang zählt dann ebenfalls als
+    /// Schutz, aber NUR solange irgendein Vorgang für dieselbe Liste noch
+    /// offen ist — dieselbe Unschärfe wie bisher, jetzt aber nur noch in dem
+    /// seltenen Fall, für den sie ursprünglich gedacht war.
     ///
     /// **Vereinfacht seit der Ablösung der Vorgangs-Umleitung (Session
     /// 2026-08-03):** Die frühere Fassung suchte für einen bereits
@@ -804,10 +823,11 @@ enum SyncSnapshotImportService {
     /// unter den Vorgängen dieser Liste überhaupt ein offener" — hier
     /// direkt so geprüft, ohne den (jetzt gelöschten) Umweg.
     private static func istBereitsAbgehakt(
-        _ artikel: Artikel, aufListe liste: Einkaufsliste, alleVorgaenge: [Einkaufsvorgang]
+        _ artikel: Artikel, aufListe liste: Einkaufsliste, alleVorgaenge: [Einkaufsvorgang], istAusDerZeitGefallen: Bool
     ) -> Bool {
         let vorgaengeFuerListe = alleVorgaenge.filter { $0.einkaufsliste == liste }
         guard vorgaengeFuerListe.contains(where: { $0.kaufEintraege.contains { $0.artikel == artikel } }) else { return false }
+        guard istAusDerZeitGefallen else { return true }
         return vorgaengeFuerListe.contains { $0.endZeit == nil }
     }
 
