@@ -239,6 +239,31 @@ des SENDENDEN Geräts durchs Geschäft, nicht die dieses Geräts, und würde
 `Einkaufsvorgang.naechsterKategorieBesuchsIndex` ignoriert indexlose Einträge
 bei der Suche nach einem bereits vergebenen Index für dieselbe Kategorie.
 
+**Geschäft kommt aus der Nutzlast, nicht aus dem Container-Vorgang (GitHub
+#66):** `SyncEventNutzlast.geschaeftID` (additiv-optional) trägt das beim
+SENDENDEN Gerät zum Zeitpunkt des Abhakens aktive Geschäft mit. Ohne dieses
+Feld hätte der beim Umleiten neu materialisierte `KaufEintrag` das Geschäft
+des NACHFOLGE-Vorgangs geerbt (`self.geschaeft` in
+`Einkaufsvorgang.artikelAbhakenOhneEventAufzeichnung`) statt des Geschäfts,
+an dem der Kauf tatsächlich stattfand — z.B. wenn „Einkauf abschließen" die
+Geschäftsauswahl zurücksetzt (GitHub #51) oder der Nachfolger an einem
+anderen Geschäft läuft. `geschaeft geschaeftUeberschreibung: Geschaeft??`
+(bewusst doppelt optional, analog dem bereits bestehenden
+`kategorie`-Override) unterscheidet „kein Override, `self.geschaeft` gilt"
+(Standardfall beim lokalen Abhaken) von „Override auf explizit KEIN
+Geschäft" (Sender hatte keins ausgewählt) — beides muss unterscheidbar
+bleiben.
+
+**Auswirkung auf #69:** Da der Kaufeintrag jetzt unabhängig vom
+Container-Vorgang immer das korrekte Geschäft trägt, kann der store-lose
+Umleitungs-Fallback (kein offener Vorgang mit passendem Geschäft, siehe
+GitHub #69) keine zwei Einkäufe an unterschiedlichen Geschäften mehr
+inhaltlich vermischen — er könnte höchstens noch einen Kaufeintrag am
+„falschen" Container-Vorgang gruppieren, was für Distanzlernen (immer
+indexlos bei Fremdherkunft), Listenzustand (listenbasiert, nicht
+vorgangsbasiert) und Preishistorie (seit GitHub #76 komplett von
+`KaufEintrag` entkoppelt) folgenlos bleibt.
+
 **Deterministische Kanon-Wahl bei mehreren passenden Kandidaten (GitHub
 #67-Erweiterung):** Legen zwei Geräte kurz nacheinander (vor dem ersten
 Sync-Zyklus) unabhängig je einen eigenen offenen Vorgang für dieselbe

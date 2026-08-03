@@ -34,6 +34,20 @@ struct SyncEventNutzlast: Codable {
     /// `Einkaufsliste.id` oder `Einkaufsvorgang.id`, je nach `SyncEventArt`.
     var bezugsID: UUID
     var artikelID: UUID
+    /// Nur für `.artikelAbgehakt` gesetzt (additiv-optional, GitHub #66):
+    /// das beim SENDENDEN Gerät zum Zeitpunkt des Abhakens aktive
+    /// ``Geschaeft`` (`nil`, falls dort kein Geschäft ausgewählt war).
+    ///
+    /// **Warum das nicht aus dem lokalen Einkaufsvorgang abgeleitet wird:**
+    /// Wird das Event auf einen bereits abgeschlossenen Vorgang umgeleitet
+    /// (``SyncImportService/aufOffenenNachfolgerUmgeleitet(_:fremdeID:context:)``),
+    /// hätte der neu materialisierte ``KaufEintrag`` sonst das Geschäft des
+    /// NACHFOLGE-Vorgangs geerbt statt des Geschäfts, an dem der Kauf laut
+    /// diesem Event tatsächlich stattfand — siehe GitHub #66. Da dieses Feld
+    /// direkt mit dem Event reist, bleibt die Zuordnung auch dann korrekt,
+    /// wenn der ursprüngliche Vorgang zum Verarbeitungszeitpunkt bereits
+    /// abgeschlossen (oder inzwischen sogar aufgeräumt) ist.
+    var geschaeftID: UUID?
 }
 
 /// Ein einzelnes, unveränderliches Ereignis für die geplante

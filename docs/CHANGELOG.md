@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.10 (Build 198) — Geschäft kommt bei umgeleiteten Abhaken-Ereignissen aus der Nutzlast statt aus dem Container-Vorgang (GitHub #66)
+
+- `Einkaufsvorgang.artikelAbhakenOhneEventAufzeichnung` legte einen neuen
+  `KaufEintrag` nach einer Vorgangs-Umleitung bisher mit dem Geschäft des
+  NACHFOLGE-Vorgangs an, statt mit dem Geschäft, an dem der Kauf laut
+  sendendem Gerät tatsächlich stattfand — z.B. wenn „Einkauf abschließen"
+  die Geschäftsauswahl zurücksetzt (GitHub #51).
+- `SyncEventNutzlast` bekommt ein additiv-optionales `geschaeftID`; das
+  sendende Gerät zeichnet dort sein eigenes aktives Geschäft mit auf.
+  `SyncImportService` löst diese ID beim Materialisieren zu einem lokalen
+  Geschäft auf (über den Bereich-B-Alias) und übergibt sie als Override —
+  analog dem bereits bestehenden `kategorie`-Override, aber bewusst doppelt
+  optional (`Geschaeft??`), um „kein Override" von „Override auf explizit
+  kein Geschäft" zu unterscheiden. `geschaeftNameSnapshot` wird automatisch
+  mitkorrigiert.
+- Geprüft und dokumentiert: dieser Fix entschärft auch GitHub #69 (store-loser
+  Umleitungs-Fallback) vollständig auf der Datenebene — der Kaufeintrag trägt
+  jetzt immer das korrekte Geschäft, unabhängig vom Container-Vorgang. #69
+  bleibt trotzdem offen für die verbleibende, rein kosmetische
+  Gruppierungsfrage.
+
 ## v0.10 (Build 197) — Deterministische Kanon-Wahl bei mehreren offenen Einkaufsvorgang-Kandidaten (GitHub #67-Erweiterung)
 
 - Legten zwei Geräte kurz nacheinander (vor dem ersten Sync-Zyklus)

@@ -95,9 +95,20 @@ final class Einkaufsvorgang {
     /// mehreren zugeordneten Kategorien ein Artikel dort tatsächlich steht (z.B.
     /// Sojasauce bei Edeka unter "Soßen", bei Aldi unter "Asia") statt einer
     /// global für den Artikel geratenen.
+    /// `geschaeftUeberschreibung` ist ein DOPPELT optionaler Parameter
+    /// (`Geschaeft??`), um „kein Override" (Standardfall: `nil`, `self.geschaeft`
+    /// gilt) von „Override auf explizit KEIN Geschäft" (`.some(nil)`) zu
+    /// unterscheiden (GitHub #66) — Letzteres tritt auf, wenn ein per Sync
+    /// empfangenes Ereignis meldet, dass auf dem sendenden Gerät gar kein
+    /// Geschäft ausgewählt war. Ein Aufrufer, der einen bereits als
+    /// `Geschaeft?` typisierten Wert übergibt (auch wenn dessen Inhalt `nil`
+    /// ist), wird von Swift automatisch korrekt in die äußere Optionalität
+    /// gehoben — nur der reine `nil`-Literal bedeutet „kein Override".
     @discardableResult
     func artikelAbhakenOhneEventAufzeichnung(
-        _ artikel: Artikel, context: ModelContext, indexFuerDistanzlernen: Bool = true, kategorie kategorieUeberschreibung: ArtikelKategorie? = nil
+        _ artikel: Artikel, context: ModelContext, indexFuerDistanzlernen: Bool = true,
+        kategorie kategorieUeberschreibung: ArtikelKategorie? = nil,
+        geschaeft geschaeftUeberschreibung: Geschaeft?? = nil
     ) -> AbhakErgebnis {
         // Dedupe-Schutz gegen das in `docs/DATABASE_CONCURRENCY.md` dokumentierte
         // Restrisiko (Sync-Latenz-Kollisionsfenster bei zeitgleichem Abhaken auf zwei
@@ -119,11 +130,12 @@ final class Einkaufsvorgang {
             return .bereitsAbgehaktVon(geraeteID: gewinner?.autorGeraeteID)
         }
 
-        let kategorie = kategorieUeberschreibung ?? artikel.fuehrendeKategorie(inGeschaeft: geschaeft, context: context)
+        let geschaeftFuerEintrag = geschaeftUeberschreibung ?? geschaeft
+        let kategorie = kategorieUeberschreibung ?? artikel.fuehrendeKategorie(inGeschaeft: geschaeftFuerEintrag, context: context)
         let index = indexFuerDistanzlernen ? naechsterKategorieBesuchsIndex(fuer: kategorie) : nil
         let eintrag = KaufEintrag(
             artikel: artikel,
-            geschaeft: geschaeft,
+            geschaeft: geschaeftFuerEintrag,
             kategorie: kategorie,
             menge: listenEintrag?.menge ?? artikel.mengenSchritt,
             kategorieBesuchsIndex: index
@@ -136,15 +148,18 @@ final class Einkaufsvorgang {
         return .abgehakt
     }
 
-    /// Wie ``artikelAbhakenOhneEventAufzeichnung(_:context:indexFuerDistanzlernen:kategorie:)``,
+    /// Wie ``artikelAbhakenOhneEventAufzeichnung(_:context:indexFuerDistanzlernen:kategorie:geschaeft:)``,
     /// zeichnet zusätzlich (nur bei tatsächlicher Neuanlage) ein
     /// ``SyncEventArt/artikelAbgehakt``-Event auf (Phase 0,
-    /// `docs/DATENSYNCHRONISATION_VERLAUF.md`).
+    /// `docs/DATENSYNCHRONISATION_VERLAUF.md`) — inklusive des eigenen
+    /// aktuellen ``geschaeft`` in der Nutzlast (GitHub #66), damit ein
+    /// Empfänger den Kaufeintrag auch nach einer Umleitung auf einen anderen
+    /// Vorgang mit dem tatsächlich zutreffenden Geschäft anlegen kann.
     @discardableResult
     func artikelAbhaken(_ artikel: Artikel, context: ModelContext, kategorie: ArtikelKategorie? = nil) -> AbhakErgebnis {
         let ergebnis = artikelAbhakenOhneEventAufzeichnung(artikel, context: context, kategorie: kategorie)
         if ergebnis == .abgehakt {
-            SyncEventService.aufzeichnen(.artikelAbgehakt, bezugsID: id, artikelID: artikel.id, context: context)
+            SyncEventService.aufzeichnen(.artikelAbgehakt, bezugsID: id, artikelID: artikel.id, geschaeftID: geschaeft?.id, context: context)
         }
         return ergebnis
     }

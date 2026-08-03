@@ -18,11 +18,12 @@ enum SyncEventService {
         _ art: SyncEventArt,
         bezugsID: UUID,
         artikelID: UUID,
+        geschaeftID: UUID? = nil,
         context: ModelContext
     ) -> SyncEvent {
         let event = SyncEvent(
             art: art,
-            nutzlast: SyncEventNutzlast(bezugsID: bezugsID, artikelID: artikelID),
+            nutzlast: SyncEventNutzlast(bezugsID: bezugsID, artikelID: artikelID, geschaeftID: geschaeftID),
             lamportZaehler: LamportClock.naechsterZaehler(),
             lamportGeraeteID: DatabaseLeaseService.geraeteID,
             autorGeraeteID: DatabaseLeaseService.geraeteID

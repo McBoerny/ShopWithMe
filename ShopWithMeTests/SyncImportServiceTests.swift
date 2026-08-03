@@ -326,6 +326,61 @@ struct SyncImportServiceTests {
         #expect(!liste.enthaelt(apfel))
     }
 
+    /// GitHub #66: Derselbe Umleitungsfall wie oben, aber die Nutzlast trägt
+    /// zusätzlich die Geschäfts-ID des Vorgangs, an dem der Kauf laut
+    /// sendendem Gerät tatsächlich stattfand. Der materialisierte
+    /// `KaufEintrag` muss DIESES Geschäft bekommen — nicht `nil`, das
+    /// `neuerVorgang.geschaeft` des Nachfolgers, auf den umgeleitet wird.
+    @Test
+    func artikelAbgehaktFuerBereitsAbgeschlossenenVorgangBehaeltUrspruenglichesGeschaeft() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let typ = GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")
+        context.insert(typ)
+        let geschaeft = Geschaeft(name: "Testladen", typen: [typ])
+        context.insert(geschaeft)
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759")
+        context.insert(apfel)
+        liste.artikelHinzufuegenOhneEventAufzeichnung(apfel, context: context)
+
+        let alterVorgang = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste)
+        context.insert(alterVorgang)
+        alterVorgang.abschliessen()
+        // Nachfolger mit ANDEREM Geschäft (nicht nur nil) — zeigt, dass die
+        // Korrektur nicht zufällig nur den "kein Geschäft ausgewählt"-Fall
+        // abdeckt, sondern jede Abweichung zwischen Sender- und
+        // Nachfolger-Geschäft.
+        let anderesGeschaeft = Geschaeft(name: "Rewe", typen: [typ])
+        context.insert(anderesGeschaeft)
+        let neuerVorgang = Einkaufsvorgang(geschaeft: anderesGeschaeft, einkaufsliste: liste)
+        context.insert(neuerVorgang)
+        try context.save()
+
+        let fremdesEvent = SyncEventExportDarstellung(
+            id: UUID(), art: SyncEventArt.artikelAbgehakt.rawValue,
+            nutzlast: try JSONEncoder().encode(
+                SyncEventNutzlast(bezugsID: alterVorgang.id, artikelID: apfel.id, geschaeftID: geschaeft.id)
+            ),
+            lamportZaehler: 1, lamportGeraeteID: "fremdes-geraet", autorGeraeteID: "fremdes-geraet", wallClock: Date()
+        )
+        try schreibeFremdesEvent(fremdesEvent, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncImportService.importiereNeueEvents(context: context)
+
+        let eintrag = neuerVorgang.kaufEintraege.first { $0.artikel == apfel }
+        #expect(eintrag?.geschaeft == geschaeft)
+        #expect(eintrag?.geschaeftNameSnapshot == "Testladen")
+        // Der Container-Vorgang selbst bleibt unverändert bei seinem eigenen
+        // Geschäft — nur der einzelne Kaufeintrag trägt das korrigierte.
+        #expect(neuerVorgang.geschaeft == anderesGeschaeft)
+    }
+
     /// Existieren für dieselbe Liste gleichzeitig ZWEI offene Vorgänge an
     /// unterschiedlichen Geschäften (zwei Geräte kaufen parallel an
     /// verschiedenen Läden dieselbe Liste ein), muss die Umleitung den

@@ -287,7 +287,20 @@ enum SyncImportService {
             // dieses Geräts (siehe Einkaufsvorgang-Typ-Doku). Ein hier vergebener
             // Index würde WarengruppenDistanzService mit einer erfundenen
             // Position für diesen Nutzer füttern.
-            vorgang.artikelAbhakenOhneEventAufzeichnung(artikel, context: context, indexFuerDistanzlernen: false)
+            //
+            // geschaeft: explizit aus der Nutzlast statt aus `vorgang.geschaeft`
+            // (GitHub #66) — nach einer Umleitung auf einen offenen Nachfolger
+            // wäre `vorgang.geschaeft` sonst das Geschäft des NACHFOLGERS, nicht
+            // das Geschäft, an dem dieser Kauf laut sendendem Gerät tatsächlich
+            // stattfand. `geschaeftUeberschreibung` ist bewusst als bereits
+            // typisierter `Geschaeft?`-Wert übergeben (nicht der Literal `nil`),
+            // damit Swift ihn korrekt in die äußere Optionalität hebt — auch ein
+            // `nil`-Ergebnis (kein Geschäft ausgewählt) gilt so als expliziter
+            // Override, nicht als „kein Override, self.geschaeft gilt".
+            let geschaeftUeberschreibung: Geschaeft? = nutzlast.geschaeftID.flatMap { geschaeft(mitID: $0, context: context) }
+            vorgang.artikelAbhakenOhneEventAufzeichnung(
+                artikel, context: context, indexFuerDistanzlernen: false, geschaeft: geschaeftUeberschreibung
+            )
             return true
         case .artikelAbgewaehlt:
             // KEINE Umleitung: Abwählen muss den bereits existierenden KaufEintrag
@@ -426,6 +439,18 @@ enum SyncImportService {
     private static func artikel(mitID id: UUID, context: ModelContext) -> Artikel? {
         let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(fuer: id, art: SyncEntitaetsArt.artikel, context: context)
         var deskriptor = FetchDescriptor<Artikel>(predicate: #Predicate { $0.id == aufgeloesteID })
+        deskriptor.fetchLimit = 1
+        return try? context.fetch(deskriptor).first
+    }
+
+    /// Löst zuerst einen bekannten Alias auf (siehe ``SyncEntitaetsAlias`` —
+    /// Bereich-B-Namens-/Koordinatenmatching, GitHub #86, kann ein fremdes
+    /// Geschäft mit einem anderen lokalen zusammengeführt haben), bevor
+    /// direkt per `id` gesucht wird — genutzt für die Geschäfts-Überschreibung
+    /// beim Abhaken-Materialisieren (GitHub #66).
+    private static func geschaeft(mitID id: UUID, context: ModelContext) -> Geschaeft? {
+        let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(fuer: id, art: SyncEntitaetsArt.geschaeft, context: context)
+        var deskriptor = FetchDescriptor<Geschaeft>(predicate: #Predicate { $0.id == aufgeloesteID })
         deskriptor.fetchLimit = 1
         return try? context.fetch(deskriptor).first
     }

@@ -2166,3 +2166,40 @@ das gar nicht passt.
 `.offenerNachfolgerWaehltBeiMehrerenKandidatenDenAeltesten`. Kein
 eigenständiger `xcodebuild test`-Lauf durch Claude (Projektkonvention) —
 nicht auf echten Geräten nachverifiziert.
+
+## 34. GitHub #66: Geschäft kommt jetzt aus der Event-Nutzlast statt aus dem Umleitungs-Container
+
+**Fund:** `Einkaufsvorgang.artikelAbhakenOhneEventAufzeichnung` legte den
+neuen `KaufEintrag` bisher immer mit `self.geschaeft` an — nach einer
+Vorgangs-Umleitung (Abschnitt 4.3) war `self` aber der NACHFOLGE-Vorgang, der
+fast immer ein anderes (oder gar kein) Geschäft hat als der Vorgang, in dem
+der Kauf laut sendendem Gerät tatsächlich stattfand.
+
+**Fix:** `SyncEventNutzlast` bekommt ein additiv-optionales `geschaeftID`
+(nie eine Migration nötig, reiner JSON-Payload). `Einkaufsvorgang.artikelAbhaken`
+zeichnet beim lokalen Abhaken `self.geschaeft?.id` mit auf.
+`SyncImportService.materialisiere`s `.artikelAbgehakt`-Fall löst diese ID
+(über den Bereich-B-Alias, GitHub #86) zu einem lokalen `Geschaeft?` auf und
+übergibt sie als Override an
+`artikelAbhakenOhneEventAufzeichnung(...:geschaeft:)` — analog dem bereits
+bestehenden `kategorie`-Override, aber bewusst doppelt optional (`Geschaeft??`),
+um „kein Override" von „Override auf explizit kein Geschäft" zu
+unterscheiden. `geschaeftNameSnapshot` (bei `KaufEintrag`-Anlage aus
+demselben Parameter abgeleitet) wird dadurch automatisch mitkorrigiert, ohne
+eigene Fundstelle.
+
+**Auswirkung auf #69 geprüft und dokumentiert:** Der store-lose
+Umleitungs-Fallback aus #69 kann dadurch keine zwei Käufe unterschiedlicher
+Geschäfte mehr inhaltlich vermischen — vollständig durchgegangen (Distanzlernen,
+Listenzustand, Preishistorie, siehe `docs/DATENSYNCHRONISATION.md` Abschnitt
+4.3), kein verbleibender Schadpfad gefunden. #69 bleibt trotzdem als eigenes
+Issue offen für die verbleibende, rein kosmetische Container-Gruppierungsfrage.
+
+**Verifikationsstand:** `xcodegen generate` + `xcodebuild build`/
+`build-for-testing` grün. Neuer Regressionstest:
+`SyncImportServiceTests.artikelAbgehaktFuerBereitsAbgeschlossenenVorgangBehaeltUrspruenglichesGeschaeft`
+(Nachfolger hat ein ANDERES Geschäft als der ursprüngliche Vorgang, nicht nur
+`nil`, um sicherzustellen, dass die Korrektur nicht zufällig nur den
+„kein Geschäft ausgewählt"-Fall abdeckt). Kein eigenständiger
+`xcodebuild test`-Lauf durch Claude (Projektkonvention) — nicht auf echten
+Geräten nachverifiziert.
