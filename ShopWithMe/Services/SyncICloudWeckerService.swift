@@ -101,7 +101,14 @@ enum SyncICloudWeckerService {
         let query = NSMetadataQuery()
         query.searchScopes = [ordner]
         query.predicate = NSPredicate(format: "%K LIKE '*'", NSMetadataItemFSNameKey)
-        query.operationQueue = OperationQueue()
+        // NSMetadataQuery verlangt zwingend eine serielle Queue — ein
+        // unkonfiguriertes `OperationQueue()` hat standardmäßig unbegrenzte
+        // Nebenläufigkeit (`maxConcurrentOperationCount == -1`), was zur
+        // Laufzeit mit "[CRIT] API MISUSE: running a NSMetadataQuery with
+        // maxConcurrentOperationCount != 1 is not supported" abbricht.
+        let queue = OperationQueue()
+        queue.maxConcurrentOperationCount = 1
+        query.operationQueue = queue
         let koordinator = WeckImpulsKoordinator(query: query)
 
         return await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
