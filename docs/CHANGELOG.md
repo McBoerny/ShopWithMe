@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.11 (Build 211) — GitHub #91: Aktiver iCloud-Weckimpuls vor jedem Sync-Zyklus
+
+- Neu: `SyncICloudWeckerService.wecke(ordner:)` läuft als erster Schritt
+  jedes `SyncPollingService.syncZyklus()` (automatisch wie über „Jetzt
+  synchronisieren") — eine kurz laufende, auf den Sync-Ordner gescopte
+  `NSMetadataQuery` stößt aktiv den iCloud-Abgleich an, statt nur passiv
+  bereits lokal gecachte Ordnerinhalte zu lesen (Live-Test-Beobachtung:
+  Peer-Änderungen tauchten teils erst auf, nachdem der Ordner manuell in der
+  Files-App geöffnet wurde). Wartet höchstens 2s (Timeout, testbar/nachjustierbar),
+  blockiert den Zyklus aber nie länger; bei Ordnern anderer Anbieter (Synology
+  Drive, lokal) wirkungslos, da `NSMetadataQuery` auf iOS fest an iCloud
+  gebunden ist, kein Sonderfall nötig.
+- Neues Diagnose-Event `sync_icloud_wecker_abgeschlossen` (Sync-Debug-Modus,
+  Details: `rechtzeitig=<Bool> dauer=<Duration>`) als Grundlage, den
+  Timeout-Wert später empirisch nachzujustieren.
+- Details in `docs/DATENSYNCHRONISATION_VERLAUF.md`, Abschnitt 39.
+
 ## v0.11 (Build 210) — Live-Test-Fund: Einkauf abschließen ließ Duplikat-Vorgänge und eine Sync-Sicherheitsnetz-Lücke zurück
 
 - Im Mehrgeräte-Live-Test gefunden: „Einkauf abschließen" schloss nur den

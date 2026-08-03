@@ -2450,3 +2450,51 @@ einzelnes Abwählen setzt den Artikel vollständig zurück.
 Szenario (Artikel in zwei unterschiedlichen Läden für dieselbe Liste
 abhaken, danach auf einem Gerät wieder abwählen) bleibt vor endgültigem
 Vertrauen empfohlen.
+
+## 39. GitHub #91: Aktiver iCloud-Weckimpuls vor jedem Sync-Zyklus
+
+**Beobachtung (Live-Test):** Mehrgeräte-Sync lief erst zuverlässig, sobald man
+den Sync-Ordner in der Files-App öffnete — das stößt aktiv einen
+iCloud-Abgleich an. Ohne diesen manuellen Trigger blieben neue
+Peer-Änderungen teils deutlich verzögert oder blieben ganz aus.
+
+**Root Cause:** Alle Sync-Services (`SyncImportService`,
+`SyncSnapshotImportService`, `SyncExportService`, `SyncOrdnerService`,
+`SyncKaeufeExportService`) listen den Ordner über schlichtes
+`FileManager.default.contentsOfDirectory(...)` — das liest nur, was iCloud auf
+diesem Gerät bereits lokal zwischengespeichert hat, ohne selbst einen Abgleich
+anzustoßen. `SyncDateiZugriff.leseKoordiniert` (GitHub #52) löst zwar bereits
+zuverlässig den Download EINER bekannten Datei aus, hilft aber nicht gegen das
+eigentliche Problem: die Enumeration NEUER, dem Gerät noch unbekannter
+Peer-Dateien.
+
+**Fix:** Neuer ``SyncICloudWeckerService`` — eine kurz laufende
+`NSMetadataQuery`, gescoped auf den Sync-Ordner, läuft als erster Schritt
+jedes ``SyncPollingService/syncZyklus()`` (automatisch wie manuell über
+„Jetzt synchronisieren"). Wartet höchstens `timeout` (Standard 2s, per
+`static var` testbar) auf `.NSMetadataQueryDidFinishGathering`, blockiert den
+Zyklus aber nie länger — ein Timeout wird protokolliert
+(`sync_icloud_wecker_abgeschlossen`), aber nicht als Fehlschlag des Zyklus
+gewertet.
+
+**Bewusst `NSMetadataQuery`, nicht `NSFilePresenter`:** Der in Build 128
+eingeführte und in Build 133 wegen eines Deadlocks (`presentedItemOperationQueue
+= .main` gegen bestehende synchrone `NSFileCoordinator`-Schreibzugriffe)
+zurückgenommene `SyncOrdnerBeobachter`-Ansatz war providerunabhängig, aber
+main-thread-gebunden. `NSMetadataQuery.operationQueue` läuft hier bewusst auf
+einer eigenen Queue, nicht `.main` — vermeidet denselben Deadlock-Mechanismus.
+
+**Geprüft, kein Sonderfall für andere Anbieter nötig:** `NSMetadataQuery` ist
+auf iOS fest an iCloud gebunden — auch mit URL-gescopten `searchScopes` (seit
+iOS 14) werden Ordner anderer File-Provider-Erweiterungen (Synology Drive u.ä.,
+selbst über die Files-App/FileProvider-Framework eingebunden) nicht erfasst.
+Bei solchen Ordnern liefert die Query einfach nichts, das Timeout greift
+wirkungslos — bestätigt gegen aktuelle Apple-Dokumentation/-Foren, nicht nur
+angenommen.
+
+**Verifikationsstand:** `xcodegen generate` + `xcodebuild build` grün. Ein
+echter Zwei-Geräte-Live-Test (insbesondere: verkürzt sich die beobachtete
+Verzögerung bis zum Sichtbarwerden einer Peer-Änderung tatsächlich?) steht
+noch aus — der Timeout-Wert von 2s ist eine Annahme, die anhand der neuen
+`sync_icloud_wecker_abgeschlossen`-Protokolldaten empirisch nachjustiert
+werden soll.

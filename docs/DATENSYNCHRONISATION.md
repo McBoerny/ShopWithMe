@@ -445,15 +445,29 @@ Abschnitt 9a.
 
 ## 5. Sync-Zyklus und adaptives Polling
 
-`SyncPollingService` führt einen vollständigen Zyklus (Import Bereich A →
-Import Bereich B/C/D → Export Bereich A → Export Bereich B/C/D) aus, solange
-die App im Vordergrund ist: sofort bei App-Start/Rückkehr aus dem
-Hintergrund, danach alle 5s während `EinkaufenView` aktiv sichtbar ist (aktiv
-gemeinsam eingekauft wird), sonst alle 60s. Kein separates
+`SyncPollingService` führt einen vollständigen Zyklus (iCloud-Weckimpuls →
+Import Bereich A → Import Bereich B/C/D → Export Bereich A → Export Bereich
+B/C/D) aus, solange die App im Vordergrund ist: sofort bei App-Start/Rückkehr
+aus dem Hintergrund, danach alle 5s während `EinkaufenView` aktiv sichtbar ist
+(aktiv gemeinsam eingekauft wird), sonst alle 60s. Kein separates
 Hintergrund-Intervall (ein reiner In-App-`Task`-Loop pausiert ohnehin, sobald
 iOS die App suspendiert) und kein Fehler-Backoff (alle Sync-Funktionen sind
 heute best-effort mit stillem Fehlschlagen, `try?`, ohne auswertbares
 Erfolgs-/Fehlersignal).
+
+**Aktiver iCloud-Weckimpuls (GitHub #91):** Ein reines `contentsOfDirectory`
+sieht nur, was iCloud auf diesem Gerät bereits lokal zwischengespeichert hat —
+Live-Tests zeigten teils deutlich verzögerte oder ausbleibende
+Peer-Änderungen, bis der Ordner manuell in der Files-App geöffnet wurde.
+`SyncICloudWeckerService.wecke(ordner:)` läuft deshalb als erster Schritt
+jedes Zyklus: eine kurz laufende, auf den Sync-Ordner gescopte
+`NSMetadataQuery` signalisiert iCloud aktiv „ich beobachte diesen Ordner" und
+löst denselben Abgleich aus wie das manuelle Öffnen in der Files-App. Wartet
+höchstens `SyncICloudWeckerService.timeout` (Standard 2s) darauf, blockiert
+den Zyklus aber nie länger — bei Ordnern anderer Anbieter (Synology Drive,
+lokal) liefert die Query ohnehin nichts (`NSMetadataQuery` ist auf iOS fest an
+iCloud gebunden, auch mit URL-gescopten `searchScopes`), das Timeout greift
+dann einfach wirkungslos.
 
 `SyncOrdnerSettingsView` nutzt denselben `SyncPollingService.syncZyklus()`
 für „Jetzt synchronisieren" wie das automatische Polling — Protokollierung
