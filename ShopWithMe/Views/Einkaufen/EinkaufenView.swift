@@ -102,6 +102,27 @@ struct EinkaufenView: View {
         Einkaufsvorgang.kanonischer(unter: vorgaengeDerAktuellenKombination)
     }
 
+    /// Alle offenen Vorgänge für ``ausgewaehlteListe`` — anders als
+    /// ``vorgaengeDerAktuellenKombination`` bewusst OHNE Geschäfts-Filter,
+    /// dieselbe Kein-Geschäft-übergreifende Reichweite wie
+    /// ``abgehakteKaufEintraegeFuerAktuelleListe``/
+    /// ``Einkaufsvorgang/abgehakteKaufEintraege(fuerListe:unter:)`` (Live-Test-
+    /// Nachtrag, Session 2026-08-03): eine erste Fassung schloss beim
+    /// Abschließen nur Duplikate DERSELBEN Geschäft+Liste-Kombination — ein
+    /// per DB-Debug-Log bestätigter echter Testfall hatte die übrig
+    /// gebliebenen Kaufeinträge aber an offenen Vorgängen EINES ANDEREN
+    /// Geschäfts derselben Liste hängen, die dieser engere Filter nicht
+    /// erfasste. Da die Sichtbarkeit abgehakter Artikel ohnehin
+    /// geschäftsübergreifend gilt, muss das Abschließen (das genau diese
+    /// Sichtbarkeit beendet) dieselbe Reichweite haben, um sie zuverlässig
+    /// aufzuräumen.
+    private var weitereOffeneVorgaengeDerListe: [Einkaufsvorgang] {
+        guard let ausgewaehlteListe, let einkauf = aktuellerEinkauf else { return [] }
+        return offeneEinkaufsvorgaenge.filter {
+            $0.einkaufsliste == ausgewaehlteListe && $0.persistentModelID != einkauf.persistentModelID
+        }
+    }
+
     /// Alle für die Live-Ansicht relevanten Kaufeinträge dieser Liste — siehe
     /// ``Einkaufsvorgang/abgehakteKaufEintraege(fuerListe:unter:)`` für die
     /// Begründung (sichtbar, solange der jeweilige Container-Vorgang noch
@@ -222,7 +243,7 @@ struct EinkaufenView: View {
         if let ausgewaehlteListe, let einkauf = aktuellerEinkauf {
             EinkaufslisteView(
                 geschaeft: ausgewaehltesGeschaeft, einkaufsliste: ausgewaehlteListe, einkaufsvorgang: einkauf,
-                weitereOffeneVorgaengeDerKombination: vorgaengeDerAktuellenKombination.filter { $0.persistentModelID != einkauf.persistentModelID },
+                weitereOffeneVorgaengeDerListe: weitereOffeneVorgaengeDerListe,
                 abgehakteKaufEintraege: abgehakteKaufEintraegeFuerAktuelleListe,
                 geschaeftZuruecksetzen: { ausgewaehltesGeschaeft = nil },
                 interaktionRegistrieren: { letzteInteraktion = .now }
@@ -257,15 +278,14 @@ struct EinkaufenView: View {
         // Nur die Identitäten über die `await`-Grenze hinweg sichern (siehe
         // ``ModelReference``) — während des Micro-Lease-Erwerbs kann ein
         // nebenläufiger Sync-Zyklus diese Vorgänge bereits geschlossen oder
-        // gelöscht haben. Schließt bewusst ALLE offenen Vorgänge derselben
-        // Kombination mit (nicht nur den Anker) — siehe
-        // ``EinkaufslisteView/einkaufAbschliessen()`` für die Begründung
-        // (Live-Test-Fund, Session 2026-08-03): dieselbe Lücke bestand hier
-        // beim automatischen Abschließen nach Inaktivität.
+        // gelöscht haben. Schließt bewusst ALLE offenen Vorgänge DERSELBEN
+        // LISTE mit (nicht nur den Anker, auch nicht nur dieselbe
+        // Geschäfts-Kombination — siehe ``weitereOffeneVorgaengeDerListe``
+        // für die Begründung) — siehe ``EinkaufslisteView/einkaufAbschliessen()``,
+        // dieselbe Lücke bestand hier beim automatischen Abschließen nach
+        // Inaktivität.
         let referenz = ModelReference(einkauf)
-        let weitereReferenzen = vorgaengeDerAktuellenKombination
-            .filter { $0.persistentModelID != einkauf.persistentModelID }
-            .map(ModelReference.init)
+        let weitereReferenzen = weitereOffeneVorgaengeDerListe.map(ModelReference.init)
         Task {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
                 guard let einkauf = referenz.resolved(in: modelContext), !einkauf.istAbgeschlossen else { return }
@@ -860,15 +880,16 @@ private struct EinkaufslisteView: View {
     let geschaeft: Geschaeft?
     let einkaufsliste: Einkaufsliste
     let einkaufsvorgang: Einkaufsvorgang
-    /// Weitere offene Vorgänge derselben Kombination aus Geschäft und Liste
-    /// (siehe ``EinkaufenView/vorgaengeDerAktuellenKombination``, OHNE
-    /// ``einkaufsvorgang`` selbst) — entstehen durch eine Race-Anlage (zwei
-    /// Geräte vor dem ersten Sync-Zyklus) oder nach einem unvollständigen
-    /// Abschluss-Versuch. ``einkaufAbschliessen()`` schließt sie zusammen mit
-    /// ``einkaufsvorgang`` mit (Live-Test-Fund, Session 2026-08-03) — sonst
-    /// bleiben listenweit sichtbare (``abgehakteKaufEintraege``) abgehakte
-    /// Artikel an ihnen hängen, obwohl der Einkauf scheinbar abgeschlossen wurde.
-    let weitereOffeneVorgaengeDerKombination: [Einkaufsvorgang]
+    /// Weitere offene Vorgänge derselben ``einkaufsliste`` — OHNE
+    /// ``einkaufsvorgang`` selbst, bewusst UNABHÄNGIG vom Geschäft (siehe
+    /// ``EinkaufenView/weitereOffeneVorgaengeDerListe``) — entstehen durch
+    /// eine Race-Anlage (zwei Geräte vor dem ersten Sync-Zyklus) oder nach
+    /// einem unvollständigen Abschluss-Versuch. ``einkaufAbschliessen()``
+    /// schließt sie zusammen mit ``einkaufsvorgang`` mit (Live-Test-Fund,
+    /// Session 2026-08-03) — sonst bleiben listenweit sichtbare
+    /// (``abgehakteKaufEintraege``) abgehakte Artikel an ihnen hängen, obwohl
+    /// der Einkauf scheinbar abgeschlossen wurde.
+    let weitereOffeneVorgaengeDerListe: [Einkaufsvorgang]
     /// Alle für die Live-Ansicht relevanten Kaufeinträge dieser Liste, von
     /// EGAL welchem Vorgang (eigenem oder synchronisiertem, offenem oder
     /// bereits geschlossenem) — siehe
@@ -978,13 +999,17 @@ private struct EinkaufslisteView: View {
     /// Diagnose für den Live-Test-Fund „Einkauf abschließen bewirkt scheinbar
     /// nichts" (Session 2026-08-03, siehe ``DatabaseDebugLogger/Ereignis/einkaufAbschlussAusgeloest``)
     /// — protokolliert vor dem eigentlichen Abschließen, wie viele offene
-    /// Vorgänge für ``einkaufsliste`` existieren und wie sich die
-    /// listenweit sichtbaren abgehakten Einträge (``abgehakteKaufEintraege``)
-    /// auf ``einkaufsvorgang`` selbst gegenüber allen anderen offenen
-    /// Vorgängen derselben Liste verteilen. Früher Ausstieg bei
-    /// deaktiviertem Debug-Modus, damit der zusätzliche Fetch nicht
-    /// unnötig auf dem Schreibpfad läuft (siehe `docs/LOGGING.md` →
-    /// „Kein spürbarer Overhead bei Deaktivierung").
+    /// Vorgänge für ``einkaufsliste`` existieren, wie sich die listenweit
+    /// sichtbaren abgehakten Einträge (``abgehakteKaufEintraege``) auf
+    /// ``einkaufsvorgang`` selbst gegenüber allen anderen offenen Vorgängen
+    /// derselben Liste verteilen, UND (seit dem zweiten Live-Test-Nachtrag —
+    /// eine erste, auf dieselbe Geschäft+Liste-Kombination beschränkte
+    /// Fassung des Fixes erfasste in einem bestätigten Testfall nicht alle
+    /// Duplikate, weil sie an einem ANDEREN Geschäft derselben Liste hingen)
+    /// zu welchem Geschäft die anderen offenen Vorgänge mit Einträgen
+    /// gehören. Früher Ausstieg bei deaktiviertem Debug-Modus, damit der
+    /// zusätzliche Fetch nicht unnötig auf dem Schreibpfad läuft (siehe
+    /// `docs/LOGGING.md` → „Kein spürbarer Overhead bei Deaktivierung").
     private func protokolliereAbschlussDiagnose() {
         guard DatabaseDebugLogger.istAktiv else { return }
         let listeID = einkaufsliste.persistentModelID
@@ -994,24 +1019,43 @@ private struct EinkaufslisteView: View {
         )
         let offeneFuerListe = (try? modelContext.fetch(deskriptor)) ?? []
         let listenweitGesamt = offeneFuerListe.reduce(0) { $0 + $1.kaufEintraege.count }
-        let andereMitEintraegen = offeneFuerListe
-            .filter { $0.persistentModelID != vorgangID && !$0.kaufEintraege.isEmpty }
-            .count
+        let andereMitEintraegen = offeneFuerListe.filter { $0.persistentModelID != vorgangID && !$0.kaufEintraege.isEmpty }
+        let andereGeschaefte = andereMitEintraegen
+            .map { "\($0.geschaeft?.name ?? "kein Geschäft")=\($0.kaufEintraege.count)" }
+            .joined(separator: ",")
         DatabaseDebugLogger.log(
             .einkaufAbschlussAusgeloest,
             details: "geschaeft=\(geschaeft?.name ?? "kein Geschäft") eigeneEintraege=\(einkaufsvorgang.kaufEintraege.count) "
-                + "offeneVorgaengeFuerListe=\(offeneFuerListe.count) andereOffeneVorgaengeMitEintraegen=\(andereMitEintraegen) "
-                + "listenweitAbgehaktGesamt=\(listenweitGesamt)"
+                + "offeneVorgaengeFuerListe=\(offeneFuerListe.count) andereOffeneVorgaengeMitEintraegen=\(andereMitEintraegen.count) "
+                + "listenweitAbgehaktGesamt=\(listenweitGesamt) andereGeschaefte=[\(andereGeschaefte)]"
         )
     }
 
-    /// Schließt ``einkaufsvorgang`` UND alle ``weitereOffeneVorgaengeDerKombination``
+    /// Bestätigung NACH dem Schließen (siehe ``einkaufAbschliessen()``) — zählt
+    /// erneut, ob für ``einkaufsliste`` noch offene Vorgänge mit Kaufeinträgen
+    /// übrig sind. Sollte im Erfolgsfall immer `0` sein; ein Wert `> 0` zeigt
+    /// direkt im Log, ob/wo der Fix eine weitere Lücke hat, ohne aus einem
+    /// stillen „hat nicht funktioniert" raten zu müssen.
+    private func protokolliereAbschlussErgebnis(geschlosseneDuplikate: Int) {
+        guard DatabaseDebugLogger.istAktiv else { return }
+        let listeID = einkaufsliste.persistentModelID
+        let deskriptor = FetchDescriptor<Einkaufsvorgang>(
+            predicate: #Predicate<Einkaufsvorgang> { $0.einkaufsliste?.persistentModelID == listeID && $0.endZeit == nil }
+        )
+        let verbleibendMitEintraegen = ((try? modelContext.fetch(deskriptor)) ?? []).filter { !$0.kaufEintraege.isEmpty }.count
+        DatabaseDebugLogger.log(
+            .einkaufAbschlussDurchgefuehrt,
+            details: "geschlosseneDuplikate=\(geschlosseneDuplikate) verbleibendOffenMitEintraegenFuerListe=\(verbleibendMitEintraegen)"
+        )
+    }
+
+    /// Schließt ``einkaufsvorgang`` UND alle ``weitereOffeneVorgaengeDerListe``
     /// mit ab (Live-Test-Fund, Session 2026-08-03, siehe DB-Debug-Log-Analyse
     /// im dazugehörigen Diagnose-Ereignis): die listenweite Sichtbarkeit
     /// abgehakter Artikel (``abgehakteKaufEintraege``) kennt keinen einzelnen
     /// „zuständigen" Vorgang — schließt „Einkauf abschließen" nur
     /// ``einkaufsvorgang`` selbst, bleiben Artikel an einem übrig gebliebenen,
-    /// weiterhin offenen Duplikat-Vorgang derselben Kombination hängen und
+    /// weiterhin offenen Duplikat-Vorgang derselben Liste hängen und
     /// tauchen nach dem vermeintlichen Abschluss unverändert weiter als
     /// abgehakt auf. Der Besuchszähler (``Geschaeft/eigeneAnzahlEinkaufsvorgaenge``)
     /// wird dabei bewusst nur für ``einkaufsvorgang`` erhöht (``zaehleAlsBesuch``)
@@ -1020,7 +1064,7 @@ private struct EinkaufslisteView: View {
         // Nur die Identitäten über die `await`-Grenze hinweg sichern (siehe
         // ``ModelReference``) — während des Micro-Lease-Erwerbs kann ein
         // nebenläufiger Sync-Zyklus einen dieser Vorgänge bereits verändert haben.
-        let weitereReferenzen = weitereOffeneVorgaengeDerKombination.map(ModelReference.init)
+        let weitereReferenzen = weitereOffeneVorgaengeDerListe.map(ModelReference.init)
         Task {
             // Abschließen + Lernschritt sind fachlich eine Aktion → ein
             // gemeinsamer Micro-Lease statt zwei getrennter (siehe
@@ -1030,10 +1074,13 @@ private struct EinkaufslisteView: View {
                 protokolliereAbschlussDiagnose()
                 einkaufsvorgang.abschliessen()
                 umbauNeuErkannt = WarengruppenDistanzService.verarbeiteEinkauf(einkaufsvorgang, context: modelContext)
+                var geschlossen = 0
                 for referenz in weitereReferenzen {
                     guard let weiterer = referenz.resolved(in: modelContext), !weiterer.istAbgeschlossen else { continue }
                     weiterer.abschliessen(zaehleAlsBesuch: false)
+                    geschlossen += 1
                 }
+                protokolliereAbschlussErgebnis(geschlosseneDuplikate: geschlossen)
             }
             // Bewusst der Rückgabewert (nur beim erstmaligen Erkennen `true`)
             // statt des rohen `geschaeft.umbauVerdacht`-Felds, das über mehrere

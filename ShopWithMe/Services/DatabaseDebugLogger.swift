@@ -30,6 +30,12 @@ enum DatabaseDebugLogger {
         /// abgehakte Artikel an einem ANDEREN, weiterhin offenen Vorgang für
         /// dieselbe Liste hängen können (z.B. nach einem Geschäftswechsel).
         case einkaufAbschlussAusgeloest = "einkauf_abschluss_ausgeloest"
+        /// Bestätigung NACH dem Schließen aller Duplikat-Vorgänge (siehe
+        /// ``einkaufAbschlussAusgeloest``) — `verbleibendOffenMitEintraegenFuerListe`
+        /// sollte im Erfolgsfall `0` sein. Ein Wert `> 0` zeigt direkt im Log,
+        /// dass der Fix (noch) eine Lücke hat, statt es aus einem stillen
+        /// „hat nicht funktioniert" im nächsten Testlauf erneut erraten zu müssen.
+        case einkaufAbschlussDurchgefuehrt = "einkauf_abschluss_durchgefuehrt"
         case debugModeEnabled = "debug_mode_enabled"
         case debugModeDisabled = "debug_mode_disabled"
 
@@ -48,7 +54,7 @@ enum DatabaseDebugLogger {
                  .dedupeConflictDetected, .debugModeEnabled, .debugModeDisabled:
                 return .fehler
             case .storeOpenStart, .storeOpenSuccess, .leaseAcquireAttempt, .leaseAcquireSuccess,
-                 .leaseRelease, .saveSuccess, .einkaufAbschlussAusgeloest:
+                 .leaseRelease, .saveSuccess, .einkaufAbschlussAusgeloest, .einkaufAbschlussDurchgefuehrt:
                 return .standard
             }
         }

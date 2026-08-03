@@ -259,8 +259,8 @@ den alten, unvollständig abgeschlossenen Bestand zurück). Bestätigt per
 `DatabaseDebugLogger`-Diagnose-Ereignis `einkauf_abschluss_ausgeloest`
 (`docs/LOGGING.md`): `offeneVorgaengeFuerListe=4`,
 `andereOffeneVorgaengeMitEintraegen=2`, `eigeneEintraege=1` bei
-`listenweitAbgehaktGesamt=5`. Fix: `EinkaufslisteView.einkaufAbschliessen()`
-schließt jetzt alle offenen Vorgänge derselben Geschäft+Liste-Kombination
+`listenweitAbgehaktGesamt=5`. Erster Fix: `EinkaufslisteView.einkaufAbschliessen()`
+schließt alle offenen Vorgänge derselben Geschäft+Liste-Kombination
 (`EinkaufenView.vorgaengeDerAktuellenKombination`) — nicht nur den Anker.
 `Einkaufsvorgang.abschliessen(zaehleAlsBesuch:)` erhöht
 `Geschaeft.eigeneAnzahlEinkaufsvorgaenge` dabei bewusst nur für den Anker, damit
@@ -268,6 +268,33 @@ mehrere geschlossene Datensätze nicht denselben physischen Ladenbesuch mehrfach
 zählen. Dieselbe Lücke bestand auch beim automatischen Abschließen nach
 Inaktivität (`EinkaufenView.inaktivitaetPruefen()`) und wurde dort identisch
 mitgefixt.
+
+**Live-Test-Fund, dritter Nachtrag (2026-08-03): auf dieselbe Kombination
+beschränkter Fix reichte nicht.** Ein erneuter Testlauf mit demselben
+Diagnose-Ereignis zeigte weiterhin `eigeneEintraege=0` bei
+`andereOffeneVorgaengeMitEintraegen=2` — der erste Fix (Kombination aus
+Geschäft UND Liste) griff nicht, weil die betroffenen Duplikat-Vorgänge in
+diesem Testfall an einem ANDEREN Geschäft derselben Liste hingen, nicht am
+selben. Erklärung: bei einem lange laufenden, chaotisch über viele
+Geschäftswechsel getesteten Bestand können offene Duplikate für ein und
+dieselbe Liste unter beliebig vielen verschiedenen Geschäften (inkl. „Kein
+Geschäft") entstehen — nicht nur unter der aktuell gewählten Kombination.
+Die auf „dieselbe Kombination" verengte erste Fassung widersprach damit dem
+bereits bestehenden Prinzip weiter oben: die Sichtbarkeit abgehakter Artikel
+ist ausdrücklich liste-, nicht geschäftsgebunden („sichtbar, SOLANGE DER
+EINKAUF NICHT ABGESCHLOSSEN IST" ist ein Vorgangs-Zustand, unabhängig vom
+Geschäft) — das Abschließen, das genau diese Sichtbarkeit beendet, muss
+dieselbe Reichweite haben. Zweiter, endgültiger Fix:
+`EinkaufenView.weitereOffeneVorgaengeDerListe` lässt den Geschäfts-Filter
+komplett weg und liefert ALLE offenen Vorgänge derselben Liste außer dem
+Anker — `einkaufAbschliessen()`/`inaktivitaetPruefen()` schließen seither
+diese vollständige Menge. Der Besuchszähler bleibt weiterhin nur für den
+Anker erhöht. Zusätzlich neues Bestätigungs-Ereignis
+`einkauf_abschluss_durchgefuehrt` (`docs/LOGGING.md`) direkt nach dem
+Schließen, das erneut zählt, ob noch offene Vorgänge mit Einträgen für die
+Liste übrig sind — sollte `0` sein, macht ein erneutes Fehlschlagen im
+nächsten Testlauf sofort sichtbar, statt erneut nur aus dem
+Vorher-Zustand geraten werden zu müssen.
 
 Ein `.artikelAbgehakt`-Event materialisiert den `KaufEintrag` deshalb immer
 auf dem in der Nutzlast referenzierten Vorgang selbst — **keine Umleitung auf

@@ -125,7 +125,7 @@ Live-Test mit mehreren Geräten ausgewertet werden können.
 `store_open_{start,success,failure}`,
 `lease_acquire_{attempt,success,denied_readonly}`, `lease_stale_takeover`,
 `lease_release`, `save_{success,failure}`, `dedupe_conflict_detected`,
-`einkauf_abschluss_ausgeloest`,
+`einkauf_abschluss_{ausgeloest,durchgefuehrt}`,
 `debug_mode_{enabled,disabled}` (Meta-Ereignis, damit beim Auswerten klar ist, ab
 wann überhaupt protokolliert wurde). Micro- und Session-Lease teilen sich
 dieselben Ereignistypen — unterschieden über ein `"micro"`/`"session"`-Präfix im
@@ -133,24 +133,37 @@ Detail-Text statt über eigene Ereignistypen.
 
 **`einkauf_abschluss_ausgeloest`** (2026-08-03, Diagnose für den Live-Test-Fund
 „Einkauf abschließen bewirkt scheinbar nichts trotz sichtbar abgehakter
-Artikel"): protokolliert bei jedem Tap auf „Einkauf abschließen" (Details:
+Artikel"): protokolliert bei jedem Tap auf „Einkauf abschließen", bevor der
+eigentliche Vorgang geschlossen wird (Details:
 `geschaeft=… eigeneEintraege=N offeneVorgaengeFuerListe=K
-andereOffeneVorgaengeMitEintraegen=J listenweitAbgehaktGesamt=M`), bevor der
-eigentliche Vorgang geschlossen wird. Verdacht: seit die Sichtbarkeit
-abgehakter Artikel listenweit über alle offenen Vorgänge einer
+andereOffeneVorgaengeMitEintraegen=J listenweitAbgehaktGesamt=M
+andereGeschaefte=[Name=Anzahl,…]`). Ursprünglicher Verdacht: seit die
+Sichtbarkeit abgehakter Artikel listenweit über alle offenen Vorgänge einer
 ``Einkaufsliste`` gilt — unabhängig vom gewählten Geschäft, siehe
 ``Einkaufsvorgang/abgehakteKaufEintraege(fuerListe:unter:)`` —,
-``EinkaufslisteView/einkaufAbschliessen()`` aber weiterhin nur den EINEN zur
-aktuellen Geschäftsauswahl gehörenden Vorgang schließt: `J > 0` bzw.
-`eigeneEintraege < listenweitAbgehaktGesamt` bestätigt, dass abgehakte
-Einträge an einem anderen, dabei unberührt bleibenden offenen Vorgang
-derselben Liste hängen (z.B. nach einem Geschäftswechsel).
+``EinkaufslisteView/einkaufAbschliessen()`` aber nur den EINEN zur aktuellen
+Geschäftsauswahl gehörenden Vorgang schließt. Ein erster Fix (schließt alle
+offenen Vorgänge derselben Geschäft+Liste-Kombination) behob einen
+bestätigten Testfall NICHT vollständig — `andereGeschaefte` zeigte, dass die
+übrig gebliebenen Einträge an einem offenen Vorgang eines ANDEREN Geschäfts
+derselben Liste hingen, außerhalb der engeren Kombination. Der zweite Fix
+schließt seither ALLE offenen Vorgänge derselben Liste, unabhängig vom
+Geschäft — siehe `docs/DATENSYNCHRONISATION.md` Abschnitt 4.3, „zweiter
+Nachtrag".
+
+**`einkauf_abschluss_durchgefuehrt`** (2026-08-03): protokolliert direkt im
+Anschluss, NACHDEM alle Duplikat-Vorgänge geschlossen wurden (Details:
+`geschlosseneDuplikate=N verbleibendOffenMitEintraegenFuerListe=M`).
+`verbleibendOffenMitEintraegenFuerListe` ist eine erneute Zählung nach dem
+Schließen und sollte im Erfolgsfall immer `0` sein — ein Wert `> 0` zeigt
+direkt im Log eine verbleibende Lücke, statt sie aus einem stillen „hat
+nicht funktioniert" im nächsten Testlauf erneut erraten zu müssen.
 
 **Stufen-Einordnung** (siehe „Gemeinsamer Baustein: `Protokollstufe`" oben):
 `Fehler` für `store_open_failure`, `lease_acquire_denied_readonly`,
 `lease_stale_takeover`, `save_failure`, `dedupe_conflict_detected`,
 `debug_mode_{enabled,disabled}`; `Standard` für den Rest (inkl.
-`einkauf_abschluss_ausgeloest`). Anders als beim Sync-Protokoll aktuell keine
+`einkauf_abschluss_{ausgeloest,durchgefuehrt}`). Anders als beim Sync-Protokoll aktuell keine
 `Ausführlich`-exklusiven Ereignisse — das Micro-Lease-Verfahren ist
 aktionsgetrieben (ein Lease pro Speichervorgang), nicht poll-getrieben, und
 hat damit kein Äquivalent zu `sync_snapshot_unveraendert_uebersprungen`.
