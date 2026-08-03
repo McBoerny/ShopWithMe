@@ -82,6 +82,16 @@ die übrige Doku aktualisiert wird): `docs/BUILD_WORKFLOW.md`.
   abschließen“, Distanzlern-Isolation gegen fremd abgehakte Artikel) — siehe
   `docs/ARCHITECTURE.md` → „v0.9-Robustheits-Fixes“.
 
+- [x] **v0.11** — Mehrgeräte-Live-Test-Fixes rund um „Einkauf abschließen":
+  schließt jetzt alle offenen Vorgänge einer Liste statt nur den lokalen
+  Anker (verhindert liegen bleibende Duplikat-Vorgänge samt daran hängender
+  abgehakter Artikel); Sync-Merge-Sicherheitsnetz gegen verpasste Events
+  behandelt einen bereits erfassten Kauf jetzt als dauerhaftes Faktum statt
+  vorgangs-abhängig (verhindert, dass ein noch nicht aktueller Peer-Snapshot
+  bereits gekaufte Artikel zurückholt); DB-Debug-Log-Writer-Instanz wird
+  zwischengespeichert statt bei jedem Aufruf neu erzeugt. Details:
+  `docs/DATENSYNCHRONISATION.md` Abschnitt 4.3/4.7, `docs/LOGGING.md`.
+
 Damit ist die in der Kickoff-Unterhaltung beschriebene Kernfunktionalität
 vollständig umgesetzt; weitere Ideen siehe „Zukünftig“ unten.
 

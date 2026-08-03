@@ -1,5 +1,36 @@
 # Changelog
 
+## v0.11 (Build 210) — Live-Test-Fund: Einkauf abschließen ließ Duplikat-Vorgänge und eine Sync-Sicherheitsnetz-Lücke zurück
+
+- Im Mehrgeräte-Live-Test gefunden: „Einkauf abschließen" schloss nur den
+  lokalen Anker-Vorgang, während die listenweite Sichtbarkeit abgehakter
+  Artikel (seit der Vorgangs-Entkopplung) alle offenen Vorgänge einer Liste
+  umfasst — abgehakte Artikel blieben an übrig gebliebenen, weiterhin offenen
+  Duplikat-Vorgängen (auch anderer Geschäfte) hängen und tauchten nach dem
+  Abschließen unverändert weiter als abgehakt auf.
+- Fix: „Einkauf abschließen" (und das automatische Abschließen nach
+  Inaktivität) schließen jetzt alle offenen Vorgänge derselben Liste,
+  unabhängig vom Geschäft — der Besuchszähler wird dabei weiterhin nur
+  einmal erhöht.
+- Dabei zweite Lücke gefunden: das Sync-Merge-Sicherheitsnetz gegen verpasste
+  Events nutzte „irgendein Vorgang der Liste ist offen" als Näherung für
+  „dieser Kauf ist bereits bekannt". Sobald durch den obigen Fix keine Liste
+  mehr offen war, holte ein noch nicht aktueller Peer-Snapshot bereits
+  gekaufte Artikel zurück auf die offene Liste (bestätigt: Listenstand sprang
+  bei beiden Geräten unabhängig voneinander hoch und blieb auf
+  unterschiedlichen Endständen stehen).
+- Fix: ein normal synchronisierendes Gerät behandelt „ich habe irgendwann
+  einen KaufEintrag dafür" jetzt als dauerhaftes Faktum statt
+  vorgangs-abhängig; nur ein Gerät, das laut
+  `SyncAktualitaetsService.istAusDerZeitGefallen` tatsächlich lange nicht
+  synchronisiert hat, fällt weiter auf die alte, schwächere Prüfung zurück.
+- Zusätzlich: die DB-Debug-Log-Writer-Instanz wird jetzt zwischengespeichert
+  statt bei jedem Aufruf neu erzeugt — verhinderte, dass zwei fast
+  gleichzeitige Protokoll-Schreibvorgänge sich gegenseitig überschrieben
+  (abgeschnittene/vertauschte Log-Zeilen).
+- Details: `docs/DATENSYNCHRONISATION.md` Abschnitt 4.3 (zweiter/dritter
+  Nachtrag) und 4.7, `docs/LOGGING.md`.
+
 ## v0.10 (Build 202) — Live-Test-Fund: Dedupe-Schutz beim Abhaken galt nur pro Vorgang statt listenweit
 
 - Im Zwei-Geräte-Test gefunden: Artikel, die in unterschiedlichen Läden für
