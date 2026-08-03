@@ -36,6 +36,14 @@ enum DatabaseDebugLogger {
         /// dass der Fix (noch) eine Lücke hat, statt es aus einem stillen
         /// „hat nicht funktioniert" im nächsten Testlauf erneut erraten zu müssen.
         case einkaufAbschlussDurchgefuehrt = "einkauf_abschluss_durchgefuehrt"
+        /// Diagnose für den Live-Test-Fund „Einkauf abschließen auf einem
+        /// Gerät beendet ungewollt einen noch aktiven Vorgang eines anderen
+        /// Geräts" (Session 2026-08-03): protokolliert je tatsächlich
+        /// mitgeschlossenem Duplikat-Vorgang dessen Geschäft, Anzahl eigener
+        /// Einträge und wie lange seine letzte Aktivität zurückliegt —
+        /// Grundlage für die Entscheidung, ob nur „stale" Duplikate
+        /// automatisch geschlossen werden sollten.
+        case einkaufAbschlussDuplikatGeschlossen = "einkauf_abschluss_duplikat_geschlossen"
         case debugModeEnabled = "debug_mode_enabled"
         case debugModeDisabled = "debug_mode_disabled"
 
@@ -54,7 +62,8 @@ enum DatabaseDebugLogger {
                  .dedupeConflictDetected, .debugModeEnabled, .debugModeDisabled:
                 return .fehler
             case .storeOpenStart, .storeOpenSuccess, .leaseAcquireAttempt, .leaseAcquireSuccess,
-                 .leaseRelease, .saveSuccess, .einkaufAbschlussAusgeloest, .einkaufAbschlussDurchgefuehrt:
+                 .leaseRelease, .saveSuccess, .einkaufAbschlussAusgeloest, .einkaufAbschlussDurchgefuehrt,
+                 .einkaufAbschlussDuplikatGeschlossen:
                 return .standard
             }
         }

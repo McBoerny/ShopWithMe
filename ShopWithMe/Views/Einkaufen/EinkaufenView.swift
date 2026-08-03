@@ -2,6 +2,28 @@ import SwiftUI
 import SwiftData
 import MapKit
 
+/// Diagnose für den Live-Test-Fund „Einkauf abschließen auf einem Gerät
+/// beendet ungewollt einen noch aktiven Vorgang eines anderen Geräts" (Session
+/// 2026-08-03) — protokolliert je tatsächlich mitgeschlossenem Duplikat-Vorgang
+/// (aus ``EinkaufslisteView/einkaufAbschliessen()`` UND
+/// ``EinkaufenView/inaktivitaetPruefen()``, daher als freie Funktion statt
+/// Methode) dessen Geschäft, Anzahl eigener Einträge und wie lange seine
+/// letzte Aktivität (jüngster ``KaufEintrag/datum``, sonst
+/// ``Einkaufsvorgang/startZeit``) zurückliegt — Grundlage für die Entscheidung,
+/// ob ein Schwellwert („nur Duplikate schließen, die seit N Minuten inaktiv
+/// sind", analog ``EinkaufenView/inaktivitaetsSchwelleMitGeschaeft``) nötig
+/// ist, um gerade aktiv genutzte Vorgänge anderer Geräte zu verschonen.
+private func protokolliereVorDuplikatSchliessung(_ vorgang: Einkaufsvorgang) {
+    guard DatabaseDebugLogger.istAktiv else { return }
+    let letzteAktivitaet = vorgang.kaufEintraege.map(\.datum).max() ?? vorgang.startZeit
+    let sekundenSeitAktivitaet = Int(Date.now.timeIntervalSince(letzteAktivitaet))
+    DatabaseDebugLogger.log(
+        .einkaufAbschlussDuplikatGeschlossen,
+        details: "geschaeft=\(vorgang.geschaeft?.name ?? "kein Geschäft") eigeneEintraege=\(vorgang.kaufEintraege.count) "
+            + "letzteAktivitaetVorSekunden=\(sekundenSeitAktivitaet)"
+    )
+}
+
 /// Einstiegspunkt zum Einkaufen: zeigt sofort beim Öffnen die Einkaufsliste der
 /// ausgewählten ``Einkaufsliste`` an — optional nach Artikelkategorie gruppiert und
 /// sortiert (``WarengruppenDistanzService``), wenn ein Geschäft gewählt ist. Ein
@@ -293,6 +315,7 @@ struct EinkaufenView: View {
                 WarengruppenDistanzService.verarbeiteEinkauf(einkauf, context: modelContext)
                 for weitereReferenz in weitereReferenzen {
                     guard let weiterer = weitereReferenz.resolved(in: modelContext), !weiterer.istAbgeschlossen else { continue }
+                    protokolliereVorDuplikatSchliessung(weiterer)
                     weiterer.abschliessen(zaehleAlsBesuch: false)
                 }
             }
@@ -1077,6 +1100,7 @@ private struct EinkaufslisteView: View {
                 var geschlossen = 0
                 for referenz in weitereReferenzen {
                     guard let weiterer = referenz.resolved(in: modelContext), !weiterer.istAbgeschlossen else { continue }
+                    protokolliereVorDuplikatSchliessung(weiterer)
                     weiterer.abschliessen(zaehleAlsBesuch: false)
                     geschlossen += 1
                 }

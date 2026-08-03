@@ -145,7 +145,7 @@ Live-Test mit mehreren Geräten ausgewertet werden können.
 `store_open_{start,success,failure}`,
 `lease_acquire_{attempt,success,denied_readonly}`, `lease_stale_takeover`,
 `lease_release`, `save_{success,failure}`, `dedupe_conflict_detected`,
-`einkauf_abschluss_{ausgeloest,durchgefuehrt}`,
+`einkauf_abschluss_{ausgeloest,duplikat_geschlossen,durchgefuehrt}`,
 `debug_mode_{enabled,disabled}` (Meta-Ereignis, damit beim Auswerten klar ist, ab
 wann überhaupt protokolliert wurde). Micro- und Session-Lease teilen sich
 dieselben Ereignistypen — unterschieden über ein `"micro"`/`"session"`-Präfix im
@@ -171,6 +171,20 @@ schließt seither ALLE offenen Vorgänge derselben Liste, unabhängig vom
 Geschäft — siehe `docs/DATENSYNCHRONISATION.md` Abschnitt 4.3, „zweiter
 Nachtrag".
 
+**`einkauf_abschluss_duplikat_geschlossen`** (2026-08-03, Diagnose für den
+Live-Test-Fund „Einkauf abschließen auf einem Gerät beendet ungewollt einen
+noch aktiven Vorgang eines anderen Geräts"): protokolliert je tatsächlich
+mitgeschlossenem Duplikat-Vorgang, VOR dessen Schließen (Details:
+`geschaeft=… eigeneEintraege=N letzteAktivitaetVorSekunden=S`).
+`letzteAktivitaetVorSekunden` misst gegen den jüngsten `KaufEintrag.datum`
+dieses Vorgangs (sonst `startZeit`) — ein kleiner Wert (wenige Sekunden/
+Minuten) bei gleichzeitig mehreren aktiven Geräten ist der Verdacht, dass
+der zweite Fix (siehe `einkauf_abschluss_ausgeloest` unten) zu weit geht:
+er kann einen Vorgang schließen, der auf einem anderen Gerät gerade aktiv
+in Benutzung ist, nicht nur eine seit Langem verwaiste Karteileiche. Noch
+kein Fix umgesetzt — die Diagnose soll erst zeigen, ob ein Schwellwert
+(„nur schließen, wenn seit N Minuten inaktiv") das zuverlässig unterscheidet.
+
 **`einkauf_abschluss_durchgefuehrt`** (2026-08-03): protokolliert direkt im
 Anschluss, NACHDEM alle Duplikat-Vorgänge geschlossen wurden (Details:
 `geschlosseneDuplikate=N verbleibendOffenMitEintraegenFuerListe=M`).
@@ -183,7 +197,7 @@ nicht funktioniert" im nächsten Testlauf erneut erraten zu müssen.
 `Fehler` für `store_open_failure`, `lease_acquire_denied_readonly`,
 `lease_stale_takeover`, `save_failure`, `dedupe_conflict_detected`,
 `debug_mode_{enabled,disabled}`; `Standard` für den Rest (inkl.
-`einkauf_abschluss_{ausgeloest,durchgefuehrt}`). Anders als beim Sync-Protokoll aktuell keine
+`einkauf_abschluss_{ausgeloest,duplikat_geschlossen,durchgefuehrt}`). Anders als beim Sync-Protokoll aktuell keine
 `Ausführlich`-exklusiven Ereignisse — das Micro-Lease-Verfahren ist
 aktionsgetrieben (ein Lease pro Speichervorgang), nicht poll-getrieben, und
 hat damit kein Äquivalent zu `sync_snapshot_unveraendert_uebersprungen`.
