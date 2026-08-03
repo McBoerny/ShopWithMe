@@ -943,6 +943,36 @@ private struct EinkaufslisteView: View {
         }
     }
 
+    /// Diagnose für den Live-Test-Fund „Einkauf abschließen bewirkt scheinbar
+    /// nichts" (Session 2026-08-03, siehe ``DatabaseDebugLogger/Ereignis/einkaufAbschlussAusgeloest``)
+    /// — protokolliert vor dem eigentlichen Abschließen, wie viele offene
+    /// Vorgänge für ``einkaufsliste`` existieren und wie sich die
+    /// listenweit sichtbaren abgehakten Einträge (``abgehakteKaufEintraege``)
+    /// auf ``einkaufsvorgang`` selbst gegenüber allen anderen offenen
+    /// Vorgängen derselben Liste verteilen. Früher Ausstieg bei
+    /// deaktiviertem Debug-Modus, damit der zusätzliche Fetch nicht
+    /// unnötig auf dem Schreibpfad läuft (siehe `docs/LOGGING.md` →
+    /// „Kein spürbarer Overhead bei Deaktivierung").
+    private func protokolliereAbschlussDiagnose() {
+        guard DatabaseDebugLogger.istAktiv else { return }
+        let listeID = einkaufsliste.persistentModelID
+        let vorgangID = einkaufsvorgang.persistentModelID
+        let deskriptor = FetchDescriptor<Einkaufsvorgang>(
+            predicate: #Predicate<Einkaufsvorgang> { $0.einkaufsliste?.persistentModelID == listeID && $0.endZeit == nil }
+        )
+        let offeneFuerListe = (try? modelContext.fetch(deskriptor)) ?? []
+        let listenweitGesamt = offeneFuerListe.reduce(0) { $0 + $1.kaufEintraege.count }
+        let andereMitEintraegen = offeneFuerListe
+            .filter { $0.persistentModelID != vorgangID && !$0.kaufEintraege.isEmpty }
+            .count
+        DatabaseDebugLogger.log(
+            .einkaufAbschlussAusgeloest,
+            details: "geschaeft=\(geschaeft?.name ?? "kein Geschäft") eigeneEintraege=\(einkaufsvorgang.kaufEintraege.count) "
+                + "offeneVorgaengeFuerListe=\(offeneFuerListe.count) andereOffeneVorgaengeMitEintraegen=\(andereMitEintraegen) "
+                + "listenweitAbgehaktGesamt=\(listenweitGesamt)"
+        )
+    }
+
     private func einkaufAbschliessen() {
         Task {
             // Abschließen + Lernschritt sind fachlich eine Aktion → ein
@@ -950,6 +980,7 @@ private struct EinkaufslisteView: View {
             // `docs/DATABASE_CONCURRENCY.md` → „Gebündelte Aktionen“).
             var umbauNeuErkannt = false
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                protokolliereAbschlussDiagnose()
                 einkaufsvorgang.abschliessen()
                 umbauNeuErkannt = WarengruppenDistanzService.verarbeiteEinkauf(einkaufsvorgang, context: modelContext)
             }

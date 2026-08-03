@@ -18,6 +18,18 @@ enum DatabaseDebugLogger {
         case saveSuccess = "save_success"
         case saveFailure = "save_failure"
         case dedupeConflictDetected = "dedupe_conflict_detected"
+        /// Diagnose für den Live-Test-Fund „Einkauf abschließen bewirkt
+        /// scheinbar nichts" (Session 2026-08-03): protokolliert bei jedem Tap
+        /// auf „Einkauf abschließen", wie viele offene Vorgänge für dieselbe
+        /// ``Einkaufsliste`` existieren und wie sich die listenweit sichtbaren
+        /// abgehakten Einträge auf sie verteilen — Verdacht ist, dass
+        /// ``EinkaufenView/EinkaufslisteView/einkaufAbschliessen()`` nur den
+        /// EINEN zur aktuellen Geschäftsauswahl gehörenden Vorgang schließt,
+        /// während listenweit sichtbare (siehe
+        /// ``Einkaufsvorgang/abgehakteKaufEintraege(fuerListe:unter:)``)
+        /// abgehakte Artikel an einem ANDEREN, weiterhin offenen Vorgang für
+        /// dieselbe Liste hängen können (z.B. nach einem Geschäftswechsel).
+        case einkaufAbschlussAusgeloest = "einkauf_abschluss_ausgeloest"
         case debugModeEnabled = "debug_mode_enabled"
         case debugModeDisabled = "debug_mode_disabled"
 
@@ -36,7 +48,7 @@ enum DatabaseDebugLogger {
                  .dedupeConflictDetected, .debugModeEnabled, .debugModeDisabled:
                 return .fehler
             case .storeOpenStart, .storeOpenSuccess, .leaseAcquireAttempt, .leaseAcquireSuccess,
-                 .leaseRelease, .saveSuccess:
+                 .leaseRelease, .saveSuccess, .einkaufAbschlussAusgeloest:
                 return .standard
             }
         }

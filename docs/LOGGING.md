@@ -125,19 +125,35 @@ Live-Test mit mehreren Geräten ausgewertet werden können.
 `store_open_{start,success,failure}`,
 `lease_acquire_{attempt,success,denied_readonly}`, `lease_stale_takeover`,
 `lease_release`, `save_{success,failure}`, `dedupe_conflict_detected`,
+`einkauf_abschluss_ausgeloest`,
 `debug_mode_{enabled,disabled}` (Meta-Ereignis, damit beim Auswerten klar ist, ab
 wann überhaupt protokolliert wurde). Micro- und Session-Lease teilen sich
 dieselben Ereignistypen — unterschieden über ein `"micro"`/`"session"`-Präfix im
 Detail-Text statt über eigene Ereignistypen.
 
+**`einkauf_abschluss_ausgeloest`** (2026-08-03, Diagnose für den Live-Test-Fund
+„Einkauf abschließen bewirkt scheinbar nichts trotz sichtbar abgehakter
+Artikel"): protokolliert bei jedem Tap auf „Einkauf abschließen" (Details:
+`geschaeft=… eigeneEintraege=N offeneVorgaengeFuerListe=K
+andereOffeneVorgaengeMitEintraegen=J listenweitAbgehaktGesamt=M`), bevor der
+eigentliche Vorgang geschlossen wird. Verdacht: seit die Sichtbarkeit
+abgehakter Artikel listenweit über alle offenen Vorgänge einer
+``Einkaufsliste`` gilt — unabhängig vom gewählten Geschäft, siehe
+``Einkaufsvorgang/abgehakteKaufEintraege(fuerListe:unter:)`` —,
+``EinkaufslisteView/einkaufAbschliessen()`` aber weiterhin nur den EINEN zur
+aktuellen Geschäftsauswahl gehörenden Vorgang schließt: `J > 0` bzw.
+`eigeneEintraege < listenweitAbgehaktGesamt` bestätigt, dass abgehakte
+Einträge an einem anderen, dabei unberührt bleibenden offenen Vorgang
+derselben Liste hängen (z.B. nach einem Geschäftswechsel).
+
 **Stufen-Einordnung** (siehe „Gemeinsamer Baustein: `Protokollstufe`" oben):
 `Fehler` für `store_open_failure`, `lease_acquire_denied_readonly`,
 `lease_stale_takeover`, `save_failure`, `dedupe_conflict_detected`,
-`debug_mode_{enabled,disabled}`; `Standard` für den Rest. Anders als beim
-Sync-Protokoll aktuell keine `Ausführlich`-exklusiven Ereignisse — das
-Micro-Lease-Verfahren ist aktionsgetrieben (ein Lease pro Speichervorgang),
-nicht poll-getrieben, und hat damit kein Äquivalent zu
-`sync_snapshot_unveraendert_uebersprungen`.
+`debug_mode_{enabled,disabled}`; `Standard` für den Rest (inkl.
+`einkauf_abschluss_ausgeloest`). Anders als beim Sync-Protokoll aktuell keine
+`Ausführlich`-exklusiven Ereignisse — das Micro-Lease-Verfahren ist
+aktionsgetrieben (ein Lease pro Speichervorgang), nicht poll-getrieben, und
+hat damit kein Äquivalent zu `sync_snapshot_unveraendert_uebersprungen`.
 
 **Bewusst nicht umgesetzt:** eigene Ereignistypen für WAL-Checkpoints,
 `NSFileCoordinator`-Fehler oder `NSFilePresenter`-Änderungsbenachrichtigungen —
