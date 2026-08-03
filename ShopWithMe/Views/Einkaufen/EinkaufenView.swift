@@ -1243,40 +1243,31 @@ private struct EinkaufslisteView: View {
         // Nur die Identitäten über die `await`-Grenze hinweg sichern (siehe
         // ``ModelReference``) — während des Micro-Lease-Erwerbs kann ein
         // nebenläufiger Sync-Zyklus genau diesen Artikel, Einkaufsvorgang,
-        // diese Kategorie oder Liste (z.B. per Peer-Zusammenführung/Löschung)
-        // verändert haben. `startZeit` ist ein reiner Wert (kein Objekt),
-        // sicher direkt zu erfassen.
+        // diese Kategorie oder den Kaufeintrag (z.B. per Peer-Zusammenführung/
+        // Löschung) verändert haben.
+        //
+        // Der TATSÄCHLICHE Besitzer-Vorgang eines ggf. bereits abgehakten
+        // Eintrags kommt bewusst direkt aus ``kaufEintrag(fuer:)`` (derselben
+        // Quelle, die auch ``istAbgehakt(_:)``/die Sichtbarkeit dieses
+        // Buttons bestimmt hat) — NICHT über einen neuen, zeitfenster-
+        // beschränkten Fetch relativ zu `einkaufsvorgang.startZeit` erneut
+        // geraten: seit die Live-Ansicht liste-weit statt nur vorgangs-weit
+        // gilt, rotiert `einkaufsvorgang` bei jedem „Einkauf abschließen"
+        // auf einen NEUEN, späteren Vorgang — ein zeitfenster-basierter Fetch
+        // hätte den echten, ÄLTEREN Eintrag dann verfehlt (Regressionsfund:
+        // machte „Abwählen"/„dauerhaft entfernen" zum stillen No-op, sobald
+        // der Vorgang seit dem Abhaken bereits rotiert war).
         let artikelReferenz = ModelReference(artikel)
         let einkaufsvorgangReferenz = ModelReference(einkaufsvorgang)
         let kategorieReferenz = ModelReference(kategorie)
-        let einkaufslisteReferenz = ModelReference(einkaufsliste)
-        let zeitfensterStart = einkaufsvorgang.startZeit
+        let vorhandenerEintragReferenz = ModelReference(kaufEintrag(fuer: artikel))
         Task {
             var abhakErgebnis: AbhakErgebnis?
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
                 guard let artikelFrisch = artikelReferenz.resolved(in: modelContext),
-                      let einkaufsvorgangFrisch = einkaufsvorgangReferenz.resolved(in: modelContext),
-                      let einkaufslisteFrisch = einkaufslisteReferenz.resolved(in: modelContext)
+                      let einkaufsvorgangFrisch = einkaufsvorgangReferenz.resolved(in: modelContext)
                 else { return }
-                // Bewusst ein frischer, artikel-/zeitfenster-beschränkter Fetch
-                // statt `self.abgehakteKaufEintraege` (View-Property von VOR
-                // dem `await` oben, dieselbe baumelnde-Referenz-Gefahr) — UND
-                // der eigentliche Grund dafür: seit die Live-Ansicht liste-weit
-                // statt nur vorgangs-weit gilt (siehe
-                // ``EinkaufenView/abgehakteKaufEintraegeFuerAktuelleListe``),
-                // kann der Artikel an einem ANDEREN Vorgang als
-                // `einkaufsvorgangFrisch` abgehakt worden sein — genau DORT
-                // muss `artikelAbwaehlen` aufgerufen werden (die Methode sucht
-                // nur unter `self.kaufEintraege`), sonst bliebe der Tap auf
-                // "Abwählen" wirkungslos.
-                let artikelID = artikelFrisch.persistentModelID
-                let deskriptor = FetchDescriptor<KaufEintrag>(predicate: #Predicate {
-                    $0.artikel?.persistentModelID == artikelID && $0.datum >= zeitfensterStart
-                })
-                let vorhandenerEintrag = (try? modelContext.fetch(deskriptor))?.first {
-                    $0.einkaufsvorgang?.einkaufsliste?.persistentModelID == einkaufslisteFrisch.persistentModelID
-                }
-                if let besitzer = vorhandenerEintrag?.einkaufsvorgang {
+                if let besitzer = vorhandenerEintragReferenz?.resolved(in: modelContext)?.einkaufsvorgang {
                     besitzer.artikelAbwaehlen(artikelFrisch, context: modelContext)
                 } else {
                     // `nil`, falls die Kategorie inzwischen gelöscht wurde — fällt
@@ -1313,27 +1304,20 @@ private struct EinkaufslisteView: View {
 
     private func entferneDauerhaft(_ artikel: Artikel) {
         interaktionRegistrieren()
-        // Siehe ``umschalten(_:kategorie:)`` — derselbe Grund für den frischen,
-        // liste-/zeitfenster-beschränkten Fetch statt eines Aufrufs auf
-        // `einkaufsvorgang` allein: `artikelDauerhaftEntfernen` sucht nur unter
-        // `self.kaufEintraege` und bliebe sonst ein stiller No-op, falls der
-        // Eintrag an einem anderen Vorgang hängt.
+        // Siehe ``umschalten(_:kategorie:)`` — derselbe Grund, den
+        // TATSÄCHLICHEN Besitzer-Vorgang direkt aus ``kaufEintrag(fuer:)``
+        // zu nehmen statt über einen zeitfenster-beschränkten Fetch relativ
+        // zu `einkaufsvorgang.startZeit` erneut zu raten (Regressionsfund:
+        // war nach einer Vorgangs-Rotation, z.B. durch „Einkauf abschließen“,
+        // ein stiller No-op — der Eintrag blieb bestehen und `artikelDauerhaftEntfernt`
+        // wurde nie aufgezeichnet, sichtbar als weiterhin „abgehakt“ auf
+        // anderen Geräten/Ansichten).
         let artikelReferenz = ModelReference(artikel)
-        let einkaufslisteReferenz = ModelReference(einkaufsliste)
-        let zeitfensterStart = einkaufsvorgang.startZeit
+        let vorhandenerEintragReferenz = ModelReference(kaufEintrag(fuer: artikel))
         Task {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
-                guard let artikelFrisch = artikelReferenz.resolved(in: modelContext),
-                      let einkaufslisteFrisch = einkaufslisteReferenz.resolved(in: modelContext)
-                else { return }
-                let artikelID = artikelFrisch.persistentModelID
-                let deskriptor = FetchDescriptor<KaufEintrag>(predicate: #Predicate {
-                    $0.artikel?.persistentModelID == artikelID && $0.datum >= zeitfensterStart
-                })
-                let vorhandenerEintrag = (try? modelContext.fetch(deskriptor))?.first {
-                    $0.einkaufsvorgang?.einkaufsliste?.persistentModelID == einkaufslisteFrisch.persistentModelID
-                }
-                vorhandenerEintrag?.einkaufsvorgang?.artikelDauerhaftEntfernen(artikelFrisch, context: modelContext)
+                guard let artikelFrisch = artikelReferenz.resolved(in: modelContext) else { return }
+                vorhandenerEintragReferenz?.resolved(in: modelContext)?.einkaufsvorgang?.artikelDauerhaftEntfernen(artikelFrisch, context: modelContext)
             }
         }
     }

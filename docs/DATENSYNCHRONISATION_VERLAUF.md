@@ -2285,3 +2285,56 @@ Zwei-Geräte-Test (ein Gerät schließt „Einkauf abschließen" mitten im
 gemeinsamen Einkauf, während das andere weiter abhakt) sollte vor
 endgültigem Vertrauen in diese Änderung real durchgeführt werden, wie bei
 allen bisherigen Änderungen an dieser Stelle in diesem Projekt.
+
+## 36. Live-Test-Fund (2026-08-03, echter Zwei-Geräte-Test zu Abschnitt 35): „dauerhaft entfernen“/„Abwählen“ wurden nach Vorgangs-Rotation zum stillen No-op
+
+**Auslöser:** Der in Abschnitt 35 geforderte echte Zwei-Geräte-Test (Geräte
+„Bernhard“ und „Backup“). Beobachtung: ein per „Einkauf abschließen“
+abgeschlossener Artikel wurde anschließend über die Geschäftsansicht (Edeka)
+per Wisch-Geste „dauerhaft entfernt“ — blieb aber auf der geschäftsneutralen
+Ansicht weiterhin als „abgehakt“ stehen.
+
+**Diagnose per Debug-Log statt Vermutung:** Weder in `sync-debug.log` (Gerät
+Bernhard) noch in `sync-debug 2.log` (Gerät Backup) taucht über den gesamten
+Testzeitraum auch nur EIN `sync_event_empfangen art=artikelDauerhaftEntfernt`
+auf — nur `artikelHinzugefuegt`/`artikelAbgehakt`/`artikelAbgewaehlt`. Das
+belegt: die Löschung fand nie tatsächlich statt (kein Event wurde je
+aufgezeichnet), unabhängig vom Sync selbst.
+
+**Root Cause:** Der in Abschnitt 35 eingeführte „frische, zeitfenster-
+beschränkte Fetch“ in `EinkaufenView.umschalten(_:kategorie:)`/
+`entferneDauerhaft(_:)` (siehe dort) filterte nach
+`$0.datum >= zeitfensterStart`, wobei `zeitfensterStart =
+einkaufsvorgang.startZeit` — die Startzeit des GERADE ANGEZEIGTEN Vorgangs.
+„Einkauf abschließen“ legt aber sofort einen NEUEN, offenen Vorgang mit
+späterer `startZeit` an (``EinkaufenView/einkaufSicherstellen()``). Wurde
+danach in derselben Geschäftsansicht auf „dauerhaft entfernen“ getippt, war
+`einkaufsvorgang` bereits der NEUE Vorgang — der Fetch filterte den echten,
+ÄLTEREN `KaufEintrag` (aus dem gerade abgeschlossenen Vorgang) damit
+versehentlich heraus. `vorhandenerEintrag` wurde `nil`,
+`artikelDauerhaftEntfernen`/`artikelAbwaehlen` liefen dadurch ins Leere —
+exakt dieselbe Fehlerklasse, vor der die Doku-Kommentare in Abschnitt 35
+warnten, nur eine Ebene tiefer als dort angenommen: nicht nur bei fremd
+(peer-)materialisierten Einträgen, sondern bei JEDER Vorgangs-Rotation der
+eigenen Geschäftsauswahl.
+
+**Fix:** Der zeitfenster-basierte Rate-Fetch entfällt vollständig. Beide
+Funktionen ermitteln den zu mutierenden `KaufEintrag` jetzt direkt über
+``EinkaufslisteView/kaufEintrag(fuer:)`` — dieselbe Quelle, die auch
+``istAbgehakt(_:)``/die Sichtbarkeit des „dauerhaft entfernen“-Buttons
+bestimmt (dedupliziert bereits korrekt aus ``abgehakteKaufEintraege``, ohne
+Zeitfenster-Annahme). Ein ``ModelReference<KaufEintrag>`` sichert diese
+Identität über die `await`-Grenze des Micro-Lease hinweg (analog Artikel/
+Vorgang/Kategorie). Da diese Anzeige-Quelle per Konstruktion IMMER exakt den
+Eintrag liefert, der auch als „abgehakt“ gerendert wurde, kann die Mutation
+nicht mehr von dem abweichen, was der Anwender tatsächlich sieht.
+
+**Verifikationsstand:** `xcodegen generate` + `xcodebuild build`/
+`build-for-testing` grün. Kein neuer automatisierter Test — `EinkaufenView`s
+private Methoden sind ohne SwiftUI-Testharness nicht direkt testbar; die
+Korrektheit wurde stattdessen genau über den Log-Befund oben verifiziert
+(Abwesenheit von `artikelDauerhaftEntfernt`-Events als Beweis des Bugs). Ein
+erneuter Zwei-Geräte-Test desselben Szenarios (abschließen → in der
+ursprünglichen Geschäftsansicht dauerhaft entfernen → auf einem zweiten
+Gerät/der geschäftsneutralen Ansicht prüfen) bleibt vor endgültigem Vertrauen
+empfohlen.

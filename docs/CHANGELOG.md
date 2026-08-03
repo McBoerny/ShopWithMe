@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.10 (Build 200) — Live-Test-Fund: „dauerhaft entfernen“/„Abwählen“ wurden nach Vorgangs-Rotation zum stillen No-op
+
+- Im echten Zwei-Geräte-Test zur letzten Änderung (Einkaufsvorgang
+  entkoppelt) gefunden: nach „Einkauf abschließen“ konnte ein bereits
+  abgehakter Artikel über die Geschäftsansicht per Wisch-Geste NICHT mehr
+  zuverlässig dauerhaft entfernt/abgewählt werden — er blieb dann auf
+  anderen Ansichten/Geräten weiterhin fälschlich als „abgehakt“ stehen.
+- Ursache: `EinkaufenView.umschalten(_:kategorie:)`/`entferneDauerhaft(_:)`
+  suchten den zu mutierenden `KaufEintrag` über einen Fetch, der nach
+  `datum >= einkaufsvorgang.startZeit` filterte — „Einkauf abschließen“ legt
+  aber sofort einen neuen Vorgang mit späterer Startzeit an, wodurch der
+  echte, ältere Eintrag herausgefiltert wurde (stiller No-op, kein
+  `artikelDauerhaftEntfernt`-Sync-Event wurde je aufgezeichnet).
+- Fix: beide Funktionen ermitteln den Eintrag jetzt direkt über
+  `EinkaufslisteView.kaufEintrag(fuer:)` — dieselbe Quelle, die auch die
+  Sichtbarkeit des Buttons bestimmt — statt ihn über ein Zeitfenster erneut
+  zu erraten. Details: `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 36.
+
 ## v0.10 (Build 199) — Einkaufsvorgang entkoppelt: Live-Ansicht braucht keine geteilte Vorgangs-Identität mehr
 
 - Architektur-Vereinfachung: die Live-Ansicht „was ist gerade abgehakt" löst
