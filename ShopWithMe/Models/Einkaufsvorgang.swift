@@ -268,17 +268,30 @@ extension Einkaufsvorgang {
 
     /// Alle für die Live-Ansicht relevanten Kaufeinträge von `liste` — von
     /// EGAL welchem der übergebenen `vorgaenge` (eigenem oder
-    /// synchronisiertem, offenem oder bereits geschlossenem), solange
-    /// ``KaufEintrag/datum`` nicht vor `seit` liegt (sonst zählte ein legitim
-    /// erneut hinzugefügter, tatsächlich lange zurückliegender Kauf fälschlich
-    /// als „gerade abgehakt"). Verwendet von ``EinkaufenView`` als Ersatz für
-    /// die frühere Vorgangs-Umleitung (Session 2026-08-03, siehe
+    /// synchronisiertem), solange dessen ``Einkaufsvorgang/endZeit`` noch
+    /// `nil` ist. Verwendet von ``EinkaufenView`` als Ersatz für die frühere
+    /// Vorgangs-Umleitung (Session 2026-08-03, siehe
     /// `docs/DATENSYNCHRONISATION.md` Abschnitt 4.3): ein von einem anderen
     /// Gerät abgehakter Artikel muss dafür nicht mehr auf „meinen" aktuell
     /// offenen Vorgang umgeleitet werden.
-    static func abgehakteKaufEintraege(
-        fuerListe liste: Einkaufsliste, seit start: Date, unter vorgaenge: [Einkaufsvorgang]
-    ) -> [KaufEintrag] {
-        vorgaenge.filter { $0.einkaufsliste == liste }.flatMap(\.kaufEintraege).filter { $0.datum >= start }
+    ///
+    /// **Bewusst KEIN Zeitfenster** (Live-Test-Fund, Nachtrag Session
+    /// 2026-08-03): eine frühere Fassung filterte stattdessen nach
+    /// `KaufEintrag.datum >= aktuellerEinkauf.startZeit` — das koppelte die
+    /// Sichtbarkeit an die zufällige, rein lokale Vorgangs-Historie des
+    /// BETRACHTENDEN Geräts, nicht an den tatsächlichen Zustand des Vorgangs,
+    /// dem der Eintrag gehört. Wählte ein Gerät gerade „Kein Geschäft“ mit
+    /// einem alten, seit Stunden offenen Vorgang, blieb ein längst
+    /// abgeschlossener Kauf eines anderen Geräts dort sichtbar; wählte
+    /// dasselbe Gerät kurz vorher ein Geschäft und rotierte dadurch seinen
+    /// eigenen Vorgang, verschwand derselbe Kauf dort wieder — zwei Geräte
+    /// (oder zwei Ansichten desselben Geräts) zeigten dieselbe Liste
+    /// inkonsistent. Der ursprüngliche Auftrag lautete „sichtbar, SOLANGE DER
+    /// EINKAUF NICHT ABGESCHLOSSEN IST“ — das ist der Zustand des Vorgangs
+    /// (`endZeit`), kein Zeitpunkt-Vergleich. Filtert `vorgaenge` deshalb
+    /// zusätzlich defensiv selbst auf `endZeit == nil`, statt sich auf eine
+    /// bereits vorgefilterte Aufrufer-Liste zu verlassen.
+    static func abgehakteKaufEintraege(fuerListe liste: Einkaufsliste, unter vorgaenge: [Einkaufsvorgang]) -> [KaufEintrag] {
+        vorgaenge.filter { $0.einkaufsliste == liste && $0.endZeit == nil }.flatMap(\.kaufEintraege)
     }
 }

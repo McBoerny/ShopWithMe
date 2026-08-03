@@ -2338,3 +2338,58 @@ erneuter Zwei-Geräte-Test desselben Szenarios (abschließen → in der
 ursprünglichen Geschäftsansicht dauerhaft entfernen → auf einem zweiten
 Gerät/der geschäftsneutralen Ansicht prüfen) bleibt vor endgültigem Vertrauen
 empfohlen.
+
+## 37. Live-Test-Fund (2026-08-03, Fortsetzung des Tests aus Abschnitt 36): Sichtbarkeit „abgehakt“ hing am falschen Kriterium — Zeitfenster statt Vorgangs-Status
+
+**Auslöser:** Derselbe Zwei-Geräte-Test, nächste Runde nach dem Fix aus
+Abschnitt 36. Zwei Beobachtungen, die sich als EIN Fund entpuppten:
+
+1. Trotz erzwungenem Sync zeigten beide Geräte für die Liste „Urlaub“
+   unterschiedliche Artikel — Gerät Backup zusätzlich „Gnocchi“.
+2. Wurde auf einem Gerät „Einkauf abschließen“ getippt, blieben dessen
+   abgehakte Artikel auf der GESCHÄFTSNEUTRALEN Ansicht (kein Geschäft
+   gewählt) weiterhin sichtbar — die Liste wurde dort nicht aufgeräumt.
+
+**Root Cause:** Die in Abschnitt 35 eingeführte Sichtbarkeits-Regel
+(`Einkaufsvorgang.abgehakteKaufEintraege(fuerListe:seit:unter:)`) filterte
+nach `KaufEintrag.datum >= aktuellerEinkauf.startZeit` — einem Zeitpunkt aus
+der rein LOKALEN, gerade zufällig aktiven Vorgangs-Historie des
+BETRACHTENDEN Geräts. Das hat mit dem tatsächlichen Zustand des Vorgangs, dem
+der Kaufeintrag gehört, nichts zu tun: ein Gerät mit „Kein Geschäft“ und
+einem seit Stunden offenen, alten Vorgang zeigt so ziemlich jeden späteren
+Kauf als „abgehakt“ — auch nach dessen Abschluss auf einem anderen Gerät
+(Fund 2). Ein Gerät, das zwischenzeitlich selbst einen neuen Vorgang anlegt
+(z.B. durch Geschäftswechsel), rückt seinen eigenen Fensteranfang dagegen
+nach vorne und verliert dieselben Käufe aus dem Blick (Fund 1 — Bernhard und
+Backup hatten schlicht unterschiedliche eigene Fenster-Startzeiten für
+dieselbe Liste). Der ursprüngliche fachliche Auftrag (vor Abschnitt 35)
+lautete unmissverständlich: „sichtbar, SOLANGE DER EINKAUF NICHT
+ABGESCHLOSSEN IST“ — das ist ``Einkaufsvorgang/endZeit``, kein
+Zeitpunkt-Vergleich. Das Zeitfenster war ein Fehlgriff bei der Umsetzung
+dieses an sich richtigen Auftrags aus Abschnitt 35.
+
+**Fix:** `abgehakteKaufEintraege(fuerListe:unter:)` (Parameter `seit`
+entfernt) filtert jetzt schlicht auf `$0.endZeit == nil` — sichtbar ist ein
+Kaufeintrag genau dann, wenn sein Container-Vorgang (egal auf welchem Gerät
+angelegt) noch offen ist. Sobald irgendein Gerät „Einkauf abschließen“
+ausführt und das per Sync ankommt, verschwindet der Eintrag auf JEDEM Gerät
+aus der „abgehakt“-Ansicht — unabhängig von dessen eigener, unabhängiger
+Vorgangs-Historie. Die Funktion filtert `vorgaenge` dabei defensiv selbst
+zusätzlich auf `endZeit == nil`, statt sich auf eine bereits gefilterte
+Aufrufer-Liste zu verlassen (Schutz gegen genau diese Fehlerklasse bei
+künftigen Aufrufern). `EinkaufenView.aktuellerEinkauf` bleibt bestehen, aber
+ausschließlich als lokaler Anker für NEUE eigene Häkchen — seine `startZeit`
+spielt für die Anzeige keine Rolle mehr.
+
+**Tests:** `EinkaufsvorgangTests.abgehakteKaufEintraegeFiltertNachListeUndZeitfenster`
+(Abschnitt 35) → ersetzt durch
+`.abgehakteKaufEintraegeZaehltNurOffeneVorgaenge`: prüft, dass ein Eintrag
+eines offenen Vorgangs zählt, ein Eintrag eines (soeben erst) geschlossenen
+Vorgangs derselben Liste NICHT mehr zählt, und Einträge anderer Listen
+unabhängig vom Status ausgeschlossen bleiben.
+
+**Verifikationsstand:** `xcodegen generate` + `xcodebuild build`/
+`build-for-testing` grün. Ein erneuter Zwei-Geräte-Test (Einkauf auf Gerät A
+abschließen, prüfen dass abgehakte Artikel auf Gerät B — sowohl in der
+ursprünglichen Geschäftsansicht als auch geschäftsneutral — konsistent
+verschwinden) bleibt vor endgültigem Vertrauen empfohlen.

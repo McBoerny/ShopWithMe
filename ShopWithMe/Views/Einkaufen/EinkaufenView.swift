@@ -80,11 +80,9 @@ struct EinkaufenView: View {
     /// ersten Sync-Zyklus) entscheidet ``Einkaufsvorgang/kanonischer(unter:)``
     /// deterministisch, statt eines beliebigen, per Fetch-Reihenfolge nicht
     /// garantierten Treffers (GitHub #67-Erweiterung) — dieser Vorgang ist
-    /// der Anker, an dem NEUE eigene Häkchen landen, und legt über seine
-    /// ``Einkaufsvorgang/startZeit`` das Zeitfenster für
-    /// ``abgehakteKaufEintraegeFuerAktuelleListe`` fest; eine nicht
-    /// deterministische Wahl würde dieses Zeitfenster zwischen Geräten
-    /// auseinanderlaufen lassen.
+    /// NUR der Anker, an dem NEUE eigene Häkchen landen. Er bestimmt NICHT
+    /// (mehr), was als „gerade abgehakt" angezeigt wird — siehe
+    /// ``abgehakteKaufEintraegeFuerAktuelleListe``.
     private var aktuellerEinkauf: Einkaufsvorgang? {
         guard let ausgewaehlteListe else { return nil }
         let kandidaten = offeneEinkaufsvorgaenge.filter {
@@ -94,18 +92,13 @@ struct EinkaufenView: View {
     }
 
     /// Alle für die Live-Ansicht relevanten Kaufeinträge dieser Liste — siehe
-    /// ``Einkaufsvorgang/abgehakteKaufEintraege(fuerListe:seit:unter:)`` für
-    /// die Begründung. NICHT auf ``aktuellerEinkauf`` beschränkt: welcher
-    /// konkrete Vorgang einen Kaufeintrag „besitzt", ist seit der Entkopplung
-    /// der Live-Ansicht von der Vorgangs-Identität (Session 2026-08-03,
-    /// Ablösung der Vorgangs-Umleitung) irrelevant für die Anzeige — nur
-    /// ``aktuellerEinkauf``s ``Einkaufsvorgang/startZeit`` legt das
-    /// Zeitfenster fest.
+    /// ``Einkaufsvorgang/abgehakteKaufEintraege(fuerListe:unter:)`` für die
+    /// Begründung (sichtbar, solange der jeweilige Container-Vorgang noch
+    /// nicht abgeschlossen ist — UNABHÄNGIG von ``aktuellerEinkauf``, also
+    /// z.B. auch bei gewähltem „Kein Geschäft").
     private var abgehakteKaufEintraegeFuerAktuelleListe: [KaufEintrag] {
-        guard let ausgewaehlteListe, let start = aktuellerEinkauf?.startZeit else { return [] }
-        return Einkaufsvorgang.abgehakteKaufEintraege(
-            fuerListe: ausgewaehlteListe, seit: start, unter: offeneEinkaufsvorgaenge + abgeschlosseneEinkaufsvorgaenge
-        )
+        guard let ausgewaehlteListe else { return [] }
+        return Einkaufsvorgang.abgehakteKaufEintraege(fuerListe: ausgewaehlteListe, unter: offeneEinkaufsvorgaenge)
     }
 
     /// Meistgenutzte Geschäfte für die priorisierte Anzeige im Geschäfts-Menü

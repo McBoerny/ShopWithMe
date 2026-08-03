@@ -219,17 +219,29 @@ geräteübergreifende Sicht — und die löst seit Session 2026-08-03 **die
 Einkaufsliste**, nicht mehr eine zwischen Geräten übereinstimmend gewählte
 Vorgangs-Identität.
 
-**Live-Ansicht: liste- und zeitfensterbasiert statt vorgangsbasiert.**
+**Live-Ansicht: liste- und statusbasiert statt vorgangsbasiert.**
 `EinkaufenView.abgehakteKaufEintraegeFuerAktuelleListe` (auf
-`Einkaufsvorgang.abgehakteKaufEintraege(fuerListe:seit:unter:)` delegiert)
-zeigt alle Kaufeinträge der aktuell gewählten Liste an — von EGAL welchem
-Vorgang (eigenem oder synchronisiertem, offenem oder bereits geschlossenem),
-solange ihr `KaufEintrag.datum` nicht vor dem `startZeit` des eigenen
-aktuellen Vorgangs liegt (sonst zählte ein legitim erneut hinzugefügter,
-tatsächlich lange zurückliegender Kauf fälschlich als „gerade abgehakt"). Der
+`Einkaufsvorgang.abgehakteKaufEintraege(fuerListe:unter:)` delegiert) zeigt
+alle Kaufeinträge der aktuell gewählten Liste an — von EGAL welchem Vorgang
+(eigenem oder synchronisiertem), solange dessen `endZeit` noch `nil` ist. Der
 lokale `aktuellerEinkauf` bleibt als Anker bestehen, an dem NEUE eigene
-Häkchen landen, und legt über seine `startZeit` das Zeitfenster fest — er ist
-aber nicht mehr die alleinige Quelle für „was zeige ich als abgehakt an".
+Häkchen landen, bestimmt aber NICHT (mehr), was als „gerade abgehakt"
+angezeigt wird.
+  
+**Live-Test-Fund, Nachtrag (2026-08-03): zunächst ein Zeitfenster statt des
+Vorgangs-Status verwendet — falsch.** Die erste Fassung filterte nach
+`KaufEintrag.datum >= aktuellerEinkauf.startZeit` statt nach `endZeit == nil`.
+Das koppelte die Sichtbarkeit an die zufällige, rein lokale Vorgangs-Historie
+des BETRACHTENDEN Geräts: wählte ein Gerät „Kein Geschäft“ mit einem alten,
+seit Stunden offenen Vorgang, blieb ein längst abgeschlossener Kauf eines
+anderen Geräts dort dauerhaft sichtbar; rotierte dasselbe Gerät kurz zuvor
+seinen eigenen Vorgang (z.B. durch Geschäftswechsel), verschwand derselbe
+Kauf dort wieder — zwei Geräte (oder zwei Ansichten desselben Geräts) zeigten
+dieselbe Liste inkonsistent, und „Einkauf abschließen“ räumte abgehakte
+Artikel dadurch nicht zuverlässig auf. Der ursprüngliche Auftrag lautete
+„sichtbar, SOLANGE DER EINKAUF NICHT ABGESCHLOSSEN IST“ — das ist der Zustand
+des Vorgangs, kein Zeitpunkt-Vergleich. Fix: einfacher Filter auf
+`Einkaufsvorgang.endZeit == nil`, kein Zeitfenster mehr nötig.
 
 Ein `.artikelAbgehakt`-Event materialisiert den `KaufEintrag` deshalb immer
 auf dem in der Nutzlast referenzierten Vorgang selbst — **keine Umleitung auf

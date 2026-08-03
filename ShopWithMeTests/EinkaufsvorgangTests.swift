@@ -455,15 +455,17 @@ struct EinkaufsvorgangTests {
         #expect(Einkaufsvorgang.kanonischer(unter: [b, a])?.id == erwarteterGewinner.id)
     }
 
-    /// Regressionstest für die Live-Ansicht nach Ablösung der
-    /// Vorgangs-Umleitung (Session 2026-08-03): ein auf einem alten, bereits
-    /// geschlossenen Vorgang materialisierter Kaufeintrag zählt als „gerade
-    /// abgehakt", solange sein ``KaufEintrag/datum`` nicht vor `seit` liegt —
-    /// ein legitim erneut hinzugefügter, tatsächlich alter Kauf (Datum davor)
-    /// dagegen nicht. Einträge anderer Listen werden unabhängig vom Datum
-    /// ausgeschlossen.
+    /// Regressionstest für den Live-Test-Fund (Nachtrag Session 2026-08-03):
+    /// ein Kaufeintrag zählt als „gerade abgehakt" GENAU DANN, wenn sein
+    /// Container-Vorgang noch nicht abgeschlossen ist (`endZeit == nil`) —
+    /// unabhängig davon, WANN er abgehakt wurde. Die vorherige, zeitfenster-
+    /// basierte Fassung koppelte die Sichtbarkeit fälschlich an die lokale
+    /// Vorgangs-Historie des BETRACHTENDEN Geräts statt an den tatsächlichen
+    /// Zustand des Vorgangs — ein bereits abgeschlossener Kauf blieb dadurch
+    /// je nach Gerät/Ansicht inkonsistent sichtbar oder unsichtbar. Einträge
+    /// anderer Listen werden unabhängig vom Vorgangs-Status ausgeschlossen.
     @Test
-    func abgehakteKaufEintraegeFiltertNachListeUndZeitfenster() throws {
+    func abgehakteKaufEintraegeZaehltNurOffeneVorgaenge() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
@@ -480,35 +482,29 @@ struct EinkaufsvorgangTests {
         let kirsche = Artikel(name: "Kirsche", symbolName: "carrot.fill", farbeHex: "#34C759")
         context.insert(kirsche)
 
-        let start = Date()
+        let offenerVorgang = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste)
+        context.insert(offenerVorgang)
+        _ = offenerVorgang.artikelAbhakenOhneEventAufzeichnung(apfel, context: context, indexFuerDistanzlernen: false)
 
-        // Alter, bereits geschlossener Vorgang — ein knapp danach von einem
-        // Peer materialisierter Kaufeintrag muss trotzdem sichtbar werden.
-        let geschlossenerVorgang = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste, startZeit: start.addingTimeInterval(-3600))
+        // Bereits abgeschlossener Vorgang derselben Liste — der Kaufeintrag
+        // bleibt als Historie bestehen, zählt aber nicht mehr als „gerade
+        // abgehakt" (unabhängig davon, dass der Abschluss erst gerade eben
+        // erfolgte).
+        let geschlossenerVorgang = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste)
         context.insert(geschlossenerVorgang)
+        _ = geschlossenerVorgang.artikelAbhakenOhneEventAufzeichnung(birne, context: context, indexFuerDistanzlernen: false)
         geschlossenerVorgang.abschliessen()
-        let neuerNachEintrag = geschlossenerVorgang.artikelAbhakenOhneEventAufzeichnung(
-            apfel, context: context, indexFuerDistanzlernen: false
-        )
-        _ = neuerNachEintrag
 
-        // Derselbe Vorgang, aber ein Kaufeintrag von VOR dem Zeitfenster
-        // (ein tatsächlich alter, legitim erneut hinzugefügter Kauf) darf
-        // nicht mitgezählt werden.
-        let alterEintrag = KaufEintrag(artikel: birne, geschaeft: geschaeft, kategorie: nil, menge: 1, datum: start.addingTimeInterval(-120))
-        context.insert(alterEintrag)
-        alterEintrag.einkaufsvorgang = geschlossenerVorgang
-
-        // Ein Vorgang für eine ANDERE Liste — dessen Einträge dürfen trotz
-        // passendem Zeitfenster nicht mitgezählt werden.
-        let vorgangAndereListe = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: andereListe, startZeit: start)
+        // Offener Vorgang einer ANDEREN Liste — trotz offenem Status nicht
+        // mitgezählt.
+        let vorgangAndereListe = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: andereListe)
         context.insert(vorgangAndereListe)
         _ = vorgangAndereListe.artikelAbhakenOhneEventAufzeichnung(kirsche, context: context, indexFuerDistanzlernen: false)
 
         try context.save()
 
         let ergebnis = Einkaufsvorgang.abgehakteKaufEintraege(
-            fuerListe: liste, seit: start, unter: [geschlossenerVorgang, vorgangAndereListe]
+            fuerListe: liste, unter: [offenerVorgang, geschlossenerVorgang, vorgangAndereListe]
         )
 
         #expect(ergebnis.contains { $0.artikel == apfel })

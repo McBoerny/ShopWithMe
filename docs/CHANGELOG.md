@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.10 (Build 201) — Live-Test-Fund: Sichtbarkeit „abgehakt“ hing am falschen Kriterium (Zeitfenster statt Vorgangs-Status)
+
+- Im fortgesetzten Zwei-Geräte-Test gefunden: nach „Einkauf abschließen“ auf
+  einem Gerät blieben die abgehakten Artikel auf der geschäftsneutralen
+  Ansicht (kein Geschäft gewählt) weiterhin sichtbar; zusätzlich zeigten
+  beide Geräte trotz erzwungenem Sync unterschiedliche Artikel für dieselbe
+  Liste.
+- Ursache: die Sichtbarkeitsregel filterte nach
+  `KaufEintrag.datum >= aktuellerEinkauf.startZeit` — einem Zeitpunkt aus der
+  rein lokalen, zufälligen Vorgangs-Historie des BETRACHTENDEN Geräts, nicht
+  aus dem tatsächlichen Zustand des Vorgangs. Der ursprüngliche Auftrag war
+  eindeutig: sichtbar, solange der Einkauf NICHT ABGESCHLOSSEN ist — das ist
+  ein Zustand (`endZeit`), kein Zeitpunkt-Vergleich.
+- Fix: `Einkaufsvorgang.abgehakteKaufEintraege(fuerListe:unter:)` filtert
+  jetzt schlicht auf `endZeit == nil`, kein Zeitfenster mehr. Sobald ein
+  Gerät „Einkauf abschließen“ ausführt, verschwinden dessen Artikel nach dem
+  Sync auf JEDEM Gerät konsistent aus der „abgehakt“-Ansicht. Details:
+  `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 37.
+
 ## v0.10 (Build 200) — Live-Test-Fund: „dauerhaft entfernen“/„Abwählen“ wurden nach Vorgangs-Rotation zum stillen No-op
 
 - Im echten Zwei-Geräte-Test zur letzten Änderung (Einkaufsvorgang
