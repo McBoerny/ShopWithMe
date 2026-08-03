@@ -91,6 +91,26 @@ gemeinsamer, mechanismus-unabhängiger `DebugLogWriter`-Baustein vorgesehen:
   `DatabaseLocationService`/`DatabaseLocationSettingsView`, da es (Stand
   dieser Dokumentation) noch keinen zentralen Settings-Store im Projekt gibt.
 
+**Live-Test-Fund (Session 2026-08-03): Writer-Instanz je Mechanismus
+zwischenspeichern, nicht bei jedem Aufruf neu erzeugen.** `DebugLogWriter`
+ist ein `actor` und serialisiert Schreibzugriffe damit zuverlässig — aber
+nur GEGEN SICH SELBST, nicht gegen eine bei jedem `log(...)`-Aufruf frisch
+erzeugte zweite Instanz auf dieselbe Datei. `SyncDebugLogger` legt seinen
+Writer als stabile `static let` einmalig an und war davon nie betroffen;
+`DatabaseDebugLogger` braucht wegen des im Dateinamen enthaltenen,
+änderbaren Geräte-Präfix (GitHub #84) eine dynamische Erzeugung und
+instanziierte bis dahin bei jedem Aufruf neu — sichtbar geworden, als das
+`einkauf_abschluss_ausgeloest`/`einkauf_abschluss_durchgefuehrt`-Paar
+(siehe unten) zwei `log(...)`-Aufrufe kurz hintereinander auslöste: die
+beiden `seekToEnd()`+`write()`-Sequenzen aus zwei verschiedenen Instanzen
+überschrieben sich teilweise gegenseitig — sichtbar als abgeschnittene
+(fehlender Zeitstempel-Präfix) bzw. in der Reihenfolge vertauschte
+Protokollzeilen. Fix: die Writer-Instanz wird jetzt unter einem `NSLock`
+(analog dem Muster von `WiederholungsFilter`) zwischengespeichert und nur
+bei tatsächlich geändertem Präfix neu erzeugt — jeder künftige Mechanismus
+mit dynamischem Dateinamen sollte demselben Muster folgen statt `lokalerWriter`
+als reine Computed Property ohne Cache zu implementieren.
+
 ## Mechanismus: DB-Debug-Modus (Sync/Lock/Öffnen)
 
 Erster und aktuell einziger konkreter Mechanismus. Protokolliert Probleme

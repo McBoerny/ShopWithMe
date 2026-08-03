@@ -109,6 +109,24 @@ enum DatabaseDebugLogger {
         set { stufe = newValue ? (stufeCache == .aus ? .standard : stufeCache) : .aus }
     }
 
+    /// Schützt Lesen+ggf.-Neuanlegen von ``zwischengespeicherterWriter`` als eine
+    /// atomare Operation, analog dem `NSLock`-Muster von ``WiederholungsFilter``
+    /// in `DebugLogWriter.swift`.
+    private static let writerSperre = NSLock()
+    /// Zwischengespeicherte Writer-Instanz je zuletzt verwendetem Geräte-Präfix
+    /// (Live-Test-Fund, Session 2026-08-03: abgeschnittene/vertauschte
+    /// Protokollzeilen). ``lokalerWriter`` erzeugte vorher bei JEDEM Aufruf eine
+    /// neue ``DebugLogWriter``-Actor-Instanz — ein `actor` serialisiert
+    /// Schreibzugriffe aber nur GEGEN SICH SELBST, nicht gegen eine zweite,
+    /// zeitgleich frisch erzeugte Instanz auf dieselbe Datei. Zwei nahezu
+    /// gleichzeitige ``log(_:details:)``-Aufrufe (seit dem
+    /// ``Ereignis/einkaufAbschlussAusgeloest``/``Ereignis/einkaufAbschlussDurchgefuehrt``-Paar
+    /// der Regelfall) konnten sich dadurch beim `seekToEnd()`+`write()` in
+    /// `DebugLogWriter.schreibeInDatei(_:)` gegenseitig überschreiben. Fix:
+    /// dieselbe Instanz wiederverwenden, solange sich der Präfix nicht ändert —
+    /// dann serialisiert die Actor-Isolation zuverlässig.
+    nonisolated(unsafe) private static var zwischengespeicherterWriter: (praefix: String, writer: DebugLogWriter)?
+
     /// Dateiname trägt den gesetzten Gerätenamen (GitHub #84), z.B.
     /// „Küche DB Debug.log" — ohne eigenen Override (siehe
     /// ``DatabaseLeaseService/eigenerGeraeteNameOverride``) generisch „Gerät DB
@@ -120,11 +138,18 @@ enum DatabaseDebugLogger {
     private static var lokalerWriter: DebugLogWriter {
         let override = DatabaseLeaseService.eigenerGeraeteNameOverride?.trimmingCharacters(in: .whitespacesAndNewlines)
         let praefix = (override?.isEmpty == false ? override! : nil) ?? "Gerät"
-        return DebugLogWriter(
+        writerSperre.lock()
+        defer { writerSperre.unlock() }
+        if let zwischengespeicherterWriter, zwischengespeicherterWriter.praefix == praefix {
+            return zwischengespeicherterWriter.writer
+        }
+        let writer = DebugLogWriter(
             kategorie: "DatabaseConcurrency",
             dateiURL: FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
                 .appendingPathComponent("\(praefix) DB Debug.log")
         )
+        zwischengespeicherterWriter = (praefix, writer)
+        return writer
     }
 
     private static let wiederholungsFilter = WiederholungsFilter()
