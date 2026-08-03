@@ -109,6 +109,7 @@ enum WarengruppenDistanzService {
                 let schluessel = paarSchluessel(fuer: besuche[i].kategorie, besuche[j].kategorie)
                 if let bestehender = matrix[schluessel] {
                     bestehender.distanz = bestehender.distanz * (1 - aktuelleLernrate) + distanz * aktuelleLernrate
+                    bestehender.eigeneBeobachtungsAnzahl += 1
                 } else {
                     let (kategorieA, kategorieB) = WarengruppenDistanz.kanonischesPaar(besuche[i].kategorie, besuche[j].kategorie)
                     let neuer = WarengruppenDistanz(
@@ -117,6 +118,7 @@ enum WarengruppenDistanzService {
                         kategorieB: kategorieB,
                         distanz: WarengruppenDistanz.initialwert * (1 - aktuelleLernrate) + distanz * aktuelleLernrate
                     )
+                    neuer.eigeneBeobachtungsAnzahl = 1
                     context.insert(neuer)
                     matrix[schluessel] = neuer
                 }

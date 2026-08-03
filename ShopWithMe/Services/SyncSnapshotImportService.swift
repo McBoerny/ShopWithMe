@@ -84,9 +84,9 @@ enum SyncSnapshotImportService {
 
         let peersOrdner = syncOrdner.appendingPathComponent("peers", isDirectory: true)
         let eigeneGeraeteID = DatabaseLeaseService.geraeteID
-        guard let peerVerzeichnisse = try? FileManager.default.contentsOfDirectory(
-            at: peersOrdner, includingPropertiesForKeys: nil
-        ) else { return true }
+        guard let peerVerzeichnisse = await Task.detached(priority: .utility, operation: {
+            SyncDateiZugriff.listeKoordiniert(peersOrdner)
+        }).value else { return true }
 
         for peerOrdner in peerVerzeichnisse where !PeerOrdnerName.gehoertZu(peerOrdner.lastPathComponent, geraeteID: eigeneGeraeteID) {
             let peerName = peerOrdner.lastPathComponent
@@ -195,9 +195,9 @@ enum SyncSnapshotImportService {
 
         let peersOrdner = syncOrdner.appendingPathComponent("peers", isDirectory: true)
         let eigeneGeraeteID = DatabaseLeaseService.geraeteID
-        guard let peerVerzeichnisse = try? FileManager.default.contentsOfDirectory(
-            at: peersOrdner, includingPropertiesForKeys: nil
-        ) else { return [] }
+        guard let peerVerzeichnisse = await Task.detached(priority: .utility, operation: {
+            SyncDateiZugriff.listeKoordiniert(peersOrdner)
+        }).value else { return [] }
 
         let alleLokalen = (try? context.fetch(FetchDescriptor<Geschaeft>())) ?? []
         var kandidaten: [GeschaeftsAbgleichKandidat] = []
@@ -293,9 +293,7 @@ enum SyncSnapshotImportService {
     /// `KaufEintrag` hat schlicht (noch) keinen `kaeufe/`-Ordner angelegt).
     nonisolated private static func ladeKaeufe(ausOrdner ordner: URL) async -> [KaufEintragSnapshot] {
         await Task.detached(priority: .utility) {
-            guard let dateien = try? FileManager.default.contentsOfDirectory(
-                at: ordner, includingPropertiesForKeys: nil
-            ) else { return [] }
+            guard let dateien = SyncDateiZugriff.listeKoordiniert(ordner) else { return [] }
             return dateien.filter { $0.pathExtension == "json" }.compactMap { url -> KaufEintragSnapshot? in
                 guard let daten = SyncDateiZugriff.leseKoordiniert(url) else { return nil }
                 return try? JSONDecoder().decode(KaufEintragSnapshot.self, from: daten)
@@ -359,7 +357,8 @@ enum SyncSnapshotImportService {
         mergePreispunkte(preise.preispunkte, artikelZuordnung: artikelZuordnung, geschaeftZuordnung: geschaeftZuordnung, context: context)
         mergeArtikelAliase(stamm.artikelAliase, artikelZuordnung: artikelZuordnung, context: context)
         mergeWarengruppenDistanzen(
-            lernen.warengruppenDistanzen, geschaeftZuordnung: geschaeftZuordnung, kategorieZuordnung: kategorieZuordnung, context: context
+            lernen.warengruppenDistanzen, geschaeftZuordnung: geschaeftZuordnung, kategorieZuordnung: kategorieZuordnung,
+            peerGeraeteID: peerGeraeteID, context: context
         )
     }
 
@@ -406,7 +405,8 @@ enum SyncSnapshotImportService {
         )
         mergeArtikelAliase(snapshot.artikelAliase, artikelZuordnung: artikelZuordnung, context: context)
         mergeWarengruppenDistanzen(
-            snapshot.warengruppenDistanzen, geschaeftZuordnung: geschaeftZuordnung, kategorieZuordnung: kategorieZuordnung, context: context
+            snapshot.warengruppenDistanzen, geschaeftZuordnung: geschaeftZuordnung, kategorieZuordnung: kategorieZuordnung,
+            peerGeraeteID: peerGeraeteID, context: context
         )
     }
 
@@ -1160,10 +1160,31 @@ enum SyncSnapshotImportService {
 
     // MARK: - WarengruppenDistanz (Bereich D)
 
+    /// Gewichteter Mittelwert statt naiver 50/50-Mittelung (GitHub #87):
+    /// dieselbe G-Counter-Herleitung wie ``mergeGeschaefte(_:typZuordnung:kategorieZuordnung:peerGeraeteID:aliase:context:)``
+    /// für ``WarengruppenDistanz/beobachtungsAnzahl`` — merkt sich nur den von
+    /// `peerGeraeteID` gemeldeten EIGENEN Beobachtungsanteil
+    /// (``WarengruppenDistanzPeerZaehlerStand``), nie dessen bereits gemergten
+    /// Gesamtwert, sonst würde derselbe Beitrag bei jedem erneuten
+    /// Sync-Zyklus doppelt gezählt (Snapshots exportieren immer den
+    /// kompletten aktuellen Bestand, keine Deltas).
+    ///
+    /// Die eigentliche Wert-Mischung (``WarengruppenDistanz/distanz``) geht
+    /// noch einen Schritt weiter als der reine Zähler: anders als eine
+    /// Summe ist eine gewichtete Mittelung NICHT idempotent, wenn man bei
+    /// jedem Sync erneut mit dem VOLLEN aktuellen Peer-Gewicht mischt — ein
+    /// unveränderter, wiederholt gesyncter Peer-Wert würde den lokalen Wert
+    /// bei jedem Zyklus erneut in seine Richtung ziehen, obwohl keine
+    /// einzige neue Beobachtung dazukam. Es fließt deshalb nur das Gewicht
+    /// des tatsächlichen ZUWACHSES seit dem zuletzt bekannten Stand dieses
+    /// Peers (``WarengruppenDistanzPeerZaehlerStand/zuletztGesehenerWert(peerGeraeteID:distanzID:context:)``)
+    /// in die Mischung ein, gegen das aktuelle (bereits gedeckelte)
+    /// Gesamtgewicht der lokalen Seite. Beide Gewichte sind zusätzlich bei
+    /// ``WarengruppenDistanz/maximaleMergeGewichtung`` gedeckelt (siehe dort).
     @MainActor
     private static func mergeWarengruppenDistanzen(
         _ remote: [WarengruppenDistanzSnapshot], geschaeftZuordnung: [UUID: Geschaeft], kategorieZuordnung: [UUID: ArtikelKategorie],
-        context: ModelContext
+        peerGeraeteID: String, context: ModelContext
     ) {
         let alleLokalen = (try? context.fetch(FetchDescriptor<WarengruppenDistanz>())) ?? []
         for eintrag in remote {
@@ -1173,14 +1194,31 @@ enum SyncSnapshotImportService {
             let geschaeft = eintrag.geschaeftID.flatMap { geschaeftZuordnung[$0] }
             let (kanonA, kanonB) = WarengruppenDistanz.kanonischesPaar(kategorieA, kategorieB)
 
-            if let vorhandener = alleLokalen.first(where: {
+            let vorhandener: WarengruppenDistanz
+            if let treffer = alleLokalen.first(where: {
                 $0.geschaeft == geschaeft && $0.kategorieA == kanonA && $0.kategorieB == kanonB
             }) {
-                vorhandener.distanz = (vorhandener.distanz + eintrag.distanz) / 2
+                vorhandener = treffer
             } else {
-                let neuer = WarengruppenDistanz(geschaeft: geschaeft, kategorieA: kanonA, kategorieB: kanonB, distanz: eintrag.distanz)
-                context.insert(neuer)
+                vorhandener = WarengruppenDistanz(geschaeft: geschaeft, kategorieA: kanonA, kategorieB: kanonB, distanz: WarengruppenDistanz.initialwert)
+                vorhandener.eigeneBeobachtungsAnzahl = 0
+                context.insert(vorhandener)
             }
+
+            let neuerPeerWert = max(eintrag.eigeneAnzahlBeobachtungen, 0)
+            let vorherigerPeerWert = WarengruppenDistanzPeerZaehlerStand.zuletztGesehenerWert(
+                peerGeraeteID: peerGeraeteID, distanzID: vorhandener.id, context: context
+            )
+            let peerZuwachs = min(max(neuerPeerWert - vorherigerPeerWert, 0), WarengruppenDistanz.maximaleMergeGewichtung)
+            let lokaleGewichtung = vorhandener.mergeGewichtung
+            if peerZuwachs > 0 {
+                vorhandener.distanz = (vorhandener.distanz * Double(lokaleGewichtung) + eintrag.distanz * Double(peerZuwachs))
+                    / Double(lokaleGewichtung + peerZuwachs)
+            }
+            WarengruppenDistanzPeerZaehlerStand.merkeEigenenZuwachsDesPeers(
+                peerGeraeteID: peerGeraeteID, distanzID: vorhandener.id,
+                eigenerWertDesPeers: neuerPeerWert, context: context
+            )
         }
     }
 
@@ -1216,9 +1254,9 @@ enum SyncSnapshotImportService {
 
         let peersOrdner = syncOrdner.appendingPathComponent("peers", isDirectory: true)
         let eigeneGeraeteID = DatabaseLeaseService.geraeteID
-        guard let peerVerzeichnisse = try? FileManager.default.contentsOfDirectory(
-            at: peersOrdner, includingPropertiesForKeys: nil
-        ) else { return true }
+        guard let peerVerzeichnisse = await Task.detached(priority: .utility, operation: {
+            SyncDateiZugriff.listeKoordiniert(peersOrdner)
+        }).value else { return true }
 
         for peerOrdner in peerVerzeichnisse where !PeerOrdnerName.gehoertZu(peerOrdner.lastPathComponent, geraeteID: eigeneGeraeteID) {
             let peerName = peerOrdner.lastPathComponent

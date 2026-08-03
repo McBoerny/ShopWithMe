@@ -376,6 +376,26 @@ per ODER-Verknüpfung gemergt; `unauffaelligeEinkaeufeInFolge` bewusst **nie**
 gemergt (ein Serien-Zähler, dessen Addition eine so nie stattgefundene
 Serie vortäuschen würde).
 
+**Variante für gewichtete Werte statt reiner Zähler (`WarengruppenDistanz`,
+GitHub #87):** derselbe G-Counter-Baustein
+(`WarengruppenDistanzPeerZaehlerStand`, exaktes Gegenstück zu
+`SyncPeerZaehlerStand`) liefert `WarengruppenDistanz.beobachtungsAnzahl` —
+aber anders als ein reiner Zähler ist die Mischung von
+`WarengruppenDistanz.distanz` selbst NICHT allein durch Summieren sicher: ein
+naiver 50/50- oder „volles aktuelles Peer-Gewicht"-Merge würde bei jedem
+erneuten Sync-Zyklus **denselben** Beitrag erneut in Richtung Peer-Wert
+verschieben, auch ohne neue Beobachtung. Der Merge blendet deshalb nur das
+Gewicht des tatsächlichen **Zuwachses** seit dem zuletzt bekannten Stand
+dieses Peers ein (`WarengruppenDistanzPeerZaehlerStand.zuletztGesehenerWert`)
+gegen das aktuelle Gesamtgewicht der lokalen Seite — ein unveränderter,
+wiederholt gesyncter Peer-Wert bleibt dadurch ein echtes No-op. Beide Gewichte
+sind zusätzlich bei `WarengruppenDistanz.maximaleMergeGewichtung`
+(`≈ 1 / WarengruppenDistanzService.lernrate`) gedeckelt — das lokale Lernen
+selbst ist ein exponentiell gleitender Durchschnitt mit begrenztem
+„Gedächtnis", ein ungedeckeltes Gewicht würde einem Gerät mit vielen längst
+verblassten historischen Beobachtungen eine inhaltlich nicht mehr getragene
+Merge-Dominanz verschaffen.
+
 ### 4.5 Sichere Referenzen und baumelnde Verweise
 
 `sichereID`/`sichereIDs` (`SyncSnapshotExportService`) liefern die `id` eines
@@ -445,29 +465,30 @@ Abschnitt 9a.
 
 ## 5. Sync-Zyklus und adaptives Polling
 
-`SyncPollingService` führt einen vollständigen Zyklus (iCloud-Weckimpuls →
-Import Bereich A → Import Bereich B/C/D → Export Bereich A → Export Bereich
-B/C/D) aus, solange die App im Vordergrund ist: sofort bei App-Start/Rückkehr
-aus dem Hintergrund, danach alle 5s während `EinkaufenView` aktiv sichtbar ist
-(aktiv gemeinsam eingekauft wird), sonst alle 60s. Kein separates
+`SyncPollingService` führt einen vollständigen Zyklus (Import Bereich A →
+Import Bereich B/C/D → Export Bereich A → Export Bereich B/C/D) aus, solange
+die App im Vordergrund ist: sofort bei App-Start/Rückkehr aus dem
+Hintergrund, danach alle 5s während `EinkaufenView` aktiv sichtbar ist (aktiv
+gemeinsam eingekauft wird), sonst alle 60s. Kein separates
 Hintergrund-Intervall (ein reiner In-App-`Task`-Loop pausiert ohnehin, sobald
 iOS die App suspendiert) und kein Fehler-Backoff (alle Sync-Funktionen sind
 heute best-effort mit stillem Fehlschlagen, `try?`, ohne auswertbares
 Erfolgs-/Fehlersignal).
 
-**Aktiver iCloud-Weckimpuls (GitHub #91):** Ein reines `contentsOfDirectory`
-sieht nur, was iCloud auf diesem Gerät bereits lokal zwischengespeichert hat —
-Live-Tests zeigten teils deutlich verzögerte oder ausbleibende
-Peer-Änderungen, bis der Ordner manuell in der Files-App geöffnet wurde.
-`SyncICloudWeckerService.wecke(ordner:)` läuft deshalb als erster Schritt
-jedes Zyklus: eine kurz laufende, auf den Sync-Ordner gescopte
-`NSMetadataQuery` signalisiert iCloud aktiv „ich beobachte diesen Ordner" und
-löst denselben Abgleich aus wie das manuelle Öffnen in der Files-App. Wartet
-höchstens `SyncICloudWeckerService.timeout` (Standard 2s) darauf, blockiert
-den Zyklus aber nie länger — bei Ordnern anderer Anbieter (Synology Drive,
-lokal) liefert die Query ohnehin nichts (`NSMetadataQuery` ist auf iOS fest an
-iCloud gebunden, auch mit URL-gescopten `searchScopes`), das Timeout greift
-dann einfach wirkungslos.
+**Koordinierte Verzeichnis-Listings statt ungeschütztem `contentsOfDirectory`
+(GitHub #91):** Ein reines `FileManager.contentsOfDirectory` auf den
+Sync-Ordner sah nur, was iCloud auf diesem Gerät bereits lokal
+zwischengespeichert hatte — Live-Tests zeigten teils deutlich verzögerte oder
+komplett ausbleibende Peer-Änderungen, bis der Ordner manuell in der
+Files-App geöffnet wurde. Ein zunächst versuchter aktiver
+`NSMetadataQuery`-Weckimpuls vor jedem Zyklus zeigte im Live-Test keinerlei
+Wirkung (siehe `docs/DATENSYNCHRONISATION_VERLAUF.md` §39, dort auch die
+Begründung, warum das zu erwarten war). Alle Verzeichnis-Listings innerhalb
+des Sync-Ordners (`peers/`, je Peer `events/`/`kaeufe/`/Paket-Ordner) laufen
+seitdem über ``SyncDateiZugriff/listeKoordiniert(_:)`` — ein
+`NSFileCoordinator`-Lesezugriff, analog zum bereits bestehenden
+`leseKoordiniert(_:)` für einzelne Dateien (GitHub #52), nur eine Ebene höher.
+Details in `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 40.
 
 `SyncOrdnerSettingsView` nutzt denselben `SyncPollingService.syncZyklus()`
 für „Jetzt synchronisieren" wie das automatische Polling — Protokollierung

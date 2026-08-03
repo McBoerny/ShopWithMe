@@ -2505,3 +2505,152 @@ Verzögerung bis zum Sichtbarwerden einer Peer-Änderung tatsächlich?) steht
 noch aus — der Timeout-Wert von 2s ist eine Annahme, die anhand der neuen
 `sync_icloud_wecker_abgeschlossen`-Protokolldaten empirisch nachjustiert
 werden soll.
+
+**Nachtrag (Zwei-Geräte-Live-Test, 2026-08-03): Ansatz wirkungslos, komplett
+zurückgenommen.** Der `NSMetadataQuery`-Weckimpuls brachte im echten Test
+keinerlei Verbesserung — Geräte synchronisierten weiterhin nur, wenn der
+Sync-Ordner manuell in der Files-App geöffnet wurde, exakt wie vor diesem
+Feature. Nachträgliche Recherche erklärt, warum die Grundannahme falsch war
+(zwei unabhängige Apple-Doku-/Forenbelege, nicht nur eine nachträgliche
+Vermutung):
+
+1. **`NSMetadataQuery` triggert selbst keinen Download unbekannter
+   Objekte** — "it's the application's responsibility to trigger downloads
+   from iCloud" via `startDownloadingUbiquitousItem`. Die Query beobachtet
+   nur bereits bekannte Metadaten, zwingt iCloud nicht, unbekannte
+   Peer-Dateien vom Server zu holen.
+2. **`NSMetadataQuery` beobachtet zuverlässig nur die Wurzel des gescopten
+   Ordners, nicht Unterordner** — Forenbefund: Änderungen in Unterordnern
+   gelten nur als Änderung des direkten Elternobjekts. Der Sync-Ordner hat
+   aber genau diese Struktur (`peers/<Gerät>/…`), die eigentlichen
+   Event-/Snapshot-Dateien liegen zwei Ebenen unter dem gescopten
+   Wurzelordner.
+
+`SyncICloudWeckerService` wurde komplett entfernt (Datei gelöscht, Aufruf aus
+`SyncPollingService.syncZyklus()` entfernt, Debug-Event
+`sync_icloud_wecker_abgeschlossen` aus `SyncDebugLogger` entfernt) — kostete
+nur ~2s pro Zyklus ohne Nutzen. Der tatsächliche, unabhängig recherchierte
+Fix-Versuch steht in Abschnitt 40.
+
+**Lehre:** Diese Fehleinschätzung entstand, weil die ursprüngliche
+Kernannahme ("`NSMetadataQuery` signalisiert iCloud aktiv, ich beobachte
+diesen Ordner, und löst denselben Abgleich wie das Öffnen in der Files-App
+aus") nie gegen Dokumentation verifiziert wurde, sondern nur plausibel
+klang — anders als die Detailfrage zum File-Provider-Scoping, die vor der
+Implementierung tatsächlich recherchiert wurde. Siehe
+`ios-swift-engineering`-Skill, Abschnitt „Bei weniger gebräuchlichen APIs
+vorher aktuelle Dokumentation prüfen".
+
+## 40. GitHub #91 (Fortsetzung): Koordinierte Verzeichnis-Listings statt ungeschütztem `contentsOfDirectory`
+
+**Ausgangslage:** Nach dem wirkungslosen `NSMetadataQuery`-Versuch (Abschnitt
+39) war die eigentliche Root Cause weiterhin offen: Peer-Änderungen wurden
+erst nach manuellem Öffnen des Sync-Ordners in der Files-App sichtbar.
+
+**Root Cause (vor Umsetzung recherchiert, nicht nur angenommen):** Alle
+Sync-Services listen Verzeichnisse innerhalb des Sync-Ordners
+(`peers/`, je Peer `events/`/`kaeufe/`/Paket-Ordner) über schlichtes
+`FileManager.default.contentsOfDirectory(...)` — ein ungeschützter,
+unkoordinierter Zugriff. Apples iCloud-File-Management-Doku verlangt explizit
+File-Coordination für jeden Zugriff außerhalb von Document-Objekten:
+„Document objects use file coordinators … If you are not using document
+objects to access files, you must handle the file coordination yourself."
+`SyncDateiZugriff.leseKoordiniert(_:)` befolgt das bereits für einzelne
+Dateien (GitHub #52) — für die Verzeichnis-**Listing**-Aufrufe selbst galt
+das bisher nicht, obwohl genau dort neue Peer-Dateien erstmals sichtbar
+werden müssten.
+
+**Fix:** Neue Funktion ``SyncDateiZugriff/listeKoordiniert(_:)`` — derselbe
+`NSFileCoordinator`-Zugriff wie ``leseKoordiniert(_:)``, nur für
+`contentsOfDirectory` statt `Data(contentsOf:)`. Alle acht Aufrufstellen in
+`SyncImportService`, `SyncSnapshotImportService`, `SyncOrdnerService`,
+`SyncKaeufeExportService`, `SyncExportService` umgestellt. Aus
+`@MainActor`-Kontext heraus jeweils per `Task.detached(priority: .utility)`
+vom Main-Thread ferngehalten (blockierender Aufruf, Netzwerk-Download kann
+mehrere Sekunden dauern) — analog zur bestehenden Doku-Empfehlung an
+``leseKoordiniert(_:)``. Die einzige synchrone, nicht-async Aufrufstelle
+(`SyncOrdnerService.hatVorhandenePeers(in:)`, nur einmalig beim
+Ordner-Verknüpfen) bleibt bewusst blockierend, da dort ohnehin ein kurzer
+UI-Wartezustand erwartet wird.
+
+**Verifikationsstand:** `xcodegen generate` + `xcodebuild build` grün. Ein
+echter Zwei-Geräte-Live-Test steht noch aus — anders als beim
+`NSMetadataQuery`-Versuch ist diese Änderung diesmal gegen offizielle Apple-
+Dokumentation zum genau vorliegenden Szenario (Verzeichnis-Zugriff auf einen
+File-Provider-verwalteten, außerhalb der App-Sandbox liegenden Ordner)
+verifiziert, keine unbelegte Analogie-Vermutung — aber ob das reicht, um die
+beobachtete Verzögerung tatsächlich zu beheben, kann nur der reale Test
+zeigen.
+
+## 41. GitHub #87: WarengruppenDistanz-Merge reihenfolgeabhängig (naive statt gewichtete Mittelung)
+
+**Befund:** `SyncSnapshotImportService.mergeWarengruppenDistanzen` mittelte
+einen bereits vorhandenen lokalen `WarengruppenDistanz`-Eintrag beim Merge
+naiv im Verhältnis 50/50 mit dem Peer-Wert (`(vorhandener.distanz +
+eintrag.distanz) / 2`) — unabhängig davon, wie viele Beobachtungen
+(Einkäufe) hinter jeder der beiden Zahlen bereits steckten. Eine reine
+Zwei-Werte-Mittelung ist nicht assoziativ: das Ergebnis hängt von der
+Sync-Reihenfolge ab, ein einzelner Ausreißer eines frisch synchronisierten
+Geräts kann einen auf vielen stabilen Beobachtungen beruhenden Wert
+unverhältnismäßig stark verschieben. Der Code-Kommentar an der Stelle
+benannte das bereits selbst als bewusste Vereinfachung ggü. dem im
+#39-Vorschlag skizzierten „gewichteten Mittelwert", mangels einer bis dahin
+mitgeführten Beobachtungszahl je Eintrag.
+
+**Fix — G-Counter-Muster für die Beobachtungszahl:** exaktes Gegenstück zur
+Lösung aus Abschnitt 17 (`SyncPeerZaehlerStand`/`Geschaeft.anzahlEinkaufsvorgaenge`):
+- `WarengruppenDistanz.eigeneBeobachtungsAnzahl` — rein lokaler, bei jedem
+  `WarengruppenDistanzService.lerne(...)`-Aufruf direkt inkrementierter
+  Anteil (additiv-optionaler Rohwert, Fallback `1` für vor der Änderung
+  angelegte Zeilen — eine bestehende Zeile beruht per Definition auf
+  mindestens einer Beobachtung).
+- `WarengruppenDistanz.beobachtungsAnzahl` (computed) — Summe aus dem
+  eigenen Anteil plus allen über das neue Modell `WarengruppenDistanzPeerZaehlerStand`
+  gespeicherten, zuletzt bekannten EIGENEN Beiträgen jedes Peers (nicht
+  dessen bereits gemergtem Gesamtwert — sonst exakt derselbe
+  Doppelzähl-Fehler wie in Abschnitt 17, da Snapshots immer den kompletten
+  aktuellen Bestand exportieren, keine Deltas).
+- `WarengruppenDistanzSnapshot.eigeneAnzahlBeobachtungen` (neu,
+  `SyncSnapshot.aktuelleFormatVersion` 4 → 5) trägt nur den rein lokalen
+  Anteil des exportierenden Geräts, analog `GeschaeftSnapshot.eigeneAnzahlEinkaufsvorgaenge`.
+
+**Zusätzliche Erkenntnis ggü. Abschnitt 17 — reine Zähler-Summe reicht hier
+NICHT:** anders als ein reiner Zähler ist die gewichtete Mittelung von
+`distanz` selbst nicht allein durch Überschreiben-statt-Addieren sicher. Ein
+Merge, der bei jedem Sync-Zyklus mit dem VOLLEN aktuellen Peer-Gewicht
+mischt, wäre nicht idempotent: ein unveränderter, wiederholt gesyncter
+Peer-Wert würde den lokalen Wert bei jedem weiteren Zyklus erneut in seine
+Richtung ziehen, obwohl keine einzige neue Beobachtung dazukam. Der Merge
+blendet deshalb nur das Gewicht des tatsächlichen ZUWACHSES seit dem
+zuletzt bekannten Stand dieses Peers ein
+(`WarengruppenDistanzPeerZaehlerStand.zuletztGesehenerWert(peerGeraeteID:distanzID:context:)`,
+vor dem Überschreiben des Ledger-Eintrags ausgelesen) — gegen das aktuelle
+Gesamtgewicht der lokalen Seite (`WarengruppenDistanz.mergeGewichtung`).
+
+**Deckelung des Merge-Gewichts (`WarengruppenDistanz.maximaleMergeGewichtung`,
+≈ `1 / WarengruppenDistanzService.lernrate` ≈ 10):** das lokale Lernen selbst
+ist ein exponentiell gleitender Durchschnitt mit fester Lernrate 0.1 — ältere
+Beobachtungen verblassen geometrisch, das tatsächliche „Gedächtnis" reicht
+nur rund 10 Beobachtungen zurück. Ein Gerät mit z.B. 100 historischen
+Beobachtungen ist inhaltlich nicht 10× verlässlicher als eines mit 10 (die
+ältesten 90 sind im aktuellen EMA-Wert längst verblasst). Ohne Deckelung
+hätte ein Gerät mit sehr vieler Historie beim Merge eine Dominanz bekommen,
+die sein aktueller Wert gar nicht mehr trägt — die Deckelung beantwortet
+damit auch die ursprünglich im Issue offene Frage nach einer Obergrenze
+(u.a. relevant, damit ein alter, etablierter Wert nach einem echten
+Ladenumbau nicht quasi unveränderlich wird).
+
+**Bewusst nicht umgesetzt (Scope-Entscheidung im Vorfeld, siehe Chat):** eine
+Variante ganz ohne neuen Zustand (Merge über die bestehende EMA-Formel
+`distanz * (1 - Lernrate) + peerDistanz * Lernrate` statt Zähler) wäre
+deutlich kleiner gewesen, hätte Reihenfolgenunabhängigkeit aber nur
+näherungsweise (starke Dämpfung statt echter Konvergenz) erreicht. Auf
+Wunsch des Nutzers („mathematisch korrekt ist besser") stattdessen die
+vollständige, mathematisch korrekte Variante mit Peer-Ledger umgesetzt.
+
+**Verifikationsstand:** Code geschrieben, drei neue Unit-Tests in
+`SyncSnapshotImportServiceTests.swift` (gleiche Beobachtungsanzahl →
+identisch zur alten 50/50-Mittelung; unterschiedliche Beobachtungsanzahl →
+Gewichtung statt 50/50; wiederholter Sync desselben Peer-Standes →
+idempotent, keine erneute Verschiebung). `xcodegen generate`/Build noch
+ausständig.

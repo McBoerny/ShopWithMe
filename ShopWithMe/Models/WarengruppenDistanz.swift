@@ -24,6 +24,12 @@ final class WarengruppenDistanz {
     var kategorieB: ArtikelKategorie?
     /// Gelernte Distanz im Bereich `[0, 1]` — siehe Typ-Dokumentation.
     var distanz: Double
+    /// Rohwert für ``eigeneBeobachtungsAnzahl``. Optional gespeichert, damit vor
+    /// Einführung dieses Attributs angelegte Zeilen beim automatischen Laden
+    /// nicht abstürzen — ein `nil`-Rohwert fällt auf `1` zurück (eine bereits
+    /// bestehende Zeile beruht per Definition auf mindestens einer
+    /// Beobachtung, siehe GitHub #87).
+    private var beobachtungsAnzahlRaw: Int?
 
     init(geschaeft: Geschaeft?, kategorieA: ArtikelKategorie, kategorieB: ArtikelKategorie, distanz: Double) {
         self.id = UUID()
@@ -31,6 +37,60 @@ final class WarengruppenDistanz {
         self.kategorieA = kategorieA
         self.kategorieB = kategorieB
         self.distanz = distanz
+    }
+}
+
+extension WarengruppenDistanz {
+    /// Wie oft DIESES Gerät für dieses Kategorie-Paar bereits selbst eine
+    /// Beobachtung gelernt hat (``WarengruppenDistanzService/lerne(besuche:matrix:geschaeft:context:)``)
+    /// — NIE durch Sync verändert, nur durch eine echte lokale Abhakung.
+    /// Grundlage (zusammen mit dem zuletzt bekannten eigenen Beitrag jedes
+    /// Peers) für ``beobachtungsAnzahl``.
+    var eigeneBeobachtungsAnzahl: Int {
+        get { beobachtungsAnzahlRaw ?? 1 }
+        set { beobachtungsAnzahlRaw = newValue }
+    }
+
+    /// Wie oft dieses Kategorie-Paar gruppenweit, über alle bekannten Geräte
+    /// hinweg, bereits beobachtet wurde.
+    ///
+    /// **G-Counter (CRDT-Muster), exaktes Gegenstück zu
+    /// ``Geschaeft/anzahlEinkaufsvorgaenge``:** Summe aus
+    /// ``eigeneBeobachtungsAnzahl`` und dem zuletzt bekannten EIGENEN Beitrag
+    /// jedes Peers (``WarengruppenDistanzPeerZaehlerStand``). Eine naive
+    /// "beide Zähler addieren"-Regel würde bei jedem erneuten Sync-Zyklus
+    /// denselben Beitrag erneut mitzählen, weil Snapshots den kompletten
+    /// aktuellen (bereits gemergten) Bestand exportieren statt nur Deltas
+    /// (GitHub #87) — siehe ausführliche Begründung bei ``Geschaeft/anzahlEinkaufsvorgaenge``.
+    ///
+    /// Berechnet bei jedem Zugriff, kein zusätzlicher gespeicherter
+    /// Gesamtwert. Ohne zugeordneten ``modelContext`` liefert nur
+    /// ``eigeneBeobachtungsAnzahl`` zurück.
+    var beobachtungsAnzahl: Int {
+        guard let context = modelContext else { return eigeneBeobachtungsAnzahl }
+        let eigeneID = id
+        let deskriptor = FetchDescriptor<WarengruppenDistanzPeerZaehlerStand>(predicate: #Predicate { $0.distanzID == eigeneID })
+        let peerBeitraege = (try? context.fetch(deskriptor)) ?? []
+        return eigeneBeobachtungsAnzahl + peerBeitraege.reduce(0) { $0 + $1.zuletztGesehenerWert }
+    }
+
+    /// Deckelt das Gewicht, mit dem eine Seite beim Geräte-Sync in den
+    /// gewichteten Mittelwert eingeht (``SyncSnapshotImportService``) —
+    /// unabhängig von der tatsächlichen ``beobachtungsAnzahl``. Grund: das
+    /// lokale Lernen (``WarengruppenDistanzService/lerne(besuche:matrix:geschaeft:context:)``)
+    /// ist selbst ein exponentiell gleitender Durchschnitt mit fester
+    /// Lernrate — ältere Beobachtungen verblassen geometrisch, das
+    /// tatsächliche „Gedächtnis" reicht nur rund `1 / Lernrate` Beobachtungen
+    /// zurück. Ohne diese Deckelung würde ein Gerät mit sehr vielen
+    /// historischen (längst verblassten) Beobachtungen beim Merge eine
+    /// Dominanz bekommen, die sein aktueller Wert inhaltlich gar nicht mehr
+    /// trägt (GitHub #87).
+    static let maximaleMergeGewichtung = Int((1 / WarengruppenDistanzService.lernrate).rounded())
+
+    /// ``beobachtungsAnzahl``, gedeckelt bei ``maximaleMergeGewichtung`` — das
+    /// beim Merge tatsächlich verwendete Gewicht dieser Seite.
+    var mergeGewichtung: Int {
+        min(beobachtungsAnzahl, WarengruppenDistanz.maximaleMergeGewichtung)
     }
 }
 

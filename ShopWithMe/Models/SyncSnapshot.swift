@@ -56,7 +56,18 @@ struct SyncSnapshot: Codable {
     /// Alias-Lernen (vormals implizit über die komplette ``KaufEintrag``-
     /// Historie) ist jetzt ein eigener, kleiner ``ArtikelAlias``-Bestand.
     /// Wieder keine Rückwärtskompatibilität nötig, siehe Version 3.
-    static let aktuelleFormatVersion = 4
+    ///
+    /// **Version 5 (G-Counter für ``WarengruppenDistanzSnapshot``, GitHub
+    /// #87):** ``WarengruppenDistanzSnapshot/distanz`` wurde beim Merge naiv
+    /// im Verhältnis 50/50 gemittelt, unabhängig davon, wie viele
+    /// Beobachtungen hinter jeder Seite steckten — reihenfolgeabhängig und
+    /// anfällig für Ausreißer. Neu: ``WarengruppenDistanzSnapshot/eigeneAnzahlBeobachtungen``
+    /// (nur der rein lokale Anteil, analog zu
+    /// ``GeschaeftSnapshot/eigeneAnzahlEinkaufsvorgaenge`` seit Version 3)
+    /// macht daraus einen echten gewichteten Mittelwert
+    /// (``WarengruppenDistanzPeerZaehlerStand``). Wieder keine
+    /// Rückwärtskompatibilität nötig, siehe Version 3.
+    static let aktuelleFormatVersion = 5
 
     var formatVersion: Int
     var erzeugtAm: Date
@@ -215,6 +226,15 @@ struct WarengruppenDistanzSnapshot: Codable {
     var kategorieAID: UUID
     var kategorieBID: UUID
     var distanz: Double
+    /// NUR der rein lokal auf dem exportierenden Gerät entstandene Anteil von
+    /// ``WarengruppenDistanz/beobachtungsAnzahl`` (``WarengruppenDistanz/eigeneBeobachtungsAnzahl``)
+    /// — bewusst NICHT der bereits gemergte Gesamtwert. G-Counter-Muster
+    /// (seit Version 5, GitHub #87), exaktes Gegenstück zu
+    /// ``GeschaeftSnapshot/eigeneAnzahlEinkaufsvorgaenge``: jeder Beitrag wird
+    /// beim Empfänger einmalig unter (Peer, Distanz-Zeile) gemerkt
+    /// (``WarengruppenDistanzPeerZaehlerStand``), der tatsächliche Gesamtwert
+    /// ergibt sich erst beim Lesen aus der Summe aller bekannten Beiträge.
+    var eigeneAnzahlBeobachtungen: Int
 }
 
 struct PreispunktSnapshot: Codable {

@@ -8,7 +8,7 @@ struct SyncSnapshotImportServiceTests {
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {
         let schema = Schema([
             Artikel.self, ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self,
-            Einkaufsvorgang.self, KaufEintrag.self, WarengruppenDistanz.self,
+            Einkaufsvorgang.self, KaufEintrag.self, WarengruppenDistanz.self, WarengruppenDistanzPeerZaehlerStand.self,
             Einkaufsliste.self, EinkaufslistenEintrag.self, IgnorierterArtikel.self,
             SyncEvent.self, SyncEntitaetsAlias.self, SyncPeerZaehlerStand.self, SyncPeerInfo.self,
             SyncTombstone.self, Preispunkt.self, ArtikelAlias.self,
@@ -1308,14 +1308,13 @@ struct SyncSnapshotImportServiceTests {
         #expect(try context.fetch(FetchDescriptor<KaufEintrag>()).isEmpty)
     }
 
-    @Test
-    func warengruppenDistanzWirdGemitteltBeiVorhandenemEintragSonstUebernommen() async throws {
-        let (container, context) = try machtLeerenContainer()
-        _ = container
-        let syncOrdner = macheTempSyncOrdner()
-        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
-        defer { SyncOrdnerService.ordnerEntfernen() }
-
+    /// Aufbau-Helfer für die folgenden drei Tests (GitHub #87): legt Geschäft
+    /// und ein kanonisches Kategorie-Paar an und liefert eine
+    /// `WarengruppenDistanzSnapshot`-Fabrik für dasselbe Paar.
+    private func machtWarengruppenDistanzSzenario(context: ModelContext) throws -> (
+        geschaeft: Geschaeft, kategorieA: ArtikelKategorie, kategorieB: ArtikelKategorie,
+        macheSnapshot: (SyncSnapshot, Double, Int) -> SyncSnapshot
+    ) {
         let typ = GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")
         context.insert(typ)
         let geschaeft = Geschaeft(name: "Rewe", typen: [typ])
@@ -1324,37 +1323,122 @@ struct SyncSnapshotImportServiceTests {
         let kategorieB = ArtikelKategorie(name: "Milchprodukte", standardSymbol: "drop", standardFarbeHex: "#007AFF")
         context.insert(kategorieA)
         context.insert(kategorieB)
-        // Wie im echten Code (WarengruppenDistanzService) immer über
-        // kanonischesPaar konstruieren, sonst kann die spätere Zuordnung im
-        // Merge (der ebenfalls kanonisiert) nicht zuverlässig matchen.
-        let (kanonA, kanonB) = WarengruppenDistanz.kanonischesPaar(kategorieA, kategorieB)
-        let bestehendeDistanz = WarengruppenDistanz(geschaeft: geschaeft, kategorieA: kanonA, kategorieB: kanonB, distanz: 0.2)
-        context.insert(bestehendeDistanz)
         try context.save()
 
-        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
-        snapshot.geschaeftsTypen = [GeschaeftTypSnapshot(id: UUID(), name: "Lebensmittel", symbolName: "cart.fill", farbeHex: "#8E8E93", sortIndex: 0)]
-        snapshot.artikelKategorien = [
-            ArtikelKategorieSnapshot(id: kategorieA.id, name: "Obst", standardSymbol: "carrot", standardFarbeHex: "#34C759", sortIndex: 0, geschaeftsTypIDs: []),
-            ArtikelKategorieSnapshot(id: kategorieB.id, name: "Milchprodukte", standardSymbol: "drop", standardFarbeHex: "#007AFF", sortIndex: 1, geschaeftsTypIDs: []),
-        ]
-        snapshot.geschaefte = [
-            GeschaeftSnapshot(
-                id: geschaeft.id, name: "Rewe", typIDs: [], adresse: nil, breitengrad: nil, laengengrad: nil,
-                erkennungsradius: nil, kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
-                ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
-            ),
-        ]
-        snapshot.warengruppenDistanzen = [
-            WarengruppenDistanzSnapshot(id: UUID(), geschaeftID: geschaeft.id, kategorieAID: kategorieA.id, kategorieBID: kategorieB.id, distanz: 0.8),
-        ]
+        func macheSnapshot(_ basis: SyncSnapshot, _ distanz: Double, _ eigeneAnzahlBeobachtungen: Int) -> SyncSnapshot {
+            var snapshot = basis
+            snapshot.geschaeftsTypen = [GeschaeftTypSnapshot(id: UUID(), name: "Lebensmittel", symbolName: "cart.fill", farbeHex: "#8E8E93", sortIndex: 0)]
+            snapshot.artikelKategorien = [
+                ArtikelKategorieSnapshot(id: kategorieA.id, name: "Obst", standardSymbol: "carrot", standardFarbeHex: "#34C759", sortIndex: 0, geschaeftsTypIDs: []),
+                ArtikelKategorieSnapshot(id: kategorieB.id, name: "Milchprodukte", standardSymbol: "drop", standardFarbeHex: "#007AFF", sortIndex: 1, geschaeftsTypIDs: []),
+            ]
+            snapshot.geschaefte = [
+                GeschaeftSnapshot(
+                    id: geschaeft.id, name: "Rewe", typIDs: [], adresse: nil, breitengrad: nil, laengengrad: nil,
+                    erkennungsradius: nil, kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
+                    ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
+                ),
+            ]
+            snapshot.warengruppenDistanzen = [
+                WarengruppenDistanzSnapshot(
+                    id: UUID(), geschaeftID: geschaeft.id, kategorieAID: kategorieA.id, kategorieBID: kategorieB.id,
+                    distanz: distanz, eigeneAnzahlBeobachtungen: eigeneAnzahlBeobachtungen
+                ),
+            ]
+            return snapshot
+        }
+        return (geschaeft, kategorieA, kategorieB, macheSnapshot)
+    }
+
+    /// Gleich viele Beobachtungen auf beiden Seiten (je 1) — Kontrollfall, in
+    /// dem der gewichtete Mittelwert auf dasselbe Ergebnis wie die frühere
+    /// naive 50/50-Mittelung fällt.
+    @Test
+    func warengruppenDistanzWirdGewichtetGemitteltBeiGleicherBeobachtungsanzahl() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let (geschaeft, kategorieA, kategorieB, macheSnapshot) = try machtWarengruppenDistanzSzenario(context: context)
+        let (kanonA, kanonB) = WarengruppenDistanz.kanonischesPaar(kategorieA, kategorieB)
+        context.insert(WarengruppenDistanz(geschaeft: geschaeft, kategorieA: kanonA, kategorieB: kanonB, distanz: 0.2))
+        try context.save()
+
+        let snapshot = macheSnapshot(leererSnapshot(geraeteID: "fremdes-geraet"), 0.8, 1)
         try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
 
         await SyncSnapshotImportService.importiereSnapshots(context: context)
 
         let alleDistanzen = try context.fetch(FetchDescriptor<WarengruppenDistanz>())
         #expect(alleDistanzen.count == 1)
-        #expect(alleDistanzen.first?.distanz == 0.5) // (0.2 + 0.8) / 2
+        #expect(alleDistanzen.first?.distanz == 0.5) // (0.2*1 + 0.8*1) / 2
+        #expect(alleDistanzen.first?.beobachtungsAnzahl == 2)
+    }
+
+    /// GitHub #87 — Kernfall: ein Gerät mit vielen (5) stabilen Beobachtungen
+    /// darf von einem einzelnen Ausreißer eines frisch synchronisierten
+    /// Peers (1 Beobachtung) nicht mehr zur Hälfte verschoben werden, sondern
+    /// nur proportional zu dessen Gewicht.
+    @Test
+    func warengruppenDistanzWirdNachBeobachtungsanzahlGewichtetStattNaiv50zu50Gemittelt() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let (geschaeft, kategorieA, kategorieB, macheSnapshot) = try machtWarengruppenDistanzSzenario(context: context)
+        let (kanonA, kanonB) = WarengruppenDistanz.kanonischesPaar(kategorieA, kategorieB)
+        let bestehendeDistanz = WarengruppenDistanz(geschaeft: geschaeft, kategorieA: kanonA, kategorieB: kanonB, distanz: 0.2)
+        bestehendeDistanz.eigeneBeobachtungsAnzahl = 5
+        context.insert(bestehendeDistanz)
+        try context.save()
+
+        let snapshot = macheSnapshot(leererSnapshot(geraeteID: "fremdes-geraet"), 0.8, 1)
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        let alleDistanzen = try context.fetch(FetchDescriptor<WarengruppenDistanz>())
+        #expect(alleDistanzen.count == 1)
+        // (0.2*5 + 0.8*1) / 6 = 0.3 — statt der naiven 0.5.
+        #expect(abs((alleDistanzen.first?.distanz ?? -1) - 0.3) < 0.0001)
+        #expect(alleDistanzen.first?.beobachtungsAnzahl == 6)
+    }
+
+    /// GitHub #87 — ein wiederholter Sync-Zyklus desselben, inhaltlich
+    /// unveränderten Peer-Standes darf den bereits gemergten Wert nicht
+    /// erneut Richtung Peer-Wert verschieben (sonst würde derselbe Beitrag
+    /// bei jedem Zyklus erneut mitgezählt, siehe ``WarengruppenDistanzPeerZaehlerStand``).
+    @Test
+    func warengruppenDistanzMergeIstBeiUnveraendertemPeerStandIdempotent() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let (geschaeft, kategorieA, kategorieB, macheSnapshot) = try machtWarengruppenDistanzSzenario(context: context)
+        let (kanonA, kanonB) = WarengruppenDistanz.kanonischesPaar(kategorieA, kategorieB)
+        context.insert(WarengruppenDistanz(geschaeft: geschaeft, kategorieA: kanonA, kategorieB: kanonB, distanz: 0.2))
+        try context.save()
+
+        let snapshot = macheSnapshot(leererSnapshot(geraeteID: "fremdes-geraet"), 0.8, 1)
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+        let nachErstemSync = try context.fetch(FetchDescriptor<WarengruppenDistanz>()).first
+        #expect(nachErstemSync?.distanz == 0.5)
+        #expect(nachErstemSync?.beobachtungsAnzahl == 2)
+
+        // Zweiter Zyklus, exakt derselbe (unveränderte) Peer-Stand — kein
+        // neuer Sync-Zyklus lässt den Wert erneut Richtung 0.8 wandern.
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+        let nachZweitemSync = try context.fetch(FetchDescriptor<WarengruppenDistanz>()).first
+        #expect(nachZweitemSync?.distanz == 0.5)
+        #expect(nachZweitemSync?.beobachtungsAnzahl == 2)
     }
 
     /// GitHub #48: Der Gerätename aus dem Snapshot muss für die spätere

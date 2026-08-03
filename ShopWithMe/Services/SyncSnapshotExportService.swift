@@ -202,7 +202,8 @@ enum SyncSnapshotExportService {
                     geschaeftID: sichereID(distanz.geschaeft, gueltigeIDs: gueltigeGeschaeftIDs),
                     kategorieAID: kategorieAID,
                     kategorieBID: kategorieBID,
-                    distanz: distanz.distanz
+                    distanz: distanz.distanz,
+                    eigeneAnzahlBeobachtungen: distanz.eigeneBeobachtungsAnzahl
                 )
             }
 
