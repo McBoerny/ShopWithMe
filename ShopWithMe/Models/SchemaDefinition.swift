@@ -43,6 +43,7 @@ enum SchemaV1: VersionedSchema {
             SyncPeerInfo.self,
             SyncTombstone.self,
             SyncAbgleichKandidat.self,
+            WarengruppenDistanzPeerZaehlerStand.self,
         ]
     }
 }

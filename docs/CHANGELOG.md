@@ -1,5 +1,38 @@
 # Changelog
 
+## v0.11 (Build 223) — Fix: WarengruppenDistanzPeerZaehlerStand fehlte im SwiftData-Schema (GitHub #87)
+
+- `WarengruppenDistanzPeerZaehlerStand` (der Peer-Zähler-Baustein aus dem
+  #87-Merge-Fix) war nie in `SchemaV1.models` (`SchemaDefinition.swift`)
+  eingetragen — SwiftData kennt den Typ mangels Relationship zu einem
+  gelisteten Modell nicht implizit. `SyncSnapshotImportService.mergeWarengruppenDistanzen`
+  legt beim Sync trotzdem Instanzen davon an, sobald ein Peer-Beitrag zu
+  einer Warengruppen-Distanz gemeldet wird.
+- Reiner Registrierungsfehler, aufgefallen weil die Testsuite ihr eigenes,
+  manuell zusammengestelltes Schema nutzt (dort war der Typ korrekt gelistet)
+  und den Produktions-Schemaaufbau deshalb nie durchlief.
+- Additiv-optional (kein bestehender Modelltyp geändert, keine
+  Datentransformation): keine neue `SchemaVN`/`MigrationStage` nötig, siehe
+  `docs/BUILD_WORKFLOW.md` → „SwiftData-Migration: wann welche
+  Schema-Version?“.
+
+## v0.11 (Build 222) — Aktive Rückfrage bei mehrdeutigen Sync-Merge-Kandidaten + Test-Fixes
+
+- Drei bisher fehlschlagende Tests waren keine Mitternachts-/Zeitgrenzen-Bugs:
+  die drei Zähler-Tests fehlten Koordinaten auf beiden `Geschaeft`-Seiten
+  (seit GitHub #86 für automatisches Merging zwingend), und
+  `wochenverdichtungBehaeltHoechstenPreisMitEchtemDatum` war tatsächlich
+  wochentagsabhängig (feste -10/-8-Tage-Offsets konnten je nach Testlauf-Tag
+  über einen ISO-Wochenwechsel rutschen) — jetzt an den Wochenstart verankert.
+- Neues additives Modell `SyncAbgleichKandidat`: `Geschaeft`/`Artikel`/
+  `Einkaufsliste`, die beim laufenden Hintergrund-Sync nicht eindeutig
+  zugeordnet werden können (z.B. ein Geschäft ohne Koordinaten), werden
+  jetzt zurückgestellt und dem Nutzer über ein Badge in
+  `SyncOrdnerSettingsView` zur aktiven Entscheidung vorgelegt, statt wie
+  bisher still als Dublette angelegt zu werden — erweitert die bereits
+  bestehende Beitritts-Rückfrage (GitHub #86 Teil 2) auf den laufenden Sync
+  und alle drei Bereich-B-Typen.
+
 ## v0.11 (Build 221) — Umbenennung Warengruppe → Abteilung in GUI und internen Bezeichnern
 
 - Alle sichtbaren GUI-Texte ("Warengruppe(n)" → "Abteilung(en)") in Views,
