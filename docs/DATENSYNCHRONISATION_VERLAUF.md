@@ -2877,3 +2877,66 @@ Call-Sites übergeben jetzt die tatsächliche Urheber-Geräte-ID
 Entstehungsweg kann den ursprünglichen Fehler dadurch nicht mehr machen.
 Keine neue `SchemaVN`/`MigrationStage` nötig (additiv-optionales Attribut,
 siehe `docs/BUILD_WORKFLOW.md`).
+
+## 45. GitHub #80: SyncEvent-„bereits gesehen"-Zustand übersteht Wipe-und-Neuaufbau nicht
+
+**Fund:** Ein Live-Test-Log direkt nach einem Neuaufbau über
+`SyncErsetzenService` (egal ob `.ersetzenDurchPeer` oder
+`planeBereinigungBaumelnderReferenzen`) zeigte einen Burst von
+`sync_event_nicht_anwendbar`-Einträgen für viele unterschiedliche,
+teils Wochen alte `bezugsID`s direkt nach dem Neustart.
+
+**Ursache:** Der Wipe löscht die komplette Store-Datei — inklusive der
+lokalen `SyncEvent`-Tabelle, die trackt, welche Bereich-A-Events
+(`SyncEventService.istBereitsBekannt`) bereits verarbeitet wurden. Die
+Peer-Event-Dateien selbst werden dadurch nicht angetastet (seit GitHub #89
+nach 30 Tagen automatisch gelöscht, Abschnitt 9). Nach einem Neuaufbau hat
+das Gerät keine Erinnerung mehr daran, welche Events es schon gesehen hat —
+der nächste Sync-Zyklus liest und verarbeitet jede noch nicht abgelaufene
+Peer-Event-Datei jedes Peers erneut, statt sie über den Dateinamens-Vorfilter
+(`SyncEventService.alleAktuellenGewinnerUndBekannteIDs`) zu überspringen.
+
+**Warum relevanter als beim ursprünglichen Melden:** Ursprünglich war der
+Wipe-Mechanismus ein seltener Sonderfall (Korruptions-Recovery,
+Erstbeitritt). GitHub #89 führte kurz danach einen erzwungenen
+Voll-Abgleich ein, der `planeErsetzenDurchPeer` automatisch auslöst, sobald
+ein Gerät länger als 30 Tage nicht synchronisiert hat
+(`SyncAktualitaetsService`/`RootView.vollAbgleichAusloesen()`) — derselbe
+Pfad, der die `SyncEvent`-Tabelle verliert. Der Wipe ist damit kein seltener
+Recovery-Sonderfall mehr, sondern kann routinemäßig automatisch ausgelöst
+werden.
+
+**Erwogene Alternative — Zeitstempel-Cutoff statt exakter ID-Liste:**
+naheliegend wäre, `SyncEvent.wallClock` gegen `SyncSnapshot.erzeugtAm` zu
+vergleichen und alles Ältere zu ignorieren. Verworfen aus zwei Gründen: (1)
+`wallClock` ist laut eigener Typ-Doku bewusst „nie für Ordnung zwischen
+Geräten verwendet" — Geräteuhren können auseinanderlaufen, ein Event mit
+leicht nachgehender Fremd-Uhr würde fälschlich für immer als „schon
+enthalten" ignoriert und ginge damit still verloren. (2) Ein Snapshot ist
+kein linearer Ausschnitt eines Event-Logs, sondern das Ergebnis einer
+Konfliktauflösung mit eigenen Vorrangregeln (`SyncKonfliktAufloesung`: z.B.
+„Dauerhaft entfernen schlägt alles"), die nicht rein durch einen Lamport-
+Zähler oder Zeitpunkt geordnet ist — es gibt daher keinen einzelnen,
+gültigen Cutoff-Wert pro Peer, den ein Snapshot hergibt.
+
+**Fix:** `SyncErsetzenBackup` (bereits bestehendes, lokal-privates
+Backup-Format für den Wipe-Mechanismus, GitHub #63) bekommt ein zusätzliches
+Feld `bekannteSyncEvents: [SyncEventBackupEintrag]?` — wrapt die bereits
+vorhandene Peer-Wire-Darstellung `SyncEventExportDarstellung` um den
+gerätelokalen `hochgeladen`-Status. `erstelleBackup(context:)` sichert damit
+vor jedem Wipe den kompletten lokalen `SyncEvent`-Bestand;
+`fuehreAusstehendeAktionAus(context:)` stellt ihn danach über die neue
+`stelleSyncEventsWiederHer(_:context:)` wieder her (nutzt intern das
+bestehende `SyncEventService.uebernehmen(_:context:)`, das Einfügen +
+Lamport-Abgleich vom regulären Peer-Empfangspfad übernimmt).
+
+**Wichtige Randbedingung beim Restore:** `uebernehmen` setzt `hochgeladen`
+sonst pauschal auf `true` (korrekt für ein tatsächlich von einem Peer
+empfangenes Event) — beim Restore des eigenen Bestands würde das ein noch
+nicht exportiertes eigenes Event fälschlich als „bereits geteilt" markieren
+und dauerhaft von `SyncExportService.exportiereNeueEvents` (Filter
+`hochgeladen == false`) ausschließen. `stelleSyncEventsWiederHer` setzt den
+Wert deshalb explizit auf den gesicherten Originalwert zurück.
+`formatVersion` von `SyncErsetzenBackup` auf 2 erhöht; `bekannteSyncEvents`
+ist bewusst optional (`nil` statt `[]` als Default), damit ein noch im alten
+Format auf der Platte liegendes Backup weiterhin decodierbar bleibt.

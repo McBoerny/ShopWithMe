@@ -226,11 +226,12 @@ enum SyncErsetzenService {
             // Vorher-Stand aus dem ohnehin vor dem Neuaufbau erstellten
             // Backup lesen (noch vorhanden, ``fuehreAusstehendeAktionAus``
             // löscht es hier bewusst nicht) — Grundlage für die
-            // Vorher-/Nachher-Zusammenfassung unten UND für den
-            // Härtungs-Rollback (siehe unten).
-            let vorherSnapshot = ladeBackup()?.snapshot
+            // Vorher-/Nachher-Zusammenfassung unten, den Härtungs-Rollback
+            // UND die SyncEvent-Wiederherstellung (GitHub #80, siehe unten).
+            let vorherBackup = ladeBackup()
             let ordnerZugriffErfolgreich = await SyncSnapshotImportService.importiereSnapshots(context: context)
-            if let vorherSnapshot {
+            if let vorherBackup {
+                let vorherSnapshot = vorherBackup.snapshot
                 let nachherSnapshot = SyncSnapshotExportService.erstelleSnapshot(context: context)
                 let vorherZaehler = BereichsZaehler(snapshot: vorherSnapshot)
                 let nachherZaehler = BereichsZaehler(snapshot: nachherSnapshot)
@@ -261,6 +262,13 @@ enum SyncErsetzenService {
                     )
                     letzterNeuaufbauAutomatischZurueckgerollt = true
                 }
+
+                // GitHub #80: unabhängig davon, ob der Peer-Import geklappt
+                // hat oder zurückgerollt wurde — dieses Gerät kannte VOR dem
+                // Wipe bereits bestimmte Events, das bleibt so, egal welcher
+                // Datenbestand jetzt aktiv ist.
+                stelleSyncEventsWiederHer(vorherBackup.bekannteSyncEvents, context: context)
+                try? context.save()
             }
         case .wiederherstellenAusBackup:
             guard let daten = try? Data(contentsOf: backupURL),
@@ -277,7 +285,34 @@ enum SyncErsetzenService {
                 neuer.ignoriertAm = vorschlag.ignoriertAm
                 context.insert(neuer)
             }
+            stelleSyncEventsWiederHer(backup.bekannteSyncEvents, context: context)
             try? context.save()
+        }
+    }
+
+    /// Stellt die zum Zeitpunkt des Backups lokal bekannten ``SyncEvent``s
+    /// wieder her (GitHub #80) — ohne das würde ein Wipe-und-Neuaufbau die
+    /// Erinnerung daran verlieren, welche Bereich-A-Events dieses Gerät
+    /// bereits gesehen hat, und der nächste Sync-Zyklus würde jede noch
+    /// nicht abgelaufene Peer-Event-Datei erneut lesen/auswerten
+    /// (``SyncImportService/importiereNeueEvents(context:)``).
+    ///
+    /// ``SyncEventService/uebernehmen(_:context:)`` übernimmt Einfügen +
+    /// Lamport-Abgleich unverändert vom regulären Peer-Empfangspfad — für die
+    /// eigenen, bereits vergebenen Lamport-Zähler ist der Abgleich ein
+    /// sicherer No-Op, da ``LamportClock`` in `UserDefaults` liegt und einen
+    /// Store-Wipe unverändert übersteht (bereits ≥ jedem hier restaurierten
+    /// Wert). `hochgeladen` wird danach bewusst auf den ursprünglich
+    /// gesicherten Wert zurückgesetzt: `uebernehmen` setzt es sonst pauschal
+    /// auf `true` (korrekt für ein tatsächlich von einem Peer empfangenes
+    /// Event) — hier würde das ein eigenes, zum Backup-Zeitpunkt noch nicht
+    /// exportiertes Event fälschlich als „bereits geteilt" markieren und
+    /// dauerhaft von ``SyncExportService/exportiereNeueEvents(context:)``
+    /// (Filter `hochgeladen == false`) ausschließen.
+    private static func stelleSyncEventsWiederHer(_ eintraege: [SyncEventBackupEintrag]?, context: ModelContext) {
+        for eintrag in eintraege ?? [] {
+            let event = SyncEventService.uebernehmen(eintrag.event, context: context)
+            event.hochgeladen = eintrag.hochgeladen
         }
     }
 
@@ -297,11 +332,19 @@ enum SyncErsetzenService {
                 name: $0.name, breitengrad: $0.breitengrad, laengengrad: $0.laengengrad, ignoriertAm: $0.ignoriertAm
             )
         }
+        // GitHub #80: lokal bekannte SyncEvents mitsichern, damit ein
+        // späterer Wipe-und-Neuaufbau nicht die Erinnerung daran verliert,
+        // welche Bereich-A-Events dieses Gerät bereits gesehen hat (siehe
+        // ``stelleSyncEventsWiederHer(_:context:)``).
+        let bekannteSyncEvents = ((try? context.fetch(FetchDescriptor<SyncEvent>())) ?? []).map {
+            SyncEventBackupEintrag(event: $0.exportDarstellung, hochgeladen: $0.hochgeladen)
+        }
         let backup = SyncErsetzenBackup(
             formatVersion: SyncErsetzenBackup.aktuelleFormatVersion,
             erstelltAm: Date(),
             snapshot: snapshot,
-            ignorierteGeschaeftsVorschlaege: ignorierteVorschlaege
+            ignorierteGeschaeftsVorschlaege: ignorierteVorschlaege,
+            bekannteSyncEvents: bekannteSyncEvents
         )
         let daten = try JSONEncoder().encode(backup)
         let url = backupURL

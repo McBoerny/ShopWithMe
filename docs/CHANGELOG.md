@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.11 (Build 226) — GitHub #80: SyncEvent-„bereits gesehen"-Zustand übersteht Wipe-und-Neuaufbau
+
+- `SyncErsetzenService` (Korruptions-Recovery, Erstbeitritt, sowie der
+  erzwungene Voll-Abgleich aus GitHub #89) löschte beim Neuaufbau bisher
+  unbemerkt die lokale `SyncEvent`-Tabelle mit — der nächste Sync-Zyklus las
+  danach jede noch nicht abgelaufene Peer-Event-Datei erneut.
+- `SyncErsetzenBackup` sichert jetzt zusätzlich den lokal bekannten
+  `SyncEvent`-Bestand (neues Feld `bekannteSyncEvents`) und stellt ihn nach
+  einem Neuaufbau wieder her, inklusive korrekt erhaltenem
+  `hochgeladen`-Status für noch nicht exportierte eigene Events. Details:
+  `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 45.
+- Kein SwiftData-Modell betroffen (`SyncErsetzenBackup` ist reines
+  Codable-Backup-Format, keine `@Model`-Klasse) — keine
+  `SchemaVN`/`MigrationStage`-Frage. `bekannteSyncEvents` ist optional, ein
+  Backup im alten Format bleibt weiterhin decodierbar.
+
 ## v0.11 (Build 225) — GitHub #68: KaufEintrag.ursprungsGeraeteID zentralisiert Ursprungs-Unterdrückung
 
 - `KaufEintrag` bekommt ein neues additiv-optionales Attribut

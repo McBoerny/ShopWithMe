@@ -715,6 +715,16 @@ kompletten `kaeufe/`-Ordners, aber ohne `events/` anzutasten.
   kein wachsendes Problem — bereits bekannte Event-IDs werden anhand des
   Dateinamens erkannt und ihre Dateien gar nicht erst gelesen/dekodiert,
   ohne die Retry-Semantik für noch nicht auflösbare Events zu berühren.
+- **SyncEvent-„bereits gesehen"-Zustand übersteht seit GitHub #80 einen
+  Wipe-und-Neuaufbau:** `SyncErsetzenService` löscht beim Neuaufbau
+  (Korruptions-Recovery, Erstbeitritt, oder der erzwungene Voll-Abgleich aus
+  GitHub #89) die komplette Store-Datei inklusive der lokalen `SyncEvent`-
+  Tabelle — ohne Gegenmaßnahme müsste der nächste Sync-Zyklus danach jede noch
+  nicht abgelaufene Peer-Event-Datei erneut lesen. `SyncErsetzenBackup`
+  (`erstelleBackup(context:)`) sichert deshalb zusätzlich alle lokal
+  bekannten `SyncEvent`s und stellt sie nach dem Neuaufbau wieder her
+  (`SyncErsetzenService.stelleSyncEventsWiederHer(_:context:)`), siehe
+  `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 45.
 - **Kein echtes Hintergrund-Sync:** ein In-App-`Task`-Loop läuft nur im
   Vordergrund — Sync bei gesperrtem Gerät oder vor dem Öffnen der App bräuchte
   das `BackgroundTasks`-Framework, nicht umgesetzt.

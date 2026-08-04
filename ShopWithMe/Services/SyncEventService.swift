@@ -108,10 +108,11 @@ enum SyncEventService {
     /// aus demselben, bereits geladenen Bestand mit — ``SyncImportService``
     /// nutzt sie, um bereits entschiedene Peer-Event-Dateien anhand der im
     /// Dateinamen kodierten ID zu überspringen, OHNE sie zu lesen/dekodieren
-    /// (Abschnitt 9 „Bekannte Grenzen": Event-Dateien werden nie gelöscht,
-    /// ohne diesen Vorfilter läse und dekodierte jeder Zyklus JEDE jemals
-    /// exportierte Event-Datei neu). Ein separater Fetch dafür wäre
-    /// redundant, da hier ohnehin schon jedes ``SyncEvent`` durchlaufen wird.
+    /// (Abschnitt 9 „Bekannte Grenzen": Event-Dateien werden seit GitHub #89
+    /// nach 30 Tagen automatisch gelöscht, aber innerhalb dieses Fensters
+    /// läse und dekodierte jeder Zyklus ohne diesen Vorfilter weiterhin jede
+    /// noch nicht abgelaufene Event-Datei neu). Ein separater Fetch dafür
+    /// wäre redundant, da hier ohnehin schon jedes ``SyncEvent`` durchlaufen wird.
     ///
     /// Der Aufrufer muss den zurückgegebenen Gewinner-Index während der
     /// Verarbeitung selbst aktuell halten (siehe

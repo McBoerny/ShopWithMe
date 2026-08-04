@@ -132,6 +132,57 @@ struct SyncErsetzenServiceTests {
         #expect(SyncErsetzenService.vorhandenesBackup() != nil)
     }
 
+    /// Regressionstest für GitHub #80: der lokal bekannte `SyncEvent`-Bestand
+    /// muss Teil des Backups sein, inklusive `hochgeladen`-Status — sonst
+    /// würde ein Restore ein eigenes, noch nicht exportiertes Event
+    /// fälschlich als „bereits geteilt" markieren (siehe
+    /// ``SyncErsetzenService/stelleSyncEventsWiederHer(_:context:)``).
+    @Test
+    func backupRundlaufEnthaeltBekannteSyncEventsMitErhaltenemHochgeladenStatus() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        defer { SyncErsetzenService.loescheBackup() }
+
+        let event = SyncEvent(
+            art: .artikelAbgehakt,
+            nutzlast: SyncEventNutzlast(bezugsID: UUID(), artikelID: UUID()),
+            lamportZaehler: 3, lamportGeraeteID: "dieses-geraet", autorGeraeteID: "dieses-geraet"
+        )
+        context.insert(event)
+        try context.save()
+        #expect(event.hochgeladen == false)
+
+        let backupURL = try SyncErsetzenService.erstelleBackup(context: context)
+        let backup = try JSONDecoder().decode(SyncErsetzenBackup.self, from: Data(contentsOf: backupURL))
+
+        let gesichertesEvent = try #require(backup.bekannteSyncEvents?.first)
+        #expect(gesichertesEvent.event.id == event.id)
+        #expect(gesichertesEvent.hochgeladen == false)
+    }
+
+    /// Abwärtskompatibilität: ein vor GitHub #80 erstelltes Backup
+    /// (Formatversion 1, ohne `bekannteSyncEvents`-Schlüssel) muss weiterhin
+    /// decodierbar bleiben, statt den Restore komplett scheitern zu lassen.
+    @Test
+    func altesBackupFormatOhneBekannteSyncEventsBleibtDecodierbar() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        defer { SyncErsetzenService.loescheBackup() }
+
+        context.insert(Geschaeft(name: "Rewe", typen: []))
+        try context.save()
+        let backupURL = try SyncErsetzenService.erstelleBackup(context: context)
+
+        var rohesJSON = try JSONSerialization.jsonObject(with: Data(contentsOf: backupURL)) as? [String: Any]
+        rohesJSON?.removeValue(forKey: "bekannteSyncEvents")
+        let daten = try JSONSerialization.data(withJSONObject: rohesJSON as Any)
+
+        let backup = try JSONDecoder().decode(SyncErsetzenBackup.self, from: daten)
+
+        #expect(backup.bekannteSyncEvents == nil)
+        #expect(backup.snapshot.geschaefte.map(\.name) == ["Rewe"])
+    }
+
     @Test
     func erneutesBackupUeberschreibtDasVorherige() throws {
         let (container, context) = try machtLeerenContainer()
@@ -364,5 +415,74 @@ struct SyncErsetzenServiceTests {
         let geschaefte = try context.fetch(FetchDescriptor<Geschaeft>())
         #expect(geschaefte.map(\.name) == ["Rewe"])
         #expect(SyncErsetzenService.ausstehendeAktion == nil)
+    }
+
+    // MARK: - SyncEvent-Wiederherstellung (GitHub #80)
+
+    @Test
+    func fuehreAusstehendeAktionAusStelltBekannteSyncEventsWiederHerFuerWiederherstellenAusBackup() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        defer { SyncErsetzenService.loescheBackup() }
+        defer { raeumeAusstehendeAktionAuf() }
+
+        let (backupContainer, backupContext) = try machtLeerenContainer()
+        _ = backupContainer
+        let event = SyncEvent(
+            art: .artikelAbgehakt,
+            nutzlast: SyncEventNutzlast(bezugsID: UUID(), artikelID: UUID()),
+            lamportZaehler: 7, lamportGeraeteID: "dieses-geraet", autorGeraeteID: "dieses-geraet"
+        )
+        backupContext.insert(event)
+        try backupContext.save()
+        #expect(event.hochgeladen == false)
+        try SyncErsetzenService.erstelleBackup(context: backupContext)
+        setzeAusstehendeAktion(.wiederherstellenAusBackup)
+
+        await SyncErsetzenService.fuehreAusstehendeAktionAus(context: context)
+
+        #expect(SyncEventService.istBereitsBekannt(event.id, context: context))
+        // Muss NICHT als bereits hochgeladen markiert sein - sonst würde
+        // ``SyncExportService`` es nie an Peers exportieren (siehe Typ-Doku
+        // ``SyncErsetzenService/stelleSyncEventsWiederHer(_:context:)``).
+        let restauriert = try #require(context.fetch(FetchDescriptor<SyncEvent>()).first)
+        #expect(restauriert.hochgeladen == false)
+    }
+
+    @Test
+    func fuehreAusstehendeAktionAusStelltBekannteSyncEventsWiederHerFuerErsetzenDurchPeer() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+        defer { raeumeAusstehendeAktionAuf() }
+        defer { SyncErsetzenService.loescheBackup() }
+        defer { SyncErsetzenService.zusammenfassungVerwerfen() }
+
+        // Vorher-Backup mit einem eigenen, noch nicht hochgeladenen SyncEvent.
+        let event = SyncEvent(
+            art: .artikelAbgehakt,
+            nutzlast: SyncEventNutzlast(bezugsID: UUID(), artikelID: UUID()),
+            lamportZaehler: 9, lamportGeraeteID: "dieses-geraet", autorGeraeteID: "dieses-geraet"
+        )
+        context.insert(event)
+        try context.save()
+        try SyncErsetzenService.erstelleBackup(context: context)
+
+        // Neuaufbau auf einem frischen, leeren Context - ein erreichbarer
+        // Peer bringt seinen eigenen Datenbestand zurück.
+        let (leererContainer, leererContext) = try machtLeerenContainer()
+        _ = leererContainer
+        var snapshot = leererSnapshot(geraeteID: "peer-a")
+        snapshot.geschaefte = [leerenGeschaeftSnapshot(name: "Rewe")]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "peer-a", in: syncOrdner)
+        setzeAusstehendeAktion(.ersetzenDurchPeer)
+
+        await SyncErsetzenService.fuehreAusstehendeAktionAus(context: leererContext)
+
+        #expect(SyncEventService.istBereitsBekannt(event.id, context: leererContext))
+        let restauriert = try #require(leererContext.fetch(FetchDescriptor<SyncEvent>()).first)
+        #expect(restauriert.hochgeladen == false)
     }
 }

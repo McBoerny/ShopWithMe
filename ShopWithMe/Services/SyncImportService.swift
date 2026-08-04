@@ -109,9 +109,10 @@ enum SyncImportService {
             // Vorfilter gegen die im Dateinamen kodierte ID (Performance-Fund,
             // siehe Typ-Doku „Bekannte Grenze" oben und
             // ``SyncEventService/alleAktuellenGewinnerUndBekannteIDs(context:)``):
-            // Event-Dateien werden nie gelöscht (Abschnitt 9), ohne diesen
-            // Vorfilter läse und dekodierte jeder Zyklus JEDE jemals
-            // exportierte Datei erneut, auch längst entschiedene. Ein Event,
+            // Event-Dateien werden seit GitHub #89 nach 30 Tagen automatisch
+            // gelöscht (Abschnitt 9), aber innerhalb dieses Fensters läse und
+            // dekodierte jeder Zyklus ohne diesen Vorfilter weiterhin jede
+            // noch nicht abgelaufene Datei erneut, auch längst entschiedene. Ein Event,
             // dessen Referenz noch nicht auflösbar ist, wird laut Typ-Doku
             // NIE als bekannt markiert — bleibt also außerhalb von
             // `bekannteIDs` und wird hier weiterhin jeden Zyklus neu
