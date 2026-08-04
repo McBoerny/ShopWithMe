@@ -80,4 +80,41 @@ struct SyncPollingServiceTests {
         service.starten(context: context)
         service.stoppen()
     }
+
+    /// Rückkehrer-Erkennung (Peer-Lebenszyklus): `peers/` existiert, der
+    /// eigene Unterordner aber nicht — die Gruppe hat dieses Gerät entfernt.
+    /// Erwartet: Sync-Ordner wird sofort entfernt, `wurdeAusGruppeEntfernt`
+    /// wird gesetzt, und es läuft KEIN `syncZyklus()` mehr in dieser Session
+    /// (kein `manifest.json` geschrieben) — genau die Garantie, die den
+    /// Export veralteten Bestands verhindern soll.
+    @Test
+    func startenErkenntAusschlussAusGruppeUndEntferntSyncOrdnerOhneWeiterenSyncZyklus() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer {
+            SyncOrdnerService.ordnerEntfernen()
+            SyncErsetzenService.loescheBackup()
+        }
+
+        let peersOrdner = syncOrdner.appendingPathComponent("peers", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: peersOrdner.appendingPathComponent("Anderes-Geraet_abcdef", isDirectory: true), withIntermediateDirectories: true
+        )
+
+        let service = SyncPollingService()
+        service.starten(context: context)
+        defer { service.stoppen() }
+
+        for _ in 0..<50 {
+            if service.wurdeAusGruppeEntfernt { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        #expect(service.wurdeAusGruppeEntfernt)
+        #expect(SyncOrdnerService.gewaehlterOrdner() == nil)
+        let manifestURL = SyncSnapshotExportService.eigenerManifestURL(in: syncOrdner)
+        #expect(!FileManager.default.fileExists(atPath: manifestURL.path))
+    }
 }

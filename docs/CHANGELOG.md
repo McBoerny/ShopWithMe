@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.12 (Build 235) — Peer-Lebenszyklus, Baustein B: Rückkehrer-Erkennung
+
+Erster von vier Bausteinen auf dem Weg zu einer dynamisch statt fest begrenzten
+Aufbewahrung von Sync-Events/Tombstones (aktuell wächst `SyncTombstone` unbegrenzt,
+dominiert von einem Tombstone pro Kauf) — Details und Gesamtplan in der neuen
+`docs/PEER_LEBENSZYKLUS.md`. Dieser Schritt legt die Sicherheits-Grundlage: ein Gerät,
+dessen Peer-Ordner von der Gruppe entfernt wurde, darf beim nächsten Start unter keinen
+Umständen mehr seinen veralteten Bestand exportieren.
+
+- Neu: **`SyncOrdnerService.binIchNochMitglied(in:)`** — prüft, ob der eigene
+  Peer-Unterordner noch im geteilten Ordner existiert. `nil` bei nicht erreichbarem
+  Ordner (kein Internet o.ä.), bewusst nicht als „ausgeschlossen" gewertet.
+- **`SyncPollingService.starten(context:)`** prüft das jetzt als allerersten Schritt,
+  noch vor dem eigentlichen Sync-Loop — der einzige Punkt, der garantiert vor jedem
+  möglichen Sync-Zyklus dieser Session erreicht wird, unabhängig davon, ob der Start
+  über `RootView().task` oder `.onChange(of: scenePhase)` ausgelöst wurde (zwischen
+  beiden gibt es keine garantierte Reihenfolge). Bei Ausschluss: sofort lokales Backup +
+  Sync-Ordner-Entfernung, kein weiterer Sync-Zyklus in dieser Session.
+- Neuer Dialog in `RootView` („Aus der Sync-Gruppe entfernt") — „Alleine weitermachen"
+  oder „Wieder beitreten" (öffnet die Sync-Einstellungen).
+- `docs/BEDIENUNGSANLEITUNG.md` (Abschnitt „Datensynchronisation") entsprechend ergänzt.
+
 ## v0.12 (Build 234) — Fix: Stale Lookup-Tabelle bei Snapshot-Merge erzeugte Namensdubletten (Root-Cause zu Live-Bericht "Brot doppelt auf Urlaub-Liste")
 
 `SyncSnapshotImportService.mergeArtikel`/`mergeGeschaefte`/`mergeEinkaufslisten`/

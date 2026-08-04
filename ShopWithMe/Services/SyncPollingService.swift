@@ -65,6 +65,13 @@ final class SyncPollingService: ObservableObject {
     /// sichtbar ist — schaltet auf das schnellere Intervall um.
     var einkaufAktiv = false
 
+    /// `true`, sobald der Rückkehrer-Check beim Loop-Start (``starten(context:)``)
+    /// festgestellt hat, dass der eigene Peer-Ordner nicht mehr existiert (die
+    /// Gruppe hat dieses Gerät entfernt) — Backup + Sync-Ordner-Entfernung sind
+    /// zu diesem Zeitpunkt bereits erfolgt, dies ist nur noch das Signal für
+    /// die UI (`RootView`), einen erklärenden Dialog zu zeigen.
+    @Published var wurdeAusGruppeEntfernt = false
+
     private var context: ModelContext?
     private var schleife: Task<Void, Never>?
     private let icloudBeobachter = SyncICloudAenderungsBeobachter()
@@ -87,6 +94,25 @@ final class SyncPollingService: ObservableObject {
         // UI-Arbeit bei Bedarf vorzuziehen, statt den Sync-Zyklus stur mit
         // Standardpriorität dazwischenzudrängen.
         schleife = Task(priority: .utility) { [weak self] in
+            // Rückkehrer-Erkennung (Peer-Lebenszyklus): läuft als allererster
+            // Schritt, VOR dem eigentlichen Sync-Loop — dieser `Task`-Block
+            // ist der einzige Punkt, der garantiert vor jedem möglichen
+            // `syncZyklus()` dieser Session erreicht wird, unabhängig davon,
+            // ob `starten(context:)` über `RootView().task` oder
+            // `.onChange(of: scenePhase)` ausgelöst wurde (siehe
+            // `ShopWithMeApp` — zwischen beiden Auslösern gibt es keine
+            // garantierte Reihenfolge). Bei `false` (definitiv ausgeschlossen)
+            // sofort Backup + Sync-Ordner-Entfernung, KEIN weiterer
+            // `syncZyklus()` in dieser Session — dadurch kann kein
+            // veralteter Bestand mehr exportiert werden, bevor der Nutzer
+            // überhaupt vom Ausschluss erfährt.
+            if let ordner = SyncOrdnerService.gewaehlterOrdner(),
+               await SyncOrdnerService.binIchNochMitglied(in: ordner) == false {
+                _ = try? SyncErsetzenService.erstelleBackup(context: context)
+                SyncOrdnerService.ordnerEntfernen()
+                self?.wurdeAusGruppeEntfernt = true
+                return
+            }
             while !Task.isCancelled {
                 await self?.syncZyklus()
                 guard !Task.isCancelled else { return }

@@ -123,6 +123,29 @@ enum SyncOrdnerService {
         return peerVerzeichnisse.contains { !PeerOrdnerName.gehoertZu($0.lastPathComponent, geraeteID: eigeneGeraeteID) }
     }
 
+    /// Ob der eigene Peer-Ordner (``eigenerPeerOrdnerName(in:)``) noch unter
+    /// `peers/` im geteilten Ordner existiert — Grundlage für die
+    /// Rückkehrer-Erkennung im Peer-Lebenszyklus: fehlt er, wurde dieses
+    /// Gerät von der Gruppe entfernt (siehe `DebuggingView`s
+    /// Peer-Entfernung). `nil` bei nicht erreichbarem Ordner — bewusst NICHT
+    /// als „ausgeschlossen" gewertet, sonst würde ein rein transientes
+    /// Problem (kein Internet, Cloud-Anbieter kurz nicht erreichbar)
+    /// fälschlich einen Voll-Neuaufbau samt Verwerfen der eigenen
+    /// Sync-Konfiguration auslösen.
+    @MainActor
+    static func binIchNochMitglied(in ordner: URL) async -> Bool? {
+        guard ordner.startAccessingSecurityScopedResource() else { return nil }
+        defer { ordner.stopAccessingSecurityScopedResource() }
+
+        let eigenerName = eigenerPeerOrdnerName(in: ordner)
+        let peersOrdner = ordner.appendingPathComponent("peers", isDirectory: true)
+        guard let peerVerzeichnisse = await SyncDateiZugriff.mitZeitlimit({
+            SyncDateiZugriff.listeKoordiniert(peersOrdner)
+        }) ?? nil else { return nil }
+
+        return peerVerzeichnisse.contains { $0.lastPathComponent == eigenerName }
+    }
+
     /// Ordnername dieses Geräts unter `peers/` (GitHub #81) — Gerätename +
     /// kurzes ID-Suffix (``PeerOrdnerName``). Einmal vergeben, wird der Name
     /// in `UserDefaults` zwischengespeichert; ändert der Anwender später

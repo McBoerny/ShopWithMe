@@ -31,6 +31,8 @@ struct RootView: View {
     @State private var ausstehenderMilkForUsImport: AusstehenderImport?
     @State private var zeigeAusDerZeitGefallenDialog = false
     @State private var zeigeNeustartHinweisNachVollAbgleich = false
+    @State private var zeigeAusGruppeEntferntDialog = false
+    @State private var zeigeSyncOrdnerSettingsFuerBeitritt = false
 
     var body: some View {
         TabView {
@@ -61,6 +63,10 @@ struct RootView: View {
                 pruefeAusDerZeitGefallen()
             }
         }
+        .onChange(of: syncPollingService.wurdeAusGruppeEntfernt) { _, entfernt in
+            guard entfernt else { return }
+            zeigeAusGruppeEntferntDialog = true
+        }
         .onOpenURL { url in
             guard url.scheme == "shopwithme", url.host == "milkforus-import",
                   let text = MilkForUsPendingImportStore.abholen()
@@ -87,6 +93,34 @@ struct RootView: View {
             Button("OK") {}
         } message: {
             Text("Bitte schließe die App jetzt vollständig (nicht nur in den Hintergrund legen) und öffne sie erneut, um den Abgleich abzuschließen.")
+        }
+        // Peer-Lebenszyklus, Rückkehrer-Fall: der eigene Peer-Ordner wurde von
+        // der Gruppe entfernt — Backup + Sync-Ordner-Entfernung sind zu
+        // diesem Zeitpunkt bereits automatisch erfolgt (``SyncPollingService/starten(context:)``),
+        // dieser Dialog ist rein informativ, keine der beiden Optionen ist
+        // zeitkritisch. Bewusst abweichender Text vom „Sync-Abgleich
+        // nötig"-Dialog oben — anderer Fall (von der Gruppe ausgeschlossen,
+        // nicht nur selbst zurückgefallen).
+        .confirmationDialog("Aus der Sync-Gruppe entfernt", isPresented: $zeigeAusGruppeEntferntDialog) {
+            Button("Wieder beitreten") {
+                syncPollingService.wurdeAusGruppeEntfernt = false
+                zeigeSyncOrdnerSettingsFuerBeitritt = true
+            }
+            Button("Alleine weitermachen", role: .cancel) {
+                syncPollingService.wurdeAusGruppeEntfernt = false
+            }
+        } message: {
+            Text("Deine Gruppe hat dieses Gerät entfernt, weil es seit längerer Zeit nicht gesehen wurde. Ein lokales Backup deines bisherigen Bestands wurde bereits erstellt. Du kannst allein weitermachen oder der Gruppe wieder beitreten (dabei wird dein Bestand durch den aktuellen Gruppenstand ersetzt).")
+        }
+        .sheet(isPresented: $zeigeSyncOrdnerSettingsFuerBeitritt) {
+            NavigationStack {
+                SyncOrdnerSettingsView()
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Fertig") { zeigeSyncOrdnerSettingsFuerBeitritt = false }
+                        }
+                    }
+            }
         }
     }
 

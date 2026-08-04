@@ -76,4 +76,57 @@ struct SyncOrdnerServiceTests {
         )
         #expect(SyncOrdnerService.hatVorhandenePeers(in: syncOrdner))
     }
+
+    /// Rückkehrer-Erkennung (Peer-Lebenszyklus): der eigene Peer-Ordner ist
+    /// noch da → weiterhin Mitglied.
+    @Test
+    func binIchNochMitgliedLiefertTrueWennEigenerOrdnerExistiert() async throws {
+        cacheZuruecksetzen()
+        defer { cacheZuruecksetzen() }
+        let vorherigerOverride = DatabaseLeaseService.eigenerGeraeteNameOverride
+        defer { DatabaseLeaseService.eigenerGeraeteNameOverride = vorherigerOverride }
+        DatabaseLeaseService.eigenerGeraeteNameOverride = "Testgerät"
+
+        let syncOrdner = macheTempSyncOrdner()
+        let eigenerName = SyncOrdnerService.eigenerPeerOrdnerName(in: syncOrdner)
+        let peersOrdner = syncOrdner.appendingPathComponent("peers", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: peersOrdner.appendingPathComponent(eigenerName, isDirectory: true), withIntermediateDirectories: true
+        )
+
+        let ergebnis = await SyncOrdnerService.binIchNochMitglied(in: syncOrdner)
+        #expect(ergebnis == true)
+    }
+
+    /// Rückkehrer-Erkennung: `peers/` existiert, der eigene Unterordner aber
+    /// nicht (mehr) — die Gruppe hat dieses Gerät entfernt.
+    @Test
+    func binIchNochMitgliedLiefertFalseWennEigenerOrdnerFehlt() async throws {
+        cacheZuruecksetzen()
+        defer { cacheZuruecksetzen() }
+        let vorherigerOverride = DatabaseLeaseService.eigenerGeraeteNameOverride
+        defer { DatabaseLeaseService.eigenerGeraeteNameOverride = vorherigerOverride }
+        DatabaseLeaseService.eigenerGeraeteNameOverride = "Testgerät"
+
+        let syncOrdner = macheTempSyncOrdner()
+        let peersOrdner = syncOrdner.appendingPathComponent("peers", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: peersOrdner.appendingPathComponent("Anderes-Geraet_abcdef", isDirectory: true), withIntermediateDirectories: true
+        )
+
+        let ergebnis = await SyncOrdnerService.binIchNochMitglied(in: syncOrdner)
+        #expect(ergebnis == false)
+    }
+
+    /// Rückkehrer-Erkennung: ein nicht erreichbarer Ordner darf NICHT als
+    /// „ausgeschlossen" gewertet werden (sonst würde ein rein transientes
+    /// Problem fälschlich einen Voll-Neuaufbau auslösen) — `nil` statt `false`.
+    @Test
+    func binIchNochMitgliedLiefertNilBeiNichtErreichbaremOrdner() async {
+        let nichtErreichbar = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+            .appendingPathComponent("unterordner", isDirectory: true)
+        let ergebnis = await SyncOrdnerService.binIchNochMitglied(in: nichtErreichbar)
+        #expect(ergebnis == nil)
+    }
 }
