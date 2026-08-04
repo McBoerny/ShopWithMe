@@ -67,7 +67,17 @@ struct SyncSnapshot: Codable {
     /// macht daraus einen echten gewichteten Mittelwert
     /// (``WarengruppenDistanzPeerZaehlerStand``). Wieder keine
     /// Rückwärtskompatibilität nötig, siehe Version 3.
-    static let aktuelleFormatVersion = 5
+    ///
+    /// **Version 6 (Geschäfts-Aggregate entkoppelt von ``Einkaufsliste``,
+    /// siehe `docs/GESCHAEFTS_AGGREGATE.md`):** ``artikelGeschaeftVerfuegbarkeiten``
+    /// (ersetzt einen Live-`KaufEintrag`-Scan in ``ArtikelVerfuegbarkeitService``)
+    /// und ``geschaeftBesuche`` (ersetzt den direkten ``Einkaufsvorgang``-Zugriff
+    /// in `GeschaeftBesuchsProtokollView`) neu hinzugekommen — beide dauerhaft
+    /// und unabhängig davon, ob die ursprüngliche ``Einkaufsliste``/der
+    /// ursprüngliche ``Einkaufsvorgang`` noch existiert (Voraussetzung dafür,
+    /// dass ``Einkaufsliste/einkaufsvorgaenge`` jetzt kaskadierend löschen
+    /// darf). Wieder keine Rückwärtskompatibilität nötig, siehe Version 3.
+    static let aktuelleFormatVersion = 6
 
     var formatVersion: Int
     var erzeugtAm: Date
@@ -100,6 +110,10 @@ struct SyncSnapshot: Codable {
     /// ``ArtikelAlias``.
     var artikelAliase: [ArtikelAliasSnapshot]
     var warengruppenDistanzen: [WarengruppenDistanzSnapshot]
+    /// Seit Version 6, siehe ``ArtikelGeschaeftVerfuegbarkeit``.
+    var artikelGeschaeftVerfuegbarkeiten: [ArtikelGeschaeftVerfuegbarkeitSnapshot] = []
+    /// Seit Version 6, siehe ``GeschaeftBesuch``.
+    var geschaeftBesuche: [GeschaeftBesuchSnapshot] = []
     /// Absichtliche Löschungen von Bereich-B-Entitäten (``Geschaeft``,
     /// ``Artikel``, ``ArtikelKategorie``, ``Einkaufsliste``, ``KaufEintrag``,
     /// ``Preispunkt``), siehe ``SyncTombstone``.
@@ -237,6 +251,26 @@ struct WarengruppenDistanzSnapshot: Codable {
     var eigeneAnzahlBeobachtungen: Int
 }
 
+/// Seit Version 6, siehe ``ArtikelGeschaeftVerfuegbarkeit``. Reine
+/// Existenz-Tatsache — anders als ``WarengruppenDistanzSnapshot`` kein Zähler,
+/// da nichts gemittelt werden muss (Union nach (``artikelID``, ``geschaeftID``),
+/// siehe ``SyncSnapshotImportService``).
+struct ArtikelGeschaeftVerfuegbarkeitSnapshot: Codable {
+    var artikelID: UUID
+    var geschaeftID: UUID
+}
+
+/// Seit Version 6, siehe ``GeschaeftBesuch``. `id` ist die `id` des
+/// ursprünglichen ``Einkaufsvorgang``s — Union nach `id`, analog
+/// ``PreispunktSnapshot``.
+struct GeschaeftBesuchSnapshot: Codable {
+    var id: UUID
+    var geschaeftID: UUID?
+    var startZeit: Date
+    var endZeit: Date
+    var anzahlProdukte: Int
+}
+
 struct PreispunktSnapshot: Codable {
     var id: UUID
     var artikelID: UUID?
@@ -344,8 +378,17 @@ struct SyncListenSnapshot: Codable {
 /// Bereich D (Lernen) — eigene Datei statt Bündelung mit Stammdaten, da
 /// ``WarengruppenDistanz`` bei jedem abgeschlossenen Einkauf potenziell
 /// aktualisiert wird, Stammdaten aber nur selten.
+///
+/// **Seit Version 6 zusätzlich ``artikelGeschaeftVerfuegbarkeiten``/
+/// ``geschaeftBesuche``** (siehe `docs/GESCHAEFTS_AGGREGATE.md`) — bewusst
+/// hier statt in einer eigenen Datei: beide ändern sich in derselben
+/// Größenordnung wie ``warengruppenDistanzen`` (bei jedem Abhaken bzw. jedem
+/// Kaufabschluss), eine weitere unabhängig fingerabdruck-geprüfte Datei hätte
+/// hier keinen zusätzlichen Nutzen gebracht.
 struct SyncLernenSnapshot: Codable {
     var warengruppenDistanzen: [WarengruppenDistanzSnapshot]
+    var artikelGeschaeftVerfuegbarkeiten: [ArtikelGeschaeftVerfuegbarkeitSnapshot] = []
+    var geschaeftBesuche: [GeschaeftBesuchSnapshot] = []
 }
 
 /// Bereich C, Einkaufsvorgänge — eigene Datei, da `Einkaufsvorgang.endZeit`

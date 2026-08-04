@@ -480,6 +480,10 @@ enum SyncSnapshotImportService {
             lernen.warengruppenDistanzen, geschaeftZuordnung: geschaeftZuordnung, kategorieZuordnung: kategorieZuordnung,
             peerGeraeteID: peerGeraeteID, context: context
         )
+        mergeArtikelGeschaeftVerfuegbarkeiten(
+            lernen.artikelGeschaeftVerfuegbarkeiten, artikelZuordnung: artikelZuordnung, geschaeftZuordnung: geschaeftZuordnung, context: context
+        )
+        mergeGeschaeftBesuche(lernen.geschaeftBesuche, geschaeftZuordnung: geschaeftZuordnung, context: context)
     }
 
     /// **Nur noch für den lokalen Backup-/Wiederherstellungs-Pfad**
@@ -528,6 +532,10 @@ enum SyncSnapshotImportService {
             snapshot.warengruppenDistanzen, geschaeftZuordnung: geschaeftZuordnung, kategorieZuordnung: kategorieZuordnung,
             peerGeraeteID: peerGeraeteID, context: context
         )
+        mergeArtikelGeschaeftVerfuegbarkeiten(
+            snapshot.artikelGeschaeftVerfuegbarkeiten, artikelZuordnung: artikelZuordnung, geschaeftZuordnung: geschaeftZuordnung, context: context
+        )
+        mergeGeschaeftBesuche(snapshot.geschaeftBesuche, geschaeftZuordnung: geschaeftZuordnung, context: context)
     }
 
     // MARK: - Tombstones (Löschungen)
@@ -1429,6 +1437,50 @@ enum SyncSnapshotImportService {
                 peerGeraeteID: peerGeraeteID, distanzID: vorhandener.id,
                 eigenerWertDesPeers: neuerPeerWert, context: context
             )
+        }
+    }
+
+    // MARK: - ArtikelGeschaeftVerfuegbarkeit / GeschaeftBesuch (Bereich D, seit Version 6)
+
+    /// Reine Existenz-Tatsache, kein Zähler/Mittelwert wie bei
+    /// ``mergeWarengruppenDistanzen`` — Union nach (``Artikel``,
+    /// ``Geschaeft``)-Paar, kein Tombstone nötig (wird vom Nutzer nie direkt
+    /// gelöscht, siehe ``ArtikelGeschaeftVerfuegbarkeit``-Typ-Doku).
+    @MainActor
+    private static func mergeArtikelGeschaeftVerfuegbarkeiten(
+        _ remote: [ArtikelGeschaeftVerfuegbarkeitSnapshot], artikelZuordnung: [UUID: Artikel], geschaeftZuordnung: [UUID: Geschaeft],
+        context: ModelContext
+    ) {
+        let alleLokalen = (try? context.fetch(FetchDescriptor<ArtikelGeschaeftVerfuegbarkeit>())) ?? []
+        for eintrag in remote {
+            guard let artikel = artikelZuordnung[eintrag.artikelID], let geschaeft = geschaeftZuordnung[eintrag.geschaeftID] else { continue }
+            guard !alleLokalen.contains(where: { $0.artikel == artikel && $0.geschaeft == geschaeft }) else { continue }
+            context.insert(ArtikelGeschaeftVerfuegbarkeit(artikel: artikel, geschaeft: geschaeft))
+        }
+    }
+
+    /// Wie ``kaufEintragExistiertLokal(id:context:)``, für ``GeschaeftBesuch``.
+    @MainActor
+    private static func geschaeftBesuchExistiertLokal(id: UUID, context: ModelContext) -> Bool {
+        var deskriptor = FetchDescriptor<GeschaeftBesuch>(predicate: #Predicate { $0.id == id })
+        deskriptor.fetchLimit = 1
+        return ((try? context.fetchCount(deskriptor)) ?? 0) > 0
+    }
+
+    /// Union nach `id` (= `id` des ursprünglichen ``Einkaufsvorgang``s), analog
+    /// ``mergePreispunkte`` — ein ``GeschaeftBesuch`` ist ein unveränderliches
+    /// historisches Ereignis, kein Tombstone nötig (siehe Typ-Doku).
+    @MainActor
+    private static func mergeGeschaeftBesuche(
+        _ remote: [GeschaeftBesuchSnapshot], geschaeftZuordnung: [UUID: Geschaeft], context: ModelContext
+    ) {
+        for eintrag in remote {
+            guard !geschaeftBesuchExistiertLokal(id: eintrag.id, context: context) else { continue }
+            let neuer = GeschaeftBesuch(
+                id: eintrag.id, geschaeft: eintrag.geschaeftID.flatMap { geschaeftZuordnung[$0] },
+                startZeit: eintrag.startZeit, endZeit: eintrag.endZeit, anzahlProdukte: eintrag.anzahlProdukte
+            )
+            context.insert(neuer)
         }
     }
 

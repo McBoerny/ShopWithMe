@@ -9,7 +9,7 @@ struct EinkaufsvorgangTests {
         let schema = Schema([
             Artikel.self, ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self,
             Einkaufsvorgang.self, KaufEintrag.self,
-            Einkaufsliste.self, EinkaufslistenEintrag.self, SyncEvent.self,
+            Einkaufsliste.self, EinkaufslistenEintrag.self, SyncEvent.self, ArtikelGeschaeftVerfuegbarkeit.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])

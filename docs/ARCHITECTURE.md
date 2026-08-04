@@ -90,7 +90,23 @@ kategorieA: ArtikelKategorie?             ignoriertAm: Date
 kategorieB: ArtikelKategorie?             (keine Relationship zu Geschaeft —
 distanz: Double (0=nah, 1=fern)            Name/Koordinaten genügen für den
                                             Abgleich, siehe unten)
+
+ArtikelGeschaeftVerfuegbarkeit             GeschaeftBesuch (seit v0.12, siehe
+(seit v0.12, siehe                         docs/GESCHAEFTS_AGGREGATE.md)
+docs/GESCHAEFTS_AGGREGATE.md)              ───────────────
+─────────────────────────────             id: UUID (= id des ursprünglichen
+id: UUID                                    Einkaufsvorgang)
+artikel: Artikel?                         geschaeft: Geschaeft?
+geschaeft: Geschaeft?                     startZeit/endZeit: Date
+(reine Existenz-Tatsache, kein Zähler)     anzahlProdukte: Int
 ```
+
+**`Einkaufsvorgang.einkaufsliste` seit v0.12 `cascade`** (vormals `nullify`,
+siehe `docs/GESCHAEFTS_AGGREGATE.md`): Löschen einer `Einkaufsliste` löscht
+jetzt auch ihre `Einkaufsvorgang`e/`KaufEintrag`e vollständig — sicher, weil
+`ArtikelGeschaeftVerfuegbarkeit`/`GeschaeftBesuch` die beiden dauerhaft
+wertvollen Ableitungen bereits beim Abhaken/Abschließen unabhängig von der
+Liste festschreiben.
 
 Design-Entscheidung (siehe `docs/DECISIONS.md`): Ein `Geschaeft` bekommt
 `ArtikelKategorie`n direkt zugeordnet (`Geschaeft.kategorien`) — das ist der einzige
@@ -174,10 +190,16 @@ Abschnitt zurückfällt (Belegscan, Preisschild-Scan, Sync-Import).
   Teilen-Funktion. Details in `docs/MILKFORUS_IMPORT.md`.
 - **ArtikelVerfuegbarkeitService**: bestimmt, ob ein `Artikel` in einem `Geschaeft`
   verfügbar ist — über `Geschaeft.verfuegbareKategorien`, oder (besitzt das Geschäft
-  keine eigenen Kategorien) gelernt aus der Kaufhistorie (`KaufEintrag`). Grundlage für
-  den Verfügbarkeitsfilter beim Einkaufen, den der Anwender per Umschalter direkt im
-  laufenden Einkauf übergehen kann (siehe `EinkaufenView`) — keine persistente
-  Geschäfts-Einstellung.
+  keine eigenen Kategorien) gelernt aus `ArtikelGeschaeftVerfuegbarkeit` (seit v0.12
+  ein eigenes, dauerhaftes Aggregat statt eines Live-Scans über `KaufEintrag`, siehe
+  `docs/GESCHAEFTS_AGGREGATE.md`). Grundlage für den Verfügbarkeitsfilter beim
+  Einkaufen, den der Anwender per Umschalter direkt im laufenden Einkauf übergehen
+  kann (siehe `EinkaufenView`) — keine persistente Geschäfts-Einstellung.
+- **GeschaeftBesuchService** (seit v0.12): schreibt bei jedem abgeschlossenen
+  `Einkaufsvorgang` einen dauerhaften `GeschaeftBesuch` (Zeitpunkt, Dauer,
+  Produktanzahl) — Grundlage für `GeschaeftBesuchsProtokollView`, unabhängig davon,
+  ob die zugehörige `Einkaufsliste` später gelöscht wird. Details in
+  `docs/GESCHAEFTS_AGGREGATE.md`.
 - **Einkaufsliste — Interaktionsmodell**: Tap auf die Mengenangabe öffnet direkt das
   Sheet für exakte Menge + Notiz; Swipe links/rechts erhöht/verringert die Menge;
   Sektions-Header ohne Fortschrittszähler — Details in

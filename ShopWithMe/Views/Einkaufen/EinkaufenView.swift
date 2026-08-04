@@ -313,6 +313,7 @@ struct EinkaufenView: View {
                 guard let einkauf = referenz.resolved(in: modelContext), !einkauf.istAbgeschlossen else { return }
                 einkauf.abschliessen()
                 AbteilungsDistanzService.verarbeiteEinkauf(einkauf, context: modelContext)
+                GeschaeftBesuchService.erfassen(fuer: einkauf, context: modelContext)
                 for weitereReferenz in weitereReferenzen {
                     guard let weiterer = weitereReferenz.resolved(in: modelContext), !weiterer.istAbgeschlossen else { continue }
                     protokolliereVorDuplikatSchliessung(weiterer)
@@ -1103,6 +1104,7 @@ private struct EinkaufslisteView: View {
                 protokolliereAbschlussDiagnose()
                 einkaufsvorgang.abschliessen()
                 umbauNeuErkannt = AbteilungsDistanzService.verarbeiteEinkauf(einkaufsvorgang, context: modelContext)
+                GeschaeftBesuchService.erfassen(fuer: einkaufsvorgang, context: modelContext)
                 var geschlossen = 0
                 for referenz in weitereReferenzen {
                     guard let weiterer = referenz.resolved(in: modelContext), !weiterer.istAbgeschlossen else { continue }

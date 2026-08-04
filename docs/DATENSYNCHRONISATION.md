@@ -147,6 +147,12 @@ bestehen. Die folgenden Unterabschnitte (Matching-Regeln, „nie destruktiv",
 G-Counter, baumelnde Referenzen, Fingerabdruck-Prinzip) gelten unverändert für
 beide Pfade — sie sind unabhängig vom Datei-Layout.
 
+**Seit v0.12 zusätzlich in Bereich D (`lernen.json`):**
+`ArtikelGeschaeftVerfuegbarkeit` (Existenz-Tatsache, Union nach (Artikel,
+Geschäft)-Paar) und `GeschaeftBesuch` (Union nach `id`, analog `Preispunkt`) —
+beide dauerhafte, von `Einkaufsliste`/`Einkaufsvorgang` unabhängige Ableitungen,
+siehe `docs/GESCHAEFTS_AGGREGATE.md`.
+
 ### 4.1 Grundprinzip: nie destruktiv
 
 Ein bestehender lokaler Wert wird **nie** durch einen abweichenden

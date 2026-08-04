@@ -165,6 +165,9 @@ final class Einkaufsvorgang {
         if let listenEintrag {
             context.delete(listenEintrag)
         }
+        if let geschaeftFuerEintrag {
+            ArtikelVerfuegbarkeitService.vermerkeGekauft(artikel: artikel, geschaeft: geschaeftFuerEintrag, context: context)
+        }
         return .abgehakt
     }
 

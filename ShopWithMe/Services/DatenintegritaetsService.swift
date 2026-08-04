@@ -201,6 +201,43 @@ enum DatenintegritaetsService {
         return betroffene.count
     }
 
+    /// Einmalige Migration (siehe `docs/GESCHAEFTS_AGGREGATE.md`): sichert für
+    /// jeden bereits vorhandenen ``KaufEintrag``/abgeschlossenen
+    /// ``Einkaufsvorgang`` die beiden neuen, dauerhaften Ableitungen
+    /// (``ArtikelGeschaeftVerfuegbarkeit``/``GeschaeftBesuch``), BEVOR
+    /// ``Einkaufsvorgang``e ohne ``Einkaufsliste`` — vormals durch `.nullify`
+    /// entstanden, seit der Umstellung von ``Einkaufsliste/einkaufsvorgaenge``
+    /// auf `.cascade` strukturell nicht mehr neu entstehbar — endgültig
+    /// gelöscht werden (inklusive ihrer ``KaufEintrag``e per Kaskade). Ohne
+    /// diese Reihenfolge würden Artikel, die nur über eine inzwischen
+    /// gelöschte Liste gekauft wurden, fälschlich wieder als „nie hier
+    /// gekauft" gelten, und ihr Ladenbesuch verschwände aus dem
+    /// Besuchsprotokoll.
+    ///
+    /// Idempotent wie ``KaufEintrag/preisverlaufMigrierenFallsNoetig(context:)``
+    /// (kein separates „schon gelaufen"-Flag): jeder Schritt prüft vor dem
+    /// Schreiben/Löschen den aktuellen Bestand, ein wiederholter Aufruf findet
+    /// beim zweiten Mal nichts mehr vor. Läuft beim App-Start (siehe
+    /// ``ShopWithMeApp``), vor ``raeumeLeereListenloseVorgaengeAuf(context:)``.
+    @MainActor
+    static func migriereGeschaeftsAggregateFallsNoetig(context: ModelContext) {
+        for eintrag in (try? context.fetch(FetchDescriptor<KaufEintrag>())) ?? [] {
+            guard let artikel = eintrag.artikel, let geschaeft = eintrag.geschaeft else { continue }
+            ArtikelVerfuegbarkeitService.vermerkeGekauft(artikel: artikel, geschaeft: geschaeft, context: context)
+        }
+        for vorgang in (try? context.fetch(FetchDescriptor<Einkaufsvorgang>())) ?? [] where vorgang.endZeit != nil {
+            GeschaeftBesuchService.erfassen(fuer: vorgang, context: context)
+        }
+
+        let verwaist = ((try? context.fetch(FetchDescriptor<Einkaufsvorgang>())) ?? []).filter { $0.einkaufsliste == nil }
+        guard !verwaist.isEmpty else { return }
+        for vorgang in verwaist { context.delete(vorgang) }
+        try? context.save()
+        DatenintegritaetsLogger.log(
+            "\(verwaist.count) Einkaufsvorgänge ohne Einkaufsliste endgültig bereinigt (Artikel-Verfügbarkeit/Besuchsprotokoll vorher gesichert)"
+        )
+    }
+
     /// `gueltigeIDs: nil` prüft nur, ob `objekt` überhaupt gesetzt ist, ohne
     /// gegen eine konkrete Gültigkeitsmenge abzugleichen — für
     /// ``KaufEintrag/einkaufsvorgang``, wo ein eigener Fetch für nur diese eine

@@ -11,6 +11,7 @@ struct SyncSnapshotExportServiceTests {
             Einkaufsvorgang.self, KaufEintrag.self, WarengruppenDistanz.self,
             Einkaufsliste.self, EinkaufslistenEintrag.self, IgnorierterArtikel.self, SyncEvent.self,
             SyncPeerZaehlerStand.self, Preispunkt.self, ArtikelAlias.self,
+            ArtikelGeschaeftVerfuegbarkeit.self, GeschaeftBesuch.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
@@ -57,6 +58,10 @@ struct SyncSnapshotExportServiceTests {
         context.insert(kategorie2)
         let distanz = WarengruppenDistanz(geschaeft: geschaeft, kategorieA: kategorie, kategorieB: kategorie2, distanz: 0.3)
         context.insert(distanz)
+        let verfuegbarkeit = ArtikelGeschaeftVerfuegbarkeit(artikel: apfel, geschaeft: geschaeft)
+        context.insert(verfuegbarkeit)
+        let besuch = GeschaeftBesuch(geschaeft: geschaeft, startZeit: Date().addingTimeInterval(-300), endZeit: Date(), anzahlProdukte: 2)
+        context.insert(besuch)
         try context.save()
 
         let snapshot = SyncSnapshotExportService.erstelleSnapshot(context: context)
@@ -100,6 +105,14 @@ struct SyncSnapshotExportServiceTests {
         let distanzSnapshot = try #require(snapshot.warengruppenDistanzen.first { $0.id == distanz.id })
         #expect(distanzSnapshot.kategorieAID == kategorie.id)
         #expect(distanzSnapshot.kategorieBID == kategorie2.id)
+
+        let verfuegbarkeitSnapshot = try #require(snapshot.artikelGeschaeftVerfuegbarkeiten.first)
+        #expect(verfuegbarkeitSnapshot.artikelID == apfel.id)
+        #expect(verfuegbarkeitSnapshot.geschaeftID == geschaeft.id)
+
+        let besuchSnapshot = try #require(snapshot.geschaeftBesuche.first { $0.id == besuch.id })
+        #expect(besuchSnapshot.geschaeftID == geschaeft.id)
+        #expect(besuchSnapshot.anzahlProdukte == 2)
     }
 
     /// GitHub #82: `exportiereSnapshot`/`export.json` (ein Monolith) ersetzt

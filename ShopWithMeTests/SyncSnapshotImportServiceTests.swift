@@ -12,6 +12,7 @@ struct SyncSnapshotImportServiceTests {
             Einkaufsliste.self, EinkaufslistenEintrag.self, IgnorierterArtikel.self,
             SyncEvent.self, SyncEntitaetsAlias.self, SyncPeerZaehlerStand.self, SyncPeerInfo.self,
             SyncTombstone.self, Preispunkt.self, ArtikelAlias.self, SyncAbgleichKandidat.self,
+            ArtikelGeschaeftVerfuegbarkeit.self, GeschaeftBesuch.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
@@ -52,7 +53,11 @@ struct SyncSnapshotImportServiceTests {
             artikelAliase: snapshot.artikelAliase
         )
         let listen = SyncListenSnapshot(einkaufslistenEintraege: snapshot.einkaufslistenEintraege)
-        let lernen = SyncLernenSnapshot(warengruppenDistanzen: snapshot.warengruppenDistanzen)
+        let lernen = SyncLernenSnapshot(
+            warengruppenDistanzen: snapshot.warengruppenDistanzen,
+            artikelGeschaeftVerfuegbarkeiten: snapshot.artikelGeschaeftVerfuegbarkeiten,
+            geschaeftBesuche: snapshot.geschaeftBesuche
+        )
         let vorgaenge = SyncVorgaengeSnapshot(einkaufsvorgaenge: snapshot.einkaufsvorgaenge)
         let preise = SyncPreisSnapshot(preispunkte: snapshot.preispunkte)
 
@@ -1461,6 +1466,89 @@ struct SyncSnapshotImportServiceTests {
         #expect(allePunkte.first?.id == preispunktID)
         #expect(allePunkte.first?.artikel?.id == apfel.id)
         #expect(allePunkte.first?.preis == 1.49)
+    }
+
+    /// `docs/GESCHAEFTS_AGGREGATE.md`: Union nach (Artikel, Geschäft)-Paar,
+    /// kein Duplikat bei wiederholtem Sync, kein Tombstone-Bedarf (die
+    /// Tatsache wird vom Nutzer nie direkt gelöscht).
+    @Test
+    func artikelGeschaeftVerfuegbarkeitWirdAlsExistenzTatsacheUebernommenOhneDuplikat() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759")
+        context.insert(apfel)
+        let rewe = Geschaeft(name: "Rewe", typen: [])
+        context.insert(rewe)
+        try context.save()
+
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.artikel = [
+            ArtikelSnapshot(
+                id: apfel.id, name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759",
+                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+            ),
+        ]
+        snapshot.geschaefte = [
+            GeschaeftSnapshot(
+                id: rewe.id, name: "Rewe", typIDs: [], adresse: nil, breitengrad: nil, laengengrad: nil,
+                erkennungsradius: nil, kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
+                ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
+            ),
+        ]
+        snapshot.artikelGeschaeftVerfuegbarkeiten = [
+            ArtikelGeschaeftVerfuegbarkeitSnapshot(artikelID: apfel.id, geschaeftID: rewe.id),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+        await SyncSnapshotImportService.importiereSnapshots(context: context) // wiederholter Sync
+
+        #expect(try context.fetchCount(FetchDescriptor<ArtikelGeschaeftVerfuegbarkeit>()) == 1)
+        #expect(ArtikelVerfuegbarkeitService.wurdeBereitsGekauft(apfel, in: rewe, context: context))
+    }
+
+    /// `docs/GESCHAEFTS_AGGREGATE.md`: Union nach `id` (= `id` des
+    /// ursprünglichen ``Einkaufsvorgang``s), analog dem `KaufEintrag`-Merge.
+    @Test
+    func geschaeftBesuchWirdAlsUnveraenderlicheHistorieUebernommenOhneDuplikat() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let rewe = Geschaeft(name: "Rewe", typen: [])
+        context.insert(rewe)
+        try context.save()
+
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.geschaefte = [
+            GeschaeftSnapshot(
+                id: rewe.id, name: "Rewe", typIDs: [], adresse: nil, breitengrad: nil, laengengrad: nil,
+                erkennungsradius: nil, kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
+                ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
+            ),
+        ]
+        let besuchID = UUID()
+        let start = Date().addingTimeInterval(-600)
+        let ende = Date()
+        snapshot.geschaeftBesuche = [
+            GeschaeftBesuchSnapshot(id: besuchID, geschaeftID: rewe.id, startZeit: start, endZeit: ende, anzahlProdukte: 4),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+        await SyncSnapshotImportService.importiereSnapshots(context: context) // wiederholter Sync
+
+        let alleBesuche = try context.fetch(FetchDescriptor<GeschaeftBesuch>())
+        #expect(alleBesuche.count == 1)
+        #expect(alleBesuche.first?.id == besuchID)
+        #expect(alleBesuche.first?.geschaeft?.id == rewe.id)
+        #expect(alleBesuche.first?.anzahlProdukte == 4)
     }
 
     /// Ein per Snapshot gemergter (also per Konstruktion von einem ANDEREN

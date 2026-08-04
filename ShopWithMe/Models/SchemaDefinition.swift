@@ -44,6 +44,8 @@ enum SchemaV1: VersionedSchema {
             SyncTombstone.self,
             SyncAbgleichKandidat.self,
             WarengruppenDistanzPeerZaehlerStand.self,
+            ArtikelGeschaeftVerfuegbarkeit.self,
+            GeschaeftBesuch.self,
         ]
     }
 }

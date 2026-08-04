@@ -10,6 +10,7 @@ struct ArtikelVerfuegbarkeitServiceTests {
             Artikel.self, ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self,
             Einkaufsvorgang.self, KaufEintrag.self,
             Einkaufsliste.self, EinkaufslistenEintrag.self, SyncEvent.self,
+            ArtikelGeschaeftVerfuegbarkeit.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
@@ -87,5 +88,36 @@ struct ArtikelVerfuegbarkeitServiceTests {
 
         #expect(ArtikelVerfuegbarkeitService.istVerfuegbar(kaugummi, in: anderesGeschaeft, context: context))
         #expect(!ArtikelVerfuegbarkeitService.istVerfuegbar(kaugummi, in: kiosk, context: context))
+    }
+
+    /// Regressionstest für `docs/GESCHAEFTS_AGGREGATE.md`: die Verfügbarkeit
+    /// ist eine eigene, dauerhafte Tatsache (``ArtikelGeschaeftVerfuegbarkeit``)
+    /// — anders als vor der Entkopplung überlebt sie das Löschen der
+    /// ``Einkaufsliste``, über die der Artikel ursprünglich gekauft wurde
+    /// (löscht seit `.cascade` auch den ``Einkaufsvorgang``/``KaufEintrag``).
+    @Test
+    func verfuegbarkeitUeberlebtGeloeschteEinkaufsliste() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let sonstiges = ArtikelKategorie(name: "Sonstiges", standardSymbol: "shippingbox.fill", standardFarbeHex: "#8E8E93")
+        context.insert(sonstiges)
+        let kiosk = Geschaeft(name: "Kiosk", typen: [sonstigesTyp()])
+        context.insert(kiosk)
+        let kaugummi = Artikel(name: "Kaugummi", symbolName: "shippingbox.fill", farbeHex: "#8E8E93", kategorien: [sonstiges])
+        context.insert(kaugummi)
+
+        let liste = Einkaufsliste(name: "Urlaub")
+        context.insert(liste)
+        let einkauf = Einkaufsvorgang(geschaeft: kiosk, einkaufsliste: liste)
+        context.insert(einkauf)
+        einkauf.artikelAbhaken(kaugummi, context: context)
+        try context.save()
+
+        context.delete(liste)
+        try context.save()
+
+        #expect(ArtikelVerfuegbarkeitService.istVerfuegbar(kaugummi, in: kiosk, context: context))
+        #expect(try context.fetchCount(FetchDescriptor<Einkaufsvorgang>()) == 0)
     }
 }

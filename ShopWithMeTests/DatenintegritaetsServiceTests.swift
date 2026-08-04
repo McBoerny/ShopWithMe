@@ -31,7 +31,7 @@ struct DatenintegritaetsServiceTests {
         Artikel.self, ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self,
         Einkaufsvorgang.self, KaufEintrag.self, WarengruppenDistanz.self,
         Einkaufsliste.self, EinkaufslistenEintrag.self, IgnorierterArtikel.self,
-        SyncEvent.self,
+        SyncEvent.self, ArtikelGeschaeftVerfuegbarkeit.self, GeschaeftBesuch.self,
     ])
 
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {
@@ -182,5 +182,60 @@ struct DatenintegritaetsServiceTests {
         let zweiterBefund = try #require(DatenintegritaetsService.pruefe(context: context).first)
         #expect(zweiterBefund.beschreibung.contains("7 Einkaufsvorgänge ohne Einkaufsliste"))
         #expect(zweiterBefund.beschreibung.contains("⚠️ +5"))
+    }
+
+    /// Regressionstest für `docs/GESCHAEFTS_AGGREGATE.md`: ein listenloser
+    /// Vorgang MIT Kauf wird jetzt (anders als
+    /// ``raeumtNurLeereListenloseVorgaengeAufUndBehaeltSolcheMitKaeufen``)
+    /// endgültig gelöscht — aber erst, nachdem Artikel-Verfügbarkeit und
+    /// Besuchsprotokoll-Eintrag als dauerhafte Aggregate gesichert wurden.
+    @Test
+    func migriertBestandVorLoeschungListenloserVorgaengeMitKaeufen() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let geschaeft = Geschaeft(name: "Rewe", typen: [])
+        context.insert(geschaeft)
+        let artikel = Artikel(name: "Bananen", symbolName: "cart", farbeHex: "#000000")
+        context.insert(artikel)
+
+        let vorgang = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: nil, startZeit: Date().addingTimeInterval(-600))
+        context.insert(vorgang)
+        vorgang.endZeit = Date()
+        let kauf = KaufEintrag(artikel: artikel, geschaeft: geschaeft)
+        kauf.einkaufsvorgang = vorgang
+        context.insert(kauf)
+        try context.save()
+
+        DatenintegritaetsService.migriereGeschaeftsAggregateFallsNoetig(context: context)
+
+        #expect(ArtikelVerfuegbarkeitService.wurdeBereitsGekauft(artikel, in: geschaeft, context: context))
+        #expect(try context.fetchCount(FetchDescriptor<GeschaeftBesuch>()) == 1)
+        #expect(try context.fetchCount(FetchDescriptor<Einkaufsvorgang>()) == 0)
+        #expect(try context.fetchCount(FetchDescriptor<KaufEintrag>()) == 0)
+    }
+
+    /// Idempotenz analog ``KaufEintrag/preisverlaufMigrierenFallsNoetig(context:)``:
+    /// ein zweiter Aufruf auf bereits migrierten/leeren Daten verändert nichts
+    /// und stürzt nicht ab.
+    @Test
+    func migrationIstIdempotent() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let geschaeft = Geschaeft(name: "Rewe", typen: [])
+        context.insert(geschaeft)
+        let artikel = Artikel(name: "Bananen", symbolName: "cart", farbeHex: "#000000")
+        context.insert(artikel)
+        let vorgang = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: nil)
+        context.insert(vorgang)
+        vorgang.endZeit = Date()
+        try context.save()
+
+        DatenintegritaetsService.migriereGeschaeftsAggregateFallsNoetig(context: context)
+        DatenintegritaetsService.migriereGeschaeftsAggregateFallsNoetig(context: context)
+
+        #expect(try context.fetchCount(FetchDescriptor<GeschaeftBesuch>()) == 1)
+        #expect(try context.fetchCount(FetchDescriptor<Einkaufsvorgang>()) == 0)
     }
 }

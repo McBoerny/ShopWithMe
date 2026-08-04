@@ -207,6 +207,21 @@ enum SyncSnapshotExportService {
                 )
             }
 
+        let artikelGeschaeftVerfuegbarkeiten = ((try? context.fetch(FetchDescriptor<ArtikelGeschaeftVerfuegbarkeit>())) ?? [])
+            .compactMap { eintrag -> ArtikelGeschaeftVerfuegbarkeitSnapshot? in
+                guard let artikelID = sichereID(eintrag.artikel, gueltigeIDs: gueltigeArtikelIDs),
+                      let geschaeftID = sichereID(eintrag.geschaeft, gueltigeIDs: gueltigeGeschaeftIDs)
+                else { return nil }
+                return ArtikelGeschaeftVerfuegbarkeitSnapshot(artikelID: artikelID, geschaeftID: geschaeftID)
+            }
+
+        let geschaeftBesuche = ((try? context.fetch(FetchDescriptor<GeschaeftBesuch>())) ?? []).map {
+            GeschaeftBesuchSnapshot(
+                id: $0.id, geschaeftID: sichereID($0.geschaeft, gueltigeIDs: gueltigeGeschaeftIDs),
+                startZeit: $0.startZeit, endZeit: $0.endZeit, anzahlProdukte: $0.anzahlProdukte
+            )
+        }
+
         let tombstones = SyncTombstoneService.alle(context: context).map {
             SyncTombstoneSnapshot(entitaetsArt: $0.entitaetsArt, geloeschteID: $0.geloeschteID, geloeschtAm: $0.geloeschtAm)
         }
@@ -227,6 +242,8 @@ enum SyncSnapshotExportService {
             preispunkte: preispunkte,
             artikelAliase: artikelAliase,
             warengruppenDistanzen: warengruppenDistanzen,
+            artikelGeschaeftVerfuegbarkeiten: artikelGeschaeftVerfuegbarkeiten,
+            geschaeftBesuche: geschaeftBesuche,
             tombstones: tombstones
         )
     }
@@ -530,6 +547,8 @@ enum SyncSnapshotExportService {
     private static func normalisiereLernen(_ lernen: SyncLernenSnapshot) -> SyncLernenSnapshot {
         var lernen = lernen
         lernen.warengruppenDistanzen.sort { $0.id.uuidString < $1.id.uuidString }
+        lernen.artikelGeschaeftVerfuegbarkeiten.sort { "\($0.artikelID)_\($0.geschaeftID)" < "\($1.artikelID)_\($1.geschaeftID)" }
+        lernen.geschaeftBesuche.sort { $0.id.uuidString < $1.id.uuidString }
         return lernen
     }
 
@@ -582,7 +601,11 @@ enum SyncSnapshotExportService {
             artikelAliase: snapshot.artikelAliase
         )
         let listen = SyncListenSnapshot(einkaufslistenEintraege: snapshot.einkaufslistenEintraege)
-        let lernen = SyncLernenSnapshot(warengruppenDistanzen: snapshot.warengruppenDistanzen)
+        let lernen = SyncLernenSnapshot(
+            warengruppenDistanzen: snapshot.warengruppenDistanzen,
+            artikelGeschaeftVerfuegbarkeiten: snapshot.artikelGeschaeftVerfuegbarkeiten,
+            geschaeftBesuche: snapshot.geschaeftBesuche
+        )
         let vorgaenge = SyncVorgaengeSnapshot(einkaufsvorgaenge: snapshot.einkaufsvorgaenge)
         let preise = SyncPreisSnapshot(preispunkte: snapshot.preispunkte)
         return (manifest, snapshot.tombstones, stamm, listen, lernen, vorgaenge, preise)

@@ -1,5 +1,39 @@
 # Changelog
 
+## v0.12 (Build 239) — Geschäfts-Aggregate entkoppelt von der Einkaufsliste
+
+Siehe `docs/GESCHAEFTS_AGGREGATE.md` für die vollständige Herleitung. Ausgangspunkt:
+`Einkaufsvorgang.einkaufsliste` (`deleteRule: .nullify`) ließ eine gelöschte
+`Einkaufsliste` ihre `Einkaufsvorgang`e verwaist zurück — mit angehängten
+`KaufEintrag`en für die App strukturell unerreichbar, aber wegen der echten
+Kaufhistorie nicht automatisch bereinigbar (auf einem Testgerät akkumulierten sich
+so 22 Vorgänge mit 136 Käufen).
+
+- Neu: **`ArtikelGeschaeftVerfuegbarkeit`** (`Artikel`, `Geschaeft`) — dauerhafte
+  Existenz-Tatsache "wurde hier mindestens einmal gekauft", ersetzt einen
+  Live-`KaufEintrag`-Scan in `ArtikelVerfuegbarkeitService.istVerfuegbar`.
+  Geschrieben bei jedem tatsächlich neuen `KaufEintrag`
+  (`Einkaufsvorgang.artikelAbhakenOhneEventAufzeichnung`).
+- Neu: **`GeschaeftBesuch`** (`id` = `id` des ursprünglichen `Einkaufsvorgang`s,
+  `geschaeft`, `startZeit`, `endZeit`, `anzahlProdukte`) — ersetzt den direkten
+  `Einkaufsvorgang`-Zugriff in `GeschaeftBesuchsProtokollView`. Geschrieben von
+  `GeschaeftBesuchService.erfassen(fuer:context:)` direkt nach
+  `Einkaufsvorgang.abschliessen(...)`. Besuchsprotokoll zeigt jetzt zusätzlich die
+  Produktanzahl je Besuch.
+- **`Einkaufsliste.einkaufsvorgaenge` jetzt `deleteRule: .cascade`** (vormals
+  `.nullify`) — sicher, weil beide dauerhaft wertvollen Ableitungen bereits vor
+  einer möglichen Löschung festgeschrieben sind. Löschen einer Liste entfernt ihre
+  `Einkaufsvorgang`e/`KaufEintrag`e jetzt vollständig, statt sie unerreichbar liegen
+  zu lassen.
+- Sync: beide neuen Typen als Bereich D in `lernen.json` mitgeführt
+  (`SyncSnapshot.aktuelleFormatVersion` → 6) — additive Union-Merges, kein
+  Tombstone-Bedarf (werden vom Nutzer nie direkt gelöscht).
+- Neu: **`DatenintegritaetsService.migriereGeschaeftsAggregateFallsNoetig(context:)`**
+  — einmalige, idempotente Bestandsmigration (läuft vor
+  `raeumeLeereListenloseVorgaengeAuf`): sichert beide Aggregate für alle bereits
+  vorhandenen Daten nach, bevor listenlose `Einkaufsvorgang`e (jetzt sicher)
+  endgültig gelöscht werden.
+
 ## v0.12 (Build 238) — Peer-Lebenszyklus, Baustein C: dynamischer Aufbewahrungs-Wasserstand (Abschluss)
 
 Vierter und letzter Baustein, siehe `docs/PEER_LEBENSZYKLUS.md`. Ersetzt zwei feste,

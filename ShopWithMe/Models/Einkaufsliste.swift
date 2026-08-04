@@ -21,12 +21,22 @@ final class Einkaufsliste {
     @Relationship(deleteRule: .cascade, inverse: \EinkaufslistenEintrag.einkaufsliste)
     var eintraege: [EinkaufslistenEintrag] = []
     /// Einkaufsvorgänge, die aus dieser Liste heraus abgehakt wurden — inverse
-    /// zu ``Einkaufsvorgang/einkaufsliste``. Bewusst NICHT kaskadierend: eine
-    /// gelöschte Liste soll die historischen Einkaufsvorgänge nicht mit
-    /// löschen, nur den Bezug dazu verlieren (siehe
-    /// ``Geschaeft/einkaufsvorgaenge`` für dieselbe Begründung inkl.
-    /// Absturzrisiko ohne diese `inverse`-Deklaration).
-    @Relationship(deleteRule: .nullify, inverse: \Einkaufsvorgang.einkaufsliste)
+    /// zu ``Einkaufsvorgang/einkaufsliste``.
+    ///
+    /// **Kaskadierend seit 2026-08-04** (vormals `.nullify`, siehe
+    /// `docs/GESCHAEFTS_AGGREGATE.md`): `.nullify` ließ gelöschte Listen
+    /// verwaiste ``Einkaufsvorgang``e mit angehängten ``KaufEintrag``en
+    /// zurück — für die App strukturell unerreichbar (``EinkaufenView``
+    /// verlangt immer eine konkrete Liste), aber wegen der echten Kaufhistorie
+    /// nicht automatisch bereinigbar (siehe
+    /// ``DatenintegritaetsService/raeumeLeereListenloseVorgaengeAuf(context:)``).
+    /// Jetzt sicher kaskadierbar, weil beide dauerhaft wertvollen Ableitungen
+    /// aus ``Einkaufsvorgang``/``KaufEintrag`` — Artikel-Verfügbarkeit
+    /// (``ArtikelGeschaeftVerfuegbarkeit``) und Besuchsprotokoll
+    /// (``GeschaeftBesuch``) — bereits beim Abhaken/Abschließen unabhängig von
+    /// der Liste festgeschrieben werden, bevor eine Löschung überhaupt
+    /// greifen kann.
+    @Relationship(deleteRule: .cascade, inverse: \Einkaufsvorgang.einkaufsliste)
     var einkaufsvorgaenge: [Einkaufsvorgang] = []
 
     init(name: String) {

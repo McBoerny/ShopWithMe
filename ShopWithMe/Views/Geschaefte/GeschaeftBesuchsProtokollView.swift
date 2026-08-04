@@ -1,22 +1,20 @@
 import SwiftUI
 import SwiftData
 
-/// Protokoll aller abgeschlossenen Einkaufsbesuche in einem Geschäft — Zeitpunkt
-/// und Dauer, direkt aus den ohnehin vorhandenen ``Einkaufsvorgang``-Daten
-/// (``Einkaufsvorgang/startZeit``/``Einkaufsvorgang/endZeit``) abgeleitet, ohne
-/// eigenes Datenmodell (GitHub #32) — jeder abgeschlossene Einkaufsvorgang in
-/// diesem Geschäft *ist* bereits ein Besuchsprotokoll-Eintrag.
+/// Protokoll aller abgeschlossenen Einkaufsbesuche in einem Geschäft — Zeitpunkt,
+/// Dauer und Produktanzahl aus ``GeschaeftBesuch`` (seit 2026-08-04, siehe
+/// `docs/GESCHAEFTS_AGGREGATE.md`; vormals direkt aus ``Einkaufsvorgang``
+/// abgeleitet, GitHub #32) — dauerhaft, unabhängig davon, ob die
+/// ``Einkaufsliste`` des ursprünglichen Einkaufs noch existiert.
 struct GeschaeftBesuchsProtokollView: View {
     let geschaeft: Geschaeft
-    @Query private var einkaufsvorgaenge: [Einkaufsvorgang]
+    @Query private var besuche: [GeschaeftBesuch]
 
     init(geschaeft: Geschaeft) {
         self.geschaeft = geschaeft
         let geschaeftID = geschaeft.persistentModelID
-        _einkaufsvorgaenge = Query(
-            filter: #Predicate<Einkaufsvorgang> {
-                $0.geschaeft?.persistentModelID == geschaeftID && $0.endZeit != nil
-            },
+        _besuche = Query(
+            filter: #Predicate<GeschaeftBesuch> { $0.geschaeft?.persistentModelID == geschaeftID },
             sort: [SortDescriptor(\.startZeit, order: .reverse)]
         )
     }
@@ -33,19 +31,22 @@ struct GeschaeftBesuchsProtokollView: View {
 
     var body: some View {
         List {
-            ForEach(einkaufsvorgaenge) { vorgang in
-                if let endZeit = vorgang.endZeit {
-                    HStack {
-                        Text(vorgang.startZeit, format: Self.datumsFormat)
-                        Spacer()
-                        Text(dauerText(von: vorgang.startZeit, bis: endZeit))
+            ForEach(besuche) { besuch in
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text(besuch.startZeit, format: Self.datumsFormat)
+                        Text("\(besuch.anzahlProdukte) Produkte")
+                            .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                    Spacer()
+                    Text(dauerText(von: besuch.startZeit, bis: besuch.endZeit))
+                        .foregroundStyle(.secondary)
                 }
             }
         }
         .overlay {
-            if einkaufsvorgaenge.isEmpty {
+            if besuche.isEmpty {
                 ContentUnavailableView(
                     "Noch keine Einkäufe",
                     systemImage: "clock.arrow.circlepath",
@@ -72,5 +73,5 @@ struct GeschaeftBesuchsProtokollView: View {
     NavigationStack {
         GeschaeftBesuchsProtokollView(geschaeft: Geschaeft(name: "Rewe", typen: [GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")]))
     }
-    .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self, Einkaufsvorgang.self], inMemory: true)
+    .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self, GeschaeftBesuch.self], inMemory: true)
 }

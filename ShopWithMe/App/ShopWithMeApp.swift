@@ -54,6 +54,7 @@ struct ShopWithMeApp: App {
         Geschaeft.typenMigrierenFallsNoetig(context: context)
         ArtikelKategorie.geschaeftsTypenMigrierenFallsNoetig(context: context)
         KaufEintrag.preisverlaufMigrierenFallsNoetig(context: context)
+        DatenintegritaetsService.migriereGeschaeftsAggregateFallsNoetig(context: context)
         DatenintegritaetsService.raeumeLeereListenloseVorgaengeAuf(context: context)
         DatenintegritaetsService.pruefe(context: context)
         try? context.save()
