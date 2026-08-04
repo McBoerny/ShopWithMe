@@ -184,20 +184,12 @@ enum SyncExportService {
     }
 
     /// Schreibt über `NSFileCoordinator`, damit File-Provider-Erweiterungen
-    /// (iCloud Drive/Synology Drive/…) von der Änderung erfahren — analog zum
-    /// bestehenden Muster in ``DatabaseLeaseService``.
+    /// (iCloud Drive/Synology Drive/…) von der Änderung erfahren — dünner
+    /// Wrapper um ``SyncDateiZugriff/schreibeKoordiniert(_:nach:)`` (Single
+    /// Source of Truth für dieses Coordinator-Muster, siehe dort), Name/
+    /// Signatur hier unverändert beibehalten, um alle bestehenden
+    /// Aufrufstellen unangetastet zu lassen.
     nonisolated private static func schreibeBlocking(_ daten: Data, nach url: URL) -> Bool {
-        let coordinator = NSFileCoordinator()
-        var coordinatorFehler: NSError?
-        var erfolgreich = false
-        coordinator.coordinate(writingItemAt: url, options: [], error: &coordinatorFehler) { zielURL in
-            do {
-                try daten.write(to: zielURL, options: .atomic)
-                erfolgreich = true
-            } catch {
-                erfolgreich = false
-            }
-        }
-        return coordinatorFehler == nil && erfolgreich
+        SyncDateiZugriff.schreibeKoordiniert(daten, nach: url)
     }
 }

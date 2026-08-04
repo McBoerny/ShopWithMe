@@ -1,5 +1,61 @@
 # Changelog
 
+## v0.12 (Build 228) — Code-Review-Fixes für den Multipeer-Beschleunigungskanal (GitHub #49)
+
+Ultra-Review (8 Finder-Winkel, 9-fach unabhängig verifiziert) über den Build-227-Diff
+fand sieben reale Bugs und zwei Cleanup-Punkte, alle gefixt:
+
+- **Race: Datei-Batch-Import vs. Multipeer-Sofort-Anwendung.** `importiereNeueEvents`
+  hielt seinen `gewinner`-Index über mehrere `await`-Punkte hinweg unverändert, während
+  ein per Multipeer empfangenes Event auf einem separaten `@MainActor`-Task denselben
+  Konflikt bereits entscheiden konnte — der Batch-Zyklus konnte den gerade erst korrekt
+  gesetzten Zustand danach mit einem veralteten Snapshot überschreiben. Neue Sperre
+  `SyncImportService.batchZyklusLaeuft`: `wendeEinzelnesEmpfangenesEventAn` tut während
+  eines laufenden Batch-Zyklus bewusst nichts (kein Datenverlust, der Datei-Kanal liefert
+  dasselbe Event ohnehin zusätzlich).
+- **Race: Gruppen-ID-Marker-Datei.** `multipeerGruppenID(in:)` war ein ungeschütztes
+  Read-then-write — zwei überlappende `starteAdvertisingUndBrowsing()`-Aufrufe (schnelles
+  Verlassen+Wiederbetreten von `EinkaufenView`) konnten unterschiedliche UUIDs
+  lesen/schreiben. Neue synchrone `wirdAufgebaut`-Sperre (vor dem ersten `await` gesetzt)
+  verhindert überlappende Aufrufe vollständig.
+- **scenePhase `.inactive` beendete den Multipeer-Kanal dauerhaft.** `stoppen()` lief auch
+  bei kurzen Unterbrechungen (Anrufbanner, Kontrollzentrum), setzte aber `aktiv` nicht
+  zurück — `starten()` prüfte `aktiv` nicht erneut, der Kanal blieb für den Rest der
+  Einkaufssitzung tot. `starten(context:)` startet Advertising/Browsing jetzt erneut,
+  falls `aktiv` bereits `true`, aber `session` `nil` ist.
+- **UTF8-Kürzung von `MCPeerID.displayName` konnte über dem 63-Byte-Limit bleiben.** Das
+  manuelle Byte-Array-Trimmen entfernte nur Continuation-Bytes, nie einen angeschnittenen
+  Leading-Byte — belegt durch einen Repro-Fall, der nach der „Kürzung" weiterhin über dem
+  Limit lag. Ersetzt durch `Character`-weises `removeLast()`, das nie mitten in einer
+  Mehrbyte-Sequenz schneidet.
+- **`#Preview`-Blöcke fehlten das neue `MultipeerSyncService`-EnvironmentObject** in
+  `EinkaufenView.swift` und `App/RootView.swift` — Absturz beim Öffnen der Xcode-Canvas-
+  Preview. Ergänzt.
+- **Voller `SyncEvent`-Tabellen-Scan pro einzelnem Multipeer-Event**, entgegen der eigenen
+  Dokumentation von `alleAktuellenGewinnerUndBekannteIDs` ("nur für den Batch-
+  Anwendungsfall"). `wendeEinzelnesEmpfangenesEventAn` prüft jetzt zuerst günstig
+  `istBereitsBekannt`, dann die gezielte Einzelabfrage `aktuellerGewinner` statt eines
+  vollen Index-Aufbaus.
+- **Parameter-Schatten + asymmetrischer Peer-Guard:** der Einladungs-Kontext-Parameter
+  hieß `context` und verdeckte die gleichnamige `ModelContext?`-Property; der
+  Gruppen-Schlüssel-Check war zwischen Advertiser/Browser dupliziert, nur die
+  Browser-Seite prüfte bereits verbundene Peers. Umbenannt zu `gruppenContext`,
+  gemeinsamer `passtGruppenSchluessel(_:)`-Helfer, Guard auf beiden Seiten.
+- **Cleanup:** `SyncExportService.schreibeBlocking`/`SyncSnapshotExportService.schreibeBlocking`
+  delegieren jetzt an `SyncDateiZugriff.schreibeKoordiniert` statt das
+  `NSFileCoordinator`-Schreib-Muster ein drittes Mal zu duplizieren (Signaturen
+  unverändert, keine Aufrufstelle betroffen).
+
+**Bewusst nicht verändert:** Das im Review ebenfalls aufgezeigte, aber explizit
+dokumentierte Vertrauensmodell (Zertifikat wird ungeprüft akzeptiert, Gruppen-Schlüssel
+wandert vor Verbindungsaufbau unverschlüsselt über `discoveryInfo`/Einladungs-Kontext) —
+schwächer als das bisherige Datei-Kanal-Vorbild, aber eine Design-Entscheidung, keine
+versehentliche Regression. Zurückgestellt zur bewussten Entscheidung, nicht automatisch
+gehärtet.
+
+Kein SwiftData-Modell betroffen. Build/Test grün (35 Suiten/284 Tests), Simulator- und
+Geräte-Build sauber.
+
 ## v0.12 (Build 227) — GitHub #49: Multipeer-Beschleunigungskanal für die Datensynchronisation
 
 - Neuer, rein additiver Sync-Kanal (``MultipeerSyncService``) neben dem

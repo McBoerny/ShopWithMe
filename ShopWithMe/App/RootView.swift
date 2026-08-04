@@ -135,4 +135,5 @@ private struct AusstehenderImport: Identifiable {
 #Preview {
     RootView()
         .environmentObject(SyncPollingService())
+        .environmentObject(MultipeerSyncService())
 }

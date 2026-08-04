@@ -71,10 +71,26 @@ final class MultipeerSyncService: NSObject, ObservableObject {
     /// — erst nach dem asynchronen Auflösen in ``starteAdvertisingUndBrowsing()``
     /// gesetzt, für den Abgleich in beiden Delegate-Methoden zwischengespeichert.
     private var gruppenSchluessel: String?
+    /// Synchron (vor dem ersten `await` in ``starteAdvertisingUndBrowsing()``)
+    /// gesetzte Sperre gegen überlappende Aufrufe — siehe dort.
+    private var wirdAufgebaut = false
 
+    /// Setzt `context`/`Self.aktuell` neu — z.B. beim App-Start oder bei
+    /// jeder Rückkehr zu `scenePhase == .active`. Prüft dabei zusätzlich, ob
+    /// `aktiv` (von `EinkaufenView`) bereits `true` ist, aber `session` fehlt:
+    /// genau dieser Zustand entsteht, wenn `scenePhase` zwischenzeitlich kurz
+    /// auf `.inactive` sprang (z.B. Anrufbanner, Kontrollzentrum, ein
+    /// System-Dialog — nicht nur echtes Backgrounding) und `stoppen()` dabei
+    /// die Verbindung beendet hat, OHNE dass `EinkaufenView` je verlassen
+    /// wurde — `aktiv` bleibt in diesem Fall unverändert `true`, `didSet`
+    /// feuert also nicht erneut, und ohne diesen expliziten Neustart bliebe
+    /// der Multipeer-Kanal für den Rest der Einkaufssitzung stumm tot.
     func starten(context: ModelContext) {
         self.context = context
         Self.aktuell = self
+        if aktiv, session == nil {
+            Task { await starteAdvertisingUndBrowsing() }
+        }
     }
 
     /// Beendet auch ein evtl. noch laufendes Advertising/Browsing — z.B. beim
@@ -94,21 +110,31 @@ final class MultipeerSyncService: NSObject, ObservableObject {
     /// konfigurierten Sync-Ordner passiert nichts — dieser Kanal ist rein
     /// additiv zum Datei-Kanal, nie ein eigenständiger Ersatz.
     private func starteAdvertisingUndBrowsing() async {
-        guard aktiv, session == nil, let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return }
+        // `!wirdAufgebaut` synchron VOR dem ersten `await` geprüft und
+        // gesetzt (kein Suspension-Point dazwischen) — ein zweiter,
+        // überlappender Aufruf (schnelles Verlassen+Wiederbetreten von
+        // `EinkaufenView`, oder ein erneuter `starten(context:)` nach kurzem
+        // `.inactive`) bricht dadurch sofort ab, statt ebenfalls
+        // `SyncOrdnerService.multipeerGruppenID(in:)` aufzurufen — sonst
+        // könnten beide Aufrufe unabhängig eine je eigene, unterschiedliche
+        // Gruppen-ID lesen/erzeugen und die spätere Schreibung würde die
+        // frühere still überschreiben, während der GEWINNENDE In-Memory-
+        // Aufruf nicht zwingend die tatsächlich persistierte ID verwendet
+        // (Live-Test/Review-Fund) — ein Gerät würde dann dauerhaft mit einer
+        // vom eigenen Marker-Dateiinhalt abweichenden ID advertisen.
+        guard aktiv, session == nil, !wirdAufgebaut, let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return }
         guard syncOrdner.startAccessingSecurityScopedResource() else { return }
-        defer { syncOrdner.stopAccessingSecurityScopedResource() }
+        wirdAufgebaut = true
+        defer {
+            syncOrdner.stopAccessingSecurityScopedResource()
+            wirdAufgebaut = false
+        }
 
         let gruppenID = await Task.detached(priority: .utility) {
             SyncOrdnerService.multipeerGruppenID(in: syncOrdner)
         }.value
         // Währenddessen evtl. wieder deaktiviert (EinkaufenView bereits
-        // verlassen) — dann nicht mehr verbinden. Ebenso `session != nil`:
-        // ein schnelles Verlassen+Wiederbetreten von `EinkaufenView` kann
-        // einen zweiten, überlappenden Aufruf dieser Funktion ausgelöst
-        // haben, dessen Gruppen-ID-Auflösung zuerst fertig wurde — ohne
-        // diesen zweiten Check würde der spätere Aufruf `session`/
-        // `advertiser`/`browser` überschreiben und die zuerst erzeugten
-        // Instanzen liefen unbeaufsichtigt (und unstoppbar) weiter.
+        // verlassen) — dann nicht mehr verbinden.
         guard aktiv, session == nil else { return }
 
         let schluessel = SyncOrdnerService.multipeerDiscoveryGruppenSchluessel(fuerGruppenID: gruppenID)
@@ -137,16 +163,19 @@ final class MultipeerSyncService: NSObject, ObservableObject {
     /// `MCPeerID.displayName` erlaubt laut `MCPeerID.h` max. 63 **Bytes** in
     /// UTF8, nicht Zeichen — ein einfaches `.prefix(63)` auf den Gerätenamen
     /// würde bei Mehrbyte-Zeichen (Umlaute, Emoji) zu lang bleiben können.
-    /// Kürzt stattdessen sicher auf UTF8-Byte-Ebene, ohne mitten in einer
-    /// Mehrbyte-Sequenz abzuschneiden.
+    /// Entfernt deshalb ganze `Character`s (Extended Grapheme Cluster) vom
+    /// Ende, bis das UTF8-Byte-Budget eingehalten ist — ein früherer Versuch,
+    /// stattdessen einzelne rohe UTF8-Bytes manuell abzuschneiden, konnte
+    /// eine angeschnittene Mehrbyte-Sequenz hinterlassen (Review-Fund,
+    /// belegt: bei 62 ASCII-Zeichen + einem 3-Byte-Zeichen blieb das Ergebnis
+    /// weiterhin über dem Limit). `Character.utf8`-Grenzen fallen dagegen nie
+    /// mitten in eine Byte-Sequenz.
     private static func displayNameSicherBegrenzt(_ name: String) -> String {
-        var bytes = Array(name.utf8)
-        guard bytes.count > 63 else { return name }
-        bytes = Array(bytes.prefix(63))
-        while let letztes = bytes.last, letztes & 0b1100_0000 == 0b1000_0000 {
-            bytes.removeLast()
+        var ergebnis = name
+        while ergebnis.utf8.count > 63 {
+            ergebnis.removeLast()
         }
-        return String(decoding: bytes, as: UTF8.self)
+        return ergebnis
     }
 
     private func beendeAdvertisingUndBrowsing() {
@@ -167,6 +196,16 @@ final class MultipeerSyncService: NSObject, ObservableObject {
         guard let session, !session.connectedPeers.isEmpty else { return }
         guard let daten = try? JSONEncoder().encode(darstellung) else { return }
         try? session.send(daten, toPeers: session.connectedPeers, with: .reliable)
+    }
+
+    /// Gemeinsamer Gruppen-Trust-Check für beide Delegate-Seiten (Browsing
+    /// über `discoveryInfo`, Advertising über den Einladungs-`context`) —
+    /// eine Stelle statt zweier unabhängig gepflegter Vergleiche, die sonst
+    /// bei einer künftigen Änderung des Vertrauens-Checks auseinanderlaufen
+    /// könnten.
+    private func passtGruppenSchluessel(_ empfangen: String?) -> Bool {
+        guard let gruppenSchluessel else { return false }
+        return empfangen == gruppenSchluessel
     }
 }
 
@@ -234,22 +273,27 @@ extension MultipeerSyncService: MCSessionDelegate {
 
 extension MultipeerSyncService: MCNearbyServiceAdvertiserDelegate {
     /// Nur annehmen, wenn der von ``browser(_:foundPeer:withDiscoveryInfo:)``
-    /// als Einladungs-`context` mitgesendete Gruppen-Schlüssel zum eigenen
+    /// als Einladungs-Kontext mitgesendete Gruppen-Schlüssel zum eigenen
     /// passt (Typ-Doku „Vertrauensmodell") — kein manuelles Pairing-UI, aber
     /// auch kein blindes Annehmen jeder Einladung allein auf Basis des
-    /// (app-weit festen) Service-Types.
+    /// (app-weit festen) Service-Types. Parameter bewusst `gruppenContext`
+    /// benannt (nicht `context`, wie der externe Label `withContext:` nahelegen
+    /// würde) — die Klasse hat bereits eine gleichnamige `context:
+    /// ModelContext?`-Property, ein `context`-Parameter hier würde sie
+    /// innerhalb dieser Methode ohne Warnung verdecken.
     nonisolated func advertiser(
         _ advertiser: MCNearbyServiceAdvertiser, didReceiveInvitationFromPeer peerID: MCPeerID,
-        withContext context: Data?, invitationHandler: @escaping @Sendable (Bool, MCSession?) -> Void
+        withContext gruppenContext: Data?, invitationHandler: @escaping @Sendable (Bool, MCSession?) -> Void
     ) {
         Task { @MainActor [weak self] in
-            guard let self, let eigenerSchluessel = self.gruppenSchluessel,
-                  let context, String(data: context, encoding: .utf8) == eigenerSchluessel
+            guard let self, let session = self.session,
+                  self.passtGruppenSchluessel(gruppenContext.flatMap { String(data: $0, encoding: .utf8) }),
+                  !session.connectedPeers.contains(peerID)
             else {
                 invitationHandler(false, nil)
                 return
             }
-            invitationHandler(true, self.session)
+            invitationHandler(true, session)
         }
     }
 }
@@ -268,7 +312,7 @@ extension MultipeerSyncService: MCNearbyServiceBrowserDelegate {
     nonisolated func browser(_ browser: MCNearbyServiceBrowser, foundPeer peerID: MCPeerID, withDiscoveryInfo info: [String: String]?) {
         Task { @MainActor [weak self] in
             guard let self, let session = self.session, let eigenerSchluessel = self.gruppenSchluessel,
-                  info?[Self.discoveryInfoSchluessel] == eigenerSchluessel,
+                  self.passtGruppenSchluessel(info?[Self.discoveryInfoSchluessel]),
                   !session.connectedPeers.contains(peerID)
             else { return }
             browser.invitePeer(peerID, to: session, withContext: Data(eigenerSchluessel.utf8), timeout: 30)

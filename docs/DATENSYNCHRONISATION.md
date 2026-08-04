@@ -714,6 +714,16 @@ kompletten `kaeufe/`-Ordners, aber ohne `events/` anzutasten.
   und bringt der Kanal die erhoffte spürbare Latenzverbesserung gegenüber dem
   Datei-Kanal (vergleichbar über `multipeer_event_empfangen` vs.
   `sync_event_empfangen` im Sync-Debug-Protokoll, siehe `docs/LOGGING.md`).
+- **Multipeer-Vertrauensmodell schwächer als das Datei-Kanal-Vorbild
+  (Code-Review-Fund, bewusst so belassen, siehe `docs/CHANGELOG.md`):** das
+  TLS-Zertifikat wird ungeprüft akzeptiert, und der Gruppen-Schlüssel wandert
+  vor dem eigentlichen `MCSession`-Aufbau unverschlüsselt über
+  `discoveryInfo`/den Einladungs-Kontext — anders als der Datei-Kanal, dessen
+  Vertrauensmerkmal (Zugriff auf den geteilten Ordner) nie im Klartext übers
+  lokale Netz geht. Ein Gerät in Funkreichweite könnte diesen Wert passiv
+  mitschneiden und wiederverwenden. Härtung (z.B. Challenge-Response statt
+  Wiederverwendung des statischen Schlüssels) wäre möglich, aber bewusst eine
+  spätere, eigene Entscheidung — kein Versehen.
 - **Unerreichbare Vorgeschichte:** Einkaufslisten-Einträge, die entstanden,
   bevor Bereich-A-Events bzw. der volle Snapshot-Inhalt existierten, wurden
   nie als Event aufgezeichnet und stecken in keinem historischen Snapshot —

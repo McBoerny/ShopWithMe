@@ -52,6 +52,22 @@ enum SyncImportService {
     /// verkürzen können.
     @MainActor static var maximalesEventAlterFuerRetry: TimeInterval = 48 * 60 * 60
 
+    /// Läuft gerade ein vollständiger Batch-Zyklus (``importiereNeueEvents(context:)``)?
+    /// Dessen `gewinner`-Index wird einmalig zu Beginn gebaut und über mehrere
+    /// `await`-Punkte (Datei-I/O, teils mehrere Sekunden) hinweg unverändert
+    /// weiterverwendet — währenddessen kann ein per Multipeer (GitHub #49,
+    /// ``MultipeerSyncService``) empfangenes Event, das auf einem eigenen
+    /// `@MainActor`-`Task` unabhängig materialisiert wird, denselben
+    /// (`bezugsID`,`artikelID`)-Konflikt bereits entscheiden, ohne dass der
+    /// Batch-Zyklus davon erfährt — sein veralteter Snapshot könnte danach ein
+    /// eigentlich unterlegenes Event fälschlich für gewinnend halten und den
+    /// gerade erst korrekt gesetzten Zustand überschreiben. Diese Sperre lässt
+    /// ``wendeEinzelnesEmpfangenesEventAn(_:context:)`` währenddessen bewusst
+    /// nichts tun (siehe dort) — kein Datenverlust, da dasselbe Event dem
+    /// Absender ohnehin zusätzlich als Datei vorliegt und beim nächsten
+    /// regulären Zyklus ganz normal übernommen wird.
+    @MainActor private(set) static var batchZyklusLaeuft = false
+
     /// Debug-Werkzeug für manuelle Statuskonsolidierung
     /// (``SyncOrdnerSettingsView``): gibt alle aktuell nicht anwendbaren
     /// empfangenen Events sofort auf, statt auf ``maximalesEventAlterFuerRetry``
@@ -81,9 +97,11 @@ enum SyncImportService {
             SyncDebugLogger.log(.ordnerZugriffFehlgeschlagen, details: "importiereNeueEvents")
             return false
         }
+        batchZyklusLaeuft = true
         defer {
             syncOrdner.stopAccessingSecurityScopedResource()
             SyncOrdnerZugriffsDiagnose.markiereSchliessen(aufrufstelle: "importiereNeueEvents")
+            batchZyklusLaeuft = false
         }
 
         let peersOrdner = syncOrdner.appendingPathComponent("peers", isDirectory: true)
@@ -146,18 +164,40 @@ enum SyncImportService {
     /// Konfliktauflösung/Materialisierung wie beim Datei-Import
     /// (``wendeAn(_:gewinner:context:)``), nur für ein einzelnes Event statt
     /// einen ganzen Peer-Ordner-Batch, damit hier keine zweite, parallel
-    /// gepflegte Kopie dieser Logik entsteht. Baut dafür einmalig einen
-    /// Gewinner-Index über den kompletten lokalen Bestand auf
-    /// (``SyncEventService/alleAktuellenGewinnerUndBekannteIDs(context:)``) —
-    /// für den seltenen Einzel-Empfang unkritisch teurer als der
-    /// batch-optimierte Datei-Import-Pfad. Speichert nur bei tatsächlicher
-    /// Änderung (gleiches `hasChanges`-Muster wie ``importiereNeueEvents(context:)``);
-    /// Idempotenz kommt gratis aus ``SyncEventService/istBereitsBekannt(_:context:)``
-    /// — ein später auch über den Datei-Kanal eintreffendes, hier bereits
-    /// übernommenes Event wird beim regulären Import einfach übersprungen.
+    /// gepflegte Kopie dieser Logik entsteht.
+    ///
+    /// **Kein Batch-Index-Aufbau:** Anders als ``importiereNeueEvents(context:)``
+    /// baut diese Funktion NICHT ``SyncEventService/alleAktuellenGewinnerUndBekannteIDs(context:)``
+    /// auf (laut deren eigener Doku „nur für diesen Batch-Anwendungsfall") —
+    /// bei aktivem Multipeer-Kanal trifft jede einzelne lokale Liste-/
+    /// Abhak-Aktion auf beiden Geräten sofort hier ein, ein voller
+    /// Tabellen-Scan+Decode pro Event ist dafür kein seltener, sondern der
+    /// normale Fall. Stattdessen zuerst der günstige Duplikat-Check
+    /// (``SyncEventService/istBereitsBekannt(_:context:)``, bricht früh ab,
+    /// bevor überhaupt etwas dekodiert wird — dasselbe Event trifft z.B. oft
+    /// zusätzlich später über den Datei-Kanal ein), dann bei Bedarf die
+    /// gezielte Einzelabfrage ``SyncEventService/aktuellerGewinner(bezugsID:artikelID:context:)``
+    /// für nur das eine betroffene Paar statt eines vollen Index.
+    ///
+    /// **Läuft parallel kein Datei-Batch-Zyklus:** siehe ``batchZyklusLaeuft``
+    /// — während `importiereNeueEvents(context:)` seinen eigenen, über
+    /// mehrere `await`-Punkte hinweg unveränderten Gewinner-Snapshot nutzt,
+    /// bewusst nichts tun, um dessen Entscheidung nicht mit einem hier
+    /// zwischenzeitlich materialisierten, dem Snapshot unbekannten Ergebnis
+    /// zu unterlaufen. Kein Datenverlust: der Datei-Kanal liefert dasselbe
+    /// Event ohnehin zusätzlich, spätestens beim nächsten Zyklus.
     @MainActor
     static func wendeEinzelnesEmpfangenesEventAn(_ empfangen: SyncEventExportDarstellung, context: ModelContext) {
-        var (gewinner, _) = SyncEventService.alleAktuellenGewinnerUndBekannteIDs(context: context)
+        guard !batchZyklusLaeuft else { return }
+        guard !SyncEventService.istBereitsBekannt(empfangen.id, context: context) else { return }
+
+        var gewinner: [SyncEventService.PaarSchluessel: SyncEvent] = [:]
+        if let nutzlast = try? JSONDecoder().decode(SyncEventNutzlast.self, from: empfangen.nutzlast) {
+            let schluessel = SyncEventService.PaarSchluessel(bezugsID: nutzlast.bezugsID, artikelID: nutzlast.artikelID)
+            if let bisheriger = SyncEventService.aktuellerGewinner(bezugsID: nutzlast.bezugsID, artikelID: nutzlast.artikelID, context: context) {
+                gewinner[schluessel] = bisheriger
+            }
+        }
         wendeAn(empfangen, gewinner: &gewinner, context: context)
         guard context.hasChanges else { return }
         try? context.save()

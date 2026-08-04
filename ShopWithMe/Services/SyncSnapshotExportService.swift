@@ -255,22 +255,14 @@ enum SyncSnapshotExportService {
     }
 
     /// Schreibt über `NSFileCoordinator`, damit File-Provider-Erweiterungen von
-    /// der Änderung erfahren — analog zum bestehenden Muster in
-    /// ``DatabaseLeaseService``/``SyncExportService``. Bewusst nicht `private`
-    /// — von ``SyncKaeufeExportService`` mitgenutzt.
+    /// der Änderung erfahren — dünner Wrapper um
+    /// ``SyncDateiZugriff/schreibeKoordiniert(_:nach:)`` (Single Source of
+    /// Truth für dieses Coordinator-Muster, siehe dort). Bewusst nicht
+    /// `private` — von ``SyncKaeufeExportService`` mitgenutzt, Name/Signatur
+    /// hier unverändert beibehalten, um alle bestehenden Aufrufstellen
+    /// unangetastet zu lassen.
     nonisolated static func schreibeBlocking(_ daten: Data, nach url: URL) -> Bool {
-        let coordinator = NSFileCoordinator()
-        var coordinatorFehler: NSError?
-        var erfolgreich = false
-        coordinator.coordinate(writingItemAt: url, options: [], error: &coordinatorFehler) { zielURL in
-            do {
-                try daten.write(to: zielURL, options: .atomic)
-                erfolgreich = true
-            } catch {
-                erfolgreich = false
-            }
-        }
-        return coordinatorFehler == nil && erfolgreich
+        SyncDateiZugriff.schreibeKoordiniert(daten, nach: url)
     }
 
     // MARK: - Paket-Format (GitHub #82)
