@@ -1501,7 +1501,7 @@ private struct EinkaufslisteView: View {
         // zeitfenster-beschränkten Fetch erneut zu raten, und bewusst ALLE
         // (nicht nur den ersten) Treffer zu entfernen — sonst bliebe bei
         // einem doppelt abgehakten Artikel (zwei offene Vorgänge, siehe
-        // ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:indexFuerDistanzlernen:kategorie:geschaeft:)``)
+        // ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:kategorie:geschaeft:)``)
         // der zweite Eintrag bestehen und der Artikel scheinbar weiterhin
         // „abgehakt".
         let artikelReferenz = ModelReference(artikel)

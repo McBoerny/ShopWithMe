@@ -416,7 +416,9 @@ struct SyncImportServiceTests {
         let apfelEintrag = einkauf.kaufEintraege.first { $0.artikel == apfel }
         let birnenEintrag = einkauf.kaufEintraege.first { $0.artikel == birne }
         #expect(apfelEintrag?.kategorieBesuchsIndex == 0)
+        #expect(apfelEintrag?.ursprungsGeraeteID == nil)
         #expect(birnenEintrag?.kategorieBesuchsIndex == nil)
+        #expect(birnenEintrag?.ursprungsGeraeteID == "fremdes-geraet")
         #expect(birnenEintrag?.kategorie == obst)
         #expect(!liste.enthaelt(birne))
     }

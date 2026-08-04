@@ -63,7 +63,8 @@ farbeHex: String (UI-los)            startZeit: Date            geschaeft: Gesch
 kategorie: ArtikelKategorie? (führend) endZeit: Date?           datum: Date
 kategorienRaw: [ArtikelKategorie] (→kategorien)                  menge: Double
 erstelltAm: Date                     kaufEintraege: [KaufEintrag]  kategorieBesuchsIndex: Int?
-notiz: String?
+notiz: String?                                                     ursprungsGeraeteID: String?
+                                                                      (nil = lokal, GitHub #68)
 einheitRaw: String?                  Preispunkt (GitHub #76 — Preishistorie, unabhängig vom Einkaufsvorgang)
 mengenSchrittRaw: Double?            ──────────
 ┌einkaufslistenEintraege:            id: UUID

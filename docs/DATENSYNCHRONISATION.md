@@ -336,6 +336,11 @@ des SENDENDEN Geräts durchs Geschäft, nicht die dieses Geräts, und würde
 `AbteilungsDistanzService` sonst mit einer erfundenen Position füttern.
 `Einkaufsvorgang.naechsterKategorieBesuchsIndex` ignoriert indexlose Einträge
 bei der Suche nach einem bereits vergebenen Index für dieselbe Kategorie.
+Seit GitHub #68 ist das keine reine Call-Site-Disziplin mehr: `KaufEintrag`
+trägt dafür ein eigenes `ursprungsGeraeteID: String?` (`nil` = lokal
+entstanden, sonst die Geräte-ID des Peers), und `KaufEintrag.init` löscht
+`kategorieBesuchsIndex` zentral im Typ selbst, sobald `ursprungsGeraeteID`
+gesetzt ist — unabhängig davon, was ein (auch künftiger) Aufrufer übergibt.
 
 **Geschäft kommt aus der Nutzlast, nicht aus dem Container-Vorgang (GitHub
 #66):** `SyncEventNutzlast.geschaeftID` (additiv-optional) trägt das beim

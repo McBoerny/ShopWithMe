@@ -2846,3 +2846,34 @@ stuft den Befund dennoch als ausreichend ein, um dieses Issue zu schließen
 Wirkung unbestätigte Ergänzung im Code, für einen späteren gezielten
 Vergleichstest (Picker kurz deaktivieren, sonst gleiche Bedingungen)
 offen.
+
+## 44. GitHub #68: `KaufEintrag.ursprungsGeraeteID` — Ursprungs-Unterdrückung zentral im Typ statt an zwei Call-Sites
+
+**Ausgangslage:** Die Regel „ein von einem anderen Gerät materialisierter/
+gemergter `KaufEintrag` bekommt nie einen `kategorieBesuchsIndex`" (siehe
+Abschnitt oben zu `SyncEventNutzlast.geschaeftID`/GitHub #66, sowie
+`docs/DATENSYNCHRONISATION.md`) war nur an zwei unabhängigen, von Hand
+gepflegten Call-Sites umgesetzt: `SyncImportService.materialisiere`
+(`indexFuerDistanzlernen: false`) und `SyncSnapshotImportService.
+mergeKaufEintraege` (hartcodiertes `kategorieBesuchsIndex: nil`). `KaufEintrag`
+selbst führte — anders als `SyncEvent.autorGeraeteID` — keine Information
+darüber, ob er lokal oder remote entstanden ist. Bei Prüfung des Issues
+zeigte sich, dass die befürchtete Gefahr ("ein künftiger dritter
+Entstehungsweg vergisst die Regel") bereits eingetreten war: `BelegScanView`
+legt seit einer früheren Änderung einen dritten, direkten
+`KaufEintrag(...)`-Konstruktionsort an, der außerhalb beider bekannten
+Unterdrückungsstellen liegt (zufällig unschädlich, da kein
+`kategorieBesuchsIndex`-Argument übergeben wurde).
+
+**Fix:** Neues additiv-optionales Attribut `KaufEintrag.ursprungsGeraeteID:
+String?` (`nil` = lokal entstanden, sonst die Geräte-ID des Peers, von dem
+der Eintrag per Sync-Event oder Snapshot übernommen wurde — analog
+`SyncEvent.autorGeraeteID`). `KaufEintrag.init` erzwingt jetzt zentral:
+`kategorieBesuchsIndex` wird verworfen, sobald `ursprungsGeraeteID != nil`,
+unabhängig davon, was der Aufrufer übergibt. Die beiden bisherigen
+Call-Sites übergeben jetzt die tatsächliche Urheber-Geräte-ID
+(`SyncEventExportDarstellung.autorGeraeteID` bzw. `manifest.geraeteID`/
+`peerGeraeteID`) statt eines reinen Bool-Flags — ein künftiger vierter
+Entstehungsweg kann den ursprünglichen Fehler dadurch nicht mehr machen.
+Keine neue `SchemaVN`/`MigrationStage` nötig (additiv-optionales Attribut,
+siehe `docs/BUILD_WORKFLOW.md`).

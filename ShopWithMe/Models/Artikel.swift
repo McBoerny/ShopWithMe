@@ -162,7 +162,7 @@ extension Artikel {
     /// Beste Schätzung der Kategorie eines Artikels in `geschaeft`, wenn keine
     /// explizite Sektionsauswahl vorliegt (Belegscan, Preisschild-Scan,
     /// Sync-Import empfangener Bereich-A-Events — siehe
-    /// ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:indexFuerDistanzlernen:kategorie:)``,
+    /// ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:kategorie:)``,
     /// deren `kategorie`-Parameter für die reguläre Einkaufsliste bevorzugt
     /// genutzt wird).
     ///

@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.11 (Build 225) — GitHub #68: KaufEintrag.ursprungsGeraeteID zentralisiert Ursprungs-Unterdrückung
+
+- `KaufEintrag` bekommt ein neues additiv-optionales Attribut
+  `ursprungsGeraeteID: String?` (`nil` = lokal entstanden, sonst die
+  Geräte-ID des Peers, von dem der Eintrag per Sync-Event oder Snapshot
+  übernommen wurde — analog `SyncEvent.autorGeraeteID`).
+- Die Regel „ein fremd entstandener `KaufEintrag` bekommt nie einen
+  `kategorieBesuchsIndex`" (sonst würde die ladenspezifische, von
+  `AbteilungsDistanzService` gelernte Distanzmatrix mit der Laufreihenfolge
+  eines anderen Geräts verfälscht) war bisher nur an zwei unabhängigen
+  Call-Sites (`SyncImportService.materialisiere`,
+  `SyncSnapshotImportService.mergeKaufEintraege`) von Hand nachgebildet.
+  `KaufEintrag.init` erzwingt sie jetzt zentral im Typ selbst — ein
+  künftiger weiterer Konstruktionsort kann sie nicht mehr vergessen.
+- Additiv-optional: keine neue `SchemaVN`/`MigrationStage` nötig, siehe
+  `docs/BUILD_WORKFLOW.md` → „SwiftData-Migration: wann welche
+  Schema-Version?".
+
 ## v0.11 (Build 223) — Fix: WarengruppenDistanzPeerZaehlerStand fehlte im SwiftData-Schema (GitHub #87)
 
 - `WarengruppenDistanzPeerZaehlerStand` (der Peer-Zähler-Baustein aus dem

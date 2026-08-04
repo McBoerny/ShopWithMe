@@ -1293,6 +1293,7 @@ struct SyncSnapshotImportServiceTests {
 
         let eintrag = try #require(try context.fetch(FetchDescriptor<KaufEintrag>()).first)
         #expect(eintrag.kategorieBesuchsIndex == nil)
+        #expect(eintrag.ursprungsGeraeteID == "fremdes-geraet")
     }
 
     /// Regressionstest für einen Analyse-Fund (export.json wuchs trotz aktiver

@@ -427,7 +427,7 @@ enum SyncSnapshotImportService {
         )
         mergeKaufEintraege(
             kaeufe, artikelZuordnung: artikelZuordnung, einkaufsvorgangZuordnung: einkaufsvorgangZuordnung,
-            geschaeftZuordnung: geschaeftZuordnung, kategorieZuordnung: kategorieZuordnung, context: context
+            geschaeftZuordnung: geschaeftZuordnung, kategorieZuordnung: kategorieZuordnung, peerGeraeteID: peerGeraeteID, context: context
         )
         mergePreispunkte(preise.preispunkte, artikelZuordnung: artikelZuordnung, geschaeftZuordnung: geschaeftZuordnung, context: context)
         mergeArtikelAliase(stamm.artikelAliase, artikelZuordnung: artikelZuordnung, context: context)
@@ -473,7 +473,7 @@ enum SyncSnapshotImportService {
         )
         mergeKaufEintraege(
             snapshot.kaufEintraege, artikelZuordnung: artikelZuordnung, einkaufsvorgangZuordnung: einkaufsvorgangZuordnung,
-            geschaeftZuordnung: geschaeftZuordnung, kategorieZuordnung: kategorieZuordnung, context: context
+            geschaeftZuordnung: geschaeftZuordnung, kategorieZuordnung: kategorieZuordnung, peerGeraeteID: peerGeraeteID, context: context
         )
         mergePreispunkte(
             snapshot.preispunkte, artikelZuordnung: artikelZuordnung, geschaeftZuordnung: geschaeftZuordnung, context: context
@@ -1164,8 +1164,11 @@ enum SyncSnapshotImportService {
     /// gemergten lokalen Gegenstücke umgebogen).
     ///
     /// **`kategorieBesuchsIndex` wird bewusst NICHT aus dem Snapshot
-    /// übernommen** (analog ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:indexFuerDistanzlernen:)``
-    /// für den entsprechenden Bereich-A-Fall): jeder hier neu hinzukommende
+    /// übernommen** (analog ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:)``
+    /// für den entsprechenden Bereich-A-Fall) — durchgesetzt über
+    /// ``KaufEintrag/ursprungsGeraeteID`` (`peerGeraeteID`), das
+    /// ``KaufEintrag/init(artikel:geschaeft:kategorie:preis:menge:datum:kategorieBesuchsIndex:ursprungsGeraeteID:)``
+    /// zentral im Typ selbst nullt (GitHub #68): jeder hier neu hinzukommende
     /// Eintrag stammt per Konstruktion von einem ANDEREN Gerät. Referenziert er
     /// (über ``mergeEinkaufsvorgaenge(_:geschaeftZuordnung:listeZuordnung:context:)``,
     /// z.B. weil zwei Geräte gleichzeitig im selben Geschäft an derselben Liste
@@ -1201,7 +1204,7 @@ enum SyncSnapshotImportService {
     @MainActor
     private static func mergeKaufEintraege(
         _ remote: [KaufEintragSnapshot], artikelZuordnung: [UUID: Artikel], einkaufsvorgangZuordnung: [UUID: Einkaufsvorgang],
-        geschaeftZuordnung: [UUID: Geschaeft], kategorieZuordnung: [UUID: ArtikelKategorie], context: ModelContext
+        geschaeftZuordnung: [UUID: Geschaeft], kategorieZuordnung: [UUID: ArtikelKategorie], peerGeraeteID: String, context: ModelContext
     ) {
         let geloeschteIDs = SyncTombstoneService.geloeschteIDs(art: SyncEntitaetsArt.kaufEintrag, context: context)
         for eintrag in remote {
@@ -1231,7 +1234,7 @@ enum SyncSnapshotImportService {
                 kategorie: eintrag.kategorieID.flatMap { kategorieZuordnung[$0] },
                 menge: eintrag.menge,
                 datum: eintrag.datum,
-                kategorieBesuchsIndex: nil
+                ursprungsGeraeteID: peerGeraeteID
             )
             neuer.id = eintrag.id
             neuer.einkaufsvorgang = eintrag.einkaufsvorgangID.flatMap { einkaufsvorgangZuordnung[$0] }

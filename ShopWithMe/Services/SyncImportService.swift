@@ -191,7 +191,7 @@ enum SyncImportService {
             return
         }
 
-        guard materialisiere(art, nutzlast: nutzlast, context: context) else {
+        guard materialisiere(art, nutzlast: nutzlast, autorGeraeteID: empfangen.autorGeraeteID, context: context) else {
             guard !referenzDauerhaftGeloescht(art: art, bezugsID: nutzlast.bezugsID, artikelID: nutzlast.artikelID, context: context) else {
                 // Liste/Einkauf/Artikel wurde absichtlich gelöscht (Tombstone) und
                 // wird deshalb NIE mehr lokal entstehen — anders als bei einer
@@ -260,7 +260,9 @@ enum SyncImportService {
     /// Artikel lokal (noch) nicht existiert — siehe Typ-Dokumentation zur
     /// Retry-Semantik.
     @MainActor
-    private static func materialisiere(_ art: SyncEventArt, nutzlast: SyncEventNutzlast, context: ModelContext) -> Bool {
+    private static func materialisiere(
+        _ art: SyncEventArt, nutzlast: SyncEventNutzlast, autorGeraeteID: String, context: ModelContext
+    ) -> Bool {
         switch art {
         case .artikelHinzugefuegt:
             guard let liste = einkaufsliste(mitID: nutzlast.bezugsID, context: context),
@@ -278,11 +280,11 @@ enum SyncImportService {
             guard let vorgang = einkaufsvorgang(mitID: nutzlast.bezugsID, context: context),
                   let artikel = artikel(mitID: nutzlast.artikelID, context: context)
             else { return false }
-            // indexFuerDistanzlernen: false — dieses Abhaken beschreibt die
-            // Laufreihenfolge des SENDENDEN Geräts durchs Geschäft, nicht die
-            // dieses Geräts (siehe Einkaufsvorgang-Typ-Doku). Ein hier vergebener
-            // Index würde AbteilungsDistanzService mit einer erfundenen
-            // Position für diesen Nutzer füttern.
+            // ursprungsGeraeteID: autorGeraeteID (nie nil) — dieses Abhaken
+            // beschreibt die Laufreihenfolge des SENDENDEN Geräts durchs
+            // Geschäft, nicht die dieses Geräts (siehe Einkaufsvorgang-Typ-Doku).
+            // Ein hier vergebener Index würde AbteilungsDistanzService mit einer
+            // erfundenen Position für diesen Nutzer füttern.
             //
             // geschaeft: explizit aus der Nutzlast statt aus `vorgang.geschaeft`
             // (GitHub #66) — der Kaufeintrag soll das Geschäft tragen, an dem
@@ -295,7 +297,7 @@ enum SyncImportService {
             // Override, nicht als „kein Override, self.geschaeft gilt".
             let geschaeftUeberschreibung: Geschaeft? = nutzlast.geschaeftID.flatMap { geschaeft(mitID: $0, context: context) }
             vorgang.artikelAbhakenOhneEventAufzeichnung(
-                artikel, context: context, indexFuerDistanzlernen: false, geschaeft: geschaeftUeberschreibung
+                artikel, context: context, ursprungsGeraeteID: autorGeraeteID, geschaeft: geschaeftUeberschreibung
             )
             return true
         case .artikelAbgewaehlt:
@@ -313,7 +315,7 @@ enum SyncImportService {
         }
     }
 
-    /// Unterscheidet die beiden `false`-Fälle von ``materialisiere(_:nutzlast:context:)``:
+    /// Unterscheidet die beiden `false`-Fälle von ``materialisiere(_:nutzlast:autorGeraeteID:context:)``:
     /// Referenz nur *noch nicht* lokal bekannt (retrywürdig) vs. Referenz
     /// *bewusst gelöscht* (Tombstone, siehe ``SyncTombstoneService``) und damit
     /// dauerhaft unauflösbar — ein Retry würde hier bei jedem Sync-Zyklus

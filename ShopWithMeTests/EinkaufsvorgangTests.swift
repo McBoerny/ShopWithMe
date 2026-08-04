@@ -257,7 +257,7 @@ struct EinkaufsvorgangTests {
     /// ``KaufEintrag/kategorieBesuchsIndex`` bekommen, sonst würde
     /// ``AbteilungsDistanzService`` mit einer erfundenen Besuchsposition für
     /// diesen Nutzer gefüttert (siehe Typ-Doku
-    /// ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:indexFuerDistanzlernen:)``).
+    /// ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:)``).
     @Test
     func syncMaterialisiertesAbhakenBekommtKeinenBesuchsindex() throws {
         let (container, context) = try machtLeerenContainer()
@@ -276,7 +276,7 @@ struct EinkaufsvorgangTests {
         let einkauf = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste)
         context.insert(einkauf)
 
-        einkauf.artikelAbhakenOhneEventAufzeichnung(apfel, context: context, indexFuerDistanzlernen: false)
+        einkauf.artikelAbhakenOhneEventAufzeichnung(apfel, context: context, ursprungsGeraeteID: "test-peer")
         // Siehe `abhakenErstelltKaufEintragUndEntferntVonEinkaufsliste`: ein
         // `context.delete()` spiegelt sich in `liste.eintraege` erst nach `save()`.
         try context.save()
@@ -410,7 +410,7 @@ struct EinkaufsvorgangTests {
     }
 
     /// Regressionstest (Code-Review-Fund): eine remote materialisierte
-    /// `KaufEintrag` ohne Index (`indexFuerDistanzlernen: false`, siehe
+    /// `KaufEintrag` ohne Index (`ursprungsGeraeteID: "test-peer"`, siehe
     /// `SyncImportService`) darf `naechsterKategorieBesuchsIndex` nicht dazu
     /// verleiten, für eine Kategorie, die bereits einen echten Index hat,
     /// einen zweiten (Duplikat-)Index zu vergeben — sonst zerfällt eine
@@ -441,7 +441,7 @@ struct EinkaufsvorgangTests {
         // Reihenfolge ist Teil der Regression: Birne zuerst (kein Index), dann
         // Apfel (bekommt den ersten echten Index, 0), dann Kirsche — muss
         // ebenfalls 0 bekommen (dieselbe Kategorie), nicht fälschlich 1.
-        einkauf.artikelAbhakenOhneEventAufzeichnung(birne, context: context, indexFuerDistanzlernen: false)
+        einkauf.artikelAbhakenOhneEventAufzeichnung(birne, context: context, ursprungsGeraeteID: "test-peer")
         einkauf.artikelAbhaken(apfel, context: context)
         einkauf.artikelAbhaken(kirsche, context: context)
 
@@ -531,7 +531,7 @@ struct EinkaufsvorgangTests {
 
         let offenerVorgang = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste)
         context.insert(offenerVorgang)
-        _ = offenerVorgang.artikelAbhakenOhneEventAufzeichnung(apfel, context: context, indexFuerDistanzlernen: false)
+        _ = offenerVorgang.artikelAbhakenOhneEventAufzeichnung(apfel, context: context, ursprungsGeraeteID: "test-peer")
 
         // Bereits abgeschlossener Vorgang derselben Liste — der Kaufeintrag
         // bleibt als Historie bestehen, zählt aber nicht mehr als „gerade
@@ -539,14 +539,14 @@ struct EinkaufsvorgangTests {
         // erfolgte).
         let geschlossenerVorgang = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste)
         context.insert(geschlossenerVorgang)
-        _ = geschlossenerVorgang.artikelAbhakenOhneEventAufzeichnung(birne, context: context, indexFuerDistanzlernen: false)
+        _ = geschlossenerVorgang.artikelAbhakenOhneEventAufzeichnung(birne, context: context, ursprungsGeraeteID: "test-peer")
         geschlossenerVorgang.abschliessen()
 
         // Offener Vorgang einer ANDEREN Liste — trotz offenem Status nicht
         // mitgezählt.
         let vorgangAndereListe = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: andereListe)
         context.insert(vorgangAndereListe)
-        _ = vorgangAndereListe.artikelAbhakenOhneEventAufzeichnung(kirsche, context: context, indexFuerDistanzlernen: false)
+        _ = vorgangAndereListe.artikelAbhakenOhneEventAufzeichnung(kirsche, context: context, ursprungsGeraeteID: "test-peer")
 
         try context.save()
 

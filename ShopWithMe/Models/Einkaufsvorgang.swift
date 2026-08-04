@@ -80,8 +80,10 @@ final class Einkaufsvorgang {
     /// erzeugt) — sonst ``AbhakErgebnis/bereitsAbgehaktVon(geraeteID:)`` (GitHub
     /// #48, Überkauf-Hinweis).
     ///
-    /// `indexFuerDistanzlernen: false` (siehe ``SyncImportService``) unterdrückt
-    /// die Vergabe eines ``KaufEintrag/kategorieBesuchsIndex`` bewusst: Ein von
+    /// `ursprungsGeraeteID` (siehe ``SyncImportService``) unterdrückt die
+    /// Vergabe eines ``KaufEintrag/kategorieBesuchsIndex`` bewusst, sobald sie
+    /// nicht `nil` ist (durchgereicht an ``KaufEintrag/ursprungsGeraeteID``, das
+    /// die Unterdrückung zentral im Typ selbst erzwingt, GitHub #68): Ein von
     /// einem Peer per Bereich-A-Event empfangenes Abhaken beschreibt, wo/wann
     /// **dessen** Nutzer durchs Geschäft gelaufen ist, nicht wo dieses Gerät
     /// gerade steht — würde es trotzdem einen Index aus der lokalen
@@ -115,7 +117,7 @@ final class Einkaufsvorgang {
     /// gehoben — nur der reine `nil`-Literal bedeutet „kein Override".
     @discardableResult
     func artikelAbhakenOhneEventAufzeichnung(
-        _ artikel: Artikel, context: ModelContext, indexFuerDistanzlernen: Bool = true,
+        _ artikel: Artikel, context: ModelContext, ursprungsGeraeteID: String? = nil,
         kategorie kategorieUeberschreibung: ArtikelKategorie? = nil,
         geschaeft geschaeftUeberschreibung: Geschaeft?? = nil
     ) -> AbhakErgebnis {
@@ -149,13 +151,14 @@ final class Einkaufsvorgang {
 
         let geschaeftFuerEintrag = geschaeftUeberschreibung ?? geschaeft
         let kategorie = kategorieUeberschreibung ?? artikel.fuehrendeKategorie(inGeschaeft: geschaeftFuerEintrag, context: context)
-        let index = indexFuerDistanzlernen ? naechsterKategorieBesuchsIndex(fuer: kategorie) : nil
+        let index = ursprungsGeraeteID == nil ? naechsterKategorieBesuchsIndex(fuer: kategorie) : nil
         let eintrag = KaufEintrag(
             artikel: artikel,
             geschaeft: geschaeftFuerEintrag,
             kategorie: kategorie,
             menge: listenEintrag?.menge ?? artikel.mengenSchritt,
-            kategorieBesuchsIndex: index
+            kategorieBesuchsIndex: index,
+            ursprungsGeraeteID: ursprungsGeraeteID
         )
         context.insert(eintrag)
         eintrag.einkaufsvorgang = self
@@ -165,7 +168,7 @@ final class Einkaufsvorgang {
         return .abgehakt
     }
 
-    /// Wie ``artikelAbhakenOhneEventAufzeichnung(_:context:indexFuerDistanzlernen:kategorie:geschaeft:)``,
+    /// Wie ``artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:kategorie:geschaeft:)``,
     /// zeichnet zusätzlich (nur bei tatsächlicher Neuanlage) ein
     /// ``SyncEventArt/artikelAbgehakt``-Event auf (Phase 0,
     /// `docs/DATENSYNCHRONISATION_VERLAUF.md`) — inklusive des eigenen
@@ -232,7 +235,7 @@ final class Einkaufsvorgang {
     /// Sucht bewusst nur unter Einträgen mit BEREITS VORHANDENEM Index (nicht per
     /// simplem `first(where:)` über die ungeordnete `kaufEintraege`-Relationship):
     /// seit remote materialisierte/gemergte Einträge bewusst `kategorieBesuchsIndex
-    /// == nil` bekommen (siehe ``artikelAbhakenOhneEventAufzeichnung(_:context:indexFuerDistanzlernen:kategorie:)``),
+    /// == nil` bekommen (siehe ``artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:kategorie:)``),
     /// könnte die ungeordnete Aufzählung sonst zuerst auf so einen `nil`-Eintrag
     /// treffen und fälschlich einen NEUEN Index für eine Kategorie vergeben, die
     /// lokal bereits einen echten Index hat — zwei Besuchs-Slots für dieselbe
