@@ -211,7 +211,7 @@ struct EinkaufsvorgangTests {
         try context.save()
 
         #expect(ersteAbhakung == .abgehakt)
-        #expect(zweiteAbhakung == .bereitsAbgehaktVon(geraeteID: nil))
+        #expect(zweiteAbhakung == .bereitsAbgehaktVon(geraeteID: DatabaseLeaseService.geraeteID))
         #expect(einkaufEdeka.kaufEintraege.count == 1)
         #expect(einkaufRewe.kaufEintraege.isEmpty)
         #expect(liste.enthaelt(milch) == false)
