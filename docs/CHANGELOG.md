@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.12 (Build 240) — Diagnose: fehlende Referenz bei nicht anwendbaren Sync-Events
+
+Live-Test-Nachfolgefund zur vorherigen Geschäfts-Aggregate-Änderung (siehe
+`docs/GESCHAEFTS_AGGREGATE.md` Abschnitt „Live-Verifikation"): drei hängende
+`artikelAbgehakt`-Events ließen sich aus dem bisherigen, einheitlichen
+`sync_event_nicht_anwendbar`-Log nicht mehr in „Bezug fehlt" vs. „Artikel
+fehlt" auflösen.
+
+- **`SyncImportService.materialisiere`** liefert jetzt statt `Bool` ein
+  `MaterialisierungsErgebnis` (`erfolgreich`/`bezugFehlt`/`artikelFehlt`/
+  `bezugUndArtikelFehlen`) — reines Diagnose-Detail, keine Verhaltensänderung.
+- `sync_event_nicht_anwendbar`/`sync_event_aufgegeben` protokollieren seither
+  zusätzlich `fehlt=bezug|artikel|beide`.
+- Ergebnis der Live-Diagnose: root-caused auf listenlose Vorgänge, die von der
+  neuen Bestandsmigration bereits gelöscht wurden, bevor der jeweils andere
+  Peer die referenzierenden Events anwenden konnte — bewusst nicht behoben
+  (Details/Begründung siehe verlinkter Abschnitt).
+
 ## v0.12 (Build 239) — Geschäfts-Aggregate entkoppelt von der Einkaufsliste
 
 Siehe `docs/GESCHAEFTS_AGGREGATE.md` für die vollständige Herleitung. Ausgangspunkt:

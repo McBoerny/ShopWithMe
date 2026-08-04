@@ -96,3 +96,55 @@ und ihr Besuch verschwände aus dem Protokoll. Idempotent wie
 `KaufEintrag.preisverlaufMigrierenFallsNoetig` (kein separates
 "schon gelaufen"-Flag): jeder Schritt prüft vor dem Schreiben/Löschen den
 aktuellen Bestand.
+
+## Live-Verifikation (2026-08-04, zwei echte Geräte)
+
+Nach dem Rollout auf beide Geräte ("Bernhard"/"Backup") bestätigten die
+`datenintegritaet.log`-Dateien beider Geräte exakt die erwartete Zeile
+(„N Einkaufsvorgänge ohne Einkaufsliste endgültig bereinigt
+(Artikel-Verfügbarkeit/Besuchsprotokoll vorher gesichert)"), keine Abstürze,
+normaler Sync-Betrieb danach. Damit ist die eingangs offene Frage aus der
+SwiftData-Migrations-Doku (Lightweight-Migration auf einem echten, bereits
+befüllten Store, nicht nur im In-Memory-Unit-Test) für diesen konkreten Fall
+positiv beantwortet.
+
+**Bekannte, akzeptierte Grenze — hängende `artikelAbgehakt`-Events nach der
+Migration:** Auf einem der beiden Geräte blieben drei `SyncEvent`s
+(`artikelAbgehakt` für denselben Artikel, drei verschiedene
+`Einkaufsvorgang`-IDs als `bezugsID`) dauerhaft mit `sync_event_nicht_anwendbar`
+hängen — schon vor der Migration beobachtet, nicht durch sie verursacht, aber
+seit ihr endgültig unauflösbar. Zur Diagnose wurde
+`SyncImportService.materialisiere` von `Bool` auf ein `MaterialisierungsErgebnis`
+(`erfolgreich`/`bezugFehlt`/`artikelFehlt`/`bezugUndArtikelFehlen`) umgestellt —
+`sync_event_nicht_anwendbar`/`sync_event_aufgegeben` protokollieren seither
+zusätzlich `fehlt=bezug|artikel|beide`. Ergebnis: in allen drei Fällen
+`fehlt=bezug`, nicht der Artikel (eine zunächst vermutete Namens-Ambiguität
+zweier sehr ähnlich benannter Artikel war eine falsche Spur — beide Artikel
+existierten bereits korrekt auf beiden Geräten).
+
+**Root Cause:** Die drei referenzierten `Einkaufsvorgang`e gehörten mit hoher
+Wahrscheinlichkeit zu den listenlosen Vorgängen, die
+`migriereGeschaeftsAggregateFallsNoetig` auf dem sendenden Gerät bereits vor
+Eintreffen dieser Events endgültig gelöscht hat — sie stehen seitdem nicht mehr
+in dessen `vorgaenge.json` und können vom empfangenden Gerät strukturell nicht
+mehr aufgelöst werden (kein Skip-Log für „unauflösbare Liste"/„Tombstone" tritt
+auf, weil der Eintrag in der Quelle schlicht fehlt, statt beim Merge verworfen
+zu werden). Die Migration löscht dabei bewusst **ohne** Tombstone zu setzen —
+harmlos für sie selbst (kein Peer konnte die gelöschten Vorgänge ohnehin noch
+gebrauchen), aber genau hier ist ein anderer, noch nicht nachgeholter Kauf
+sichtbar liegen geblieben.
+
+**Bewusst nicht behoben** (Nutzer-Entscheidung 2026-08-04): Ein Tombstone beim
+Löschen würde nur den 48h-Log-Rauschen früher beenden
+(`SyncImportService.maximalesEventAlterFuerRetry`), nicht die eigentliche
+Zustandslücke (der Artikel bleibt auf dem betroffenen Gerät bis zur manuellen
+Korrektur als „offen" stehen) — die Migration selbst läuft nur einmalig und
+wird dieses Szenario nicht erneut auslösen. Das strukturell gleiche, seltene
+Wettrennen (Liste löschen kaskadiert Vorgänge weg, während ein Peer mit dem
+Sync im Rückstand ist) bleibt über den regulären Lösch-Pfad
+(`EinkaufslistenVerwaltungView.listeLoeschen`) theoretisch weiter möglich —
+Konsequenz bei jedem erneuten Auftreten bleibt harmlos (kein Crash, kein
+Datenverlust, nur bis zu 48h Log-Rauschen plus ggf. eine manuelle Korrektur).
+Falls das je aufgegriffen wird: die Tombstone-Ergänzung gehört dann in
+`listeLoeschen` (den dauerhaften, wiederkehrenden Lösch-Pfad), nicht in die
+Migration.

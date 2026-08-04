@@ -271,7 +271,8 @@ enum SyncImportService {
             return
         }
 
-        guard materialisiere(art, nutzlast: nutzlast, autorGeraeteID: empfangen.autorGeraeteID, context: context) else {
+        let materialisierungsErgebnis = materialisiere(art, nutzlast: nutzlast, autorGeraeteID: empfangen.autorGeraeteID, context: context)
+        guard materialisierungsErgebnis == .erfolgreich else {
             guard !referenzDauerhaftGeloescht(art: art, bezugsID: nutzlast.bezugsID, artikelID: nutzlast.artikelID, context: context) else {
                 // Liste/Einkauf/Artikel wurde absichtlich gelöscht (Tombstone) und
                 // wird deshalb NIE mehr lokal entstehen — anders als bei einer
@@ -291,7 +292,7 @@ enum SyncImportService {
                 // Tombstone-Fall bereits der neue Gewinner für sein Paar.
                 SyncDebugLogger.log(
                     .eventAufgegeben,
-                    details: "art=\(art.rawValue) bezugsID=\(nutzlast.bezugsID) artikelID=\(nutzlast.artikelID)"
+                    details: "art=\(art.rawValue) bezugsID=\(nutzlast.bezugsID) artikelID=\(nutzlast.artikelID) fehlt=\(materialisierungsErgebnis.rawValue)"
                 )
                 gewinner[schluessel] = SyncEventService.uebernehmen(empfangen, context: context)
                 return
@@ -304,7 +305,7 @@ enum SyncImportService {
             // übernommen → kein Gewinner-Index-Eintrag.
             SyncDebugLogger.log(
                 .eventNichtAnwendbar,
-                details: "art=\(art.rawValue) bezugsID=\(nutzlast.bezugsID) artikelID=\(nutzlast.artikelID)"
+                details: "art=\(art.rawValue) bezugsID=\(nutzlast.bezugsID) artikelID=\(nutzlast.artikelID) fehlt=\(materialisierungsErgebnis.rawValue)"
             )
             return
         }
@@ -335,31 +336,61 @@ enum SyncImportService {
         return SyncKonfliktAufloesung.gewinnt(neuerKandidat, ueber: bisherigerKandidat)
     }
 
+    /// Unterscheidet, WELCHE der beiden Referenzen einer nicht anwendbaren
+    /// ``SyncEvent``-Nutzlast (noch) fehlt — reines Diagnose-Detail für
+    /// ``eventNichtAnwendbar``/``eventAufgegeben`` (Live-Test-Fund 2026-08-04:
+    /// ein dauerhaft hängendes Event ließ sich aus dem bisherigen einheitlichen
+    /// „nicht anwendbar"-Log nicht mehr in „Bezug fehlt" vs. „Artikel fehlt"
+    /// auflösen, siehe `docs/GESCHAEFTS_AGGREGATE.md`). Ändert nichts an der
+    /// Retry-/Aufgeben-Semantik selbst.
+    private enum MaterialisierungsErgebnis: String {
+        case erfolgreich
+        /// Referenzierte Liste/Einkaufsvorgang (`bezugsID`) noch nicht lokal auflösbar.
+        case bezugFehlt = "bezug"
+        /// Referenzierter Artikel (`artikelID`) noch nicht lokal auflösbar.
+        case artikelFehlt = "artikel"
+        /// Beide Referenzen noch nicht lokal auflösbar.
+        case bezugUndArtikelFehlen = "beide"
+    }
+
+    /// Bildet aus zwei aufgelösten (oder fehlgeschlagenen) Referenzen das
+    /// passende ``MaterialisierungsErgebnis`` — nur für den `nil`/`nil`-,
+    /// `nil`/Wert- und Wert/`nil`-Fall gedacht, der Erfolgsfall wird von den
+    /// Aufrufern bereits über das `guard let` selbst behandelt.
+    private static func fehlendeReferenz(bezug: AnyObject?, artikel: AnyObject?) -> MaterialisierungsErgebnis {
+        switch (bezug, artikel) {
+        case (nil, nil): return .bezugUndArtikelFehlen
+        case (nil, _): return .bezugFehlt
+        case (_, nil): return .artikelFehlt
+        default: return .erfolgreich
+        }
+    }
+
     /// Wendet die dem `art` entsprechende, nicht-aufzeichnende Mutationsfunktion
-    /// an. Liefert `false`, falls die referenzierte Liste/der Einkauf oder der
-    /// Artikel lokal (noch) nicht existiert — siehe Typ-Dokumentation zur
-    /// Retry-Semantik.
+    /// an. Liefert ungleich ``MaterialisierungsErgebnis/erfolgreich``, falls die
+    /// referenzierte Liste/der Einkauf oder der Artikel lokal (noch) nicht
+    /// existiert — siehe Typ-Dokumentation zur Retry-Semantik.
     @MainActor
     private static func materialisiere(
         _ art: SyncEventArt, nutzlast: SyncEventNutzlast, autorGeraeteID: String, context: ModelContext
-    ) -> Bool {
+    ) -> MaterialisierungsErgebnis {
         switch art {
         case .artikelHinzugefuegt:
-            guard let liste = einkaufsliste(mitID: nutzlast.bezugsID, context: context),
-                  let artikel = artikel(mitID: nutzlast.artikelID, context: context)
-            else { return false }
+            let liste = einkaufsliste(mitID: nutzlast.bezugsID, context: context)
+            let artikel = artikel(mitID: nutzlast.artikelID, context: context)
+            guard let liste, let artikel else { return fehlendeReferenz(bezug: liste, artikel: artikel) }
             liste.artikelHinzufuegenOhneEventAufzeichnung(artikel, context: context)
-            return true
+            return .erfolgreich
         case .artikelEntfernt:
-            guard let liste = einkaufsliste(mitID: nutzlast.bezugsID, context: context),
-                  let artikel = artikel(mitID: nutzlast.artikelID, context: context)
-            else { return false }
+            let liste = einkaufsliste(mitID: nutzlast.bezugsID, context: context)
+            let artikel = artikel(mitID: nutzlast.artikelID, context: context)
+            guard let liste, let artikel else { return fehlendeReferenz(bezug: liste, artikel: artikel) }
             liste.artikelEntfernenOhneEventAufzeichnung(artikel, context: context)
-            return true
+            return .erfolgreich
         case .artikelAbgehakt:
-            guard let vorgang = einkaufsvorgang(mitID: nutzlast.bezugsID, context: context),
-                  let artikel = artikel(mitID: nutzlast.artikelID, context: context)
-            else { return false }
+            let vorgang = einkaufsvorgang(mitID: nutzlast.bezugsID, context: context)
+            let artikel = artikel(mitID: nutzlast.artikelID, context: context)
+            guard let vorgang, let artikel else { return fehlendeReferenz(bezug: vorgang, artikel: artikel) }
             // ursprungsGeraeteID: autorGeraeteID (nie nil) — dieses Abhaken
             // beschreibt die Laufreihenfolge des SENDENDEN Geräts durchs
             // Geschäft, nicht die dieses Geräts (siehe Einkaufsvorgang-Typ-Doku).
@@ -379,23 +410,23 @@ enum SyncImportService {
             vorgang.artikelAbhakenOhneEventAufzeichnung(
                 artikel, context: context, ursprungsGeraeteID: autorGeraeteID, geschaeft: geschaeftUeberschreibung
             )
-            return true
+            return .erfolgreich
         case .artikelAbgewaehlt:
-            guard let vorgang = einkaufsvorgang(mitID: nutzlast.bezugsID, context: context),
-                  let artikel = artikel(mitID: nutzlast.artikelID, context: context)
-            else { return false }
+            let vorgang = einkaufsvorgang(mitID: nutzlast.bezugsID, context: context)
+            let artikel = artikel(mitID: nutzlast.artikelID, context: context)
+            guard let vorgang, let artikel else { return fehlendeReferenz(bezug: vorgang, artikel: artikel) }
             vorgang.artikelAbwaehlenOhneEventAufzeichnung(artikel, context: context)
-            return true
+            return .erfolgreich
         case .artikelDauerhaftEntfernt:
-            guard let vorgang = einkaufsvorgang(mitID: nutzlast.bezugsID, context: context),
-                  let artikel = artikel(mitID: nutzlast.artikelID, context: context)
-            else { return false }
+            let vorgang = einkaufsvorgang(mitID: nutzlast.bezugsID, context: context)
+            let artikel = artikel(mitID: nutzlast.artikelID, context: context)
+            guard let vorgang, let artikel else { return fehlendeReferenz(bezug: vorgang, artikel: artikel) }
             vorgang.artikelDauerhaftEntfernenOhneEventAufzeichnung(artikel, context: context)
-            return true
+            return .erfolgreich
         }
     }
 
-    /// Unterscheidet die beiden `false`-Fälle von ``materialisiere(_:nutzlast:autorGeraeteID:context:)``:
+    /// Unterscheidet die beiden nicht-erfolgreichen Fälle von ``materialisiere(_:nutzlast:autorGeraeteID:context:)``:
     /// Referenz nur *noch nicht* lokal bekannt (retrywürdig) vs. Referenz
     /// *bewusst gelöscht* (Tombstone, siehe ``SyncTombstoneService``) und damit
     /// dauerhaft unauflösbar — ein Retry würde hier bei jedem Sync-Zyklus
