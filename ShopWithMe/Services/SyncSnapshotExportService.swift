@@ -359,13 +359,22 @@ enum SyncSnapshotExportService {
     /// Baut die Paket-Teile aus dem aktuellen Modellzustand und schreibt jeden
     /// nur dann neu, wenn sich sein Inhalt seit dem letzten Schreiben
     /// tatsächlich geändert hat — Nachfolger von `exportiereSnapshot(context:)`
-    /// (siehe `docs/EXPORT_PAKET_UMBAU.md`). `manifest.json` wird davon
-    /// unabhängig **immer** neu geschrieben (siehe ``SyncPeerManifest``).
-    /// Ohne hinterlegten Sync-Ordner ohne Wirkung. Rückgabewert meldet
-    /// ausschließlich, ob der Ordnerzugriff (Berechtigung) geklappt hat.
+    /// (siehe `docs/EXPORT_PAKET_UMBAU.md`). Ohne hinterlegten Sync-Ordner
+    /// ohne Wirkung. Rückgabewert meldet ausschließlich, ob der
+    /// Ordnerzugriff (Berechtigung) geklappt hat.
+    ///
+    /// **`importErfolgreich` (Peer-Lebenszyklus, Baustein C0):** `manifest.json`
+    /// wird nur bei `true` neu geschrieben (Default, deckt den bisherigen
+    /// „immer" ab) — bei `false` bleibt die alte Datei mit ihrem alten,
+    /// weiterhin korrekten Zeitstempel unverändert stehen. Grund: der
+    /// Zeitstempel muss „ich habe erfolgreich alles importiert, was es gab"
+    /// zertifizieren können (Grundlage für einen künftigen, dynamischen
+    /// Aufbewahrungs-Wasserstand, siehe `docs/PEER_LEBENSZYKLUS.md`) — vorher
+    /// wurde er unabhängig vom Import-Erfolg desselben Zyklus geschrieben und
+    /// bedeutete nur „ein Export wurde versucht".
     @discardableResult
     @MainActor
-    static func exportierePaket(context: ModelContext) async -> Bool {
+    static func exportierePaket(context: ModelContext, importErfolgreich: Bool = true) async -> Bool {
         guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return true }
         let teile = erstellePaketTeile(context: context)
 
@@ -387,7 +396,7 @@ enum SyncSnapshotExportService {
             return true
         }
 
-        if let manifestDaten = try? encoder.encode(teile.manifest) {
+        if importErfolgreich, let manifestDaten = try? encoder.encode(teile.manifest) {
             _ = schreibeBlocking(manifestDaten, nach: eigenerOrdner.appendingPathComponent("manifest.json"))
         }
 

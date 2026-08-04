@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.12 (Build 237) — Peer-Lebenszyklus, Baustein C0: Manifest muss „vollständiger Sync" zertifizieren
+
+Dritter von vier Bausteinen, siehe `docs/PEER_LEBENSZYKLUS.md`. Voraussetzung für den in
+Baustein C geplanten dynamischen Aufbewahrungs-Wasserstand: `manifest.json` bedeutete
+bisher nur „ein Export wurde versucht", nicht „ich habe erfolgreich alles importiert,
+was es gab".
+
+- **`SyncSnapshotExportService.exportierePaket(context:importErfolgreich:)`** — neuer
+  Parameter (Default `true`), von `syncZyklus()` mit
+  `snapshotImportErfolgreich && eventImportErfolgreich` durchgereicht. `manifest.json`
+  bekommt nur noch bei erfolgreichem Import desselben Zyklus einen neuen Zeitstempel —
+  bei Fehlschlag bleibt die alte Datei unverändert stehen, statt fälschlich „frisch" zu
+  wirken.
+
 ## v0.12 (Build 236) — Peer-Lebenszyklus, Baustein A: Peer-Sterblichkeit sichtbar machen
 
 Zweiter von vier Bausteinen, siehe `docs/PEER_LEBENSZYKLUS.md`.

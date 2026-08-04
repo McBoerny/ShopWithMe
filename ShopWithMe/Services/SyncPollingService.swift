@@ -157,7 +157,13 @@ final class SyncPollingService: ObservableObject {
         // bisherige `exportiereSnapshot` (ein monolithisches `export.json`);
         // `exportiereNeueKaeufe` schreibt die Kaufhistorie separat als
         // Append-Log, statt sie bei jedem Zyklus erneut zu kodieren.
-        let paketExportErfolgreich = await SyncSnapshotExportService.exportierePaket(context: context)
+        // Peer-Lebenszyklus, Baustein C0: `importErfolgreich` bestimmt, ob
+        // `manifest.json` einen neuen Zeitstempel bekommt (siehe
+        // ``SyncPeerManifest``-Typ-Doku) — nur der Import-Teil zählt, nicht
+        // der Export-Erfolg dieses Aufrufs selbst.
+        let paketExportErfolgreich = await SyncSnapshotExportService.exportierePaket(
+            context: context, importErfolgreich: snapshotImportErfolgreich && eventImportErfolgreich
+        )
         let kaeufeExportErfolgreich = await SyncKaeufeExportService.exportiereNeueKaeufe(context: context)
 
         let dauer = start.duration(to: .now)

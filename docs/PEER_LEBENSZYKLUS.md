@@ -1,6 +1,6 @@
 # ShopWithMe — Peer-Lebenszyklus
 
-Status: **In Umsetzung** (Bausteine A und B von 4 fertig). Ausgangspunkt: `SyncTombstone`
+Status: **In Umsetzung** (Bausteine A, B und C0 von 4 fertig). Ausgangspunkt: `SyncTombstone`
 wächst aktuell für immer (siehe `docs/DATENSYNCHRONISATION.md` — dominiert durch einen
 Tombstone pro `KaufEintrag`, automatisch 48h nach jedem Einkauf erzeugt). Statt einer
 fest „gepflegten" Zeit-Frist soll ein dynamischer, sich selbst nachführender
@@ -17,7 +17,7 @@ Vier Bausteine, jeder ein eigener Checkpoint:
 
 - **Baustein B — Rückkehrer-Erkennung** (✅)
 - **Baustein A — Peer-Sterblichkeit sichtbar machen + bestätigte Entfernung** (✅)
-- **Baustein C0 — Manifest muss „vollständiger Sync" zertifizieren** (offen)
+- **Baustein C0 — Manifest muss „vollständiger Sync" zertifizieren** (✅)
 - **Baustein C — Dynamischer Aufbewahrungs-Wasserstand für Events/Tombstones** (offen)
 
 Reihenfolge bewusst so: B zuerst, weil es die Sicherheits-Garantie liefert, von der alle
@@ -106,3 +106,25 @@ statt koordiniertem Zugriff, und ohne Alters-Hervorhebung, nur im Debug-Menü ve
 `istWahrscheinlichTotIstTrueJenseitsDerSchwelle`;
 `SyncOrdnerServiceTests.entfernePeerLoeschtOrdnerUndSyncPeerInfo`. Der proaktive Dialog
 selbst nur manuell im Simulator verifizierbar (nach expliziter Freigabe).
+
+## Baustein C0: Manifest muss „vollständiger Sync" zertifizieren
+
+**Lücke:** `SyncSnapshotExportService.exportierePaket` schrieb `manifest.json` (mit
+frischem `erzeugtAm`) bisher **bedingungslos** bei jedem Export-Versuch — unabhängig
+davon, ob der Import-Teil desselben Zyklus (`importiereSnapshots`/`importiereNeueEvents`
+in `SyncPollingService.syncZyklus()`) erfolgreich war. Der Zeitstempel bedeutete damit
+nur „ein Export wurde versucht", nicht „ich habe erfolgreich alles importiert, was es
+gab" — für den in Baustein C geplanten dynamischen Aufbewahrungs-Wasserstand muss er
+aber genau das zertifizieren, sonst könnte ein Gerät mit dauerhaft fehlschlagendem
+Import trotzdem „frisch" wirken und andere Geräte dazu bringen, zu früh aufzuräumen.
+
+**Fix:** `exportierePaket(context:importErfolgreich:)` — neuer Parameter (Default
+`true`, deckt bestehende Aufrufstellen wie das Debug-Werkzeug „Sync-Paket aufräumen"
+unverändert ab), von `syncZyklus()` mit `snapshotImportErfolgreich && eventImportErfolgreich`
+durchgereicht. Der Manifest-Schreibvorgang läuft nur noch bei `importErfolgreich == true`
+— bei `false` bleibt die alte Datei (mit ihrem alten, weiterhin korrekten Zeitstempel)
+unverändert stehen. Restlicher Paket-Export (`tombstones.json`/`stamm.json`/etc.,
+fingerabdruck-geprüft) bleibt unverändert.
+
+**Tests:** `SyncSnapshotExportServiceTests.exportierePaketSchreibtManifestBeiFehlgeschlagenemImportNichtNeu`/
+`exportierePaketSchreibtManifestBeiErfolgreichemImportNeu`.

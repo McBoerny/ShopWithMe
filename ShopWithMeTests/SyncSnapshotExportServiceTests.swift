@@ -130,6 +130,54 @@ struct SyncSnapshotExportServiceTests {
         #expect(stamm.geschaefte.map(\.id) == [geschaeft.id])
     }
 
+    /// Peer-Lebenszyklus, Baustein C0: `manifest.json` muss „ich habe
+    /// erfolgreich alles importiert" zertifizieren können — bei
+    /// fehlgeschlagenem Import desselben Zyklus bleibt der alte, weiterhin
+    /// korrekte Zeitstempel unverändert stehen statt fälschlich "frisch" zu
+    /// wirken.
+    @Test
+    func exportierePaketSchreibtManifestBeiFehlgeschlagenemImportNichtNeu() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        await SyncSnapshotExportService.exportierePaket(context: context, importErfolgreich: true)
+        let manifestURL = SyncSnapshotExportService.eigenerManifestURL(in: syncOrdner)
+        let ersteDaten = try Data(contentsOf: manifestURL)
+        let ersterZeitstempel = try JSONDecoder().decode(SyncPeerManifest.self, from: ersteDaten).erzeugtAm
+
+        try await Task.sleep(for: .milliseconds(20))
+        await SyncSnapshotExportService.exportierePaket(context: context, importErfolgreich: false)
+
+        let zweiteDaten = try Data(contentsOf: manifestURL)
+        #expect(zweiteDaten == ersteDaten)
+        let zweiterZeitstempel = try JSONDecoder().decode(SyncPeerManifest.self, from: zweiteDaten).erzeugtAm
+        #expect(zweiterZeitstempel == ersterZeitstempel)
+    }
+
+    /// Gegenprobe zum Test oben: bei erfolgreichem Import bekommt
+    /// `manifest.json` weiterhin bei jedem Zyklus einen neuen Zeitstempel.
+    @Test
+    func exportierePaketSchreibtManifestBeiErfolgreichemImportNeu() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        await SyncSnapshotExportService.exportierePaket(context: context, importErfolgreich: true)
+        let manifestURL = SyncSnapshotExportService.eigenerManifestURL(in: syncOrdner)
+        let ersterZeitstempel = try JSONDecoder().decode(SyncPeerManifest.self, from: Data(contentsOf: manifestURL)).erzeugtAm
+
+        try await Task.sleep(for: .milliseconds(20))
+        await SyncSnapshotExportService.exportierePaket(context: context, importErfolgreich: true)
+
+        let zweiterZeitstempel = try JSONDecoder().decode(SyncPeerManifest.self, from: Data(contentsOf: manifestURL)).erzeugtAm
+        #expect(zweiterZeitstempel > ersterZeitstempel)
+    }
+
     /// Regressionstest für GitHub #78 (Fingerabdruck/Datei nicht deterministisch,
     /// da `JSONEncoder` ohne `.sortedKeys` keine stabile Top-Level-Schlüssel-
     /// reihenfolge garantiert — bestätigt anhand zweier realer, zeitnah

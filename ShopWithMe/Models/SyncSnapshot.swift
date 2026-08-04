@@ -276,15 +276,24 @@ struct ArtikelAliasSnapshot: Codable {
 /// „keine Rückwärtskompatibilität nötig"-Haltung wie bei den bisherigen
 /// `SyncSnapshot.formatVersion`-Sprüngen.
 
-/// Kleine, immer (jeden Zyklus, unabhängig vom Fingerabdruck-Skip der übrigen
-/// Teile) geschriebene Datei — ersetzt das bisherige `erzeugtAm`/`formatVersion`
-/// auf dem Monolithen als Peer-Alters-Gate
-/// (``SyncSnapshotImportService/maximalesSnapshotAlter``). Muss unbedingt bei
-/// jedem Zyklus aktualisiert werden, auch wenn kein Teil sich inhaltlich
-/// geändert hat — sonst würde ein seit Tagen inhaltlich unverändertes, aber
-/// weiterhin aktives Gerät fälschlich als verwaist gelten (siehe
-/// `SyncSnapshotExportService`, Abschnitt „Schreibt nur bei tatsächlich
-/// geändertem Inhalt").
+/// Kleine, bei jedem Zyklus mit erfolgreichem Import geschriebene Datei
+/// (unabhängig vom Fingerabdruck-Skip der übrigen Teile) — ersetzt das
+/// bisherige `erzeugtAm`/`formatVersion` auf dem Monolithen als
+/// Peer-Alters-Gate (``SyncSnapshotImportService/maximalesSnapshotAlter``).
+/// Muss bei jedem Zyklus mit erfolgreichem Import aktualisiert werden, auch
+/// wenn kein Teil sich inhaltlich geändert hat — sonst würde ein seit Tagen
+/// inhaltlich unverändertes, aber weiterhin aktives Gerät fälschlich als
+/// verwaist gelten (siehe `SyncSnapshotExportService`, Abschnitt „Schreibt
+/// nur bei tatsächlich geändertem Inhalt").
+///
+/// **Peer-Lebenszyklus, Baustein C0:** `erzeugtAm` muss „ich habe
+/// erfolgreich alles importiert, was es gab" zertifizieren können —
+/// Grundlage für einen künftigen, dynamischen Aufbewahrungs-Wasserstand für
+/// Sync-Events/Tombstones (siehe `docs/PEER_LEBENSZYKLUS.md`). Deshalb
+/// schreibt ``SyncSnapshotExportService/exportierePaket(context:importErfolgreich:)``
+/// diese Datei NUR bei erfolgreichem Import desselben Zyklus neu — bei
+/// Fehlschlag bleibt die alte Datei (mit ihrem alten, weiterhin korrekten
+/// Zeitstempel) unverändert stehen, statt fälschlich "frisch" zu wirken.
 struct SyncPeerManifest: Codable {
     /// Eigene, vom Bereich-B/C/D-`SyncSnapshot.formatVersion` unabhängige
     /// Versionierung des Paket-Layouts selbst.
