@@ -53,6 +53,7 @@ struct RootView: View {
             await KaufEintragBereinigungService.automatischBereinigenFallsFaellig(context: modelContext)
             await PreispunktVerdichtungService.automatischVerdichtenFallsFaellig(context: modelContext)
             await SyncExportService.raeumeAlteEigeneEventDateienAufFallsFaellig()
+            await SyncTombstoneService.raeumeAlteTombstonesAufFallsFaellig(context: modelContext)
             pruefeAusDerZeitGefallen()
             pruefeToteGruppenPeers()
         }
@@ -63,6 +64,7 @@ struct RootView: View {
                 await KaufEintragBereinigungService.automatischBereinigenFallsFaellig(context: modelContext)
                 await PreispunktVerdichtungService.automatischVerdichtenFallsFaellig(context: modelContext)
                 await SyncExportService.raeumeAlteEigeneEventDateienAufFallsFaellig()
+            await SyncTombstoneService.raeumeAlteTombstonesAufFallsFaellig(context: modelContext)
                 pruefeAusDerZeitGefallen()
                 pruefeToteGruppenPeers()
             }

@@ -61,6 +61,51 @@ enum SyncSnapshotImportService {
     /// Tests sie auf sehr kurze Werte setzen können.
     @MainActor static var maximalesSnapshotAlter: TimeInterval = 30 * 24 * 60 * 60
 
+    /// Peer-Lebenszyklus, Baustein C: dynamischer Aufbewahrungs-Wasserstand
+    /// für Sync-Events/Tombstones (ersetzt feste Fristen, siehe
+    /// `docs/PEER_LEBENSZYKLUS.md`) — „ist ein Ereignis/Tombstone älter als
+    /// dieser Wert, hat JEDER aktuell bekannte Peer nachweislich schon einen
+    /// vollständigen Sync danach gehabt, hat es für die Gruppe keinen
+    /// Mehrwert mehr". Liest live alle aktuell vorhandenen `peers/*/manifest.json`
+    /// (kein separat gepflegter Cache — ``SyncPeerInfo`` dient einem anderen
+    /// Zweck, siehe dort) und bildet das Minimum ihrer `erzeugtAm`-Zeitstempel.
+    /// Baustein C0 (``SyncSnapshotExportService/exportierePaket(context:importErfolgreich:)``)
+    /// stellt sicher, dass `erzeugtAm` das auch tatsächlich zertifiziert
+    /// (nur bei erfolgreichem Import desselben Zyklus aktualisiert).
+    ///
+    /// `nil`, wenn (a) der Ordnerzugriff fehlschlägt, (b) aktuell kein
+    /// anderer Peer bekannt ist (frisch verbundenes Gerät ohne Partner —
+    /// noch keine Grundlage, sicher aufzuräumen), oder (c) sich auch nur
+    /// EIN aktuell vorhandener Peer-Ordner nicht lesen lässt — bewusst nicht
+    /// einfach übersprungen, sonst könnte der Wasserstand an genau dem Peer
+    /// vorbei fortschreiten, der ihn eigentlich noch zurückhalten müsste.
+    /// `nil` bedeutet für Aufrufer: in diesem Lauf nichts löschen.
+    @MainActor
+    static func aktuellerAufraeumWasserstand(in ordner: URL) async -> Date? {
+        guard ordner.startAccessingSecurityScopedResource() else { return nil }
+        defer { ordner.stopAccessingSecurityScopedResource() }
+
+        let peersOrdner = ordner.appendingPathComponent("peers", isDirectory: true)
+        let eigeneGeraeteID = DatabaseLeaseService.geraeteID
+        guard let peerVerzeichnisse = await SyncDateiZugriff.mitZeitlimit({
+            SyncDateiZugriff.listeKoordiniert(peersOrdner)
+        }) ?? nil else { return nil }
+
+        let fremdePeerOrdner = peerVerzeichnisse.filter { !PeerOrdnerName.gehoertZu($0.lastPathComponent, geraeteID: eigeneGeraeteID) }
+        guard !fremdePeerOrdner.isEmpty else { return nil }
+
+        var wasserstand: Date?
+        for peerOrdner in fremdePeerOrdner {
+            guard let manifest = await ladeManifest(
+                von: SyncSnapshotExportService.manifestURL(fuerPeer: peerOrdner.lastPathComponent, in: ordner)
+            ) else { return nil }
+            if wasserstand == nil || manifest.erzeugtAm < wasserstand! {
+                wasserstand = manifest.erzeugtAm
+            }
+        }
+        return wasserstand
+    }
+
     /// Rückgabewert meldet ausschließlich, ob der Ordnerzugriff (Berechtigung)
     /// geklappt hat — die einzige Fehlerart, die für die Person tatsächlich
     /// handlungsrelevant ist (z.B. Ordner erneut auswählen). Alle anderen,

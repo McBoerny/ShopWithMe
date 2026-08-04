@@ -3,10 +3,18 @@ import SwiftData
 
 /// Erkennt ein bereits etabliertes Sync-Gruppenmitglied, das so lange nicht
 /// erfolgreich synchronisiert hat, dass eigene, inzwischen gelöschte
-/// Event-Dateien (siehe ``SyncExportService/eventAufbewahrungsfrist``) auf
-/// anderen Geräten Löschungen enthalten haben könnten, die dieses Gerät nie
-/// erfahren hat (GitHub #89, siehe `docs/DATENSYNCHRONISATION.md` Abschnitt 9a
+/// Event-Dateien (siehe ``veraltungsSchwelle``) auf anderen Geräten
+/// Löschungen enthalten haben könnten, die dieses Gerät nie erfahren hat
+/// (GitHub #89, siehe `docs/DATENSYNCHRONISATION.md` Abschnitt 9a
 /// „Event-Bereinigung").
+///
+/// **Peer-Lebenszyklus, Baustein C:** ``veraltungsSchwelle`` ist bewusst ein
+/// eigener, rein lokaler Wert statt eines Bezugs auf den dynamischen
+/// Aufbewahrungs-Wasserstand (``SyncSnapshotImportService/aktuellerAufraeumWasserstand(in:)``)
+/// — die hier beantwortete Frage ("wie lange kann ICH mich nicht mehr auf
+/// die Vollständigkeit meines eigenen Event-Lesens verlassen") ist rein
+/// lokal, ohne Gruppenbezug, und in einer anderen Kategorie als die
+/// Aufräum-Mechanismen für Events/Tombstones — siehe `docs/PEER_LEBENSZYKLUS.md`.
 ///
 /// **Warum ein eigener, rein lokaler Zeitstempel statt einer Konsum-Quittung
 /// zwischen Peers:** Eine echte Quittung ("hat jeder Peer meine Events schon
@@ -31,6 +39,13 @@ import SwiftData
 /// (`SyncOrdnerSettingsView`, `docs/DATENSYNCHRONISATION.md` Abschnitt 6).
 enum SyncAktualitaetsService {
     private static let zuletztErfolgreichSchluessel = "syncZuletztErfolgreichSynchronisiertAm"
+
+    /// Eigener, unabhängiger Schwellenwert (Peer-Lebenszyklus, Baustein C —
+    /// vorher aus ``SyncExportService/eventAufbewahrungsfrist`` mitgenutzt,
+    /// das mit der Umstellung auf den dynamischen Aufbewahrungs-Wasserstand
+    /// entfallen ist). `static var` statt Konstante, damit Tests sie
+    /// verkürzen können.
+    @MainActor static var veraltungsSchwelle: TimeInterval = 30 * 24 * 60 * 60
 
     /// Zeitpunkt des letzten ERFOLGREICHEN Sync-Zyklus (alle fünf Teilschritte
     /// von `SyncPollingService.syncZyklus()` erfolgreich) — `nil`, falls noch
@@ -61,8 +76,7 @@ enum SyncAktualitaetsService {
     /// Ob dieses Gerät als „aus der Zeit gefallen" gilt: ein Sync-Ordner ist
     /// aktiv verknüpft, das Gerät ist bereits etabliertes Mitglied (siehe
     /// ``istEtabliertesMitglied(context:)``), UND der letzte erfolgreiche
-    /// Sync-Zyklus liegt länger als ``SyncExportService/eventAufbewahrungsfrist``
-    /// zurück.
+    /// Sync-Zyklus liegt länger als ``veraltungsSchwelle`` zurück.
     ///
     /// **Migrations-Fall:** `nil` (noch nie ein Zeitpunkt aufgezeichnet) gilt
     /// bewusst NICHT als „aus der Zeit gefallen" — sonst würde jedes bereits
@@ -76,6 +90,6 @@ enum SyncAktualitaetsService {
         guard SyncOrdnerService.gewaehlterOrdner() != nil else { return false }
         guard istEtabliertesMitglied(context: context) else { return false }
         guard let zuletzt = zuletztErfolgreichSynchronisiertAm else { return false }
-        return Date().timeIntervalSince(zuletzt) > SyncExportService.eventAufbewahrungsfrist
+        return Date().timeIntervalSince(zuletzt) > veraltungsSchwelle
     }
 }

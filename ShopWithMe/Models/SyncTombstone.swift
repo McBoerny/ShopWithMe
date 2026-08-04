@@ -20,10 +20,12 @@ import SwiftData
 /// bereits über ``SyncEntitaetsAliasService`` aufgelöst) — nur so kann jedes
 /// Gerät seinen eigenen Bestand korrekt dagegen abgleichen.
 ///
-/// **Bewusst keine Bereinigung/Verfallsdatum** in dieser ersten Umsetzung —
-/// die Tombstone-Liste wächst unbegrenzt mit, aber langsam (nur tatsächliche
-/// Löschungen, keine laufenden Änderungen); eine Kürzung nach hinreichend
-/// langer Zeit wäre eine spätere, unabhängige Ergänzung.
+/// **Bereinigung seit Peer-Lebenszyklus Baustein C** (vorher bewusst
+/// unbegrenzt, siehe `docs/PEER_LEBENSZYKLUS.md`):
+/// ``SyncTombstoneService/raeumeAlteTombstonesAufFallsFaellig(context:)``
+/// löscht Tombstones, die älter als der aktuelle dynamische
+/// Aufbewahrungs-Wasserstand sind — dominiert vorher von einem Tombstone pro
+/// `KaufEintrag`, automatisch 48h nach jedem Einkauf erzeugt.
 @Model
 final class SyncTombstone {
     var id: UUID
@@ -80,5 +82,45 @@ enum SyncTombstoneService {
     /// Alle lokal bekannten Tombstones — für den Snapshot-Export.
     static func alle(context: ModelContext) -> [SyncTombstone] {
         (try? context.fetch(FetchDescriptor<SyncTombstone>())) ?? []
+    }
+
+    private static let letzteBereinigungSchluessel = "syncTombstoneBereinigungLetzteBereinigung"
+
+    /// Mindestabstand zwischen zwei automatischen Aufräumläufen, analog
+    /// `SyncExportService.automatischesBereinigungsintervall`.
+    static let automatischesBereinigungsintervall: TimeInterval = 60 * 60 * 24
+
+    static var letzteBereinigung: Date? {
+        get { UserDefaults.standard.object(forKey: letzteBereinigungSchluessel) as? Date }
+        set { UserDefaults.standard.set(newValue, forKey: letzteBereinigungSchluessel) }
+    }
+
+    /// Peer-Lebenszyklus, Baustein C: löscht Tombstones, deren `geloeschtAm`
+    /// vor dem aktuellen dynamischen Aufbewahrungs-Wasserstand liegt (siehe
+    /// ``SyncSnapshotImportService/aktuellerAufraeumWasserstand(in:)``) —
+    /// ersetzt die vorherige „nie bereinigt"-Politik. Höchstens einmal pro
+    /// ``automatischesBereinigungsintervall`` tatsächlich ausgeführt. Kein
+    /// Löschversuch, wenn der Wasserstand `nil` liefert (kein anderer Peer
+    /// bekannt, oder ein aktuell vorhandener Peer-Ordner nicht lesbar).
+    @MainActor
+    static func raeumeAlteTombstonesAufFallsFaellig(context: ModelContext) async {
+        if let letzte = letzteBereinigung, Date().timeIntervalSince(letzte) < automatischesBereinigungsintervall {
+            return
+        }
+        letzteBereinigung = Date()
+
+        guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return }
+        guard let wasserstand = await SyncSnapshotImportService.aktuellerAufraeumWasserstand(in: syncOrdner) else { return }
+
+        let alle = (try? context.fetch(FetchDescriptor<SyncTombstone>())) ?? []
+        let zuLoeschende = alle.filter { $0.geloeschtAm < wasserstand }
+        guard !zuLoeschende.isEmpty else { return }
+        for tombstone in zuLoeschende {
+            context.delete(tombstone)
+        }
+        try? context.save()
+        if SyncDebugLogger.istAktiv {
+            SyncDebugLogger.log(.tombstonesBereinigt, details: "anzahl=\(zuLoeschende.count)")
+        }
     }
 }

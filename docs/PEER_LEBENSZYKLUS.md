@@ -1,6 +1,6 @@
 # ShopWithMe — Peer-Lebenszyklus
 
-Status: **In Umsetzung** (Bausteine A, B und C0 von 4 fertig). Ausgangspunkt: `SyncTombstone`
+Status: **Umgesetzt** (alle 4 Bausteine fertig). Ausgangspunkt: `SyncTombstone`
 wächst aktuell für immer (siehe `docs/DATENSYNCHRONISATION.md` — dominiert durch einen
 Tombstone pro `KaufEintrag`, automatisch 48h nach jedem Einkauf erzeugt). Statt einer
 fest „gepflegten" Zeit-Frist soll ein dynamischer, sich selbst nachführender
@@ -18,7 +18,7 @@ Vier Bausteine, jeder ein eigener Checkpoint:
 - **Baustein B — Rückkehrer-Erkennung** (✅)
 - **Baustein A — Peer-Sterblichkeit sichtbar machen + bestätigte Entfernung** (✅)
 - **Baustein C0 — Manifest muss „vollständiger Sync" zertifizieren** (✅)
-- **Baustein C — Dynamischer Aufbewahrungs-Wasserstand für Events/Tombstones** (offen)
+- **Baustein C — Dynamischer Aufbewahrungs-Wasserstand für Events/Tombstones** (✅)
 
 Reihenfolge bewusst so: B zuerst, weil es die Sicherheits-Garantie liefert, von der alle
 anderen Bausteine abhängen.
@@ -128,3 +128,61 @@ fingerabdruck-geprüft) bleibt unverändert.
 
 **Tests:** `SyncSnapshotExportServiceTests.exportierePaketSchreibtManifestBeiFehlgeschlagenemImportNichtNeu`/
 `exportierePaketSchreibtManifestBeiErfolgreichemImportNeu`.
+
+## Baustein C: Dynamischer Aufbewahrungs-Wasserstand, ersetzt beide festen Fristen
+
+**Neue Funktion:** `SyncSnapshotImportService.aktuellerAufraeumWasserstand(in:)` — listet
+`peers/` (`SyncDateiZugriff.listeKoordiniert`), überspringt den eigenen Ordner, liest je
+verbleibendem Peer-Ordner `manifest.json` und bildet das Minimum aller `erzeugtAm`-
+Zeitstempel. **Kein separat gepflegter Cache** — `SyncPeerInfo` dient einem anderen
+Zweck (Namensauflösung für Meldungen wie „Bereits von {Gerät} abgehakt") und wird hier
+bewusst nicht gelesen; jeder Aufräum-Lauf liest live.
+
+`nil`, wenn (a) der Ordnerzugriff fehlschlägt, (b) aktuell kein anderer Peer bekannt ist
+(frisch verbundenes Gerät ohne Partner), oder (c) sich auch nur EIN aktuell vorhandener
+Peer-Ordner nicht lesen lässt — bewusst nicht übersprungen, sonst könnte der Wasserstand
+an genau dem Peer vorbei fortschreiten, der ihn eigentlich noch zurückhalten müsste.
+`nil` bedeutet für Aufrufer: in diesem Lauf nichts löschen.
+
+**Ersetzt zwei bestehende Mechanismen:**
+- `SyncExportService.raeumeAlteEigeneEventDateienAufFallsFaellig()` — Löschkriterium
+  vorher „Datei-Änderungsdatum älter als die feste `eventAufbewahrungsfrist` (30 Tage)",
+  jetzt „... älter als der aktuelle Wasserstand". Die Wasserstand-Berechnung läuft dabei
+  bewusst VOR dem Öffnen des eigenen Security-Scoped-Zugriffs dieser Funktion (nicht von
+  innen heraus aufgerufen) — verschachtelter/überlappender Zugriff auf denselben
+  Bookmark destabilisiert ihn auf echten Geräten nachweisbar (siehe
+  `SyncOrdnerZugriffsDiagnose`-Typ-Doku).
+- **Neu:** `SyncTombstoneService.raeumeAlteTombstonesAufFallsFaellig(context:)` — löscht
+  `SyncTombstone`-Zeilen mit `geloeschtAm` älter als der Wasserstand, gleiches
+  Rate-Limit-Muster (`automatischesBereinigungsintervall`) wie das Event-Vorbild.
+- Beide aufgerufen von denselben Stellen wie die übrigen `automatisch…FallsFaellig`-
+  Dienste in `RootView.swift`.
+
+**`SyncAktualitaetsService.istAusDerZeitGefallen` bewusst unverändert** — reiner,
+lokaler Selbst-Check ohne Gruppenbezug, in einer anderen Kategorie als die beiden
+Aufräum-Mechanismen oben. Bekommt einen eigenen, unabhängigen Wert
+(`SyncAktualitaetsService.veraltungsSchwelle`, weiterhin 30 Tage) statt weiter
+`SyncExportService.eventAufbewahrungsfrist` mitzunutzen, die mit dieser Umstellung
+komplett entfällt.
+
+**Kein Cleanup für `SyncEntitaetsAlias`** — wächst nach demselben „nie bereinigt"-Muster,
+aber deutlich langsamer (nur bei Bereich-B-Namens-/Koordinaten-Treffern, nicht pro Kauf)
+und hat aktuell kein Zeitstempel-Feld überhaupt. Bewusst als eigenständiger, späterer
+Schritt zurückgestellt.
+
+**Tests:** `SyncSnapshotImportServiceTests.aktuellerAufraeumWasserstandBildetMinimumMehrererPeers`/
+`aktuellerAufraeumWasserstandLiefertNilOhneAnderenPeer`/
+`aktuellerAufraeumWasserstandLiefertNilBeiUnlesbaremPeerManifest`;
+`SyncAktualitaetsServiceTests.raeumtNurAlteEigeneEventDateienAuf`/
+`raeumtNichtsOhneAnderenBekanntenPeer`/`bereinigungLaeuftHoechstensEinmalProIntervall`
+(umgeschrieben); `SyncTombstoneServiceTests` (neu, 3 Tests, analoges Muster).
+
+## Zusammenfassung
+
+Mit allen vier Bausteinen: ein Gerät, das die Gruppe lange nicht gesehen hat, wird
+sichtbar markiert und nach Bestätigung entfernt (A); ein zurückkehrendes, entferntes
+Gerät kann strukturell keinen veralteten Bestand mehr exportieren, bevor der Nutzer
+überhaupt informiert wurde (B); der Zeitstempel jedes Peers zertifiziert einen
+tatsächlich vollständigen Sync (C0); und Sync-Events/Tombstones werden gelöscht, sobald
+jeder aktuell bekannte Peer sie nachweislich gesehen hat — kein fest „gepflegter"
+Zeitwert mehr nötig, der Mechanismus passt sich dem tatsächlichen Gruppenzustand an (C).

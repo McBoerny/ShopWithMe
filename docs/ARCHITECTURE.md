@@ -202,13 +202,14 @@ Abschnitt zurückfällt (Belegscan, Preisschild-Scan, Sync-Import).
   Fileshare-Ordner über eine `NSFileCoordinator`-basierte Lock-Datei (Micro-Lease für
   diskrete Aktionen, Session-Lease für Bearbeitungs-Bildschirme) — siehe
   `docs/DATABASE_CONCURRENCY.md`.
-- **Peer-Lebenszyklus** (`SyncOrdnerService.binIchNochMitglied(in:)`,
-  `SyncPollingService.starten(context:)`): erkennt beim Start, ob der eigene
-  Peer-Ordner von der Gruppe entfernt wurde, und trennt sich in diesem Fall sofort
-  vom Sync-Ordner (nach lokalem Backup), bevor ein weiterer Sync-Zyklus laufen
-  kann — Grundlage für eine künftige, dynamisch statt fest begrenzte
-  Aufbewahrung von Sync-Events/Tombstones. Details in
-  `docs/PEER_LEBENSZYKLUS.md`.
+- **Peer-Lebenszyklus** (`SyncOrdnerService.binIchNochMitglied(in:)`/`entfernePeer(_:in:context:)`,
+  `SyncPeerInfo.istWahrscheinlichTot`, `SyncSnapshotImportService.aktuellerAufraeumWasserstand(in:)`):
+  erkennt beim Start, ob der eigene Peer-Ordner von der Gruppe entfernt wurde, und trennt
+  sich in diesem Fall sofort vom Sync-Ordner (nach lokalem Backup); macht lange nicht
+  gesehene Peers sichtbar und lässt sie bestätigt entfernen; trägt damit die
+  Sicherheits-Garantie für einen dynamischen, sich selbst nachführenden
+  Aufbewahrungs-Wasserstand für Sync-Events/`SyncTombstone` (ersetzt vorher feste
+  Fristen). Details in `docs/PEER_LEBENSZYKLUS.md`.
 - **DebugLogWriter**/**DatabaseDebugLogger**: optionaler, standardmäßig deaktivierter
   Diagnose-Logging-Mechanismus für den Mehrbenutzerzugriff (Rotation, `os.Logger`) —
   siehe `docs/LOGGING.md`.

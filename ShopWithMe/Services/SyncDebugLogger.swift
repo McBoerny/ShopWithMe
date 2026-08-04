@@ -54,13 +54,18 @@ enum SyncDebugLogger {
         /// oder per Tombstone als gelöscht markiert).
         case einkaufsvorgangEintragUebersprungen = "sync_einkaufsvorgang_eintrag_uebersprungen"
         /// GitHub #89: ``SyncExportService/raeumeAlteEigeneEventDateienAufFallsFaellig()``
-        /// hat eigene Event-Dateien gelöscht, die älter als
-        /// ``SyncExportService/eventAufbewahrungsfrist`` waren. Details:
-        /// `anzahl=N`.
+        /// hat eigene Event-Dateien gelöscht, die älter als der aktuelle
+        /// dynamische Aufbewahrungs-Wasserstand waren (Peer-Lebenszyklus
+        /// Baustein C, siehe ``SyncSnapshotImportService/aktuellerAufraeumWasserstand(in:)``).
+        /// Details: `anzahl=N`.
         case eventDateienBereinigt = "sync_event_dateien_bereinigt"
+        /// Peer-Lebenszyklus, Baustein C: ``SyncTombstoneService/raeumeAlteTombstonesAufFallsFaellig(context:)``
+        /// hat Tombstones gelöscht, die älter als der aktuelle dynamische
+        /// Aufbewahrungs-Wasserstand waren. Details: `anzahl=N`.
+        case tombstonesBereinigt = "sync_tombstones_bereinigt"
         /// GitHub #89: ``SyncAktualitaetsService/istAusDerZeitGefallen(context:)``
         /// hat zugeschlagen — ein bereits etabliertes Gerät war länger als
-        /// ``SyncExportService/eventAufbewahrungsfrist`` nicht erfolgreich
+        /// ``SyncAktualitaetsService/veraltungsSchwelle`` nicht erfolgreich
         /// synchronisiert. Details: `zuletztErfolgreichAm=…`.
         case ausDerZeitGefallenErkannt = "sync_aus_der_zeit_gefallen_erkannt"
         /// GitHub #89: der erzwungene Voll-Abgleich für ein „aus der Zeit
@@ -127,8 +132,8 @@ enum SyncDebugLogger {
             case .ordnerZugriffFehlgeschlagen, .baumelndeReferenzGefunden, .eventNichtAnwendbar,
                  .peerVerworfenAltersgrenze, .eventAufgegeben, .debugModeEnabled, .debugModeDisabled,
                  .einkaufsvorgangAbschlussNichtUebernommen, .einkaufsvorgangAbschlussUebernommen,
-                 .einkaufsvorgangEintragUebersprungen, .eventDateienBereinigt, .ausDerZeitGefallenErkannt,
-                 .vollAbgleichEingeleitet, .multipeerGruppenIDNichtAufloesbar:
+                 .einkaufsvorgangEintragUebersprungen, .eventDateienBereinigt, .tombstonesBereinigt,
+                 .ausDerZeitGefallenErkannt, .vollAbgleichEingeleitet, .multipeerGruppenIDNichtAufloesbar:
                 return .fehler
             case .zyklusStart, .zyklusEnde, .eventEmpfangen, .snapshotEmpfangen, .einkaufslistenStand,
                  .snapshotGeschrieben, .iCloudBeobachterAusgeloest, .iCloudBeobachterScopeAktualisiert,

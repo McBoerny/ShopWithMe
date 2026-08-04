@@ -74,6 +74,54 @@ struct SyncSnapshotImportServiceTests {
         }
     }
 
+    // MARK: - Peer-Lebenszyklus, Baustein C: aktuellerAufraeumWasserstand
+
+    @Test
+    func aktuellerAufraeumWasserstandBildetMinimumMehrererPeers() async throws {
+        let syncOrdner = macheTempSyncOrdner()
+
+        var aelterer = leererSnapshot(geraeteID: "peer-a")
+        aelterer.erzeugtAm = Date().addingTimeInterval(-120)
+        try schreibeFremdenSnapshot(aelterer, fremdeGeraeteID: "peer-a", in: syncOrdner)
+
+        var neuerer = leererSnapshot(geraeteID: "peer-b")
+        neuerer.erzeugtAm = Date().addingTimeInterval(-30)
+        try schreibeFremdenSnapshot(neuerer, fremdeGeraeteID: "peer-b", in: syncOrdner)
+
+        let wasserstand = await SyncSnapshotImportService.aktuellerAufraeumWasserstand(in: syncOrdner)
+        let erwartet = aelterer.erzeugtAm
+        #expect(wasserstand.map { abs($0.timeIntervalSince(erwartet)) < 1 } == true)
+    }
+
+    /// Kein anderer Peer bekannt -> keine Grundlage, um sicher aufzuräumen.
+    @Test
+    func aktuellerAufraeumWasserstandLiefertNilOhneAnderenPeer() async throws {
+        let syncOrdner = macheTempSyncOrdner()
+        try FileManager.default.createDirectory(
+            at: syncOrdner.appendingPathComponent("peers", isDirectory: true), withIntermediateDirectories: true
+        )
+
+        let wasserstand = await SyncSnapshotImportService.aktuellerAufraeumWasserstand(in: syncOrdner)
+        #expect(wasserstand == nil)
+    }
+
+    /// Ein aktuell vorhandener Peer-Ordner ohne lesbares Manifest darf den
+    /// Wasserstand NICHT einfach überspringen — sonst könnte er an genau dem
+    /// Peer vorbei fortschreiten, der ihn eigentlich zurückhalten müsste.
+    @Test
+    func aktuellerAufraeumWasserstandLiefertNilBeiUnlesbaremPeerManifest() async throws {
+        let syncOrdner = macheTempSyncOrdner()
+
+        try schreibeFremdenSnapshot(leererSnapshot(geraeteID: "peer-a"), fremdeGeraeteID: "peer-a", in: syncOrdner)
+
+        let kaputterOrdner = syncOrdner.appendingPathComponent("peers", isDirectory: true)
+            .appendingPathComponent("peer-b", isDirectory: true)
+        try FileManager.default.createDirectory(at: kaputterOrdner, withIntermediateDirectories: true)
+
+        let wasserstand = await SyncSnapshotImportService.aktuellerAufraeumWasserstand(in: syncOrdner)
+        #expect(wasserstand == nil)
+    }
+
     @Test
     func geschaeftstypWirdPerNamenGematchtStattDupliziert() async throws {
         let (container, context) = try machtLeerenContainer()

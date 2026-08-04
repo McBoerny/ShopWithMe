@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.12 (Build 238) — Peer-Lebenszyklus, Baustein C: dynamischer Aufbewahrungs-Wasserstand (Abschluss)
+
+Vierter und letzter Baustein, siehe `docs/PEER_LEBENSZYKLUS.md`. Ersetzt zwei feste,
+unabhängig voneinander „gepflegte" Zeit-Fristen durch einen einzigen, sich selbst
+nachführenden Mechanismus: Sync-Events/Tombstones gelten erst dann als sicher löschbar,
+wenn jeder aktuell bekannte Peer nachweislich schon einen vollständigen Sync danach
+hatte.
+
+- Neu: **`SyncSnapshotImportService.aktuellerAufraeumWasserstand(in:)`** — liest live
+  alle aktuell vorhandenen `peers/*/manifest.json` und bildet das Minimum ihrer
+  Zeitstempel. Kein separat gepflegter Cache. `nil` (nichts löschen), wenn kein anderer
+  Peer bekannt ist oder sich auch nur ein vorhandener Peer-Ordner nicht lesen lässt.
+- **`SyncExportService.raeumeAlteEigeneEventDateienAufFallsFaellig()`** nutzt jetzt
+  diesen Wasserstand statt der bisherigen festen 30-Tage-`eventAufbewahrungsfrist`
+  (entfällt).
+- Neu: **`SyncTombstoneService.raeumeAlteTombstonesAufFallsFaellig(context:)`** —
+  dieselbe Logik für `SyncTombstone`-Zeilen, die vorher nie bereinigt wurden (dominiert
+  von einem Tombstone pro Kauf, ~1500 Zeilen/Jahr geschätzt).
+- `SyncAktualitaetsService.istAusDerZeitGefallen` bleibt unverändert (reiner, lokaler
+  Selbst-Check ohne Gruppenbezug), bekommt aber einen eigenen, unabhängigen Wert
+  (`veraltungsSchwelle`) statt weiter die entfallende `eventAufbewahrungsfrist`
+  mitzunutzen.
+
 ## v0.12 (Build 237) — Peer-Lebenszyklus, Baustein C0: Manifest muss „vollständiger Sync" zertifizieren
 
 Dritter von vier Bausteinen, siehe `docs/PEER_LEBENSZYKLUS.md`. Voraussetzung für den in

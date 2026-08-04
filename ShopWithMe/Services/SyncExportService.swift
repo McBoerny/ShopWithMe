@@ -34,15 +34,14 @@ enum SyncExportService {
     /// Versuch (reine Alters-Heuristik ohne Sicherheitsnetz) wurde revertiert,
     /// weil „hochgeladen" nur bedeutet, dass DIESES Gerät die Datei geschrieben
     /// hat, nicht, dass ein Peer sie bereits gelesen hat: ein zu diesem
-    /// Zeitpunkt länger als die Frist abwesender Peer verlor dadurch
-    /// unwiederbringlich `artikelAbgehakt`-Events. Sicher ist die Alters-
-    /// Heuristik jetzt, weil ``SyncAktualitaetsService`` das komplementäre
-    /// Gegenstück liefert: ein Gerät, das selbst länger als dieselbe Frist
-    /// nicht erfolgreich synchronisiert hat, erkennt das lokal und löst einen
-    /// erzwungenen Voll-Abgleich statt eines additiven Merges aus (siehe
-    /// dort) — ein Peer verliert dadurch nie mehr unbemerkt eine Löschung, er
-    /// bekommt stattdessen sicher mitgeteilt, dass er sich nicht mehr auf sein
-    /// Event-Log verlassen darf.
+    /// Zeitpunkt abwesender Peer verlor dadurch unwiederbringlich
+    /// `artikelAbgehakt`-Events. Sicher ist die Löschung seit Peer-Lebenszyklus
+    /// Baustein C nicht mehr über eine feste Alters-Frist, sondern über einen
+    /// dynamischen Wasserstand (``SyncSnapshotImportService/aktuellerAufraeumWasserstand(in:)``):
+    /// gelöscht wird erst, wenn JEDER aktuell bekannte Peer nachweislich schon
+    /// einen vollständigen Sync danach hatte — ein tatsächlich abwesender Peer
+    /// hält den Wasserstand selbst zurück, solange er nicht per Peer-
+    /// Lebenszyklus (Baustein A/B) ausgeschlossen wurde.
     /// Rückgabewert meldet ausschließlich, ob der Ordnerzugriff (Berechtigung)
     /// geklappt hat, analog ``SyncSnapshotImportService/importiereSnapshots(context:)``.
     @discardableResult
@@ -93,20 +92,6 @@ enum SyncExportService {
         return true
     }
 
-    /// Aufbewahrungsfrist für eigene, bereits hochgeladene Event-Dateien
-    /// (GitHub #89) — danach werden sie gelöscht, unabhängig davon, ob ein
-    /// Peer sie bereits gelesen hat (siehe
-    /// ``raeumeAlteEigeneEventDateienAufFallsFaellig()`` für die Begründung,
-    /// warum das jetzt sicher ist). Dieselbe Größenordnung wie
-    /// `SyncSnapshotImportService.maximalesSnapshotAlter` — beide beantworten
-    /// dieselbe Grundfrage („wie lange ist ein Gerät ohne echten Kontakt noch
-    /// Teil der Sync-Gruppe"), nur für unterschiedliche Datei-Arten. Von
-    /// ``SyncAktualitaetsService`` als Schwelle für „aus der Zeit gefallen"
-    /// mitgenutzt, statt eines eigenen, separat zu pflegenden Werts (Single
-    /// Source of Truth). `static var` statt Konstante, damit Tests sie
-    /// verkürzen können.
-    @MainActor static var eventAufbewahrungsfrist: TimeInterval = 30 * 24 * 60 * 60
-
     private static let letzteEventBereinigungSchluessel = "syncEventBereinigungLetzteBereinigung"
 
     /// Mindestabstand zwischen zwei automatischen Aufräumläufen, analog
@@ -120,27 +105,29 @@ enum SyncExportService {
         set { UserDefaults.standard.set(newValue, forKey: letzteEventBereinigungSchluessel) }
     }
 
-    /// Löscht eigene Event-Dateien, deren Datei-Änderungsdatum länger als
-    /// ``eventAufbewahrungsfrist`` zurückliegt — höchstens einmal pro
+    /// Löscht eigene Event-Dateien, deren Datei-Änderungsdatum vor dem
+    /// aktuellen dynamischen Aufbewahrungs-Wasserstand liegt (siehe
+    /// ``SyncSnapshotImportService/aktuellerAufraeumWasserstand(in:)``,
+    /// Peer-Lebenszyklus Baustein C) — höchstens einmal pro
     /// ``automatischesBereinigungsintervall`` tatsächlich ausgeführt (siehe
     /// `RootView` für den Aufrufort, analog den übrigen
-    /// `automatisch…FallsFaellig`-Diensten).
+    /// `automatisch…FallsFaellig`-Diensten). Kein Löschversuch, wenn der
+    /// Wasserstand `nil` liefert (kein anderer Peer bekannt, oder ein
+    /// aktuell vorhandener Peer-Ordner nicht lesbar).
     ///
     /// **Warum das Datei-Änderungsdatum statt eines Feldes im Event-Inhalt:**
     /// Ein Alters-Check über `wallClock` würde jede Datei erst lesen/dekodieren
     /// müssen — genau die Kosten, die der ID-Vorfilter beim Import (siehe
     /// `SyncImportService`) gerade vermeidet. Das Dateisystem-Änderungsdatum
-    /// ist für diesen einmal-täglichen, groben Zweck (30-Tage-Schwelle)
-    /// präzise genug und kostet nur einen Verzeichnis-Listing-Aufruf.
+    /// ist für diesen einmal-täglichen, groben Zweck präzise genug und kostet
+    /// nur einen Verzeichnis-Listing-Aufruf.
     ///
-    /// **Warum das jetzt sicher ist** (siehe auch ``SyncAktualitaetsService``):
-    /// ein Peer, der regelmäßig synchronisiert, liest eine neue Event-Datei
-    /// typischerweise innerhalb von Minuten — 30 Tage Puffer reichen dafür
-    /// bei Weitem. Nur ein Peer, der TATSÄCHLICH so lange abwesend war, dass
-    /// er eine Datei verpasst haben könnte, ist überhaupt betroffen — und
-    /// genau dieser Fall erkennt sich selbst (``SyncAktualitaetsService/istAusDerZeitGefallen(context:)``)
-    /// und löst einen erzwungenen Voll-Abgleich statt eines additiven Merges
-    /// aus, statt sich auf sein (dann lückenhaftes) Event-Log zu verlassen.
+    /// **Warum das sicher ist:** der Wasserstand garantiert, dass jeder
+    /// aktuell bekannte Peer bereits einen vollständigen Sync NACH dem
+    /// Löschzeitpunkt hatte (siehe Baustein C0, `SyncPeerManifest`-Typ-Doku)
+    /// — ein Peer, der tatsächlich so lange abwesend war, dass er eine Datei
+    /// verpasst haben könnte, hält den Wasserstand selbst zurück, solange er
+    /// nicht per Peer-Lebenszyklus (Baustein A/B) ausgeschlossen wurde.
     @MainActor
     static func raeumeAlteEigeneEventDateienAufFallsFaellig() async {
         if let letzte = letzteEventBereinigung, Date().timeIntervalSince(letzte) < automatischesBereinigungsintervall {
@@ -149,6 +136,12 @@ enum SyncExportService {
         letzteEventBereinigung = Date()
 
         guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return }
+        // Eigener, in sich abgeschlossener Security-Scoped-Zugriff — VOR dem
+        // Öffnen des eigenen Scopes unten aufgerufen, nicht von innen heraus,
+        // um keinen verschachtelten/überlappenden Zugriff auf denselben
+        // Bookmark zu erzeugen (siehe ``SyncOrdnerZugriffsDiagnose``-Typ-Doku).
+        guard let wasserstand = await SyncSnapshotImportService.aktuellerAufraeumWasserstand(in: syncOrdner) else { return }
+
         let zugriffErfolgreich = syncOrdner.startAccessingSecurityScopedResource()
         SyncOrdnerZugriffsDiagnose.markiereOeffnen(aufrufstelle: "raeumeAlteEigeneEventDateienAuf", erfolgreich: zugriffErfolgreich)
         guard zugriffErfolgreich else {
@@ -165,13 +158,12 @@ enum SyncExportService {
             SyncDateiZugriff.listeKoordiniert(eventsOrdner)
         }).value else { return }
 
-        let stichtag = Date().addingTimeInterval(-eventAufbewahrungsfrist)
         let zuLoeschende = dateien.filter { datei in
             guard datei.pathExtension == "json",
                   let werte = try? datei.resourceValues(forKeys: [.contentModificationDateKey]),
                   let geaendertAm = werte.contentModificationDate
             else { return false }
-            return geaendertAm < stichtag
+            return geaendertAm < wasserstand
         }
         await Task.detached(priority: .utility, operation: {
             for datei in zuLoeschende {

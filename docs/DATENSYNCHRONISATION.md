@@ -758,8 +758,6 @@ kompletten `kaeufe/`-Ordners, aber ohne `events/` anzutasten.
   das `BackgroundTasks`-Framework, nicht umgesetzt.
 - **Kein Fehler-Backoff:** alle Sync-Funktionen sind best-effort
   (`try?`) ohne auswertbares Erfolgs-/Fehlersignal.
-- **`SyncTombstone` wächst aktuell unbegrenzt** (dominiert durch einen
-  Tombstone pro `KaufEintrag`, automatisch 48h nach jedem Einkauf erzeugt) —
-  wird durch einen dynamischen, sich selbst nachführenden Aufbewahrungs-
-  Wasserstand ersetzt, der auch die bisherige feste 30-Tage-Event-Frist
-  ablöst. In Umsetzung, siehe `docs/PEER_LEBENSZYKLUS.md`.
+- **Peer-Lebenszyklus + dynamischer Aufbewahrungs-Wasserstand für Sync-Events/Tombstones**
+  (ersetzt die vorher feste 30-Tage-Event-Frist und das vorher unbegrenzte
+  `SyncTombstone`-Wachstum) — umgesetzt, siehe `docs/PEER_LEBENSZYKLUS.md`.
