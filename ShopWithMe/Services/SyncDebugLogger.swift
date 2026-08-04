@@ -113,6 +113,13 @@ enum SyncDebugLogger {
         /// zum direkten Latenzvergleich zwischen beiden Kanälen.
         case multipeerEventEmpfangen = "multipeer_event_empfangen"
 
+        /// GitHub #49-Nachfolgefund: ``SyncOrdnerService/multipeerGruppenID(in:)``
+        /// konnte weder eine vorhandene ID lesen noch sicher bestätigen, dass
+        /// noch keine existiert (Zeitlimit oder Lese-/Schreibfehler beim
+        /// nicht erreichbaren Sync-Ordner) — der Multipeer-Aufbau wurde für
+        /// diesen Versuch übersprungen, kein Fallback auf eine geratene ID.
+        case multipeerGruppenIDNichtAufloesbar = "multipeer_gruppen_id_nicht_aufloesbar"
+
         /// Mindest-Protokollstufe, ab der dieses Ereignis geschrieben wird
         /// (siehe ``Protokollstufe``-Typ-Doku für die Einteilungskriterien).
         var mindestStufe: Protokollstufe {
@@ -121,7 +128,7 @@ enum SyncDebugLogger {
                  .peerVerworfenAltersgrenze, .eventAufgegeben, .debugModeEnabled, .debugModeDisabled,
                  .einkaufsvorgangAbschlussNichtUebernommen, .einkaufsvorgangAbschlussUebernommen,
                  .einkaufsvorgangEintragUebersprungen, .eventDateienBereinigt, .ausDerZeitGefallenErkannt,
-                 .vollAbgleichEingeleitet:
+                 .vollAbgleichEingeleitet, .multipeerGruppenIDNichtAufloesbar:
                 return .fehler
             case .zyklusStart, .zyklusEnde, .eventEmpfangen, .snapshotEmpfangen, .einkaufslistenStand,
                  .snapshotGeschrieben, .iCloudBeobachterAusgeloest, .iCloudBeobachterScopeAktualisiert,

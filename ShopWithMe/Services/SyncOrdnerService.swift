@@ -164,15 +164,30 @@ enum SyncOrdnerService {
     /// (und damit auf den geteilten Ordner) bleibt das Vertrauensmerkmal —
     /// dieselbe Logik wie im Issue skizziert, nur auf den Ordner statt eine
     /// einzelne Liste bezogen.
-    static func multipeerGruppenID(in syncOrdner: URL) -> UUID {
+    ///
+    /// **Rückgabewert `nil` bei nicht erreichbarem Ordner** (Nachfolgefund zu
+    /// GitHub #49): ein fehlgeschlagener koordinierter Lesezugriff sieht
+    /// identisch aus wie „Datei existiert noch nicht" — ohne die Unterscheidung
+    /// unten hätten zwei zeitgleich nicht erreichbare Geräte unabhängig
+    /// voneinander unterschiedliche IDs erfunden und sich über den
+    /// Discovery-Schlüssel (``multipeerDiscoveryGruppenSchluessel(fuerGruppenID:)``)
+    /// nie mehr gefunden — silent, ohne jede Fehlermeldung. Nur wenn
+    /// `FileManager.fileExists` die Abwesenheit LOKAL bestätigt (nicht bloß
+    /// der Lesezugriff scheiterte), gilt „wirklich noch nie angelegt" und eine
+    /// neue ID darf entstehen; deren Schreibversuch wird zusätzlich selbst
+    /// geprüft statt wie zuvor ungenutzt verworfen.
+    static func multipeerGruppenID(in syncOrdner: URL) async -> UUID? {
         let datei = syncOrdner.appendingPathComponent(gruppenIDDateiname)
-        if let daten = SyncDateiZugriff.leseKoordiniert(datei),
+        if let daten = await SyncDateiZugriff.mitZeitlimit({ SyncDateiZugriff.leseKoordiniert(datei) }) ?? nil,
            let text = String(data: daten, encoding: .utf8),
            let vorhandeneID = UUID(uuidString: text.trimmingCharacters(in: .whitespacesAndNewlines)) {
             return vorhandeneID
         }
+        guard !FileManager.default.fileExists(atPath: datei.path) else { return nil }
         let neueID = UUID()
-        SyncDateiZugriff.schreibeKoordiniert(Data(neueID.uuidString.utf8), nach: datei)
+        guard await SyncDateiZugriff.mitZeitlimit({ SyncDateiZugriff.schreibeKoordiniert(Data(neueID.uuidString.utf8), nach: datei) }) == true else {
+            return nil
+        }
         return neueID
     }
 

@@ -106,9 +106,16 @@ enum SyncImportService {
 
         let peersOrdner = syncOrdner.appendingPathComponent("peers", isDirectory: true)
         let eigeneGeraeteID = DatabaseLeaseService.geraeteID
-        guard let peerVerzeichnisse = await Task.detached(priority: .utility, operation: {
-            SyncDateiZugriff.listeKoordiniert(peersOrdner)
-        }).value else { return true }
+        // `nil` bedeutet hier Zeitüberschreitung/Lesefehler (Ordner nicht
+        // erreichbar) — bewusst als echter Fehlschlag gemeldet (nicht mehr
+        // wie zuvor stillschweigend als „keine Peers" behandelt), sonst würde
+        // ``SyncAktualitaetsService/vermerkeErfolgreichenZyklus()`` fälschlich
+        // einen erfolgreichen Zyklus vermerken, während der Ordner tatsächlich
+        // nicht erreichbar war (GitHub #49-Nachfolgefund).
+        guard let peerVerzeichnisse = await SyncDateiZugriff.mitZeitlimit({ SyncDateiZugriff.listeKoordiniert(peersOrdner) }) ?? nil else {
+            SyncDebugLogger.log(.ordnerZugriffFehlgeschlagen, details: "importiereNeueEvents-peers")
+            return false
+        }
 
         // Einmal für den gesamten Zyklus aufgebaut statt pro eingehendem Event
         // per ``SyncEventService/aktuellerGewinner(bezugsID:artikelID:context:)``
@@ -120,9 +127,15 @@ enum SyncImportService {
 
         for peerOrdner in peerVerzeichnisse where !PeerOrdnerName.gehoertZu(peerOrdner.lastPathComponent, geraeteID: eigeneGeraeteID) {
             let eventsOrdner = SyncExportService.eventsOrdner(fuerPeer: peerOrdner.lastPathComponent, in: syncOrdner)
-            guard let dateien = await Task.detached(priority: .utility, operation: {
-                SyncDateiZugriff.listeKoordiniert(eventsOrdner)
-            }).value else { continue }
+            // Zeitlimit statt unbegrenztem Warten, damit ein einzelner
+            // hängender Peer-Ordner nicht ``batchZyklusLaeuft`` (und damit
+            // die stillschweigende Verwerfung per Multipeer empfangener
+            // Events, siehe ``wendeEinzelnesEmpfangenesEventAn(_:context:)``)
+            // unbegrenzt lange offen hält — bewusst weiterhin nur „diesen
+            // Peer überspringen", nicht den ganzen Zyklus als fehlgeschlagen
+            // werten, da ein einzelner flakiger Peer-Ordner kein Anzeichen für
+            // einen insgesamt nicht erreichbaren Sync-Ordner ist.
+            guard let dateien = await SyncDateiZugriff.mitZeitlimit({ SyncDateiZugriff.listeKoordiniert(eventsOrdner) }) ?? nil else { continue }
 
             // Vorfilter gegen die im Dateinamen kodierte ID (Performance-Fund,
             // siehe Typ-Doku „Bekannte Grenze" oben und
@@ -216,15 +229,19 @@ enum SyncImportService {
     }
 
     /// Lädt und dekodiert Event-Dateien über einen koordinierten Lesezugriff
-    /// (``SyncDateiZugriff``, GitHub #52) — in einem `Task.detached`, damit ein
-    /// bei Bedarf ausgelöster Download nicht den `MainActor` blockiert.
+    /// (``SyncDateiZugriff``, GitHub #52) — pro Datei einzeln über
+    /// ``SyncDateiZugriff/mitZeitlimit(sekunden:_:)`` begrenzt (statt vormals
+    /// unbegrenzt in einem einzigen `Task.detached`), damit eine einzelne
+    /// hängende Datei nicht den gesamten Batch (und damit
+    /// ``batchZyklusLaeuft``) unbegrenzt lange blockiert.
     nonisolated private static func ladeEvents(aus dateien: [URL]) async -> [SyncEventExportDarstellung] {
-        await Task.detached(priority: .utility) {
-            dateien.compactMap { url -> SyncEventExportDarstellung? in
-                guard let daten = SyncDateiZugriff.leseKoordiniert(url) else { return nil }
-                return try? JSONDecoder().decode(SyncEventExportDarstellung.self, from: daten)
-            }
-        }.value
+        var ergebnis: [SyncEventExportDarstellung] = []
+        for url in dateien {
+            guard let daten = await SyncDateiZugriff.mitZeitlimit({ SyncDateiZugriff.leseKoordiniert(url) }) ?? nil else { continue }
+            guard let event = try? JSONDecoder().decode(SyncEventExportDarstellung.self, from: daten) else { continue }
+            ergebnis.append(event)
+        }
+        return ergebnis
     }
 
     @MainActor

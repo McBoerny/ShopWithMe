@@ -136,9 +136,15 @@ final class MultipeerSyncService: NSObject, ObservableObject {
             wirdAufgebaut = false
         }
 
-        let gruppenID = await Task.detached(priority: .utility) {
-            SyncOrdnerService.multipeerGruppenID(in: syncOrdner)
-        }.value
+        // `nil` bei nicht erreichbarem Ordner (Zeitlimit oder Lese-/Schreibfehler,
+        // siehe dortige Typ-Doku) — dann bewusst KEINE geratene ID verwenden,
+        // sondern diesen Versuch abbrechen; der nächste `starten(context:)`
+        // (App-Rückkehr in den Vordergrund, erneutes Betreten von
+        // `EinkaufenView`) probiert es erneut.
+        guard let gruppenID = await SyncOrdnerService.multipeerGruppenID(in: syncOrdner) else {
+            SyncDebugLogger.log(.multipeerGruppenIDNichtAufloesbar, details: "")
+            return
+        }
         // Währenddessen evtl. wieder deaktiviert (EinkaufenView bereits
         // verlassen) — dann nicht mehr verbinden.
         guard aktiv, session == nil else { return }

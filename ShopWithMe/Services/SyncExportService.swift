@@ -68,14 +68,24 @@ enum SyncExportService {
         }
 
         let eventsOrdner = eigenerEventsOrdner(in: syncOrdner)
-        guard await Task.detached(priority: .utility, operation: {
-            SyncDateiZugriff.erstelleVerzeichnisKoordiniert(eventsOrdner)
-        }).value else { return true }
+        // `nil` bedeutet Zeitüberschreitung/Fehler (Ordner nicht erreichbar) —
+        // als echter Fehlschlag gemeldet statt wie zuvor stillschweigend als
+        // Erfolg, sonst würde ``SyncAktualitaetsService/vermerkeErfolgreichenZyklus()``
+        // fälschlich einen erfolgreichen Zyklus vermerken (GitHub
+        // #49-Nachfolgefund, analog ``SyncImportService/importiereNeueEvents(context:)``).
+        guard await SyncDateiZugriff.mitZeitlimit({ SyncDateiZugriff.erstelleVerzeichnisKoordiniert(eventsOrdner) }) == true else {
+            SyncDebugLogger.log(.ordnerZugriffFehlgeschlagen, details: "exportiereNeueEvents")
+            return false
+        }
 
         for event in ausstehende {
             guard let daten = try? JSONEncoder().encode(event.exportDarstellung) else { continue }
             let zielURL = eventsOrdner.appendingPathComponent(dateiname(fuer: event))
-            guard schreibeBlocking(daten, nach: zielURL) else { continue }
+            // Zeitlimit statt (vormals) unbegrenzt blockierendem synchronem
+            // Aufruf direkt auf dem `MainActor` — bei nicht erreichbarem
+            // Ordner fror sonst die komplette UI ein, solange noch
+            // ausstehende Events zu schreiben waren (GitHub #49-Nachfolgefund).
+            guard await SyncDateiZugriff.mitZeitlimit({ SyncDateiZugriff.schreibeKoordiniert(daten, nach: zielURL) }) == true else { continue }
             event.hochgeladen = true
         }
 
@@ -183,13 +193,4 @@ enum SyncExportService {
         return "\(gepolstert)_\(event.id.uuidString).json"
     }
 
-    /// Schreibt über `NSFileCoordinator`, damit File-Provider-Erweiterungen
-    /// (iCloud Drive/Synology Drive/…) von der Änderung erfahren — dünner
-    /// Wrapper um ``SyncDateiZugriff/schreibeKoordiniert(_:nach:)`` (Single
-    /// Source of Truth für dieses Coordinator-Muster, siehe dort), Name/
-    /// Signatur hier unverändert beibehalten, um alle bestehenden
-    /// Aufrufstellen unangetastet zu lassen.
-    nonisolated private static func schreibeBlocking(_ daten: Data, nach url: URL) -> Bool {
-        SyncDateiZugriff.schreibeKoordiniert(daten, nach: url)
-    }
 }

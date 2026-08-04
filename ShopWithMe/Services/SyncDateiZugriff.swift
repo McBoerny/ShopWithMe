@@ -150,4 +150,37 @@ enum SyncDateiZugriff {
         }
         return fehler == nil && erfolgreich
     }
+
+    /// Zeitlimit für ``mitZeitlimit(sekunden:_:)`` — großzügig oberhalb der in
+    /// `SyncPollingService` dokumentierten realistischen Latenz (bis zu 30s für
+    /// iCloud Drive), damit ein normaler, nur langsamer Zugriff nicht fälschlich
+    /// als Zeitüberschreitung gewertet wird. `static var` statt Konstante, damit
+    /// Tests sie auf sehr kurze Werte setzen können.
+    nonisolated(unsafe) static var zeitlimitSekunden: Double = 20
+
+    /// Begrenzt einen der oben blockierenden koordinierten Aufrufe auf
+    /// ``zeitlimitSekunden`` — bei einem tatsächlich nicht erreichbaren
+    /// Remote-Ordner (nicht nur langsam, sondern z.B. mangels Internet dauerhaft
+    /// hängend) haben `NSFileCoordinator`-Aufrufe sonst kein Limit, siehe
+    /// ``leseKoordiniert(_:)``. Rückgabewert `nil` bedeutet entweder
+    /// Zeitüberschreitung ODER dass `operation` selbst schon `nil`/`false`
+    /// lieferte — Aufrufer behandeln beide Fälle ohnehin identisch („diesmal
+    /// keine verlässliche Antwort, beim nächsten Zyklus erneut versuchen").
+    /// Es gibt keine API, eine laufende `NSFileCoordinator`-Koordination
+    /// abzubrechen — der unterlegene Zweig läuft im Hintergrund harmlos zu
+    /// Ende, sein Ergebnis wird nur nicht mehr abgewartet.
+    nonisolated static func mitZeitlimit<T: Sendable>(
+        sekunden: Double = zeitlimitSekunden, _ operation: @escaping @Sendable () -> T
+    ) async -> T? {
+        await withTaskGroup(of: T?.self) { gruppe in
+            gruppe.addTask(priority: .utility) { operation() }
+            gruppe.addTask {
+                try? await Task.sleep(for: .seconds(sekunden))
+                return nil
+            }
+            let ergebnis = await gruppe.next() ?? nil
+            gruppe.cancelAll()
+            return ergebnis
+        }
+    }
 }

@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.12 (Build 230) — Zeitlimit für koordinierte Sync-Ordnerzugriffe (Nachfolgefund zu #49, Issue #98)
+
+Die koordinierten Dateizugriffe in `SyncDateiZugriff` (`leseKoordiniert`/`schreibeKoordiniert`/
+`erstelleVerzeichnisKoordiniert`/`listeKoordiniert`) hatten kein Zeitlimit. Bei einem
+tatsächlich nicht erreichbaren Sync-Ordner (z.B. kein Internet für iCloud Drive) konnte das
+still zu falschen Ergebnissen führen statt zu einem erkennbaren Fehler:
+
+- **`SyncOrdnerService.multipeerGruppenID(in:)`** interpretierte einen fehlgeschlagenen
+  Lesezugriff bisher identisch zu „Datei existiert noch nicht" und erfand eine neue,
+  geratene Gruppen-ID — zwei zeitgleich nicht erreichbare Geräte hätten sich über den
+  Discovery-Schlüssel nie mehr gefunden, ohne jede Fehlermeldung. Jetzt `async -> UUID?`,
+  `nil` bei nicht erreichbarem Ordner, unterscheidet über `FileManager.fileExists` zwischen
+  „wirklich noch nie angelegt" und „nur nicht lesbar".
+- **`SyncExportService.exportiereNeueEvents`/`SyncImportService.importiereNeueEvents`**
+  behandelten eine Zeitüberschreitung bisher stillschweigend als Erfolg, wodurch
+  `SyncAktualitaetsService.vermerkeErfolgreichenZyklus()` fälschlich einen erfolgreichen
+  Sync-Zyklus vermerkt hätte. Melden eine Zeitüberschreitung jetzt als echten Fehlschlag.
+- Neu: **`SyncDateiZugriff.mitZeitlimit(sekunden:_:)`** (Default 20s) begrenzt jeden
+  koordinierten Aufruf per `TaskGroup`-Wettlauf; neues Debug-Log-Ereignis
+  `multipeerGruppenIDNichtAufloesbar`.
+
 ## v0.12 (Build 229) — Sichtbarer Sync-Status für den Multipeer-Kanal
 
 Der Multipeer-Beschleunigungskanal (GitHub #49) lief bisher komplett unsichtbar für den
