@@ -129,18 +129,37 @@ struct MultipeerSyncServiceTests {
     // MARK: - Gruppen-Identität (SyncOrdnerService)
 
     @Test
-    func multipeerGruppenIDWirdEinmaligErzeugtUndDanachWiederverwendet() {
+    func multipeerGruppenIDWirdEinmaligErzeugtUndDanachWiederverwendet() async {
         let syncOrdner = macheTempSyncOrdner()
-        let ersterAufruf = SyncOrdnerService.multipeerGruppenID(in: syncOrdner)
-        let zweiterAufruf = SyncOrdnerService.multipeerGruppenID(in: syncOrdner)
+        let ersterAufruf = await SyncOrdnerService.multipeerGruppenID(in: syncOrdner)
+        let zweiterAufruf = await SyncOrdnerService.multipeerGruppenID(in: syncOrdner)
+        #expect(ersterAufruf != nil)
         #expect(ersterAufruf == zweiterAufruf)
     }
 
     @Test
-    func multipeerGruppenIDUnterscheidetSichZwischenVerschiedenenOrdnern() {
+    func multipeerGruppenIDUnterscheidetSichZwischenVerschiedenenOrdnern() async {
         let ordnerA = macheTempSyncOrdner()
         let ordnerB = macheTempSyncOrdner()
-        #expect(SyncOrdnerService.multipeerGruppenID(in: ordnerA) != SyncOrdnerService.multipeerGruppenID(in: ordnerB))
+        let idA = await SyncOrdnerService.multipeerGruppenID(in: ordnerA)
+        let idB = await SyncOrdnerService.multipeerGruppenID(in: ordnerB)
+        #expect(idA != nil && idB != nil)
+        #expect(idA != idB)
+    }
+
+    /// Nachfolgefund zu GitHub #49: ein nicht erreichbarer Ordner (hier
+    /// simuliert durch einen bereits wieder gelöschten Pfad) darf KEINE
+    /// geratene ID liefern — sonst würden zwei zeitgleich nicht erreichbare
+    /// Geräte unabhängig voneinander unterschiedliche IDs erfinden und sich
+    /// per Multipeer nie mehr finden, siehe Typ-Doku
+    /// ``SyncOrdnerService/multipeerGruppenID(in:)``.
+    @Test
+    func multipeerGruppenIDLiefertNilBeiNichtErreichbaremOrdner() async {
+        let nichtErreichbar = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+            .appendingPathComponent("unterordner", isDirectory: true)
+        let ergebnis = await SyncOrdnerService.multipeerGruppenID(in: nichtErreichbar)
+        #expect(ergebnis == nil)
     }
 
     /// Bonjour-Zwang (`MCNearbyServiceAdvertiser`/`-Browser`, verifiziert

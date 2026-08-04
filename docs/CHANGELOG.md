@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.12 (Build 232) — Testabdeckung für `multipeerGruppenID`-Zeitlimit nachgezogen (Nachfolgefund zu #49, Issue #98)
+
+Die in Build 230 beschriebene Umstellung von `SyncOrdnerService.multipeerGruppenID(in:)`
+auf `async -> UUID?` (nil bei nicht erreichbarem Ordner statt geratener ID) war bereits
+committet, der zugehörige neue Test aber noch nicht:
+
+- Neuer Test `multipeerGruppenIDLiefertNilBeiNichtErreichbaremOrdner` — belegt, dass ein
+  nicht erreichbarer Ordner `nil` statt einer geratenen ID liefert.
+- Die beiden bestehenden Tests (`multipeerGruppenIDWirdEinmaligErzeugtUndDanachWiederverwendet`,
+  `multipeerGruppenIDUnterscheidetSichZwischenVerschiedenenOrdnern`) auf `async`
+  nachgezogen und um eine `!= nil`-Prüfung ergänzt.
+
 ## v0.12 (Build 231) — Pull-to-Refresh löst Sync direkt aus der Einkaufsliste aus, dezentere Multipeer-Statuszeile
 
 Bisher war der einzige manuelle Sync-Auslöser der „Jetzt synchronisieren“-Button in den
