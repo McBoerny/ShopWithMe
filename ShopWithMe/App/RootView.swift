@@ -33,6 +33,8 @@ struct RootView: View {
     @State private var zeigeNeustartHinweisNachVollAbgleich = false
     @State private var zeigeAusGruppeEntferntDialog = false
     @State private var zeigeSyncOrdnerSettingsFuerBeitritt = false
+    @State private var toterGruppenPeer: SyncPeerInfo?
+    @State private var zeigeToterGruppenPeerDialog = false
 
     var body: some View {
         TabView {
@@ -52,6 +54,7 @@ struct RootView: View {
             await PreispunktVerdichtungService.automatischVerdichtenFallsFaellig(context: modelContext)
             await SyncExportService.raeumeAlteEigeneEventDateienAufFallsFaellig()
             pruefeAusDerZeitGefallen()
+            pruefeToteGruppenPeers()
         }
         .onChange(of: scenePhase) { _, neuePhase in
             guard neuePhase == .active else { return }
@@ -61,6 +64,7 @@ struct RootView: View {
                 await PreispunktVerdichtungService.automatischVerdichtenFallsFaellig(context: modelContext)
                 await SyncExportService.raeumeAlteEigeneEventDateienAufFallsFaellig()
                 pruefeAusDerZeitGefallen()
+                pruefeToteGruppenPeers()
             }
         }
         .onChange(of: syncPollingService.wurdeAusGruppeEntfernt) { _, entfernt in
@@ -122,6 +126,19 @@ struct RootView: View {
                     }
             }
         }
+        // Peer-Lebenszyklus, Sterblichkeits-Warnung: dieselbe 30-Tage-Schwelle
+        // wie der bestehende Ignorier-Mechanismus beim Import
+        // (``SyncSnapshotImportService/maximalesSnapshotAlter``, siehe
+        // ``SyncPeerInfo/istWahrscheinlichTot``). Rein manuell/bestätigt —
+        // kein automatisches Entfernen.
+        .confirmationDialog(
+            "Gerät seit langem nicht gesehen", isPresented: $zeigeToterGruppenPeerDialog, presenting: toterGruppenPeer
+        ) { peer in
+            Button("Entfernen", role: .destructive) { entferneToterGruppenPeer(peer) }
+            Button("Später erinnern", role: .cancel) {}
+        } message: { peer in
+            Text("„\(peer.geraeteName)“ wurde seit \(peer.zuletztGesehen.formatted(date: .abbreviated, time: .omitted)) nicht mehr gesehen. Entfernen, wenn dieses Gerät die App nicht mehr nutzt.")
+        }
     }
 
     private func pruefeAusDerZeitGefallen() {
@@ -156,6 +173,25 @@ struct RootView: View {
                 // erneut versucht, kein stiller Datenverlust möglich, da
                 // noch nichts geplant wurde.
             }
+        }
+    }
+
+    /// Peer-Lebenszyklus: sucht den ersten lange nicht mehr gesehenen Peer
+    /// und zeigt bei Fund den Entfernen-Dialog — pro Aufruf höchstens einer,
+    /// weitere folgen bei erneutem Auslösen (`.task`/`scenePhase == .active`),
+    /// analog ``pruefeAusDerZeitGefallen()``.
+    private func pruefeToteGruppenPeers() {
+        guard SyncOrdnerService.gewaehlterOrdner() != nil else { return }
+        let alle = (try? modelContext.fetch(FetchDescriptor<SyncPeerInfo>())) ?? []
+        guard let toter = alle.first(where: { $0.istWahrscheinlichTot }) else { return }
+        toterGruppenPeer = toter
+        zeigeToterGruppenPeerDialog = true
+    }
+
+    private func entferneToterGruppenPeer(_ peer: SyncPeerInfo) {
+        guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return }
+        Task {
+            await SyncOrdnerService.entfernePeer(peer, in: syncOrdner, context: modelContext)
         }
     }
 }

@@ -1,6 +1,6 @@
 # ShopWithMe — Peer-Lebenszyklus
 
-Status: **In Umsetzung** (Baustein B von 4 fertig). Ausgangspunkt: `SyncTombstone`
+Status: **In Umsetzung** (Bausteine A und B von 4 fertig). Ausgangspunkt: `SyncTombstone`
 wächst aktuell für immer (siehe `docs/DATENSYNCHRONISATION.md` — dominiert durch einen
 Tombstone pro `KaufEintrag`, automatisch 48h nach jedem Einkauf erzeugt). Statt einer
 fest „gepflegten" Zeit-Frist soll ein dynamischer, sich selbst nachführender
@@ -15,8 +15,8 @@ zurück in die Gruppe exportiert.
 
 Vier Bausteine, jeder ein eigener Checkpoint:
 
-- **Baustein B — Rückkehrer-Erkennung** (dieser Schritt, ✅)
-- **Baustein A — Peer-Sterblichkeit sichtbar machen + bestätigte Entfernung** (offen)
+- **Baustein B — Rückkehrer-Erkennung** (✅)
+- **Baustein A — Peer-Sterblichkeit sichtbar machen + bestätigte Entfernung** (✅)
 - **Baustein C0 — Manifest muss „vollständiger Sync" zertifizieren** (offen)
 - **Baustein C — Dynamischer Aufbewahrungs-Wasserstand für Events/Tombstones** (offen)
 
@@ -74,3 +74,35 @@ eine separate, spätere Entscheidung.
 `binIchNochMitgliedLiefertFalseWennEigenerOrdnerFehlt`/
 `binIchNochMitgliedLiefertNilBeiNichtErreichbaremOrdner`;
 `SyncPollingServiceTests.startenErkenntAusschlussAusGruppeUndEntferntSyncOrdnerOhneWeiterenSyncZyklus`.
+
+## Baustein A: Peer-Sterblichkeit sichtbar machen + bestätigte Entfernung
+
+**Wiederverwendung statt Neubau:** `SyncPeerInfo` trackt bereits `geraeteName` +
+`zuletztGesehen` (abgeleitet aus des Peers eigenem `manifest.erzeugtAm`, nicht lokaler
+Importzeit). `DebuggingView.BekannteSyncPeersSection` hatte bereits eine
+`@Query`-Liste mit Swipe-to-delete — vor diesem Baustein aber mit rohem `FileManager`
+statt koordiniertem Zugriff, und ohne Alters-Hervorhebung, nur im Debug-Menü versteckt.
+
+**Neu:**
+1. `SyncOrdnerService.entfernePeer(_:in:context:) async` — die Lösch-Logik aus
+   `DebuggingView` extrahiert, jetzt über `SyncDateiZugriff.listeKoordiniert`/
+   `loescheKoordiniert` statt rohem `FileManager` (Konsistenz mit dem Rest der
+   Sync-Schicht). `DebuggingView.peerEntfernen` ruft seither dieselbe Funktion auf
+   (Single Source of Truth) — gleichzeitig die Grundlage für die Rückkehrer-Erkennung
+   in Baustein B: kehrt ein entfernter Peer zurück, erkennt `binIchNochMitglied(in:)`,
+   dass sein Ordner fehlt.
+2. `SyncPeerInfo.istWahrscheinlichTot: Bool` — Vergleich `zuletztGesehen` gegen
+   `SyncSnapshotImportService.maximalesSnapshotAlter` (30 Tage) — dieselbe Schwelle wie
+   der bereits bestehende Ignorier-Mechanismus beim Import, kein neuer Wert.
+3. Neuer proaktiver Dialog in `RootView.swift`, strukturell analog zu
+   `pruefeAusDerZeitGefallen()`/`zeigeAusDerZeitGefallenDialog`: `pruefeToteGruppenPeers()`,
+   gleiche Auslöser (`.task`, `scenePhase == .active`), zeigt bei mindestens einem
+   `istWahrscheinlichTot`-Peer einen eigenen Dialog ("Gerät seit langem nicht gesehen")
+   mit „Entfernen“ (ruft `entfernePeer` auf) / „Später erinnern“ (kein „für immer
+   abbrechen“, wie beim bestehenden Vorbild) — pro Aufruf höchstens ein Peer, weitere
+   folgen bei erneutem Auslösen.
+
+**Tests:** `SyncPeerInfoTests.istWahrscheinlichTotIstFalseInnerhalbDerSchwelle`/
+`istWahrscheinlichTotIstTrueJenseitsDerSchwelle`;
+`SyncOrdnerServiceTests.entfernePeerLoeschtOrdnerUndSyncPeerInfo`. Der proaktive Dialog
+selbst nur manuell im Simulator verifizierbar (nach expliziter Freigabe).

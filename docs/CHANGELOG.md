@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.12 (Build 236) — Peer-Lebenszyklus, Baustein A: Peer-Sterblichkeit sichtbar machen
+
+Zweiter von vier Bausteinen, siehe `docs/PEER_LEBENSZYKLUS.md`.
+
+- **`SyncOrdnerService.entfernePeer(_:in:context:)`** — die bisher in `DebuggingView`
+  verankerte Peer-Entfernung (kompletter Ordner + `SyncPeerInfo`) extrahiert und auf
+  koordinierten Dateizugriff (`SyncDateiZugriff`) statt rohem `FileManager` umgestellt.
+- **`SyncPeerInfo.istWahrscheinlichTot`** — dieselbe 30-Tage-Schwelle wie der bestehende
+  Ignorier-Mechanismus beim Sync-Import.
+- Neuer proaktiver Dialog in `RootView` („Gerät seit langem nicht gesehen“) — schlägt bei
+  App-Start/Rückkehr die Entfernung lange nicht gesehener Geräte vor, bestätigt durch den
+  Nutzer, kein automatisches Löschen.
+- `docs/BEDIENUNGSANLEITUNG.md` entsprechend ergänzt.
+
 ## v0.12 (Build 235) — Peer-Lebenszyklus, Baustein B: Rückkehrer-Erkennung
 
 Erster von vier Bausteinen auf dem Weg zu einer dynamisch statt fest begrenzten

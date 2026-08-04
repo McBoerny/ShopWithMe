@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import SwiftData
 
 /// Reine Diagnose-Instrumentierung um jeden `startAccessingSecurityScopedResource()`/
 /// `stopAccessingSecurityScopedResource()`-Aufruf der wiederkehrenden
@@ -144,6 +145,32 @@ enum SyncOrdnerService {
         }) ?? nil else { return nil }
 
         return peerVerzeichnisse.contains { $0.lastPathComponent == eigenerName }
+    }
+
+    /// Entfernt `peer` vollständig — seinen kompletten Peer-Ordner im
+    /// geteilten Ordner (rekursiv, per koordiniertem Zugriff statt rohem
+    /// `FileManager`) sowie den lokalen ``SyncPeerInfo``-Merkposten. Für
+    /// Geräte, die die App nicht mehr nutzen (`DebuggingView`s manuelle
+    /// Liste, oder eine proaktive Warnung bei langer Abwesenheit) —
+    /// verhindert, dass ihr letzter bekannter Stand weiterhin zurückgespielt
+    /// wird, und ist gleichzeitig die Grundlage für die Rückkehrer-Erkennung
+    /// (``binIchNochMitglied(in:)``): kehrt das entfernte Gerät zurück,
+    /// erkennt es dort selbst, dass sein Ordner fehlt.
+    @MainActor
+    static func entfernePeer(_ peer: SyncPeerInfo, in ordner: URL, context: ModelContext) async {
+        if ordner.startAccessingSecurityScopedResource() {
+            defer { ordner.stopAccessingSecurityScopedResource() }
+            let peersOrdner = ordner.appendingPathComponent("peers", isDirectory: true)
+            if let peerVerzeichnisse = await SyncDateiZugriff.mitZeitlimit({
+                SyncDateiZugriff.listeKoordiniert(peersOrdner)
+            }) ?? nil {
+                for peerOrdner in peerVerzeichnisse
+                where PeerOrdnerName.gehoertZu(peerOrdner.lastPathComponent, geraeteID: peer.peerGeraeteID) {
+                    SyncDateiZugriff.loescheKoordiniert(peerOrdner)
+                }
+            }
+        }
+        context.delete(peer)
     }
 
     /// Ordnername dieses Geräts unter `peers/` (GitHub #81) — Gerätename +

@@ -1,9 +1,17 @@
 import Foundation
+import SwiftData
 import Testing
 @testable import ShopWithMe
 
 @MainActor
 struct SyncOrdnerServiceTests {
+    private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {
+        let schema = Schema([SyncPeerInfo.self])
+        let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [konfiguration])
+        return (container, container.mainContext)
+    }
+
     private func macheTempSyncOrdner() -> URL {
         let ordner = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try? FileManager.default.createDirectory(at: ordner, withIntermediateDirectories: true)
@@ -128,5 +136,29 @@ struct SyncOrdnerServiceTests {
             .appendingPathComponent("unterordner", isDirectory: true)
         let ergebnis = await SyncOrdnerService.binIchNochMitglied(in: nichtErreichbar)
         #expect(ergebnis == nil)
+    }
+
+    /// Peer-Lebenszyklus, bestätigte Entfernung: löscht sowohl den
+    /// kompletten Peer-Ordner im geteilten Ordner als auch den lokalen
+    /// ``SyncPeerInfo``-Merkposten.
+    @Test
+    func entfernePeerLoeschtOrdnerUndSyncPeerInfo() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        let peersOrdner = syncOrdner.appendingPathComponent("peers", isDirectory: true)
+        let peerOrdnerName = "Anderes-Geraet_abcdef"
+        let peerOrdner = peersOrdner.appendingPathComponent(peerOrdnerName, isDirectory: true)
+        try FileManager.default.createDirectory(at: peerOrdner, withIntermediateDirectories: true)
+        try Data("{}".utf8).write(to: peerOrdner.appendingPathComponent("manifest.json"))
+
+        let peer = SyncPeerInfo(peerGeraeteID: "abcdef", geraeteName: "Anderes Gerät")
+        context.insert(peer)
+        try context.save()
+
+        await SyncOrdnerService.entfernePeer(peer, in: syncOrdner, context: context)
+
+        #expect(!FileManager.default.fileExists(atPath: peerOrdner.path))
+        #expect(try context.fetch(FetchDescriptor<SyncPeerInfo>()).isEmpty)
     }
 }

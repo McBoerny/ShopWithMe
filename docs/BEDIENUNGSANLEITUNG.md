@@ -289,15 +289,22 @@ werden ausgetauscht.
   Änderungen und fordert danach zu einem Neustart der App auf, um den
   Abgleich abzuschließen. „Später erinnern“ verschiebt die Meldung auf den
   nächsten App-Start.
+- **„Gerät seit langem nicht gesehen“:** Erkennt die App bei App-Start/
+  Rückkehr aus dem Hintergrund ein Gerät in der Gruppe, das seit mehr als 30
+  Tagen nicht mehr synchronisiert hat, fragt sie aktiv nach, ob es entfernt
+  werden soll (z.B. weil es nicht mehr genutzt wird) — „Entfernen“ löscht
+  seinen Beitrag vollständig aus dem Sync-Ordner, „Später erinnern“
+  verschiebt die Frage auf den nächsten App-Start. Dasselbe lässt sich auch
+  jederzeit manuell einsehen/auslösen: Einstellungen → „Debugging“ →
+  „Bekannte Geräte“, dort per Wischen.
 - **„Aus der Sync-Gruppe entfernt“:** Wurde dieses Gerät von einem anderen
-  Mitglied der Gruppe bewusst entfernt (Einstellungen → „Debugging“ →
-  „Bekannte Geräte“, dort per Wischen möglich), erkennt es das selbst beim
-  nächsten Start und trennt sich automatisch vom Sync-Ordner — dabei entsteht
-  immer zuerst ein lokales Backup des bisherigen Bestands. Die anschließende
-  Meldung bietet „Alleine weitermachen“ (nichts weiter zu tun) oder „Wieder
-  beitreten“ (öffnet die Sync-Einstellungen, um erneut einen Ordner zu
-  wählen — der eigene Bestand wird dabei durch den aktuellen Gruppenstand
-  ersetzt).
+  Mitglied der Gruppe auf die oben beschriebene Art entfernt, erkennt es das
+  selbst beim nächsten Start und trennt sich automatisch vom Sync-Ordner —
+  dabei entsteht immer zuerst ein lokales Backup des bisherigen Bestands. Die
+  anschließende Meldung bietet „Alleine weitermachen“ (nichts weiter zu tun)
+  oder „Wieder beitreten“ (öffnet die Sync-Einstellungen, um erneut einen
+  Ordner zu wählen — der eigene Bestand wird dabei durch den aktuellen
+  Gruppenstand ersetzt).
 - **Sync-Debug-Modus** (Einstellungen → „Debugging“) — zeichnet zur
   Fehlersuche/Optimierung lokal auf, wie lange ein Abgleich dauert und wie
   aktuell empfangene Änderungen waren; im Normalbetrieb nicht nötig. Dort

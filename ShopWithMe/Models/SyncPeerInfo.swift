@@ -39,6 +39,18 @@ extension SyncPeerInfo {
         zuletztGesehenRaw ?? .distantPast
     }
 
+    /// Peer-Lebenszyklus: Grundlage für eine sichtbare Warnung/bestätigte
+    /// Entfernung lange nicht mehr gesehener Geräte — dieselbe Schwelle wie
+    /// der bereits bestehende Ignorier-Mechanismus
+    /// (``SyncSnapshotImportService/maximalesSnapshotAlter``, 30 Tage), kein
+    /// neuer, eigenständiger Wert: ein Peer jenseits dieser Grenze wird beim
+    /// Import ohnehin schon ignoriert, die Warnung fällt einfach mit diesem
+    /// bereits bestehenden Verhalten zusammen.
+    @MainActor
+    var istWahrscheinlichTot: Bool {
+        Date().timeIntervalSince(zuletztGesehen) > SyncSnapshotImportService.maximalesSnapshotAlter
+    }
+
     /// Grobe Auflösung für das Nachführen von ``zuletztGesehenRaw`` — der Wert
     /// dient einzig der 30-Tage-Alters-Schwelle
     /// (``SyncSnapshotImportService/maximalesSnapshotAlter``), die keine
