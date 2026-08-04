@@ -29,6 +29,18 @@ enum SyncEventService {
             autorGeraeteID: DatabaseLeaseService.geraeteID
         )
         context.insert(event)
+
+        // GitHub #49: zusätzlich sofort an bereits verbundene Multipeer-Peers
+        // spiegeln (rein beschleunigend, der Datei-Export unten bleibt
+        // unverändert die verlässliche Zustellung). Nur die reine
+        // `exportDarstellung`-Werteform (nicht `event` selbst) wandert über
+        // den `@MainActor`-Hop — vermeidet, eine SwiftData-Objektreferenz über
+        // einen `await` hinweg weiterzuverwenden.
+        let darstellungFuerMultipeer = event.exportDarstellung
+        Task { @MainActor in
+            MultipeerSyncService.aktuell?.sendeAnVerbundenePeers(darstellungFuerMultipeer)
+        }
+
         return event
     }
 

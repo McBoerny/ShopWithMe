@@ -338,6 +338,13 @@ eines identischen Symptoms, siehe §30) von einem rein extern verursachten
 Ordner-Ausfall unterscheidbar. Nur bei ``Protokollstufe/ausfuehrlich``, da es
 pro Aufrufstelle bei jedem Zyklus feuert.
 
+**GitHub #49 — `MultipeerSyncService` (Beschleunigungskanal):**
+`multipeer_peer_{verbunden,getrennt}` (Details: `peerID.displayName`) und
+`multipeer_event_empfangen` (Details: `alter_sekunden=…`, gleiche Bildung wie
+`sync_event_empfangen` — direkt damit vergleichbar, um die tatsächliche
+Latenz-Ersparnis gegenüber dem Datei-Kanal aus echten Live-Tests abzulesen,
+statt sie nur anzunehmen).
+
 **Stufen-Einordnung** (siehe „Gemeinsamer Baustein: `Protokollstufe`" oben):
 `Ausführlich` für `sync_snapshot_unveraendert_uebersprungen` (feuert 6× pro
 Zyklus unbedingt, größter Volumentreiber im Normalbetrieb) und
@@ -345,7 +352,8 @@ Zyklus unbedingt, größter Volumentreiber im Normalbetrieb) und
 `sync_event_empfangen`, `sync_snapshot_empfangen`, `sync_einkaufslisten_stand`,
 `sync_snapshot_geschrieben`, `sync_icloud_beobachter_ausgeloest`,
 `sync_icloud_beobachter_scope_aktualisiert`,
-`sync_icloud_picker_trigger_ausgeloest`; `Fehler` für
+`sync_icloud_picker_trigger_ausgeloest`, `multipeer_peer_{verbunden,getrennt}`,
+`multipeer_event_empfangen`; `Fehler` für
 den Rest (u.a. `sync_ordner_zugriff_fehlgeschlagen`,
 `sync_event_nicht_anwendbar`, `sync_peer_verworfen_altersgrenze`,
 `sync_event_aufgegeben`).

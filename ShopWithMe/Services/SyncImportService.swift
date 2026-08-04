@@ -141,6 +141,28 @@ enum SyncImportService {
         return true
     }
 
+    /// Wendet ein einzeln empfangenes Event sofort an (Multipeer-
+    /// Beschleunigungskanal, GitHub #49, ``MultipeerSyncService``) — dieselbe
+    /// Konfliktauflösung/Materialisierung wie beim Datei-Import
+    /// (``wendeAn(_:gewinner:context:)``), nur für ein einzelnes Event statt
+    /// einen ganzen Peer-Ordner-Batch, damit hier keine zweite, parallel
+    /// gepflegte Kopie dieser Logik entsteht. Baut dafür einmalig einen
+    /// Gewinner-Index über den kompletten lokalen Bestand auf
+    /// (``SyncEventService/alleAktuellenGewinnerUndBekannteIDs(context:)``) —
+    /// für den seltenen Einzel-Empfang unkritisch teurer als der
+    /// batch-optimierte Datei-Import-Pfad. Speichert nur bei tatsächlicher
+    /// Änderung (gleiches `hasChanges`-Muster wie ``importiereNeueEvents(context:)``);
+    /// Idempotenz kommt gratis aus ``SyncEventService/istBereitsBekannt(_:context:)``
+    /// — ein später auch über den Datei-Kanal eintreffendes, hier bereits
+    /// übernommenes Event wird beim regulären Import einfach übersprungen.
+    @MainActor
+    static func wendeEinzelnesEmpfangenesEventAn(_ empfangen: SyncEventExportDarstellung, context: ModelContext) {
+        var (gewinner, _) = SyncEventService.alleAktuellenGewinnerUndBekannteIDs(context: context)
+        wendeAn(empfangen, gewinner: &gewinner, context: context)
+        guard context.hasChanges else { return }
+        try? context.save()
+    }
+
     /// Extrahiert die ``SyncEvent/id`` aus dem Dateinamen einer Peer-Event-Datei
     /// (`{zehnstelliger Lamport-Zähler}_{uuid}.json`, siehe
     /// ``SyncExportService/dateiname(fuer:)``) — OHNE die Datei zu lesen.

@@ -10,6 +10,7 @@ import SwiftData
 struct ShopWithMeApp: App {
     let modelContainer: ModelContainer
     @StateObject private var syncPollingService = SyncPollingService()
+    @StateObject private var multipeerSyncService = MultipeerSyncService()
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -62,6 +63,7 @@ struct ShopWithMeApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(syncPollingService)
+                .environmentObject(multipeerSyncService)
                 .task {
                     // Nach einem Neustart wegen ``SyncErsetzenService`` steht
                     // hier ein frisch geöffneter, gerade eben (siehe `init()`)
@@ -70,6 +72,7 @@ struct ShopWithMeApp: App {
                     // beginnt. Ohne Wirkung, falls nichts aussteht.
                     await SyncErsetzenService.fuehreAusstehendeAktionAus(context: modelContainer.mainContext)
                     syncPollingService.starten(context: modelContainer.mainContext)
+                    multipeerSyncService.starten(context: modelContainer.mainContext)
                 }
         }
         .modelContainer(modelContainer)
@@ -77,8 +80,10 @@ struct ShopWithMeApp: App {
             switch neuePhase {
             case .active:
                 syncPollingService.starten(context: modelContainer.mainContext)
+                multipeerSyncService.starten(context: modelContainer.mainContext)
             default:
                 syncPollingService.stoppen()
+                multipeerSyncService.stoppen()
             }
         }
     }

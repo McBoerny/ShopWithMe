@@ -8,8 +8,9 @@ warum getroffen wurde, jeder Live-Test-Fund, jeder Bugfix) steht separat in
 „warum ist das so", nicht „wie funktioniert das".
 
 **Bezug:** [Issue #39](https://github.com/McBoerny/ShopWithMe/issues/39) (Grundarchitektur),
-#48 (Überkauf-Hinweis), #50 (Gruppen-Beitritt), #52/#60/#70/#71 (Live-Test-Robustheit),
-#63 (Ersetzen/Backup), #81 (lesbare Peer-Ordnernamen).
+#48 (Überkauf-Hinweis), #49 (Multipeer-Beschleunigungskanal), #50 (Gruppen-Beitritt),
+#52/#60/#70/#71 (Live-Test-Robustheit), #63 (Ersetzen/Backup), #81 (lesbare
+Peer-Ordnernamen).
 
 ## 1. Grundprinzip
 
@@ -59,13 +60,21 @@ Zwei Kanäle mit unterschiedlicher Frequenz/Konfliktsemantik:
 | **C — Historie** | `Einkaufsvorgang`, `KaufEintrag`, `Preispunkt` | `SyncSnapshot` | Union nach `id` |
 | **D — Lernen** | `WarengruppenDistanz` | `SyncSnapshot` | gewichteter Mittelwert |
 
-Bewusst **kein** MultipeerConnectivity-Kanal (WiFi/Bluetooth-Echtzeitaustausch
-im Laden, Issue #49) — nur der FileProvider-Kanal. Realistische Latenz daher
+**Zusätzlich ein Multipeer-Beschleunigungskanal** (GitHub #49,
+``MultipeerSyncService``) neben dem FileProvider-Kanal — rein additiv, keine
+Ablösung: derselbe `SyncEvent`-Typ wird beim Aufzeichnen
+(``SyncEventService/aufzeichnen(_:bezugsID:artikelID:geschaeftID:context:)``)
+zusätzlich sofort per `MCSession` an bereits verbundene Peers gespiegelt,
+während `EinkaufenView` sichtbar ist. Ohne Verbindung (anderes WLAN, außer
+Reichweite, kein anderes Gerät gerade im Einkaufen-Bildschirm) fällt jedes
+Event unverändert auf den Datei-Kanal zurück — dessen Latenz bleibt weiterhin
 durch die Sync-Geschwindigkeit des Cloud-Anbieters begrenzt (grob 5–30s
-iCloud Drive, 1–10s Synology Drive laut `docs/DATABASE_CONCURRENCY.md`), nicht
-Sekundenbruchteile. Multipeer bliebe eine spätere, rein beschleunigende
-Ergänzung (derselbe `SyncEvent`-Typ würde nur zusätzlich sofort an verbundene
-Peers gespiegelt), keine Ablösung dieser Architektur.
+iCloud Drive, 1–10s Synology Drive laut `docs/DATABASE_CONCURRENCY.md`).
+Funktioniert nur bei physischer Nähe (WiFi/Bluetooth/AWDL über Bonjour), nicht
+übers offene Internet (mDNS ist link-local-scoped) — passt zum Use-Case
+„gemeinsam im Laden". Details (Gruppen-Identität, Vertrauensmodell,
+Wire-Format-Wiederverwendung) siehe ``MultipeerSyncService``-Typ-Doku und
+``SyncOrdnerService/multipeerGruppenID(in:)``.
 
 ## 2. Geräte-Identität und Lamport-Uhr
 
@@ -696,6 +705,15 @@ kompletten `kaeufe/`-Ordners, aber ohne `events/` anzutasten.
   zwei simulierten Geräten (zwei In-Memory-`ModelContainer`), aber jede
   Aussage über tatsächliche Cloud-Sync-Latenz/-Zuverlässigkeit stammt aus
   echten Zwei-Geräte-Tests, nicht aus den Unit-Tests selbst.
+- **`MultipeerSyncService` (GitHub #49) noch ohne echten Zwei-Geräte-Live-Test:**
+  Build/Unit-Tests grün, aber die eigentliche Bonjour-Discovery/
+  `MCSession`-Handshake-Kette lässt sich im Simulator nicht zuverlässig
+  nachbilden (siehe Typ-Doku). Insbesondere offen: löst das Verbinden
+  tatsächlich den neuen `NSLocalNetworkUsageDescription`-Berechtigungsdialog
+  zuverlässig aus, finden sich zwei echte Geräte im selben WLAN tatsächlich,
+  und bringt der Kanal die erhoffte spürbare Latenzverbesserung gegenüber dem
+  Datei-Kanal (vergleichbar über `multipeer_event_empfangen` vs.
+  `sync_event_empfangen` im Sync-Debug-Protokoll, siehe `docs/LOGGING.md`).
 - **Unerreichbare Vorgeschichte:** Einkaufslisten-Einträge, die entstanden,
   bevor Bereich-A-Events bzw. der volle Snapshot-Inhalt existierten, wurden
   nie als Event aufgezeichnet und stecken in keinem historischen Snapshot —

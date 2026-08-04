@@ -253,6 +253,15 @@ werden ausgetauscht.
   Systemabgleich zusätzlich anzustoßen, keine Fehlfunktion.
 - **Nur im Vordergrund:** Bei gesperrtem Gerät oder geschlossener App pausiert
   der automatische Abgleich — er läuft beim nächsten Öffnen sofort weiter.
+- **Schnellerer Abgleich in der Nähe:** Öffnest du gemeinsam mit einer anderen
+  Person, die dieselbe Liste eingerichtet hat, gleichzeitig den
+  Einkaufen-Bildschirm, tauscht die App Häkchen/neue Artikel zusätzlich direkt
+  zwischen den Geräten aus (WLAN/Bluetooth in der Nähe) — spürbar schneller
+  als der reguläre Abgleich über den geteilten Ordner. Dafür fragt iOS beim
+  ersten gemeinsamen Einkaufen nach dieser Funktion einmalig nach der
+  Berechtigung „Im lokalen Netzwerk suchen“ — ohne diese Berechtigung
+  funktioniert weiterhin alles, nur eben etwas langsamer über den geteilten
+  Ordner.
 - **„N mögliche Duplikate prüfen“:** Erkennt der laufende Abgleich (nicht nur
   beim einmaligen Einrichten) ein Geschäft, einen Artikel oder eine
   Einkaufsliste, die einem bereits vorhandenen Eintrag ähneln, aber nicht

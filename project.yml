@@ -12,8 +12,8 @@ fileGroups:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    MARKETING_VERSION: "0.11"
-    CURRENT_PROJECT_VERSION: "226"
+    MARKETING_VERSION: "0.12"
+    CURRENT_PROJECT_VERSION: "227"
     TARGETED_DEVICE_FAMILY: "1,2"
 
 targets:
@@ -31,6 +31,10 @@ targets:
         CFBundleDisplayName: ShopWithMe
         NSCameraUsageDescription: "Wird benötigt, um Kassenbons und Preisschilder für die Preishistorie zu fotografieren."
         NSLocationWhenInUseUsageDescription: "Wird benötigt, um beim Einkaufen automatisch das passende Geschäft in der Nähe vorzuschlagen."
+        NSLocalNetworkUsageDescription: "Wird benötigt, um Änderungen an der Einkaufsliste beim gemeinsamen Einkaufen sofort mit Geräten in der Nähe abzugleichen."
+        NSBonjourServices:
+          - _swm-sync._tcp
+          - _swm-sync._udp
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait

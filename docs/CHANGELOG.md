@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.12 (Build 227) — GitHub #49: Multipeer-Beschleunigungskanal für die Datensynchronisation
+
+- Neuer, rein additiver Sync-Kanal (``MultipeerSyncService``) neben dem
+  bestehenden FileProvider-Kanal: solange `EinkaufenView` auf zwei Geräten in
+  Reichweite (WLAN/Bluetooth) gleichzeitig sichtbar ist, werden neue
+  Bereich-A-`SyncEvent`s zusätzlich sofort per `MCSession` gespiegelt — die
+  geteilte Datei bleibt Quelle der Wahrheit, ohne Verbindung ändert sich
+  nichts am bisherigen Verhalten.
+- Gruppen-Identität als Marker-Datei `.sync-gruppen-id` im geteilten Ordner
+  selbst abgeleitet (``SyncOrdnerService/multipeerGruppenID(in:)``) — bewusst
+  nicht von einer `Einkaufsliste.id` wie ursprünglich im Issue skizziert, da
+  ein Ordner inzwischen alle Listen eines Geräts abdeckt. Bonjour-Service-Type
+  ist app-weit fest (`NSBonjourServices` muss statisch deklariert werden); der
+  eigentliche Gruppen-Abgleich läuft über `discoveryInfo`/Einladungs-Kontext.
+  Details: `docs/DATENSYNCHRONISATION.md` §1, ``MultipeerSyncService``-Typ-Doku.
+- Neue Info.plist-Berechtigung `NSLocalNetworkUsageDescription` +
+  `NSBonjourServices` (`project.yml`) — neuer Berechtigungsdialog beim ersten
+  gemeinsamen Einkaufen nach dem Update, siehe `docs/BEDIENUNGSANLEITUNG.md`.
+- Kein SwiftData-Modell betroffen (`MultipeerSyncService` ist ein reiner
+  Laufzeit-Dienst, keine `@Model`-Klasse) — keine `SchemaVN`/`MigrationStage`-
+  Frage.
+- **Noch ohne echten Zwei-Geräte-Live-Test** (Simulatoren können Bluetooth/
+  AWDL-Peer-Discovery nicht zuverlässig nachbilden) — siehe
+  `docs/DATENSYNCHRONISATION.md` §9 „Bekannte Grenzen".
+
 ## v0.11 (Build 226) — GitHub #80: SyncEvent-„bereits gesehen"-Zustand übersteht Wipe-und-Neuaufbau
 
 - `SyncErsetzenService` (Korruptions-Recovery, Erstbeitritt, sowie der

@@ -930,6 +930,7 @@ private struct EinkaufslisteView: View {
 
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var syncPollingService: SyncPollingService
+    @EnvironmentObject private var multipeerSyncService: MultipeerSyncService
 
     @State private var zeigeBelegScanAngebot = false
     @State private var zeigeBelegScan = false
@@ -1409,8 +1410,14 @@ private struct EinkaufslisteView: View {
             }
         }
         .animation(.default, value: ueberkaufHinweisText)
-        .onAppear { syncPollingService.einkaufAktiv = true }
-        .onDisappear { syncPollingService.einkaufAktiv = false }
+        .onAppear {
+            syncPollingService.einkaufAktiv = true
+            multipeerSyncService.aktiv = true
+        }
+        .onDisappear {
+            syncPollingService.einkaufAktiv = false
+            multipeerSyncService.aktiv = false
+        }
     }
 
     /// Bewusst aus ``abgehakteKaufEintraege`` (liste-weit) statt nur

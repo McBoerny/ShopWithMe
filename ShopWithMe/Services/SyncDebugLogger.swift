@@ -104,6 +104,15 @@ enum SyncDebugLogger {
         /// tatsächlich etwas am Sync-Verhalten ändert.
         case iCloudPickerTriggerAusgeloest = "sync_icloud_picker_trigger_ausgeloest"
 
+        /// GitHub #49: ``MultipeerSyncService`` hat eine `MCSession`-Verbindung
+        /// zu einem Peer hergestellt/verloren — Details: `peerID.displayName`.
+        case multipeerPeerVerbunden = "multipeer_peer_verbunden"
+        case multipeerPeerGetrennt = "multipeer_peer_getrennt"
+        /// GitHub #49: ein `SyncEvent` wurde über den Multipeer-Kanal statt
+        /// über den Datei-Kanal empfangen — Alter analog ``eventEmpfangen``,
+        /// zum direkten Latenzvergleich zwischen beiden Kanälen.
+        case multipeerEventEmpfangen = "multipeer_event_empfangen"
+
         /// Mindest-Protokollstufe, ab der dieses Ereignis geschrieben wird
         /// (siehe ``Protokollstufe``-Typ-Doku für die Einteilungskriterien).
         var mindestStufe: Protokollstufe {
@@ -116,7 +125,8 @@ enum SyncDebugLogger {
                 return .fehler
             case .zyklusStart, .zyklusEnde, .eventEmpfangen, .snapshotEmpfangen, .einkaufslistenStand,
                  .snapshotGeschrieben, .iCloudBeobachterAusgeloest, .iCloudBeobachterScopeAktualisiert,
-                 .iCloudPickerTriggerAusgeloest:
+                 .iCloudPickerTriggerAusgeloest, .multipeerPeerVerbunden, .multipeerPeerGetrennt,
+                 .multipeerEventEmpfangen:
                 return .standard
             case .snapshotUnveraendertUebersprungen, .scopeZugriff:
                 return .ausfuehrlich

@@ -31,8 +31,15 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_swm-sync._tcp</string>
+		<string>_swm-sync._udp</string>
+	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Wird benötigt, um Kassenbons und Preisschilder für die Preishistorie zu fotografieren.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Wird benötigt, um Änderungen an der Einkaufsliste beim gemeinsamen Einkaufen sofort mit Geräten in der Nähe abzugleichen.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Wird benötigt, um beim Einkaufen automatisch das passende Geschäft in der Nähe vorzuschlagen.</string>
 	<key>UILaunchScreen</key>

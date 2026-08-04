@@ -251,9 +251,10 @@ GitHub #39/#50/#52/#63) — jedes Gerät führt seine eigene, lokale, live genut
 SwiftData-Datenbank am Standardpfad; ein zusätzliches, additives
 `SyncEvent`-Modell samt Lamport-Uhr wird periodisch mit dem geteilten Ordner
 abgeglichen (kein Wechsel der Persistenzschicht, kein aktiv aus mehreren
-Geräten gleichzeitig beschriebener Store). Bewusst ohne den
-MultipeerConnectivity-Kanal (WiFi/Bluetooth-Echtzeitaustausch im Laden, dafür
-weiterhin Issue #49, an Bedingungen geknüpft). **Maßgebliche, aktuelle
+Geräten gleichzeitig beschriebener Store). Zusätzlich ein rein
+beschleunigender MultipeerConnectivity-Kanal (WiFi/Bluetooth-Echtzeitaustausch
+im Laden, `MultipeerSyncService`, GitHub #49, seit v0.12) — additiv neben dem
+Ordner-Kanal, der die verlässliche Zustellung bleibt. **Maßgebliche, aktuelle
 Referenz für Architektur und Funktionsweise:** `docs/DATENSYNCHRONISATION.md`.
 Entstehungsgeschichte, jeder Live-Test-Fund und jeder Bugfix (u.a. die
 `offenerNachfolger`-Umleitung für per Event empfangenes Abhaken auf einen

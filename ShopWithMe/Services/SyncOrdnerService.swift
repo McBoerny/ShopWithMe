@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// Reine Diagnose-Instrumentierung um jeden `startAccessingSecurityScopedResource()`/
@@ -148,5 +149,63 @@ enum SyncOrdnerService {
         }
         UserDefaults.standard.set(ziel, forKey: eigenerPeerOrdnerNameCacheSchluessel)
         return ziel
+    }
+
+    private static let gruppenIDDateiname = ".sync-gruppen-id"
+
+    /// Stabile, aus dem geteilten Ordner selbst abgeleitete Gruppen-ID für den
+    /// Multipeer-Beschleunigungskanal (GitHub #49) — bewusst NICHT von einer
+    /// einzelnen `Einkaufsliste.id` abgeleitet (wie im Issue ursprünglich
+    /// skizziert): ein geteilter Ordner deckt inzwischen alle Listen eines
+    /// Geräts ab, es gibt keine listen-scoped Sync-Beziehung mehr (siehe
+    /// `docs/DATENSYNCHRONISATION.md` §4.2). Das Gerät, das den Ordner
+    /// zuerst einrichtet, schreibt einmalig eine Marker-Datei; jedes weitere
+    /// beitretende Gerät liest denselben Wert. Zugriff auf die Marker-Datei
+    /// (und damit auf den geteilten Ordner) bleibt das Vertrauensmerkmal —
+    /// dieselbe Logik wie im Issue skizziert, nur auf den Ordner statt eine
+    /// einzelne Liste bezogen.
+    static func multipeerGruppenID(in syncOrdner: URL) -> UUID {
+        let datei = syncOrdner.appendingPathComponent(gruppenIDDateiname)
+        if let daten = SyncDateiZugriff.leseKoordiniert(datei),
+           let text = String(data: daten, encoding: .utf8),
+           let vorhandeneID = UUID(uuidString: text.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            return vorhandeneID
+        }
+        let neueID = UUID()
+        SyncDateiZugriff.schreibeKoordiniert(Data(neueID.uuidString.utf8), nach: datei)
+        return neueID
+    }
+
+    /// Fester Bonjour-Service-Type für den Multipeer-Beschleunigungskanal —
+    /// bewusst NICHT aus ``multipeerGruppenID(in:)`` abgeleitet: der
+    /// Service-Type muss laut `project.yml`/Info.plist (`NSBonjourServices`,
+    /// seit iOS 14 Pflicht für jede Bonjour-Discovery) **statisch zur
+    /// Build-Zeit** deklariert werden, die Gruppen-ID entsteht aber erst zur
+    /// Laufzeit (zufällig, pro geteiltem Ordner) — beides lässt sich
+    /// grundsätzlich nicht vereinen. Der Service-Type beschreibt laut Apples
+    /// SDK-Doku ohnehin nur „das Netzwerkprotokoll der App" (max. 15 Zeichen,
+    /// Kleinbuchstaben/Ziffern/Bindestrich), nicht eine konkrete
+    /// Gruppenzugehörigkeit — dafür ist stattdessen `discoveryInfo`
+    /// vorgesehen (siehe ``multipeerDiscoveryGruppenSchluessel(fuerGruppenID:)``),
+    /// das MultipeerConnectivity explizit für genau diesen Zweck anbietet
+    /// ("advertised for browsers to see"). Alle ShopWithMe-Installationen
+    /// teilen sich denselben Service-Type; welche Peers tatsächlich zur
+    /// selben Einkaufsgruppe gehören, entscheidet erst der
+    /// Gruppen-Schlüssel-Abgleich in ``MultipeerSyncService``.
+    static let multipeerServiceType = "swm-sync"
+
+    /// Kurzer, aus ``multipeerGruppenID(in:)`` abgeleiteter Schlüssel für das
+    /// `discoveryInfo`-Dictionary bzw. den Einladungs-Kontext von
+    /// `MCNearbyServiceAdvertiser`/`-Browser` (``MultipeerSyncService``) —
+    /// der eigentliche Gruppen-Trust-Abgleich, seit der Service-Type selbst
+    /// dafür nicht mehr genutzt werden kann (siehe ``multipeerServiceType``).
+    /// Anders als dort kein 15-Zeichen-Limit (TXT-Records erlauben deutlich
+    /// mehr), trotzdem ein Hash statt der rohen ID, um sie nicht im Klartext
+    /// über das lokale Netz zu senden (gleiches Hashing-Muster wie
+    /// ``SyncSnapshotExportService``s Fingerabdruck-Bildung).
+    static func multipeerDiscoveryGruppenSchluessel(fuerGruppenID gruppenID: UUID) -> String {
+        let hash = SHA256.hash(data: Data(gruppenID.uuidString.utf8))
+        let hex = hash.map { String(format: "%02x", $0) }.joined()
+        return String(hex.prefix(16))
     }
 }

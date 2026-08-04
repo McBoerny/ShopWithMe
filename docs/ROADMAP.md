@@ -91,6 +91,18 @@ die übrige Doku aktualisiert wird): `docs/BUILD_WORKFLOW.md`.
   bereits gekaufte Artikel zurückholt); DB-Debug-Log-Writer-Instanz wird
   zwischengespeichert statt bei jedem Aufruf neu erzeugt. Details:
   `docs/DATENSYNCHRONISATION.md` Abschnitt 4.3/4.7, `docs/LOGGING.md`.
+- [x] **v0.12** — [Issue #49](https://github.com/McBoerny/ShopWithMe/issues/49):
+  Multipeer-Beschleunigungskanal — spiegelt Bereich-A-`SyncEvent`s zusätzlich
+  sofort per `MCSession` an verbundene Peers, solange beide Geräte gleichzeitig
+  im Einkaufen-Bildschirm aktiv sind; rein additiv neben dem bestehenden
+  FileProvider-Kanal, der die verlässliche Zustellung bleibt. Zurückgestellt
+  gewesen, bis die beiden im Issue genannten Bedingungen (echter
+  Mehrgeräte-Live-Test des Sync-Verfahrens, wiederholte reale Verzögerung
+  beim gemeinsamen Einkaufen) erfüllt waren — beides durch die
+  Live-Test-Serie in v0.9–v0.11 belegt (GitHub #91/#92). Details:
+  `docs/DATENSYNCHRONISATION.md` Abschnitt 1, `MultipeerSyncService`-Typ-Doku.
+  **Noch ohne echten Zwei-Geräte-Live-Test dieses konkreten Kanals** (siehe
+  dortige „Bekannte Grenzen").
 
 Damit ist die in der Kickoff-Unterhaltung beschriebene Kernfunktionalität
 vollständig umgesetzt; weitere Ideen siehe „Zukünftig“ unten.

@@ -113,6 +113,23 @@ enum SyncDateiZugriff {
         }
     }
 
+    /// Schreibt Dateiinhalt über `NSFileCoordinator`, statt direkt per
+    /// `Data.write(to:)` — analog zum bereits bestehenden koordinierten
+    /// Schreib-Muster in ``SyncExportService``/``SyncSnapshotExportService``,
+    /// hier als wiederverwendbarer Baustein für neue, einzelne Dateien (z.B.
+    /// die Multipeer-Gruppen-ID-Markerdatei) statt einer weiteren eigenen
+    /// Kopie desselben Coordinator-Musters.
+    @discardableResult
+    nonisolated static func schreibeKoordiniert(_ daten: Data, nach url: URL) -> Bool {
+        let coordinator = NSFileCoordinator()
+        var fehler: NSError?
+        var erfolgreich = false
+        coordinator.coordinate(writingItemAt: url, options: [], error: &fehler) { zielURL in
+            erfolgreich = (try? daten.write(to: zielURL, options: .atomic)) != nil
+        }
+        return fehler == nil && erfolgreich
+    }
+
     /// Verschiebt/benennt um über `NSFileCoordinator`, statt direkt per
     /// `FileManager.moveItem` (GitHub #91-Nachfolgefund). Nutzt exakt das von
     /// Apples `NSFileCoordinator.h`-Header dokumentierte Muster für einen
