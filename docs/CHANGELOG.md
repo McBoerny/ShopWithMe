@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.12 (Build 231) — Pull-to-Refresh löst Sync direkt aus der Einkaufsliste aus, dezentere Multipeer-Statuszeile
+
+Bisher war der einzige manuelle Sync-Auslöser der „Jetzt synchronisieren“-Button in den
+Sync-Einstellungen — beim Einkaufen musste man dafür extra dorthin wechseln. Außerdem
+wirkte die grün gefüllte Multipeer-Pille im Toolbar der Einkaufsliste wie ein Button ohne
+Funktion (kein Tap-Handler). Jetzt:
+
+- **Pull-to-Refresh in `EinkaufslisteView`** (`.refreshable`) löst denselben
+  iCloud-Trigger-Picker + `SyncPollingService.syncZyklus()` aus wie der manuelle Button in
+  `SyncOrdnerSettingsView` — kein Umweg mehr über die Einstellungen nötig.
+- **`ICloudSyncTriggerPicker`** aus `SyncOrdnerSettingsView.swift` in eine eigene,
+  gemeinsam genutzte Datei `Views/ICloudSyncTriggerPicker.swift` extrahiert (Single Source
+  of Truth statt Duplikat für beide Aufrufstellen).
+- **Multipeer-Statusanzeige in `EinkaufenView`** von einer grün gefüllten Toolbar-Pille
+  (`bolt.horizontal.circle.fill`, wirkte wie ein funktionsloser Button) zu einer dezenten,
+  linksbündig unter dem Listennamen platzierten Statuszeile („N Geräte verbunden“)
+  umgestellt.
+- `docs/BEDIENUNGSANLEITUNG.md` (Abschnitt „Datensynchronisation“) entsprechend
+  aktualisiert.
+
 ## v0.12 (Build 230) — Zeitlimit für koordinierte Sync-Ordnerzugriffe (Nachfolgefund zu #49, Issue #98)
 
 Die koordinierten Dateizugriffe in `SyncDateiZugriff` (`leseKoordiniert`/`schreibeKoordiniert`/

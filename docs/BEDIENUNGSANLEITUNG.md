@@ -246,11 +246,14 @@ werden ausgetauscht.
   welcher der beiden Namen bleibt) oder „Unterschiedliche Läden“. Ohne
   Entscheidung bleiben beide als getrennte Geschäfte bestehen.
 - **Läuft automatisch,** solange die App im Vordergrund ist — kein manueller
-  Sync-Tap nötig. Ein zusätzlicher „Jetzt synchronisieren“-Button steht für den
-  seltenen Fall bereit, dass du sofort statt in ein paar Sekunden abgleichen
-  möchtest. Dabei blitzt kurz ein Dateiauswahl-Fenster auf den Sync-Ordner
-  auf und schließt sich von selbst wieder — ein experimenteller Versuch, den
-  Systemabgleich zusätzlich anzustoßen, keine Fehlfunktion.
+  Sync-Tap nötig. Für den seltenen Fall, dass du sofort statt in ein paar
+  Sekunden abgleichen möchtest, gibt es zwei gleichwertige manuelle Auslöser:
+  den „Jetzt synchronisieren“-Button in den Sync-Einstellungen, sowie —
+  direkt beim Einkaufen, ohne Umweg über die Einstellungen — ein Ziehen nach
+  unten (Pull-to-Refresh) ganz oben in der Einkaufsliste. Beide lösen
+  denselben Abgleich aus; dabei blitzt kurz ein Dateiauswahl-Fenster auf den
+  Sync-Ordner auf und schließt sich von selbst wieder — ein experimenteller
+  Versuch, den Systemabgleich zusätzlich anzustoßen, keine Fehlfunktion.
 - **Nur im Vordergrund:** Bei gesperrtem Gerät oder geschlossener App pausiert
   der automatische Abgleich — er läuft beim nächsten Öffnen sofort weiter.
 - **Schnellerer Abgleich in der Nähe:** Öffnest du gemeinsam mit einer anderen
@@ -266,8 +269,9 @@ werden ausgetauscht.
   jederzeit, wann der Ordner-Abgleich zuletzt erfolgreich lief und ob gerade
   zusätzlich eine schnellere Nahbereich-Verbindung zu anderen Geräten besteht
   (und mit welchen). Während des gemeinsamen Einkaufens erscheint bei
-  bestehender Nahbereich-Verbindung außerdem ein kleines Blitz-Symbol mit der
-  Geräteanzahl oben im Einkaufen-Bildschirm.
+  bestehender Nahbereich-Verbindung außerdem eine kleine Statuszeile
+  („N Geräte verbunden“) linksbündig unter dem Listennamen im
+  Einkaufen-Bildschirm.
 - **„N mögliche Duplikate prüfen“:** Erkennt der laufende Abgleich (nicht nur
   beim einmaligen Einrichten) ein Geschäft, einen Artikel oder eine
   Einkaufsliste, die einem bereits vorhandenen Eintrag ähneln, aber nicht

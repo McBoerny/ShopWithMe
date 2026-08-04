@@ -962,6 +962,11 @@ private struct EinkaufslisteView: View {
     /// `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 8). Blendet sich
     /// nach kurzer Zeit von selbst wieder aus (``ueberkaufHinweisAnzeigen(fuer:)``).
     @State private var ueberkaufHinweisText: String?
+    /// Pull-to-Refresh löst denselben iCloud-Trigger-Picker wie der manuelle
+    /// "Jetzt synchronisieren"-Button in ``SyncOrdnerSettingsView`` aus (GitHub
+    /// #92/#97) — direkter Zugang, ohne dass beim Einkaufen erst in die
+    /// Einstellungen gewechselt werden muss.
+    @State private var zeigeSyncTriggerPicker = false
 
     /// Bewusst aus ``abgehakteKaufEintraege`` (liste-weit, EGAL welcher
     /// Vorgang) statt aus ``einkaufsvorgang.kaufEintraege`` allein — siehe
@@ -1227,6 +1232,34 @@ private struct EinkaufslisteView: View {
         einkaufsvorgang.kaufEintraege.max { $0.datum < $1.datum }?.kategorie
     }
 
+    /// Geteilte Sprachregelung für beide Pillen-Varianten (siehe
+    /// ``MultipeerPillVariante``), damit VoiceOver unabhängig von der
+    /// gewählten Optik denselben Text vorliest wie die bisherige Pille.
+    private var multipeerAccessibilityText: String {
+        let anzahl = multipeerSyncService.verbundenePeerNamen.count
+        return "Multipeer aktiv, verbunden mit \(anzahl) Gerät\(anzahl == 1 ? "" : "en")"
+    }
+
+    /// Dezente Statuszeile im Listeninhalt statt eines Toolbar-Icons (GitHub
+    /// #97-Folgediskussion) — die vorherige Optik (grün gefüllter Kreis in
+    /// der Toolbar) wirkte wie ein Button ohne Funktion. Eingebettet in
+    /// denselben oberen `safeAreaInset` wie ``sortierStatusHinweis(gruppen:)``.
+    @ViewBuilder
+    private var multipeerStatusZeile: some View {
+        if !multipeerSyncService.verbundenePeerNamen.isEmpty {
+            HStack(spacing: 6) {
+                Image(systemName: "bolt.horizontal.circle.fill")
+                Text("\(multipeerSyncService.verbundenePeerNamen.count) Gerät\(multipeerSyncService.verbundenePeerNamen.count == 1 ? "" : "e") verbunden")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal)
+            .padding(.top, 4)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(multipeerAccessibilityText)
+        }
+    }
+
     /// Statusbanner über den Sortierzustand dieses Geschäfts (Architekturvorschlag
     /// Abschnitt 7) — nur sichtbar, wenn es überhaupt kategoriebasiert sortierte
     /// Abschnitte gibt. Nimmt die bereits berechneten `gruppen` entgegen, statt
@@ -1327,22 +1360,19 @@ private struct EinkaufslisteView: View {
                 }
             }
         }
-        .safeAreaInset(edge: .top) { sortierStatusHinweis(gruppen: gruppen) }
+        .refreshable { await pullToRefreshSynchronisieren() }
+        .safeAreaInset(edge: .top) {
+            VStack(alignment: .leading, spacing: 0) {
+                multipeerStatusZeile
+                sortierStatusHinweis(gruppen: gruppen)
+            }
+        }
         .safeAreaInset(edge: .bottom) { einkaufAbschliessenButton }
         // Zeigt bewusst immer den Listennamen, nicht den Geschäftsnamen — der
         // erscheint stattdessen direkt neben dem Einkaufswagen-Icon im
         // `EinkaufenView`-Toolbar (siehe dort, GitHub #16).
         .navigationTitle(listenTitel)
         .toolbar {
-            if !multipeerSyncService.verbundenePeerNamen.isEmpty {
-                ToolbarItem(placement: .topBarLeading) {
-                    Label("\(multipeerSyncService.verbundenePeerNamen.count)", systemImage: "bolt.horizontal.circle.fill")
-                        .foregroundStyle(.green)
-                        .accessibilityLabel(
-                            "Multipeer aktiv, verbunden mit \(multipeerSyncService.verbundenePeerNamen.count) Gerät\(multipeerSyncService.verbundenePeerNamen.count == 1 ? "" : "en")"
-                        )
-                }
-            }
             if geschaeft != nil {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
@@ -1378,6 +1408,13 @@ private struct EinkaufslisteView: View {
         }
         .sheet(isPresented: $zeigeArtikelHinzufuegen) {
             ArtikelHinzufuegenView(einkaufsliste: einkaufsliste)
+        }
+        // GitHub #97: derselbe kurz aufblitzende Trigger-Picker wie in
+        // ``SyncOrdnerSettingsView`` — siehe ``ICloudSyncTriggerPicker``.
+        .sheet(isPresented: $zeigeSyncTriggerPicker) {
+            if let ordner = SyncOrdnerService.gewaehlterOrdner() {
+                ICloudSyncTriggerPicker(ordner: ordner, isPresented: $zeigeSyncTriggerPicker)
+            }
         }
         .sheet(isPresented: $zeigeBelegScanFuerGeschaeft) {
             if let geschaeft {
@@ -1427,6 +1464,20 @@ private struct EinkaufslisteView: View {
             syncPollingService.einkaufAktiv = false
             multipeerSyncService.aktiv = false
         }
+    }
+
+    /// Pull-to-Refresh-Handler (GitHub #97): löst denselben Trigger-Picker
+    /// plus Sync-Zyklus wie der manuelle Button in ``SyncOrdnerSettingsView``
+    /// aus (``SyncOrdnerSettingsView/jetztSynchronisieren()``), ohne dass
+    /// beim Einkaufen erst in die Einstellungen gewechselt werden muss.
+    /// Rückgabewert von ``SyncPollingService/syncZyklus()`` bewusst
+    /// verworfen — genau wie beim automatischen Hintergrund-Poll in
+    /// ``SyncPollingService`` selbst wird ein Fehlschlag hier nicht extra
+    /// gemeldet, die native Pull-to-Refresh-Animation läuft einfach bis zum
+    /// nächsten Poll-Zyklus wieder ohne Sonderstatus aus.
+    private func pullToRefreshSynchronisieren() async {
+        zeigeSyncTriggerPicker = true
+        await syncPollingService.syncZyklus()
     }
 
     /// Bewusst aus ``abgehakteKaufEintraege`` (liste-weit) statt nur
