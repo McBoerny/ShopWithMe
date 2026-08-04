@@ -1334,6 +1334,15 @@ private struct EinkaufslisteView: View {
         // `EinkaufenView`-Toolbar (siehe dort, GitHub #16).
         .navigationTitle(listenTitel)
         .toolbar {
+            if !multipeerSyncService.verbundenePeerNamen.isEmpty {
+                ToolbarItem(placement: .topBarLeading) {
+                    Label("\(multipeerSyncService.verbundenePeerNamen.count)", systemImage: "bolt.horizontal.circle.fill")
+                        .foregroundStyle(.green)
+                        .accessibilityLabel(
+                            "Multipeer aktiv, verbunden mit \(multipeerSyncService.verbundenePeerNamen.count) Gerät\(multipeerSyncService.verbundenePeerNamen.count == 1 ? "" : "en")"
+                        )
+                }
+            }
             if geschaeft != nil {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {

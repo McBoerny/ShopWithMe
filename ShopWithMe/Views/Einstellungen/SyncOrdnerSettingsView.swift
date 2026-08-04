@@ -18,6 +18,7 @@ import UIKit
 struct SyncOrdnerSettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var syncPollingService: SyncPollingService
+    @EnvironmentObject private var multipeerSyncService: MultipeerSyncService
 
     @State private var zeigeOrdnerauswahl = false
     @State private var fehlermeldung: String?
@@ -58,6 +59,20 @@ struct SyncOrdnerSettingsView: View {
                 LabeledContent("Sync-Ordner") {
                     Text(ausgewaehlterOrdner?.lastPathComponent ?? "ohne")
                         .foregroundStyle(.secondary)
+                }
+            }
+
+            if ausgewaehlterOrdner != nil {
+                Section {
+                    LabeledContent("Ordner-Sync") {
+                        Text(letzterOrdnerSyncText)
+                            .foregroundStyle(.secondary)
+                    }
+                    multipeerStatusZeile
+                } header: {
+                    Text("Sync-Status")
+                } footer: {
+                    Text("Der Multipeer-Kanal beschleunigt die Übertragung zusätzlich über lokales WLAN/Bluetooth, solange gemeinsam eingekauft wird — der Ordner bleibt dabei immer die eigentliche Quelle der Wahrheit.")
                 }
             }
 
@@ -245,6 +260,30 @@ struct SyncOrdnerSettingsView: View {
                     .padding()
                     .glassCard()
             }
+        }
+    }
+
+    private var letzterOrdnerSyncText: String {
+        guard let zeitpunkt = SyncAktualitaetsService.zuletztErfolgreichSynchronisiertAm else {
+            return "noch nicht synchronisiert"
+        }
+        return "zuletzt \(zeitpunkt.formatted(.relative(presentation: .named)))"
+    }
+
+    /// Rein additive Statuszeile zum Multipeer-Kanal (GitHub #49) — ``aktiv``
+    /// spiegelt, ob gerade `EinkaufenView` sichtbar ist, ``verbundenePeerNamen``,
+    /// ob dabei tatsächlich schon eine Verbindung zustande kam.
+    @ViewBuilder
+    private var multipeerStatusZeile: some View {
+        if !multipeerSyncService.aktiv {
+            Label("Multipeer inaktiv (nur beim Einkaufen)", systemImage: "bolt.horizontal.circle")
+                .foregroundStyle(.secondary)
+        } else if multipeerSyncService.verbundenePeerNamen.isEmpty {
+            Label("Multipeer sucht nach Geräten…", systemImage: "bolt.horizontal.circle")
+                .foregroundStyle(.secondary)
+        } else {
+            Label("Multipeer verbunden: \(multipeerSyncService.verbundenePeerNamen.joined(separator: ", "))", systemImage: "bolt.horizontal.circle.fill")
+                .foregroundStyle(.green)
         }
     }
 
@@ -549,5 +588,6 @@ private struct ICloudSyncTriggerPicker: UIViewControllerRepresentable {
         SyncOrdnerSettingsView()
     }
     .environmentObject(SyncPollingService())
+    .environmentObject(MultipeerSyncService())
     .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self], inMemory: true)
 }

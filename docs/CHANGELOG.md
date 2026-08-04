@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.12 (Build 229) — Sichtbarer Sync-Status für den Multipeer-Kanal
+
+Der Multipeer-Beschleunigungskanal (GitHub #49) lief bisher komplett unsichtbar für den
+Anwender — `MultipeerSyncService` war zwar `ObservableObject`, aber ohne `@Published`-
+Properties, sodass sich SwiftUI-Views nie auf seinen Zustand aktualisierten. Jetzt:
+
+- **`MultipeerSyncService.aktiv`** ist jetzt `@Published`, neue `@Published private(set)
+  var verbundenePeerNamen: [String]`, gepflegt in `session(_:peer:didChange:)` sowie beim
+  Session-Abbau in `beendeAdvertisingUndBrowsing()`.
+- **`SyncOrdnerSettingsView`**: neuer Abschnitt „Sync-Status“ zeigt Zeitpunkt des letzten
+  erfolgreichen Ordner-Syncs (`SyncAktualitaetsService.zuletztErfolgreichSynchronisiertAm`)
+  sowie den aktuellen Multipeer-Status (inaktiv / sucht / verbunden mit wem).
+- **`EinkaufenView`**: kleines Blitz-Symbol mit Geräteanzahl im Toolbar, solange
+  tatsächlich mindestens ein Peer per Multipeer verbunden ist — sonst ausgeblendet.
+- **`DebuggingView`**: neue Sektion „Multipeer-Kanal“ mit demselben Status sowie (nur
+  `#if DEBUG`) einem Schalter „Multipeer erzwingen“, um den Kanal unabhängig vom
+  Einkaufen-Bildschirm testweise zu starten/stoppen.
+
 ## v0.12 (Build 228) — Code-Review-Fixes für den Multipeer-Beschleunigungskanal (GitHub #49)
 
 Ultra-Review (8 Finder-Winkel, 9-fach unabhängig verifiziert) über den Build-227-Diff

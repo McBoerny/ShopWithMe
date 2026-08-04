@@ -57,6 +57,8 @@ struct DebuggingView: View {
                 Text("Sync-Protokoll: wie alt empfangene Updates beim Eintreffen waren und wie lange ein Sync-Zyklus dauert. Datenbank-Protokoll: Probleme rund um den Mehrbenutzerzugriff (Sperren, Öffnen, Speichern). „Fehler“: nur Störungen und seltene bedeutsame Ereignisse. „Standard“: zusätzlich die normale Zyklus-Aktivität. „Ausführlich“: zusätzlich hochfrequente Detail-Ereignisse (u.a. je Sync-Teilbereich eine „unverändert“-Zeile, sowie eine Security-Ordnerzugriffs-Diagnose) — nur für eine gezielte Tiefenanalyse einschalten, nicht dauerhaft. Beide Protokolle nur lokal auf diesem Gerät, nicht geteilt.")
             }
 
+            MultipeerStatusSection()
+
             BekannteSyncPeersSection()
 
             StatuskonsolidierungSection()
@@ -121,6 +123,48 @@ private struct SuchradiusUeberschreibungSection: View {
     }
 }
 #endif
+
+/// Zeigt, ob der zusätzliche Multipeer-Beschleunigungskanal (GitHub #49,
+/// ``MultipeerSyncService``) gerade läuft und mit wem verbunden ist — bislang
+/// nirgends für den Anwender sichtbar, obwohl der Kanal seit GitHub #49
+/// existiert. ``MultipeerSyncService/aktiv`` wird normalerweise von
+/// `EinkaufenView` gesetzt (nur während des Einkaufens); der Debug-Schalter
+/// unten überschreibt das testweise, wird aber beim nächsten Betreten/
+/// Verlassen des Einkaufen-Bildschirms wieder auf dessen eigenen Zustand
+/// zurückgesetzt.
+private struct MultipeerStatusSection: View {
+    @EnvironmentObject private var multipeerSyncService: MultipeerSyncService
+
+    var body: some View {
+        Section {
+            if !multipeerSyncService.aktiv {
+                Label("Inaktiv — läuft nur während des Einkaufens", systemImage: "bolt.horizontal.circle")
+                    .foregroundStyle(.secondary)
+            } else if multipeerSyncService.verbundenePeerNamen.isEmpty {
+                Label("Sucht nach Geräten in der Nähe…", systemImage: "bolt.horizontal.circle")
+                    .foregroundStyle(.secondary)
+            } else {
+                Label("Verbunden: \(multipeerSyncService.verbundenePeerNamen.joined(separator: ", "))", systemImage: "bolt.horizontal.circle.fill")
+                    .foregroundStyle(.green)
+            }
+            #if DEBUG
+            Toggle("Multipeer erzwingen", isOn: $multipeerSyncService.aktiv)
+            #endif
+        } header: {
+            Text("Multipeer-Kanal")
+        } footer: {
+            Text(footerText)
+        }
+    }
+
+    private var footerText: String {
+        var text = "Zusätzlicher, rein beschleunigender Sync-Kanal über lokales WLAN/Bluetooth (GitHub #49) — läuft nur, solange gemeinsam eingekauft wird. Der geteilte Sync-Ordner bleibt davon unabhängig die eigentliche Quelle der Wahrheit."
+        #if DEBUG
+        text += " „Multipeer erzwingen“ startet/stoppt den Kanal testweise unabhängig vom Einkaufen-Bildschirm — wird beim nächsten Betreten/Verlassen dieses Bildschirms wieder überschrieben."
+        #endif
+        return text
+    }
+}
 
 /// Listet alle jemals per Sync gesehenen Peer-Geräte (``SyncPeerInfo``) mit
 /// Zuletzt-gesehen-Zeitpunkt — Gegenstück zur automatischen Altersgrenze in
@@ -461,5 +505,6 @@ private struct DebugLogTeilenView: UIViewControllerRepresentable {
         DebuggingView()
     }
     .environmentObject(SyncPollingService())
+    .environmentObject(MultipeerSyncService())
     .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self], inMemory: true)
 }

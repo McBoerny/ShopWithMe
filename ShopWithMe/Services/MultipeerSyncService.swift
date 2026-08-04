@@ -52,7 +52,7 @@ final class MultipeerSyncService: NSObject, ObservableObject {
     /// ist (analog ``SyncPollingService/einkaufAktiv``) — startet/stoppt
     /// Advertising+Browsing. Bewusst kein Dauerbetrieb im Hintergrund (Akku,
     /// Privacy: kein permanentes Bluetooth-/Local-Network-Advertising).
-    var aktiv = false {
+    @Published var aktiv = false {
         didSet {
             guard aktiv != oldValue else { return }
             if aktiv {
@@ -62,6 +62,12 @@ final class MultipeerSyncService: NSObject, ObservableObject {
             }
         }
     }
+
+    /// Namen der aktuell per Multipeer verbundenen Peers — Grundlage für die
+    /// Sync-Status-Anzeige (`SyncOrdnerSettingsView`, `DebuggingView`,
+    /// `EinkaufenView`-Badge). Gepflegt in ``session(_:peer:didChange:)`` und
+    /// beim Session-Abbau in ``beendeAdvertisingUndBrowsing()``.
+    @Published private(set) var verbundenePeerNamen: [String] = []
 
     private var context: ModelContext?
     private var session: MCSession?
@@ -186,6 +192,7 @@ final class MultipeerSyncService: NSObject, ObservableObject {
         session?.disconnect()
         session = nil
         gruppenSchluessel = nil
+        verbundenePeerNamen = []
     }
 
     /// Best-effort, fire-and-forget — blockiert nie, kein Fehlerfall
@@ -218,11 +225,15 @@ extension MultipeerSyncService: MCSessionDelegate {
     /// zurück, bevor sie `context`/`session` (beide `@MainActor`-isoliert)
     /// berührt.
     nonisolated func session(_ session: MCSession, peer peerID: MCPeerID, didChange state: MCSessionState) {
-        Task { @MainActor in
+        Task { @MainActor [weak self] in
             switch state {
             case .connected:
+                if let self, !self.verbundenePeerNamen.contains(peerID.displayName) {
+                    self.verbundenePeerNamen.append(peerID.displayName)
+                }
                 SyncDebugLogger.log(.multipeerPeerVerbunden, details: peerID.displayName)
             case .notConnected:
+                self?.verbundenePeerNamen.removeAll { $0 == peerID.displayName }
                 SyncDebugLogger.log(.multipeerPeerGetrennt, details: peerID.displayName)
             case .connecting:
                 break

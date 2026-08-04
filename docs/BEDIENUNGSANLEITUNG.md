@@ -262,6 +262,12 @@ werden ausgetauscht.
   Berechtigung „Im lokalen Netzwerk suchen“ — ohne diese Berechtigung
   funktioniert weiterhin alles, nur eben etwas langsamer über den geteilten
   Ordner.
+- **Sichtbarer Sync-Status:** Einstellungen → „Datensynchronisation“ zeigt
+  jederzeit, wann der Ordner-Abgleich zuletzt erfolgreich lief und ob gerade
+  zusätzlich eine schnellere Nahbereich-Verbindung zu anderen Geräten besteht
+  (und mit welchen). Während des gemeinsamen Einkaufens erscheint bei
+  bestehender Nahbereich-Verbindung außerdem ein kleines Blitz-Symbol mit der
+  Geräteanzahl oben im Einkaufen-Bildschirm.
 - **„N mögliche Duplikate prüfen“:** Erkennt der laufende Abgleich (nicht nur
   beim einmaligen Einrichten) ein Geschäft, einen Artikel oder eine
   Einkaufsliste, die einem bereits vorhandenen Eintrag ähneln, aber nicht
@@ -281,7 +287,9 @@ werden ausgetauscht.
   nächsten App-Start.
 - **Sync-Debug-Modus** (Einstellungen → „Debugging“) — zeichnet zur
   Fehlersuche/Optimierung lokal auf, wie lange ein Abgleich dauert und wie
-  aktuell empfangene Änderungen waren; im Normalbetrieb nicht nötig.
+  aktuell empfangene Änderungen waren; im Normalbetrieb nicht nötig. Dort
+  zeigt der Abschnitt „Multipeer-Kanal“ zusätzlich denselben Nahbereich-Status
+  wie in den Sync-Einstellungen.
 
 ## Einstellungen
 
