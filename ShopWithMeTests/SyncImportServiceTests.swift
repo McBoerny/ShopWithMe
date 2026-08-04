@@ -373,7 +373,7 @@ struct SyncImportServiceTests {
     /// des SENDENDEN Geräts durchs Geschäft, nicht die dieses Geräts — der
     /// dadurch entstehende `KaufEintrag` darf deshalb keinen
     /// `kategorieBesuchsIndex` bekommen (sonst würde
-    /// `WarengruppenDistanzService` mit einer erfundenen Besuchsposition für
+    /// `AbteilungsDistanzService` mit einer erfundenen Besuchsposition für
     /// diesen Nutzer gefüttert). Ein bereits lokal abgehakter Artikel (mit
     /// echtem Index) bleibt davon unberührt, und sein Index verschiebt sich
     /// durch das importierte Event nicht.

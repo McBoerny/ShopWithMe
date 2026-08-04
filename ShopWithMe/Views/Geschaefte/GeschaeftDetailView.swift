@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 
 /// Detailansicht eines ``Geschaeft``s: Stammdaten, Kategorien-Verwaltung
-/// (``GeschaeftWarengruppenSektion``) sowie Kaufbeleg- und Preisschild-Scan.
+/// (``GeschaeftAbteilungenSektion``) sowie Kaufbeleg- und Preisschild-Scan.
 ///
 /// „Kaufbeleg scannen“ öffnet ``BelegScanView`` im ``BelegScanKontext/geschaeft(_:)``-
 /// Kontext — unabhängig von einem laufenden ``Einkaufsvorgang``, z.B. um Preise für
@@ -76,7 +76,7 @@ struct GeschaeftDetailView: View {
                 .buttonStyle(.plain)
             }
 
-            GeschaeftWarengruppenSektion(geschaeft: geschaeft)
+            GeschaeftAbteilungenSektion(geschaeft: geschaeft)
 
             Section {
                 Button {

@@ -3,7 +3,7 @@ import SwiftData
 
 /// Ein einzelner Kauf eines Artikels — die operative Buchungszeile eines
 /// laufenden ``Einkaufsvorgang``s (Dedupe-Schutz, Entfernen von der Liste,
-/// ``kategorieBesuchsIndex`` für ``WarengruppenDistanzService``).
+/// ``kategorieBesuchsIndex`` für ``AbteilungsDistanzService``).
 ///
 /// **Seit GitHub #76 keine Preishistorie-Rolle mehr** — die ist nach
 /// ``Preispunkt`` verschoben, da sie fachlich unabhängig vom laufenden
@@ -28,7 +28,7 @@ final class KaufEintrag {
     /// Das Geschäft, in dem der Kauf stattfand.
     var geschaeft: Geschaeft?
     /// Die Kategorie des Artikels zum Kaufzeitpunkt — Grundlage für
-    /// ``WarengruppenDistanzService``, unabhängig von einer späteren Änderung der
+    /// ``AbteilungsDistanzService``, unabhängig von einer späteren Änderung der
     /// Artikel-Kategorie-Zuordnung.
     var kategorie: ArtikelKategorie?
     /// Name des Artikels zum Kaufzeitpunkt (dauerhafter Schnappschuss).
@@ -52,7 +52,7 @@ final class KaufEintrag {
     /// Gekaufte Menge (Standard: 1).
     var menge: Double
     /// Position in der chronologischen Kategorie-Besuchsreihenfolge dieses
-    /// Einkaufsvorgangs — Grundlage für ``WarengruppenDistanzService``.
+    /// Einkaufsvorgangs — Grundlage für ``AbteilungsDistanzService``.
     var kategorieBesuchsIndex: Int?
 
     init(

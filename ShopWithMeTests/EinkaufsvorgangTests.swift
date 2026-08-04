@@ -255,7 +255,7 @@ struct EinkaufsvorgangTests {
     /// `SyncImportService.materialisiere`) beschreibt die Laufreihenfolge des
     /// SENDENDEN Geräts, nicht die dieses Geräts — es darf deshalb keinen
     /// ``KaufEintrag/kategorieBesuchsIndex`` bekommen, sonst würde
-    /// ``WarengruppenDistanzService`` mit einer erfundenen Besuchsposition für
+    /// ``AbteilungsDistanzService`` mit einer erfundenen Besuchsposition für
     /// diesen Nutzer gefüttert (siehe Typ-Doku
     /// ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:indexFuerDistanzlernen:)``).
     @Test
@@ -331,7 +331,7 @@ struct EinkaufsvorgangTests {
     /// mehreren Kategorien jetzt gleichzeitig in allen zugehörigen Abschnitten
     /// an (statt nur in einer "führenden") und übergibt beim Abhaken die
     /// tatsächlich getappte Kategorie — Grundlage dafür, dass
-    /// ``WarengruppenDistanzService`` pro Geschäft lernen kann, in welcher der
+    /// ``AbteilungsDistanzService`` pro Geschäft lernen kann, in welcher der
     /// mehreren Kategorien ein Artikel dort tatsächlich steht (z.B. Sojasauce
     /// bei Edeka unter "Soßen", bei Aldi unter "Asia"), statt einer für den
     /// Artikel global geratenen.
@@ -414,7 +414,7 @@ struct EinkaufsvorgangTests {
     /// `SyncImportService`) darf `naechsterKategorieBesuchsIndex` nicht dazu
     /// verleiten, für eine Kategorie, die bereits einen echten Index hat,
     /// einen zweiten (Duplikat-)Index zu vergeben — sonst zerfällt eine
-    /// Warengruppe in der ``WarengruppenDistanzService``-Distanzmatrix in zwei
+    /// Abteilung in der ``AbteilungsDistanzService``-Distanzmatrix in zwei
     /// Besuchs-Slots. Der ohne-Index-Eintrag wird bewusst ZUERST angelegt,
     /// damit ein naives `kaufEintraege.first(where:)` (ungeordnete
     /// SwiftData-Relationship, folgt vor jedem Save/Fetch typischerweise der

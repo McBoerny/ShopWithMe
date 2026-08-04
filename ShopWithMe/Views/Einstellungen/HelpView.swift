@@ -28,24 +28,24 @@ private struct HilfeThema: Identifiable {
 
     static let alle: [HilfeThema] = [
         HilfeThema(
-            titel: "Warengruppen pro Geschäft",
+            titel: "Abteilungen pro Geschäft",
             text: """
-            Unter Einstellungen → Geschäfte kannst du einem Geschäft direkt Warengruppen \
-            zuordnen („Warengruppen“-Abschnitt → „Warengruppe hinzufügen“). Zusammen mit \
-            den unter Einstellungen → Geschäftstypen hinterlegten Standard-Warengruppen \
-            des Geschäftstyps ergibt das die verfügbaren Warengruppen, die beim Einkaufen \
+            Unter Einstellungen → Geschäfte kannst du einem Geschäft direkt Abteilungen \
+            zuordnen („Abteilungen“-Abschnitt → „Abteilung hinzufügen“). Zusammen mit \
+            den unter Einstellungen → Geschäftstypen hinterlegten Standard-Abteilungen \
+            des Geschäftstyps ergibt das die verfügbaren Abteilungen, die beim Einkaufen \
             dort auftauchen. So zeigt dir die App im Baumarkt keine Milchprodukte an.
             """
         ),
         HilfeThema(
-            titel: "Geschäftstypen & Standard-Warengruppen",
+            titel: "Geschäftstypen & Standard-Abteilungen",
             text: """
             Unter Einstellungen → Geschäftstypen legst du je Geschäftstyp (z.B. \
-            Drogerie) fest, welche Warengruppen dort typischerweise geführt werden. \
-            Jedes Geschäft mit diesem Typ macht diese Warengruppen automatisch \
+            Drogerie) fest, welche Abteilungen dort typischerweise geführt werden. \
+            Jedes Geschäft mit diesem Typ macht diese Abteilungen automatisch \
             verfügbar, ganz ohne sie dem einzelnen Geschäft manuell zuzuordnen. Ist \
             Apple Intelligence verfügbar, schlägt „KI-Vorschlag“ passende \
-            Warengruppen vor.
+            Abteilungen vor.
             """
         ),
         HilfeThema(
@@ -66,7 +66,7 @@ private struct HilfeThema: Identifiable {
             text: """
             Beim Anlegen eines neuen Artikels kann dir Apple Intelligence (sofern auf \
             deinem Gerät aktiviert) automatisch ein passendes Symbol, eine Farbe und \
-            eine Warengruppe vorschlagen. Tippe dazu im Anlegen-Formular auf „Mit Apple \
+            eine Abteilung vorschlagen. Tippe dazu im Anlegen-Formular auf „Mit Apple \
             Intelligence vorschlagen“, nachdem du einen Namen eingegeben hast. Ist \
             Apple Intelligence auf deinem Gerät nicht verfügbar, wird diese \
             Schaltfläche einfach nicht angezeigt — du kannst Artikel jederzeit auch \
@@ -93,7 +93,7 @@ private struct HilfeThema: Identifiable {
             In den Einstellungen unter „Einkaufslisten“ kannst du über „MilkForUs \
             importieren“ eine aus der Shopping-App „MilkForUs“ exportierte Textdatei \
             einlesen — per Datei-Auswahl oder direkt über die Teilen-Funktion eines \
-            anderen Apps (z.B. eine per Chat empfangene Datei). Warengruppen werden \
+            anderen Apps (z.B. eine per Chat empfangene Datei). Abteilungen werden \
             automatisch mit deinem Bestand abgeglichen (exakter Name oder \
             KI-Vorschlag); in der Vorschau kannst du das vor dem Übernehmen noch \
             ändern oder einzelne Artikel ausschließen.

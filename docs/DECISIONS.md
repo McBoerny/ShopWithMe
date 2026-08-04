@@ -164,7 +164,7 @@ Regale“) hatte `Regal` bereits auf eine rein optionale Sortier-Hilfsstruktur r
 ohne Einfluss auf Verfügbarkeit.
 
 **Auslöser der Entfernung:** Mit der in Build 95 eingeführten
-`WarengruppenDistanzService`-Sortierung (paarweise gelernte Distanz je
+`AbteilungsDistanzService`-Sortierung (paarweise gelernte Distanz je
 Kategorie-Paar und Geschäft statt eines einzelnen Skalars je Kategorie, siehe
 `docs/ARCHITEKTURVORSCHLAG_ADAPTIVE_SORTIERUNG.md`) deckt die automatische Sortierung
 dasselbe Problem feiner und ganz ohne manuellen Pflegeaufwand ab. `Regal` als

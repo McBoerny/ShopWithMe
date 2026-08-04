@@ -281,7 +281,7 @@ enum SyncImportService {
             // indexFuerDistanzlernen: false — dieses Abhaken beschreibt die
             // Laufreihenfolge des SENDENDEN Geräts durchs Geschäft, nicht die
             // dieses Geräts (siehe Einkaufsvorgang-Typ-Doku). Ein hier vergebener
-            // Index würde WarengruppenDistanzService mit einer erfundenen
+            // Index würde AbteilungsDistanzService mit einer erfundenen
             // Position für diesen Nutzer füttern.
             //
             // geschaeft: explizit aus der Nutzlast statt aus `vorgang.geschaeft`

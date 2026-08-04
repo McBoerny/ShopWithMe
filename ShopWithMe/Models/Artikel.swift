@@ -167,7 +167,7 @@ extension Artikel {
     /// genutzt wird).
     ///
     /// Priorität: die aus der Kaufhistorie **gelernte** Kategorie
-    /// (``WarengruppenDistanzService/gelernteKategorie(fuer:in:context:)``, sobald
+    /// (``AbteilungsDistanzService/gelernteKategorie(fuer:in:context:)``, sobald
     /// genug Käufe vorliegen) > eine im Geschäft tatsächlich verfügbare Kategorie >
     /// die erste zugeordnete Kategorie (ohne `geschaeft`, z.B. in der
     /// geschäftsunabhängigen Artikel-Verwaltung). Kandidaten werden vor der Auswahl
@@ -185,7 +185,7 @@ extension Artikel {
     /// Artikel und Geschäft unterschiedliche, jeweils tatsächlich zutreffende
     /// Kategorien lernen, z.B. Sojasauce bei Edeka unter "Soßen", bei Aldi unter
     /// "Asia"; `EinkaufenView` fragt dafür direkt bei
-    /// ``WarengruppenDistanzService/gelernteKategorie(fuer:in:context:)`` nach,
+    /// ``AbteilungsDistanzService/gelernteKategorie(fuer:in:context:)`` nach,
     /// nicht über diese Funktion hier).
     func fuehrendeKategorie(inGeschaeft geschaeft: Geschaeft?, context: ModelContext) -> ArtikelKategorie {
         let kandidaten = effektiveKategorien(context: context).sorted { a, b in
@@ -193,7 +193,7 @@ extension Artikel {
         }
         guard let geschaeft else { return kandidaten[0] }
         if kandidaten.count > 1,
-           let gelernt = WarengruppenDistanzService.gelernteKategorie(fuer: self, in: geschaeft, context: context) {
+           let gelernt = AbteilungsDistanzService.gelernteKategorie(fuer: self, in: geschaeft, context: context) {
             return gelernt
         }
         let alleKategorien = (try? context.fetch(FetchDescriptor<ArtikelKategorie>())) ?? []

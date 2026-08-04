@@ -76,7 +76,7 @@ die übrige Doku aktualisiert wird): `docs/BUILD_WORKFLOW.md`.
   erscheint beim Einkaufen jetzt gleichzeitig in allen zugehörigen Abschnitten
   statt nur in einer „führenden“ (GitHub-Nachfolgefund zu #36); die getappte
   Kategorie fließt explizit in den `KaufEintrag` ein, sodass
-  `WarengruppenDistanzService` pro Geschäft lernen kann, in welcher der
+  `AbteilungsDistanzService` pro Geschäft lernen kann, in welcher der
   mehreren Kategorien ein Artikel dort tatsächlich steht. Dazu mehrere
   Sync-Robustheits-Fixes (dangling `Einkaufsvorgang` nach „Einkauf
   abschließen“, Distanzlern-Isolation gegen fremd abgehakte Artikel) — siehe
@@ -112,7 +112,7 @@ vollständig umgesetzt; weitere Ideen siehe „Zukünftig“ unten.
   umgesetzten Lösch-Logik in `PreisHistorieBereinigungService`) — zurückgestellt, da
   SwiftData-`@Relationship`s nicht store-übergreifend funktionieren und die dafür
   nötige Ablösung von `KaufEintrag`s operativer Rolle (laufender Einkaufsvorgang,
-  `WarengruppenDistanzService`) ein eigenständiges, größeres Vorhaben wäre. Details/
+  `AbteilungsDistanzService`) ein eigenständiges, größeres Vorhaben wäre. Details/
   erwogene Alternativen siehe `docs/PREISHISTORIE_BEREINIGUNG.md`.
 - **Nutzungs-Tracking/Analytics**: anonymisiertes Tracking-Framework zur Analyse der
   App-Nutzung — erfassen, welche Funktionen wie häufig genutzt werden, um die Roadmap
@@ -127,7 +127,7 @@ vollständig umgesetzt; weitere Ideen siehe „Zukünftig“ unten.
   laufenden Betriebs.
 - ~~**`export.json` als Paket statt Monolith**~~ ([#82](https://github.com/McBoerny/ShopWithMe/issues/82))
   — umgesetzt, siehe `docs/EXPORT_PAKET_UMBAU.md`.
-- **`ArtikelKategorie` → `Warengruppe`, vollständige Modell-Umbenennung**
+- **`ArtikelKategorie` → `Abteilung`, vollständige Modell-Umbenennung**
   ([#62](https://github.com/McBoerny/ShopWithMe/issues/62), Rest nach
   GUI-/Bezeichner-Umbenennung 2026-08-02): der `@Model`-Typ selbst sowie alle
   davon persistierten Relationship-/Attribut-Namen bleiben bewusst

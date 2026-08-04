@@ -248,7 +248,7 @@ in `EinkaufenView`) decken diesen Fall ab:
 5. **Rückwirkende Zuordnung**: steht ein `.einkaufsvorgang` ohne Geschäft dahinter,
    wird `einkaufsvorgang.geschaeft` beim Übernehmen auf das erkannte/gewählte
    Geschäft gesetzt — der gesamte Einkauf gilt rückwirkend als dort getätigt
-   (relevant für `WarengruppenDistanzService`/`ArtikelVerfuegbarkeitService`).
+   (relevant für `AbteilungsDistanzService`/`ArtikelVerfuegbarkeitService`).
 
 Bei `.geschaeft(Geschaeft)` (Scan direkt aus der Geschäfts-Detailansicht) entfällt
 dieser gesamte Abgleich — das Geschäft steht bereits fest, die „Geschäft“-Zeile
@@ -353,7 +353,7 @@ verschwinden auch seine Ignorier-Einträge (`Geschaeft.ignorierteArtikel`).
 **Seit GitHub #76** gibt es kein eigenes „Belegposition“-Model, aber zwei getrennte
 Ziel-Typen statt eines: `Preispunkt` trägt die Preishistorie-Rolle, `KaufEintrag`
 bleibt die rein operative Buchungszeile eines laufenden Einkaufsvorgangs (Dedupe,
-`kategorieBesuchsIndex` für `WarengruppenDistanzService`, keine Preisfelder mehr).
+`kategorieBesuchsIndex` für `AbteilungsDistanzService`, keine Preisfelder mehr).
 Grund für die Trennung: die beiden Rollen wuchsen unterschiedlich (jeder Kauf vs. nur
 echte Preisänderungen) und ein Preisschild-Scan hat ohnehin nie einen
 Einkaufsvorgang — siehe `docs/ROADMAP.md`/Issue #76 für die volle Herleitung.

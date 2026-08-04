@@ -67,13 +67,13 @@ struct ArtikelEditView: View {
                     Button {
                         zeigeNeueKategorie = true
                     } label: {
-                        Label("Neue Warengruppe anlegen", systemImage: "plus")
+                        Label("Neue Abteilung anlegen", systemImage: "plus")
                     }
 
                     if kiVorschlagLaeuft {
                         HStack {
                             ProgressView()
-                            Text("Apple Intelligence schlägt eine Warengruppe vor…")
+                            Text("Apple Intelligence schlägt eine Abteilung vor…")
                         }
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -150,7 +150,7 @@ struct ArtikelEditView: View {
                 await kategorieAutomatischVorschlagen()
             }
             .sheet(isPresented: $zeigeNeueKategorie) {
-                NeueWarengruppeSheet(naechsterSortIndex: (kategorien.map(\.sortIndex).max() ?? -1) + 1) { kategorie in
+                NeueAbteilungSheet(naechsterSortIndex: (kategorien.map(\.sortIndex).max() ?? -1) + 1) { kategorie in
                     artikel.kategorien.append(kategorie)
                 }
             }

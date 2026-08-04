@@ -6,7 +6,7 @@ import SwiftData
 ///
 /// Ein Geschäft bekommt ``ArtikelKategorie``n direkt zugeordnet (``kategorien``) —
 /// die Reihenfolge beim Einkaufen wird nicht manuell festgelegt, sondern von
-/// ``WarengruppenDistanzService`` aus dem bisherigen Abhakverhalten gelernt (siehe
+/// ``AbteilungsDistanzService`` aus dem bisherigen Abhakverhalten gelernt (siehe
 /// `docs/ARCHITEKTURVORSCHLAG_ADAPTIVE_SORTIERUNG.md`).
 @Model
 final class Geschaeft {
@@ -71,7 +71,7 @@ final class Geschaeft {
     /// Geschäft ausgeschlossen sind (GitHub #43) — eine Negativliste zusätzlich
     /// zur Positivliste ``kategorien``. Wird eine hier gelistete Kategorie
     /// später direkt zu ``kategorien`` hinzugefügt (z.B. über
-    /// ``WarengruppeHinzufuegenSheet``), sticht das den Ausschluss (siehe
+    /// ``AbteilungHinzufuegenSheet``), sticht das den Ausschluss (siehe
     /// ``verfuegbareKategorien(alleKategorien:)``).
     var ausgeschlosseneKategorien: [ArtikelKategorie] = []
     /// Operative Einkaufs-Buchungszeilen (``KaufEintrag``) in diesem Geschäft — seit
@@ -101,7 +101,7 @@ final class Geschaeft {
     /// `docs/DATABASE_CONCURRENCY.md`, Abschnitt zu diesem Fund).
     @Relationship(deleteRule: .nullify, inverse: \Einkaufsvorgang.geschaeft)
     var einkaufsvorgaenge: [Einkaufsvorgang] = []
-    /// Gelernte Warengruppen-Distanzen für dieses Geschäft — inverse zu
+    /// Gelernte Abteilungs-Distanzen für dieses Geschäft — inverse zu
     /// ``WarengruppenDistanz/geschaeft``. Kaskadierend: ohne das Geschäft sind
     /// geschäftsspezifisch gelernte Distanzen bedeutungslos (siehe
     /// ``einkaufsvorgaenge`` oben für die Begründung, warum eine fehlende
@@ -186,10 +186,10 @@ final class Geschaeft {
     /// dieses Attributs angelegte Geschäfte beim automatischen Laden nicht
     /// abstürzen — ein `nil`-Rohwert fällt auf `false` zurück.
     private var umbauVerdachtRaw: Bool?
-    /// Ob ``WarengruppenDistanzService`` bei den letzten Einkäufen in diesem
-    /// Geschäft eine deutliche Abweichung von der gelernten Warengruppen-Distanz
+    /// Ob ``AbteilungsDistanzService`` bei den letzten Einkäufen in diesem
+    /// Geschäft eine deutliche Abweichung von der gelernten Abteilungs-Distanz
     /// festgestellt hat (z.B. nach einem Ladenumbau) — siehe
-    /// ``WarengruppenDistanzService/erkenneUmbau(_:context:)``. Löst in der UI
+    /// ``AbteilungsDistanzService/erkenneUmbau(_:context:)``. Löst in der UI
     /// einen Hinweis aus und erhöht vorübergehend die Lernrate, damit sich die
     /// Distanzmatrix schneller an die neue Anordnung anpasst.
     var umbauVerdacht: Bool {
@@ -201,9 +201,9 @@ final class Geschaeft {
     /// Laden nicht abstürzen — ein `nil`-Rohwert fällt auf `0` zurück.
     private var unauffaelligeEinkaeufeInFolgeRaw: Int?
     /// Anzahl aufeinanderfolgender Einkäufe seit dem letzten ``umbauVerdacht``,
-    /// die keine deutliche Abweichung von der gelernten Warengruppen-Distanz
+    /// die keine deutliche Abweichung von der gelernten Abteilungs-Distanz
     /// mehr gezeigt haben — siehe
-    /// ``WarengruppenDistanzService/erkenneUmbau(besuche:matrix:geschaeft:)``.
+    /// ``AbteilungsDistanzService/erkenneUmbau(besuche:matrix:geschaeft:)``.
     /// Erreicht der Zähler die dort definierte Schwelle, wird ``umbauVerdacht``
     /// wieder zurückgesetzt.
     var unauffaelligeEinkaeufeInFolge: Int {
@@ -337,7 +337,7 @@ final class Geschaeft {
 
     /// Wie ``verfuegbareKategorien``, ergänzt um Kategorien, die zwar nicht
     /// ``kategorien`` dieses Geschäfts zugeordnet sind, aber laut
-    /// ``ArtikelKategorie/geschaeftsTypen`` als typische Warengruppe für einen der
+    /// ``ArtikelKategorie/geschaeftsTypen`` als typische Abteilung für einen der
     /// ``typen`` dieses Geschäfts gelten (GitHub #5) — abzüglich individuell
     /// ``ausgeschlosseneKategorien`` (GitHub #43). Eine ausgeschlossene Kategorie,
     /// die trotzdem direkt zu ``kategorien`` hinzugefügt wird, bleibt verfügbar —

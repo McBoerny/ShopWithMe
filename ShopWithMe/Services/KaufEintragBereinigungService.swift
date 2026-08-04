@@ -5,9 +5,9 @@ import SwiftData
 /// ``KaufEintrag``e (GitHub #76, Phase 2) — anders als die nutzerkonfigurierbare
 /// Preishistorie-Aufbewahrung (``PreisHistorieBereinigungService``, seit GitHub #76
 /// für ``Preispunkt``) hat ein `KaufEintrag` nach Abschluss seines
-/// ``Einkaufsvorgang``s keine fachliche Funktion mehr: ``WarengruppenDistanzService``
+/// ``Einkaufsvorgang``s keine fachliche Funktion mehr: ``AbteilungsDistanzService``
 /// hat seinen Beitrag bereits synchron beim Abschluss verarbeitet
-/// (``WarengruppenDistanzService/verarbeiteEinkauf(_:context:)``), die Preisrolle
+/// (``AbteilungsDistanzService/verarbeiteEinkauf(_:context:)``), die Preisrolle
 /// liegt vollständig bei ``Preispunkt``, und die Einkaufslisten-Mitgliedschaft wurde
 /// bereits beim Abhaken entfernt. Läuft deshalb automatisch, ohne Nutzer-Einstellung,
 /// mit fester, kurzer Karenzzeit statt der langen, standardmäßig deaktivierten

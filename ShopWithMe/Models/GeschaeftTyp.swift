@@ -19,7 +19,7 @@ final class GeschaeftTyp {
     var sortIndex: Int
     /// Geschäfte, die diesem Typ zugeordnet sind — inverse zu ``Geschaeft/typen``.
     var geschaefte: [Geschaeft] = []
-    /// Warengruppen, die für diesen Typ als Standard gelten — inverse zu
+    /// Abteilungen, die für diesen Typ als Standard gelten — inverse zu
     /// ``ArtikelKategorie/geschaeftsTypen`` (GitHub #5).
     var standardKategorien: [ArtikelKategorie] = []
     /// Rohspeicher für ``farbeHex`` — additiv optional, damit vor GitHub #40

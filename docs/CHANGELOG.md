@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.11 (Build 221) — Umbenennung Warengruppe → Abteilung in GUI und internen Bezeichnern
+
+- Alle sichtbaren GUI-Texte ("Warengruppe(n)" → "Abteilung(en)") in Views,
+  Hilfetexten (`HelpView`) und der Bedienungsanleitung umbenannt.
+- Fünf UI-Typen inkl. Dateien umbenannt: `WarengruppenVerwaltungView` →
+  `AbteilungenVerwaltungView`, `NeueWarengruppeSheet` → `NeueAbteilungSheet`,
+  `WarengruppeHinzufuegenSheet` → `AbteilungHinzufuegenSheet`,
+  `GeschaeftWarengruppenSektion` → `GeschaeftAbteilungenSektion`, sowie das rein
+  private `WarengruppeBearbeitenView` → `AbteilungBearbeitenView`.
+- Zusätzlich, da nicht persistiert: `WarengruppenDistanzService` →
+  `AbteilungsDistanzService` (inkl. Datei/Tests) und `WarengruppenVorschlag` →
+  `AbteilungsVorschlag` (`AISuggestionService`, KI-Vorschlag für Geschäftstyp-Abteilungen).
+- **Bewusst NICHT angefasst** (gleicher Grund wie bei der Kategorie→Warengruppe-
+  Umbenennung, GitHub #62): der `@Model`-Typ `WarengruppenDistanz` und
+  `WarengruppenDistanzPeerZaehlerStand` selbst, alle davon persistierten
+  Relationship-/Attribut-Namen (u.a. `Geschaeft.warengruppenDistanzen`) sowie die
+  Codable-Feldnamen der Sync-Snapshots (`WarengruppenDistanzSnapshot`,
+  `SyncSnapshot.warengruppenDistanzen`) — eine echte Modell-Umbenennung bliebe
+  weiterhin GitHub #62 vorbehalten, jetzt mit Zielname `Abteilung`/
+  `AbteilungsDistanz` statt `Warengruppe`/`WarengruppenDistanz` (siehe
+  `docs/ROADMAP.md`).
+
 ## v0.11 (Build 220) — GitHub #93: Geschäftsspezifisch gelernte Kategorie reduziert Mehrfachkategorie-Anzeige
 
 - Neu: `WarengruppenDistanzService.gelernteKategorie(fuer:in:context:)` wertet

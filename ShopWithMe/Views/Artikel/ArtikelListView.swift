@@ -7,14 +7,14 @@ private enum ArtikelSortierung: String, CaseIterable, Identifiable {
     case alphabetisch
     /// Nach ``ArtikelKategorie`` gruppiert (Reihenfolge nach
     /// ``ArtikelKategorie/sortIndex``), innerhalb einer Kategorie alphabetisch.
-    case warengruppe
+    case abteilung
 
     var id: String { rawValue }
 
     var anzeigename: String {
         switch self {
         case .alphabetisch: return "Alphabetisch"
-        case .warengruppe: return "Nach Warengruppe"
+        case .abteilung: return "Nach Abteilung"
         }
     }
 }
@@ -77,7 +77,7 @@ struct ArtikelListView: View {
                 .onDelete { offsets in
                     artikelLoeschen(offsets.map { alphabetischSortiert[$0] })
                 }
-            case .warengruppe:
+            case .abteilung:
                 ForEach(kategorieGruppen) { gruppe in
                     Section(gruppe.kategorie.name) {
                         ForEach(gruppe.artikel) { eintrag in

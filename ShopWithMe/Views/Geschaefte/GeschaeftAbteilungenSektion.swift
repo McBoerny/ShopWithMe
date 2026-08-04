@@ -9,10 +9,10 @@ import SwiftData
 ///
 /// Wiederverwendet in ``GeschaeftDetailView`` (bestehendes Geschäft) und in
 /// ``GeschaeftStammdatenEditView`` beim erstmaligen Anlegen (GitHub #56) — damit
-/// sich Warengruppen bereits beim Akzeptieren eines per Geolocation neu
+/// sich Abteilungen bereits beim Akzeptieren eines per Geolocation neu
 /// erkannten Geschäfts verfeinern lassen, statt erst nachträglich über die
 /// Detailansicht.
-struct GeschaeftWarengruppenSektion: View {
+struct GeschaeftAbteilungenSektion: View {
     @Bindable var geschaeft: Geschaeft
     @Query private var alleKategorien: [ArtikelKategorie]
     @State private var zeigeKategorieHinzufuegen = false
@@ -58,15 +58,15 @@ struct GeschaeftWarengruppenSektion: View {
             Button {
                 zeigeKategorieHinzufuegen = true
             } label: {
-                Label("Warengruppe hinzufügen", systemImage: "plus")
+                Label("Abteilung hinzufügen", systemImage: "plus")
             }
         } header: {
-            Text("Warengruppen")
+            Text("Abteilungen")
         } footer: {
-            Text("Warengruppen sind sofort verfügbar. Die Reihenfolge beim Einkaufen lernt die App automatisch aus deinem bisherigen Abhakverhalten. Automatisch über den Geschäftstyp verfügbare Warengruppen lassen sich für dieses eine Geschäft ausschließen, ohne sie generell vom Geschäftstyp zu entfernen — sie tauchen danach wieder unter „Warengruppe hinzufügen“ auf. Manuell zugeordnete Warengruppen: zum Entfernen nach links wischen.")
+            Text("Abteilungen sind sofort verfügbar. Die Reihenfolge beim Einkaufen lernt die App automatisch aus deinem bisherigen Abhakverhalten. Automatisch über den Geschäftstyp verfügbare Abteilungen lassen sich für dieses eine Geschäft ausschließen, ohne sie generell vom Geschäftstyp zu entfernen — sie tauchen danach wieder unter „Abteilung hinzufügen“ auf. Manuell zugeordnete Abteilungen: zum Entfernen nach links wischen.")
         }
         .sheet(isPresented: $zeigeKategorieHinzufuegen) {
-            WarengruppeHinzufuegenSheet(geschaeft: geschaeft)
+            AbteilungHinzufuegenSheet(geschaeft: geschaeft)
         }
     }
 
@@ -76,7 +76,7 @@ struct GeschaeftWarengruppenSektion: View {
 
     /// Schließt eine automatisch über den Geschäftstyp verfügbare Kategorie für
     /// dieses eine Geschäft aus (GitHub #43), ohne sie generell vom Geschäftstyp
-    /// zu entfernen. Taucht danach wieder in ``WarengruppeHinzufuegenSheet`` auf.
+    /// zu entfernen. Taucht danach wieder in ``AbteilungHinzufuegenSheet`` auf.
     private func kategorieAusschliessen(_ kategorie: ArtikelKategorie) {
         guard !geschaeft.ausgeschlosseneKategorien.contains(kategorie) else { return }
         geschaeft.ausgeschlosseneKategorien.append(kategorie)
@@ -85,7 +85,7 @@ struct GeschaeftWarengruppenSektion: View {
 
 #Preview {
     Form {
-        GeschaeftWarengruppenSektion(geschaeft: Geschaeft(name: "Rewe", typen: [GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")]))
+        GeschaeftAbteilungenSektion(geschaeft: Geschaeft(name: "Rewe", typen: [GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")]))
     }
     .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self, ArtikelKategorie.self], inMemory: true)
 }

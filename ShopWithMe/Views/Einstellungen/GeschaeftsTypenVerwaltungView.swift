@@ -1,14 +1,14 @@
 import SwiftUI
 import SwiftData
 
-/// Verwaltung der Standard-Warengruppen je ``GeschaeftTyp`` (GitHub #5) —
+/// Verwaltung der Standard-Abteilungen je ``GeschaeftTyp`` (GitHub #5) —
 /// aufrufbar aus ``SettingsView``.
 ///
 /// Eine hier markierte ``ArtikelKategorie`` gilt automatisch für jedes ``Geschaeft``
 /// mit passendem Typ als verfügbar (siehe
 /// ``Geschaeft/verfuegbareKategorien(alleKategorien:)``), ohne dass sie dem
 /// einzelnen Geschäft manuell zugeordnet werden muss. Die manuelle Zuordnung
-/// einzelner Kategorien zu einem konkreten Geschäft (``WarengruppeHinzufuegenSheet``)
+/// einzelner Kategorien zu einem konkreten Geschäft (``AbteilungHinzufuegenSheet``)
 /// bleibt davon unabhängig weiterhin möglich.
 struct GeschaeftsTypenVerwaltungView: View {
     @Environment(\.modelContext) private var modelContext
@@ -39,7 +39,7 @@ struct GeschaeftsTypenVerwaltungView: View {
 }
 
 /// Bearbeitet Name, Symbol und Farbe eines ``GeschaeftTyp`` (GitHub #40) sowie die
-/// ihm zugeordneten Standard-Warengruppen — Checkmark markiert die aktuell
+/// ihm zugeordneten Standard-Abteilungen — Checkmark markiert die aktuell
 /// zugeordneten Kategorien, analog dem Mehrfachauswahl-Muster in
 /// ``ArtikelEditView``. Zeigt die Liste alphabetisch, mit bereits ausgewählten
 /// Kategorien zuerst (``sortierteKategorien``). Kategorien, die im laufenden
@@ -58,7 +58,7 @@ private struct GeschaeftsTypKategorienView: View {
 
     /// ``alleKategorien`` alphabetisch, aber mit den für ``typ`` bereits
     /// ausgewählten Kategorien zuerst — eine sich beim Umschalten sofort dynamisch
-    /// anpassende Liste, in der auf einen Blick erkennbar ist, welche Warengruppen
+    /// anpassende Liste, in der auf einen Blick erkennbar ist, welche Abteilungen
     /// diesem Geschäftstyp bereits zugeordnet sind (GitHub #14).
     private var sortierteKategorien: [ArtikelKategorie] {
         let (ausgewaehlt, uebrige) = alleKategorien.reduce(into: ([ArtikelKategorie](), [ArtikelKategorie]())) { ergebnis, kategorie in
@@ -115,7 +115,7 @@ private struct GeschaeftsTypKategorienView: View {
                 Button {
                     zeigeNeueKategorie = true
                 } label: {
-                    Label("Neue Warengruppe anlegen", systemImage: "plus")
+                    Label("Neue Abteilung anlegen", systemImage: "plus")
                 }
 
                 if AISuggestionService.istVerfuegbar {
@@ -129,7 +129,7 @@ private struct GeschaeftsTypKategorienView: View {
                 if kiVorschlagLaeuft {
                     HStack {
                         ProgressView()
-                        Text("Apple Intelligence schlägt Warengruppen vor…")
+                        Text("Apple Intelligence schlägt Abteilungen vor…")
                     }
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -140,13 +140,13 @@ private struct GeschaeftsTypKategorienView: View {
                         .foregroundStyle(.orange)
                 }
             } footer: {
-                Text("Markierte Warengruppen sind automatisch in jedem Geschäft mit diesem Typ verfügbar, ohne sie dort einzeln zuzuordnen. Mehrfachauswahl möglich. Die „KI-Vorschlag“-Markierung gilt nur für die aktuelle Sitzung, zur Überprüfung des letzten Vorschlags.")
+                Text("Markierte Abteilungen sind automatisch in jedem Geschäft mit diesem Typ verfügbar, ohne sie dort einzeln zuzuordnen. Mehrfachauswahl möglich. Die „KI-Vorschlag“-Markierung gilt nur für die aktuelle Sitzung, zur Überprüfung des letzten Vorschlags.")
             }
         }
         .navigationTitle(typ.name)
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $zeigeNeueKategorie) {
-            NeueWarengruppeSheet(naechsterSortIndex: (alleKategorien.map(\.sortIndex).max() ?? -1) + 1) { kategorie in
+            NeueAbteilungSheet(naechsterSortIndex: (alleKategorien.map(\.sortIndex).max() ?? -1) + 1) { kategorie in
                 kategorie.geschaeftsTypen = kategorie.geschaeftsTypen + [typ]
             }
         }

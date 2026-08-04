@@ -83,7 +83,7 @@ enum AISuggestionService {
         return antwort.content
     }
 
-    /// Schlägt für einen ``GeschaeftTyp`` (z.B. Drogerie) typische Warengruppen vor,
+    /// Schlägt für einen ``GeschaeftTyp`` (z.B. Drogerie) typische Abteilungen vor,
     /// genutzt in der Typ-Verwaltung der Einstellungen (GitHub #5), um
     /// ``ArtikelKategorie/geschaeftsTypen`` schneller zu befüllen. Bestehende
     /// Kategorienamen werden als Kontext mitgegeben, damit das Modell bevorzugt
@@ -94,26 +94,26 @@ enum AISuggestionService {
     static func vorschlag(
         fuerGeschaeftsTypName typName: String,
         bekannteKategorien: [String]
-    ) async throws -> WarengruppenVorschlag {
+    ) async throws -> AbteilungsVorschlag {
         let anweisungen = """
         Du hilfst in einer Einkaufs-App dabei, für einen Geschäftstyp typische \
-        Warengruppen vorzuschlagen. Nenne mehrere passende Warengruppen für den \
+        Abteilungen vorzuschlagen. Nenne mehrere passende Abteilungen für den \
         genannten Geschäftstyp. Verwende nach Möglichkeit vorhandene Namen aus \
         dieser Liste, falls sie passen: \(bekannteKategorien.joined(separator: ", ")). \
-        Schlage nur dann neue Namen vor, wenn keine passende bestehende Warengruppe \
+        Schlage nur dann neue Namen vor, wenn keine passende bestehende Abteilung \
         dabei ist.
         """
         let session = LanguageModelSession(instructions: anweisungen)
-        let antwort = try await session.respond(to: "Geschäftstyp: \(typName)", generating: WarengruppenVorschlag.self)
+        let antwort = try await session.respond(to: "Geschäftstyp: \(typName)", generating: AbteilungsVorschlag.self)
         return antwort.content
     }
 }
 
-/// Von der lokalen Apple-KI vorgeschlagene, typische Warengruppen für einen
+/// Von der lokalen Apple-KI vorgeschlagene, typische Abteilungen für einen
 /// ``GeschaeftTyp`` — siehe ``AISuggestionService/vorschlag(fuerGeschaeftsTypName:bekannteKategorien:)``.
 @Generable
-struct WarengruppenVorschlag {
-    @Guide(description: "Namen typischer Warengruppen für diesen Geschäftstyp, bevorzugt aus den bekannten Namen")
+struct AbteilungsVorschlag {
+    @Guide(description: "Namen typischer Abteilungen für diesen Geschäftstyp, bevorzugt aus den bekannten Namen")
     var kategorieNamen: [String]
 }
 

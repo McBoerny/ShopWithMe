@@ -50,7 +50,7 @@ final class ArtikelKategorie {
     /// ``Geschaeft/einkaufsvorgaenge`` beschrieben).
     @Relationship(deleteRule: .nullify, inverse: \KaufEintrag.kategorie)
     var kaufEintraege: [KaufEintrag] = []
-    /// Gelernte Warengruppen-Distanzen, an denen diese Kategorie als "erste"
+    /// Gelernte Abteilungs-Distanzen, an denen diese Kategorie als "erste"
     /// Seite beteiligt ist — inverse zu ``WarengruppenDistanz/kategorieA``.
     /// Kaskadierend: ohne die Kategorie ist der Distanz-Eintrag bedeutungslos.
     @Relationship(deleteRule: .cascade, inverse: \WarengruppenDistanz.kategorieA)
@@ -73,7 +73,7 @@ final class ArtikelKategorie {
     /// direkt verwenden, stattdessen ``geschaeftsTypen``.
     @Relationship(inverse: \GeschaeftTyp.standardKategorien)
     var geschaeftsTypModelle: [GeschaeftTyp] = []
-    /// Geschäftstypen, für die diese Kategorie als typische Warengruppe gilt —
+    /// Geschäftstypen, für die diese Kategorie als typische Abteilung gilt —
     /// unabhängig von einer tatsächlichen Zuordnung zu einem konkreten
     /// ``Geschaeft`` (siehe ``geschaefte``). Grundlage dafür, dass
     /// ``Geschaeft/verfuegbareKategorien(alleKategorien:)`` diese Kategorie für jedes

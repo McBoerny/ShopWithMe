@@ -16,7 +16,7 @@ ShopWithMe ist eine iOS-only SwiftUI-App (kein macOS-Target) zum täglichen Eink
 Artikel mit Kategorien, Geschäfte mit direkt zugeordneten Kategorien (das
 frühere separate `Regal`-Modell wurde entfernt, GitHub #35 — Kategorien werden
 seither direkt am Geschäft geführt), eine aus dem Abhakverhalten lernende
-Kategorie-Reihenfolge (``WarengruppenDistanzService``), KI-gestützte
+Kategorie-Reihenfolge (``AbteilungsDistanzService``), KI-gestützte
 Artikelanlage (FoundationModels), Belegscan mit Preishistorie, mehrere benannte
 Einkaufslisten, sowie eine event-basierte Mehrgeräte-Datensynchronisation über
 einen geteilten Ordner (GitHub #39, kein CloudKit/eigener Server).

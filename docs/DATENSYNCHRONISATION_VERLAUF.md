@@ -732,7 +732,7 @@ Leere laufen, während das Event trotzdem als erledigt galt). Zusätzlich
 bekommt ein so oder per Snapshot-Merge (`mergeKaufEintraege`) fremd
 materialisierter `KaufEintrag` bewusst **keinen** `kategorieBesuchsIndex` — er
 beschreibt die Laufreihenfolge des SENDENDEN Geräts, nicht die dieses
-Geräts, und würde `WarengruppenDistanzService` sonst mit einer erfundenen
+Geräts, und würde `AbteilungsDistanzService` sonst mit einer erfundenen
 Besuchsposition füttern; `Einkaufsvorgang.naechsterKategorieBesuchsIndex`
 ignoriert solche indexlosen Einträge bei der Suche nach einem bereits
 vorhandenen Index, um keinen Duplikat-Index für dieselbe Kategorie zu
@@ -985,7 +985,7 @@ identische Zeitstempel-Einträge in `export.json`).
    vorher nur Geschäftsauswahl-Reset, GitHub #51): ein Ladenbesuch ist
    naturgemäß zeitlich begrenzt (1–3h) und wird nach
    `inaktivitaetsSchwelleMitGeschaeft` (3h) automatisch abgeschlossen —
-   inklusive Lernschritt (`WarengruppenDistanzService.verarbeiteEinkauf`),
+   inklusive Lernschritt (`AbteilungsDistanzService.verarbeiteEinkauf`),
    aber bewusst OHNE Umbau-Hinweis-Dialog (niemand ist beim automatischen
    Schließen aktiv am Bildschirm, um ihn sinnvoll einzuordnen; ein später
    erkannter Umbau wird beim nächsten *manuellen* Abschließen ganz normal
@@ -2600,7 +2600,7 @@ mitgeführten Beobachtungszahl je Eintrag.
 **Fix — G-Counter-Muster für die Beobachtungszahl:** exaktes Gegenstück zur
 Lösung aus Abschnitt 17 (`SyncPeerZaehlerStand`/`Geschaeft.anzahlEinkaufsvorgaenge`):
 - `WarengruppenDistanz.eigeneBeobachtungsAnzahl` — rein lokaler, bei jedem
-  `WarengruppenDistanzService.lerne(...)`-Aufruf direkt inkrementierter
+  `AbteilungsDistanzService.lerne(...)`-Aufruf direkt inkrementierter
   Anteil (additiv-optionaler Rohwert, Fallback `1` für vor der Änderung
   angelegte Zeilen — eine bestehende Zeile beruht per Definition auf
   mindestens einer Beobachtung).
@@ -2628,7 +2628,7 @@ vor dem Überschreiben des Ledger-Eintrags ausgelesen) — gegen das aktuelle
 Gesamtgewicht der lokalen Seite (`WarengruppenDistanz.mergeGewichtung`).
 
 **Deckelung des Merge-Gewichts (`WarengruppenDistanz.maximaleMergeGewichtung`,
-≈ `1 / WarengruppenDistanzService.lernrate` ≈ 10):** das lokale Lernen selbst
+≈ `1 / AbteilungsDistanzService.lernrate` ≈ 10):** das lokale Lernen selbst
 ist ein exponentiell gleitender Durchschnitt mit fester Lernrate 0.1 — ältere
 Beobachtungen verblassen geometrisch, das tatsächliche „Gedächtnis" reicht
 nur rund 10 Beobachtungen zurück. Ein Gerät mit z.B. 100 historischen

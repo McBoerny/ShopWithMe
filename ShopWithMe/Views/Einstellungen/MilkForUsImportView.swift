@@ -121,7 +121,7 @@ private struct StartAnsicht: View {
                 ContentUnavailableView {
                     Label("MilkForUs-Liste importieren", systemImage: "square.and.arrow.down.on.square")
                 } description: {
-                    Text("Wähle eine aus MilkForUs exportierte Textdatei — Artikel und Warengruppen werden automatisch mit deinem Bestand abgeglichen.")
+                    Text("Wähle eine aus MilkForUs exportierte Textdatei — Artikel und Abteilungen werden automatisch mit deinem Bestand abgeglichen.")
                 } actions: {
                     Button("Datei auswählen", action: dateiWaehlen)
                         .buttonStyle(.glass)
@@ -173,7 +173,7 @@ private struct VorschauListe: View {
                     }
                 }
             } footer: {
-                Text("Warengruppe antippen, um sie einer bestehenden Warengruppe oder „Sonstiges“ zuzuordnen, statt eine neue anzulegen. Nicht benötigte Artikel nach links wischen.")
+                Text("Abteilung antippen, um sie einer bestehenden Abteilung oder „Sonstiges“ zuzuordnen, statt eine neue anzulegen. Nicht benötigte Artikel nach links wischen.")
             }
         }
         .safeAreaInset(edge: .bottom) {
@@ -214,7 +214,7 @@ private struct KategorieZuordnungsMenu: View {
             }
         } label: {
             HStack {
-                Text(gruppe.kategorieName.isEmpty ? "Ohne Warengruppe" : gruppe.kategorieName)
+                Text(gruppe.kategorieName.isEmpty ? "Ohne Abteilung" : gruppe.kategorieName)
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.caption2)
                 Spacer()

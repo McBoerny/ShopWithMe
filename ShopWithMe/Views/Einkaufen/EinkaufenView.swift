@@ -26,7 +26,7 @@ private func protokolliereVorDuplikatSchliessung(_ vorgang: Einkaufsvorgang) {
 
 /// Einstiegspunkt zum Einkaufen: zeigt sofort beim Öffnen die Einkaufsliste der
 /// ausgewählten ``Einkaufsliste`` an — optional nach Artikelkategorie gruppiert und
-/// sortiert (``WarengruppenDistanzService``), wenn ein Geschäft gewählt ist. Ein
+/// sortiert (``AbteilungsDistanzService``), wenn ein Geschäft gewählt ist. Ein
 /// passender ``Einkaufsvorgang`` (für die Kombination aus gewählter Liste und
 /// gewähltem Geschäft) wird dafür automatisch angelegt, sobald keiner läuft; ein
 /// manueller "Start" ist nicht nötig, Artikel lassen sich jederzeit abhaken.
@@ -312,7 +312,7 @@ struct EinkaufenView: View {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
                 guard let einkauf = referenz.resolved(in: modelContext), !einkauf.istAbgeschlossen else { return }
                 einkauf.abschliessen()
-                WarengruppenDistanzService.verarbeiteEinkauf(einkauf, context: modelContext)
+                AbteilungsDistanzService.verarbeiteEinkauf(einkauf, context: modelContext)
                 for weitereReferenz in weitereReferenzen {
                     guard let weiterer = weitereReferenz.resolved(in: modelContext), !weiterer.istAbgeschlossen else { continue }
                     protokolliereVorDuplikatSchliessung(weiterer)
@@ -898,7 +898,7 @@ private struct GeschaeftInDerNaeheZeile: View {
 
 /// Die Einkaufsliste einer ``Einkaufsliste`` für einen laufenden Einkaufsvorgang —
 /// nach Artikelkategorie gruppiert und, bei gewähltem Geschäft, per
-/// ``WarengruppenDistanzService`` sortiert.
+/// ``AbteilungsDistanzService`` sortiert.
 private struct EinkaufslisteView: View {
     let geschaeft: Geschaeft?
     let einkaufsliste: Einkaufsliste
@@ -951,8 +951,8 @@ private struct EinkaufslisteView: View {
     /// Schnellauswahl umschaltbar (Lernmodus); gilt nur für diesen Einkaufsvorgang.
     @State private var zeigeAlleArtikel = false
     /// Zeigt nach ``einkaufAbschliessen()`` einmalig den Hinweis, dass
-    /// ``WarengruppenDistanzService`` eine deutliche Abweichung von der gelernten
-    /// Warengruppen-Reihenfolge festgestellt hat (``Geschaeft/umbauVerdacht``,
+    /// ``AbteilungsDistanzService`` eine deutliche Abweichung von der gelernten
+    /// Abteilungs-Reihenfolge festgestellt hat (``Geschaeft/umbauVerdacht``,
     /// Architekturvorschlag Abschnitt 4.4/7).
     @State private var zeigeUmbauHinweis = false
     /// Kurzer, nicht blockierender Hinweis, wenn ein Artikel beim Abhaken
@@ -1096,7 +1096,7 @@ private struct EinkaufslisteView: View {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
                 protokolliereAbschlussDiagnose()
                 einkaufsvorgang.abschliessen()
-                umbauNeuErkannt = WarengruppenDistanzService.verarbeiteEinkauf(einkaufsvorgang, context: modelContext)
+                umbauNeuErkannt = AbteilungsDistanzService.verarbeiteEinkauf(einkaufsvorgang, context: modelContext)
                 var geschlossen = 0
                 for referenz in weitereReferenzen {
                     guard let weiterer = referenz.resolved(in: modelContext), !weiterer.istAbgeschlossen else { continue }
@@ -1140,20 +1140,20 @@ private struct EinkaufslisteView: View {
     }
 
     /// `artikelListe` (üblicherweise ``artikelAufListe``), gruppiert nach
-    /// Artikelkategorie und sortiert über ``WarengruppenDistanzService`` — der
-    /// gelernten, paarweisen Warengruppen-Distanzmatrix dieses Geschäfts
+    /// Artikelkategorie und sortiert über ``AbteilungsDistanzService`` — der
+    /// gelernten, paarweisen Abteilungs-Distanzmatrix dieses Geschäfts
     /// (Architekturvorschlag Abschnitt 4.2/4.3, GitHub #36). Startpunkt der
     /// Sortierung ist ``zuletztAbgehakteKategorie`` — die verbleibende Liste wird
     /// so nach jeder Abhakung dynamisch neu sortiert, ausgehend vom aktuellen
     /// (impliziten) Standort. Ohne genügend gelernte Daten
-    /// (``WarengruppenDistanzService/genuegendDatenVerfuegbar(fuer:)``) bleibt es
+    /// (``AbteilungsDistanzService/genuegendDatenVerfuegbar(fuer:)``) bleibt es
     /// bei alphabetischer Reihenfolge.
     ///
     /// Kategorien, unter denen `artikel` in dieser Liste angezeigt wird: normalerweise
     /// alle zugeordneten (``Artikel/effektiveKategorien(context:)``) — außer bei
     /// gewähltem ``geschaeft`` liegt für `artikel` bereits eine eindeutig genug
     /// gelernte Kategorie vor
-    /// (``WarengruppenDistanzService/gelernteKategorie(fuer:in:context:)``, GitHub-
+    /// (``AbteilungsDistanzService/gelernteKategorie(fuer:in:context:)``, GitHub-
     /// Nachfolgefund zu #36): dann nur noch diese eine, statt weiter alle
     /// zugeordneten Abschnitte zu duplizieren. Ohne Geschäft (globale
     /// Listenansicht) bleibt es bei allen zugeordneten Kategorien, da dort keine
@@ -1166,7 +1166,7 @@ private struct EinkaufslisteView: View {
     private func kategorienFuerAnzeige(_ artikel: Artikel) -> [ArtikelKategorie] {
         let alle = artikel.effektiveKategorien(context: modelContext)
         guard !zeigeAlleArtikel, alle.count > 1, let geschaeft,
-              let gelernt = WarengruppenDistanzService.gelernteKategorie(fuer: artikel, in: geschaeft, context: modelContext)
+              let gelernt = AbteilungsDistanzService.gelernteKategorie(fuer: artikel, in: geschaeft, context: modelContext)
         else { return alle }
         return [gelernt]
     }
@@ -1198,7 +1198,7 @@ private struct EinkaufslisteView: View {
         guard let geschaeft else {
             return nachKategorie.values.sorted { $0.kategorie.name.vergleicheAlphabetisch(mit: $1.kategorie.name) == .orderedAscending }
         }
-        let sortiert = WarengruppenDistanzService.sortierteReihenfolge(
+        let sortiert = AbteilungsDistanzService.sortierteReihenfolge(
             offeneKategorien: alphabetisch,
             startpunkt: zuletztAbgehakteKategorie,
             in: geschaeft,
@@ -1234,7 +1234,7 @@ private struct EinkaufslisteView: View {
     private func sortierStatusHinweis(gruppen: [KategorieGruppe]) -> some View {
         if let geschaeft, !gruppen.isEmpty {
             HStack(spacing: 6) {
-                if WarengruppenDistanzService.genuegendDatenVerfuegbar(fuer: geschaeft) {
+                if AbteilungsDistanzService.genuegendDatenVerfuegbar(fuer: geschaeft) {
                     Image(systemName: "checkmark.seal.fill")
                     Text("Reihenfolge optimiert")
                 } else {
@@ -1712,7 +1712,7 @@ private struct ArtikelAbhakZeile: View {
 /// Sheet zum exakten Vorgeben der Menge, der Mengeneinheit und einer temporären
 /// Notiz für einen ``EinkaufslistenEintrag`` (Tap auf die Mengenangabe in
 /// ``ArtikelAbhakZeile``). Arbeitet mit lokalem Entwurfs-Zustand (analog
-/// `NeueWarengruppeSheet`) — die Übernahme ins Modell geschieht erst bei „Sichern“,
+/// `NeueAbteilungSheet`) — die Übernahme ins Modell geschieht erst bei „Sichern“,
 /// gekapselt in einem einzelnen Micro-Lease.
 ///
 /// Die Einheit ist (anders als Menge/Notiz) kein Feld von

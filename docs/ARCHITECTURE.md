@@ -21,7 +21,7 @@ ShopWithMe/
     App/                      # App-Entry-Point, ModelContainer-Setup
     Models/                   # SwiftData @Model Typen + Seed-Daten
     Services/                 # AISuggestionService, ReceiptScanService,
-                               # PriceTagScanService, WarengruppenDistanzService,
+                               # PriceTagScanService, AbteilungsDistanzService,
                                # SyncOrdnerService, MilkForUsImportService
     DesignSystem/              # Liquid-Glass-Wrapper, Symbol/Farb-Picker
     Views/                    # nach Feature gruppiert: Artikel, Geschaefte,
@@ -95,7 +95,7 @@ Design-Entscheidung (siehe `docs/DECISIONS.md`): Ein `Geschaeft` bekommt
 `ArtikelKategorie`n direkt zugeordnet (`Geschaeft.kategorien`) — das ist der einzige
 Weg, eine Kategorie verfügbar zu machen. Die Reihenfolge beim Einkaufen ist keine
 manuell gepflegte Struktur (früher: `Regal`), sondern wird von
-`WarengruppenDistanzService` aus dem Abhakverhalten gelernt (paarweise Distanz je
+`AbteilungsDistanzService` aus dem Abhakverhalten gelernt (paarweise Distanz je
 Kategorie-Paar und Geschäft, siehe
 `docs/ARCHITEKTURVORSCHLAG_ADAPTIVE_SORTIERUNG.md`).
 
@@ -107,7 +107,7 @@ Kategorie des tatsächlich getappten Abschnitts wird explizit an
 `Einkaufsvorgang.artikelAbhaken(_:context:kategorie:)` übergeben und im
 `KaufEintrag` gespeichert.
 
-Seit v0.11 (GitHub #93) wertet `WarengruppenDistanzService.gelernteKategorie(fuer:in:context:)`
+Seit v0.11 (GitHub #93) wertet `AbteilungsDistanzService.gelernteKategorie(fuer:in:context:)`
 genau diese Historie aus: liegen für (Artikel, Geschäft) mindestens 5 Käufe mit
 mindestens 80% Mehrheit für eine Kategorie vor (z.B. Sojasauce bei Edeka unter
 „Soßen", bei Aldi unter „Asia"), zeigt `EinkaufenView` (über
@@ -159,7 +159,7 @@ Abschnitt zurückfällt (Belegscan, Preisschild-Scan, Sync-Import).
   Alias für künftige Scans. Greift nur, wenn der Scan-Kontext noch kein Geschäft
   feststehend mitbringt (z.B. nachträglich zuhause gescannter Beleg) — Details in
   `docs/BELEGSCAN.md` → „Automatischer Geschäfts-Abgleich“.
-- **WarengruppenDistanzService**: lernt nach jedem abgeschlossenen `Einkaufsvorgang`
+- **AbteilungsDistanzService**: lernt nach jedem abgeschlossenen `Einkaufsvorgang`
   aus der Abhakreihenfolge eine paarweise Distanz zwischen Artikelkategorien je
   Geschäft (`WarengruppenDistanz`) und sortiert die Einkaufsliste danach dynamisch
   neu (Greedy-Nearest-Neighbor + 2-opt) — Details in

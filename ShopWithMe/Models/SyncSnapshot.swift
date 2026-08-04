@@ -121,7 +121,7 @@ struct ArtikelKategorieSnapshot: Codable {
     var standardFarbeHex: String
     var sortIndex: Int
     /// ``GeschaeftTypSnapshot/id``s, für die diese Kategorie als typische
-    /// Warengruppe gilt (GitHub #5) — einseitig hier kodiert, nicht zusätzlich
+    /// Abteilung gilt (GitHub #5) — einseitig hier kodiert, nicht zusätzlich
     /// auf ``GeschaeftTypSnapshot`` gespiegelt (dieselbe Relationship, keine
     /// redundante Doppelspeicherung).
     var geschaeftsTypIDs: [UUID]

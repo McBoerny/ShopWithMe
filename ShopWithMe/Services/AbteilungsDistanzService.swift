@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 
 /// Lernt aus der Abhakreihenfolge abgeschlossener ``Einkaufsvorgang``e eine
-/// ladenspezifische, paarweise Distanz zwischen Artikelkategorien ("Warengruppen")
+/// ladenspezifische, paarweise Distanz zwischen Artikelkategorien ("Abteilungen")
 /// und leitet daraus eine dynamisch nachsortierbare Einkaufsreihenfolge ab — siehe
 /// `docs/ARCHITEKTURVORSCHLAG_ADAPTIVE_SORTIERUNG.md` (GitHub #36).
 ///
@@ -11,7 +11,7 @@ import SwiftData
 /// (``WarengruppenDistanz``), die sich nach jeder Abhakung neu sortieren lässt
 /// (``sortierteReihenfolge(offeneKategorien:startpunkt:in:context:)``), statt nur
 /// einmal beim Einkaufsstart.
-enum WarengruppenDistanzService {
+enum AbteilungsDistanzService {
     /// Ab wie vielen abgeschlossenen Einkäufen in einem Geschäft eine sortierte
     /// Reihenfolge angeboten wird (siehe Architekturvorschlag Abschnitt 12, Phase 3).
     static let mindestEinkaeufeFuerVorschlag = 3
@@ -48,7 +48,7 @@ enum WarengruppenDistanzService {
     /// ``gelernteKategorie(fuer:in:context:)`` sie als eindeutig genug wertet.
     static let mehrheitsschwelleGelernteKategorie = 0.8
 
-    /// Ein einzelner Warengruppen-Besuch innerhalb eines Einkaufs — eine Zeile pro
+    /// Ein einzelner Abteilungs-Besuch innerhalb eines Einkaufs — eine Zeile pro
     /// distinktem ``KaufEintrag/kategorieBesuchsIndex``, mit dem frühesten
     /// beobachteten ``KaufEintrag/datum`` als Besuchszeitpunkt (mehrere Artikel
     /// derselben Kategorie werden im selben Zeitraum abgehakt). `internal` statt
@@ -63,7 +63,7 @@ enum WarengruppenDistanzService {
     /// Distanzmatrix (``lerne(besuche:matrix:geschaeft:context:)``) und prüft auf
     /// einen möglichen Ladenumbau (``erkenneUmbau(besuche:matrix:geschaeft:)``).
     /// Ohne Wirkung, wenn der Einkauf kein Geschäft hat oder weniger als zwei
-    /// unterschiedliche Warengruppen besucht wurden (keine Paare zum Lernen).
+    /// unterschiedliche Abteilungen besucht wurden (keine Paare zum Lernen).
     ///
     /// Liefert `true`, wenn ``Geschaeft/umbauVerdacht`` durch **diesen** Einkauf
     /// neu von `false` auf `true` gewechselt ist — anders als der reine
@@ -106,7 +106,7 @@ enum WarengruppenDistanzService {
         }
     }
 
-    /// Aktualisiert die Distanzmatrix für jedes Paar besuchter Warengruppen dieses
+    /// Aktualisiert die Distanzmatrix für jedes Paar besuchter Abteilungen dieses
     /// Einkaufs (Architekturvorschlag Abschnitt 4.1): kombiniert Positions- und
     /// Zeitdistanz und trägt sie per gleitendem Durchschnitt ein. Legt für bisher
     /// unbeobachtete Paare einen neuen ``WarengruppenDistanz``-Eintrag an.
@@ -253,7 +253,7 @@ enum WarengruppenDistanzService {
 
     /// 2-opt-Verbesserung (Architekturvorschlag Abschnitt 4.2, Phase 2): tauscht
     /// wiederholt Segmente des Pfads, solange sich die Gesamtdistanz dadurch
-    /// verringert. Für die hier relevanten Listengrößen (5–30 Warengruppen)
+    /// verringert. Für die hier relevanten Listengrößen (5–30 Abteilungen)
     /// deutlich unter der geforderten 10ms-Grenze.
     private static func zweiOptVerbessert(_ pfad: [ArtikelKategorie], distanz: (ArtikelKategorie, ArtikelKategorie) -> Double) -> [ArtikelKategorie] {
         // Ab 3 Elementen kann eine Vertauschung die Gesamtdistanz noch verbessern

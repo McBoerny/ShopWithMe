@@ -412,13 +412,13 @@ private struct NeuaufbauZusammenfassungView: View {
         let n = zusammenfassung.nachher
         return [
             ("Geschäftstypen", v.geschaeftsTypen, n.geschaeftsTypen),
-            ("Warengruppen", v.artikelKategorien, n.artikelKategorien),
+            ("Abteilungen", v.artikelKategorien, n.artikelKategorien),
             ("Geschäfte", v.geschaefte, n.geschaefte),
             ("Artikel", v.artikel, n.artikel),
             ("Einkaufslisten", v.einkaufslisten, n.einkaufslisten),
             ("Einkaufsvorgänge", v.einkaufsvorgaenge, n.einkaufsvorgaenge),
             ("Käufe", v.kaufEintraege, n.kaufEintraege),
-            ("Warengruppen-Distanzen", v.warengruppenDistanzen, n.warengruppenDistanzen),
+            ("Abteilungs-Distanzen", v.warengruppenDistanzen, n.warengruppenDistanzen),
         ].filter { $0.vorher != $0.nachher }
     }
 

@@ -87,14 +87,14 @@ enum DatenintegritaetsService {
 
         for artikel in (try? context.fetch(FetchDescriptor<Artikel>())) ?? [] {
             guard istBaumelnd(artikel.kategorie, gueltigeIDs: gueltigeKategorieIDs) else { continue }
-            befunde.append(Befund(beschreibung: "Artikel „\(artikel.name)“: veraltete Einzelkategorie-Referenz zeigt auf eine nicht mehr existierende Warengruppe"))
+            befunde.append(Befund(beschreibung: "Artikel „\(artikel.name)“: veraltete Einzelkategorie-Referenz zeigt auf eine nicht mehr existierende Abteilung"))
         }
 
         for eintrag in (try? context.fetch(FetchDescriptor<KaufEintrag>())) ?? [] {
             var betroffeneFelder: [String] = []
             if istBaumelnd(eintrag.artikel, gueltigeIDs: gueltigeArtikelIDs) { betroffeneFelder.append("Artikel") }
             if istBaumelnd(eintrag.geschaeft, gueltigeIDs: gueltigeGeschaeftIDs) { betroffeneFelder.append("Geschäft") }
-            if istBaumelnd(eintrag.kategorie, gueltigeIDs: gueltigeKategorieIDs) { betroffeneFelder.append("Warengruppe") }
+            if istBaumelnd(eintrag.kategorie, gueltigeIDs: gueltigeKategorieIDs) { betroffeneFelder.append("Abteilung") }
             if istBaumelnd(eintrag.einkaufsvorgang, gueltigeIDs: nil) { betroffeneFelder.append("Einkaufsvorgang") }
             guard !betroffeneFelder.isEmpty else { continue }
             // Bewusst `artikelNameSnapshot`/`geschaeftNameSnapshot` statt
@@ -165,9 +165,9 @@ enum DatenintegritaetsService {
             let kategorienBaumelnd = istBaumelnd(distanz.kategorieA, gueltigeIDs: gueltigeKategorieIDs)
                 || istBaumelnd(distanz.kategorieB, gueltigeIDs: gueltigeKategorieIDs)
             if kategorienBaumelnd {
-                befunde.append(Befund(beschreibung: "Gelernter Warengruppen-Abstand: beteiligte Warengruppe zeigt auf nicht mehr Existierendes"))
+                befunde.append(Befund(beschreibung: "Gelernter Abteilungs-Abstand: beteiligte Abteilung zeigt auf nicht mehr Existierendes"))
             } else if istBaumelnd(distanz.geschaeft, gueltigeIDs: gueltigeGeschaeftIDs) {
-                befunde.append(Befund(beschreibung: "Gelernter Warengruppen-Abstand: Geschäftsbezug zeigt auf nicht mehr Existierendes"))
+                befunde.append(Befund(beschreibung: "Gelernter Abteilungs-Abstand: Geschäftsbezug zeigt auf nicht mehr Existierendes"))
             }
         }
 

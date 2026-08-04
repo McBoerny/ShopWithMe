@@ -20,7 +20,7 @@ enum AbhakErgebnis: Equatable {
 /// Ein einzelner Einkaufsvorgang (Ladenbesuch) in einem bestimmten ``Geschaeft``.
 ///
 /// Während eines Einkaufsvorgangs entstehen ``KaufEintrag``e, aus deren
-/// Reihenfolge der ``WarengruppenDistanzService`` lernt, welche Artikelkategorien
+/// Reihenfolge der ``AbteilungsDistanzService`` lernt, welche Artikelkategorien
 /// im jeweiligen Geschäft räumlich nah beieinanderliegen.
 @Model
 final class Einkaufsvorgang {
@@ -72,7 +72,7 @@ final class Einkaufsvorgang {
     /// ``einkaufsliste`` (falls dort noch ein ``EinkaufslistenEintrag`` existiert).
     /// Artikel mit derselben Kategorie erhalten denselben
     /// ``KaufEintrag/kategorieBesuchsIndex``, neue Kategorien den jeweils nächsten
-    /// Index — das ist die Rohdatenbasis für ``WarengruppenDistanzService``. Artikel
+    /// Index — das ist die Rohdatenbasis für ``AbteilungsDistanzService``. Artikel
     /// ohne eigene Kategorie fallen dabei automatisch unter "Sonstiges". Reine
     /// Zustandsmutation ohne Event-Aufzeichnung, siehe ``artikelAbhaken(_:context:kategorie:)``.
     /// Liefert ``AbhakErgebnis/abgehakt``, falls tatsächlich ein ``KaufEintrag``
@@ -88,7 +88,7 @@ final class Einkaufsvorgang {
     /// Besuchsreihenfolge bekommen (`naechsterKategorieBesuchsIndex(fuer:)`),
     /// erschiene es fälschlich als "als Nächstes von diesem Nutzer besucht" und
     /// würde die ladenspezifische Distanzmatrix
-    /// (``WarengruppenDistanzService/besuchsreihenfolge(fuer:)`` überspringt
+    /// (``AbteilungsDistanzService/besuchsreihenfolge(fuer:)`` überspringt
     /// `nil`-Indizes bewusst) mit einer erfundenen Position verfälschen. Der
     /// Artikel gilt dadurch weiterhin korrekt als abgehakt (KaufEintrag
     /// existiert, verschwindet von der offenen Liste), fließt aber nicht in die
@@ -100,7 +100,7 @@ final class Einkaufsvorgang {
     /// `nil` fällt auf ``Artikel/fuehrendeKategorie(inGeschaeft:context:)`` zurück
     /// (Belegscan, Preisschild-Scan, Sync-Import, wo kein konkreter Abschnitt
     /// getappt wurde). Genau dieses Signal ist die Grundlage dafür, dass
-    /// ``WarengruppenDistanzService`` pro Geschäft lernen kann, in welcher der
+    /// ``AbteilungsDistanzService`` pro Geschäft lernen kann, in welcher der
     /// mehreren zugeordneten Kategorien ein Artikel dort tatsächlich steht (z.B.
     /// Sojasauce bei Edeka unter "Soßen", bei Aldi unter "Asia") statt einer
     /// global für den Artikel geratenen.

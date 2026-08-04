@@ -285,7 +285,7 @@ wie oben beschrieben.
 
 **Gebündelte Aktionen (teilen sich einen Lease statt einen eigenen zu bekommen):**
 - Einkaufsvorgang **abschließen** (`endZeit` setzen) und der direkt im selben
-  Tap ausgelöste Lernschritt (`WarengruppenDistanzService.verarbeiteEinkauf`)
+  Tap ausgelöste Lernschritt (`AbteilungsDistanzService.verarbeiteEinkauf`)
   sind fachlich eine Aktion — ein Micro-Lease für
   beide zusammen, kein zweiter Erwerb für den Lernschritt.
 

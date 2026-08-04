@@ -8,7 +8,7 @@ import CoreLocation
 ///
 /// Bei einem neuen Geschäft (`istNeu == true`) wird es erst beim Sichern in den
 /// Model-Context eingefügt (Abbrechen verwirft es folgenlos) — bis dahin lassen
-/// sich auch die Warengruppen bereits verfeinern (``GeschaeftWarengruppenSektion``,
+/// sich auch die Abteilungen bereits verfeinern (``GeschaeftAbteilungenSektion``,
 /// GitHub #56), z.B. beim Akzeptieren eines per Geolocation neu erkannten
 /// Geschäfts. Bei einem bestehenden Geschäft bleibt das ``GeschaeftDetailView``
 /// vorbehalten.
@@ -88,7 +88,7 @@ struct GeschaeftStammdatenEditView: View {
                 // Geschäft bleibt die Kategorien-Verwaltung ausschließlich in
                 // ``GeschaeftDetailView``, um sie nicht doppelt anzuzeigen.
                 if istNeu {
-                    GeschaeftWarengruppenSektion(geschaeft: geschaeft)
+                    GeschaeftAbteilungenSektion(geschaeft: geschaeft)
                 }
 
                 Section("Adresse (optional)") {

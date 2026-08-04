@@ -5,7 +5,7 @@ import SwiftData
 /// Kategorien-Verwaltung eines Geschäfts heraus. Die neue Kategorie wird beim
 /// Sichern in den Model-Context eingefügt und über ``onErstellt`` an den
 /// Aufrufer gemeldet.
-struct NeueWarengruppeSheet: View {
+struct NeueAbteilungSheet: View {
     let naechsterSortIndex: Int
     let onErstellt: (ArtikelKategorie) -> Void
 
@@ -27,7 +27,7 @@ struct NeueWarengruppeSheet: View {
                     SymbolFarbAuswahlZeile(symbolName: $symbolName, farbeHex: $farbeHex)
                 }
             }
-            .navigationTitle("Neue Warengruppe")
+            .navigationTitle("Neue Abteilung")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

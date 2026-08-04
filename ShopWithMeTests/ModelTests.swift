@@ -54,7 +54,7 @@ struct ModelTests {
     }
 
     @Test
-    func verfuegbareKategorienMitAlleKategorienEnthaeltTypBasierteWarengruppen() throws {
+    func verfuegbareKategorienMitAlleKategorienEnthaeltTypBasierteAbteilungen() throws {
         // GitHub #5: eine Kategorie ohne jede manuelle Zuordnung zum Geschäft gilt
         // trotzdem als verfügbar, sobald sie einem der Geschäftstypen zugeordnet ist.
         let (container, context) = try machtLeerenContainer()

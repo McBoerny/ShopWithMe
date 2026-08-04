@@ -21,7 +21,7 @@ Geschäfte und den Einkaufsvorgang selbst intelligent unterstützt.
   `kategorien`-Relationship ab und ließ den Artikel bei Sync-Zyklen sichtbar
   zwischen Abschnitten springen). Abgehakt wird er dabei überall zugleich; aus
   welchem Abschnitt tatsächlich abgehakt wurde, geht als Kategorie in den
-  `KaufEintrag` ein — Grundlage dafür, dass `WarengruppenDistanzService` pro
+  `KaufEintrag` ein — Grundlage dafür, dass `AbteilungsDistanzService` pro
   Geschäft lernt, in welcher der mehreren Kategorien ein Artikel dort tatsächlich
   steht (z.B. Sojasauce bei Edeka unter „Soßen", bei Aldi unter „Asia"), statt einer
   global geratenen. `Artikel/fuehrendeKategorie(inGeschaeft:context:)` bleibt als
@@ -77,7 +77,7 @@ auf die Einkaufsliste kommt.
 
 - Die App lernt automatisch aus dem Abhakverhalten vergangener Einkäufe, welche
   Artikelkategorien in einem Geschäft räumlich nah beieinanderliegen (paarweise
-  Distanzmatrix, `WarengruppenDistanzService`), und sortiert die Einkaufsliste
+  Distanzmatrix, `AbteilungsDistanzService`), und sortiert die Einkaufsliste
   danach dynamisch — nach jeder Abhakung neu, ausgehend vom aktuellen (impliziten)
   Standort. Details in `docs/ARCHITEKTURVORSCHLAG_ADAPTIVE_SORTIERUNG.md`.
 - Die Einkaufsliste ist global und nicht von einem Geschäft abhängig. Optional kann der

@@ -10,7 +10,7 @@ import SwiftData
 /// getrennte Einträge für (A, B) und (B, A). ``distanz`` liegt im Bereich `[0, 1]`:
 /// 0 = sehr nah, 1 = sehr weit, ``initialwert`` (0.5) = noch unbeobachtet.
 ///
-/// Wird ausschließlich von ``WarengruppenDistanzService`` gelesen/geschrieben.
+/// Wird ausschließlich von ``AbteilungsDistanzService`` gelesen/geschrieben.
 @Model
 final class WarengruppenDistanz {
     /// Eindeutige Kennung.
@@ -42,7 +42,7 @@ final class WarengruppenDistanz {
 
 extension WarengruppenDistanz {
     /// Wie oft DIESES Gerät für dieses Kategorie-Paar bereits selbst eine
-    /// Beobachtung gelernt hat (``WarengruppenDistanzService/lerne(besuche:matrix:geschaeft:context:)``)
+    /// Beobachtung gelernt hat (``AbteilungsDistanzService/lerne(besuche:matrix:geschaeft:context:)``)
     /// — NIE durch Sync verändert, nur durch eine echte lokale Abhakung.
     /// Grundlage (zusammen mit dem zuletzt bekannten eigenen Beitrag jedes
     /// Peers) für ``beobachtungsAnzahl``.
@@ -77,7 +77,7 @@ extension WarengruppenDistanz {
     /// Deckelt das Gewicht, mit dem eine Seite beim Geräte-Sync in den
     /// gewichteten Mittelwert eingeht (``SyncSnapshotImportService``) —
     /// unabhängig von der tatsächlichen ``beobachtungsAnzahl``. Grund: das
-    /// lokale Lernen (``WarengruppenDistanzService/lerne(besuche:matrix:geschaeft:context:)``)
+    /// lokale Lernen (``AbteilungsDistanzService/lerne(besuche:matrix:geschaeft:context:)``)
     /// ist selbst ein exponentiell gleitender Durchschnitt mit fester
     /// Lernrate — ältere Beobachtungen verblassen geometrisch, das
     /// tatsächliche „Gedächtnis" reicht nur rund `1 / Lernrate` Beobachtungen
@@ -85,7 +85,7 @@ extension WarengruppenDistanz {
     /// historischen (längst verblassten) Beobachtungen beim Merge eine
     /// Dominanz bekommen, die sein aktueller Wert inhaltlich gar nicht mehr
     /// trägt (GitHub #87).
-    static let maximaleMergeGewichtung = Int((1 / WarengruppenDistanzService.lernrate).rounded())
+    static let maximaleMergeGewichtung = Int((1 / AbteilungsDistanzService.lernrate).rounded())
 
     /// ``beobachtungsAnzahl``, gedeckelt bei ``maximaleMergeGewichtung`` — das
     /// beim Merge tatsächlich verwendete Gewicht dieser Seite.

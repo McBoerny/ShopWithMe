@@ -29,7 +29,7 @@ enum SyncEventArt: String, Codable {
 /// (``Einkaufsliste/id``/``Einkaufsvorgang/id``/``Artikel/id``), nie über
 /// `persistentModelID` — dessen String-Darstellung ist für noch nicht
 /// gespeicherte Objekte nicht eindeutig (siehe
-/// ``WarengruppenDistanzService/paarSchluessel(fuer:_:)`` für den Präzedenzfall).
+/// ``AbteilungsDistanzService/paarSchluessel(fuer:_:)`` für den Präzedenzfall).
 struct SyncEventNutzlast: Codable {
     /// `Einkaufsliste.id` oder `Einkaufsvorgang.id`, je nach `SyncEventArt`.
     var bezugsID: UUID

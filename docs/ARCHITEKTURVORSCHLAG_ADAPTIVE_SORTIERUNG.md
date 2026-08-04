@@ -16,7 +16,7 @@ Erweiterung der bestehenden App um ein selbstlernendes Modul, das:
 - die Reihenfolge einer Einkaufsliste automatisch optimiert
 - sich den Laufweg eines spezifischen Ladens durch Nutzungsverhalten erlernt
 - ohne Ladenplan, GPS, Kamera oder externe Datenquellen auskommt
-- ausschließlich auf der **Abhakreihenfolge von Warengruppen** basiert
+- ausschließlich auf der **Abhakreihenfolge von Abteilungen** basiert
 
 ### 1.3 Abgrenzung
 Das Modul ersetzt keine bestehende Listenverwaltung. Es ist ein reines Sortier- und Lernmodul, das sich in den bestehenden Einkaufsfluss einbettet.
@@ -28,7 +28,7 @@ Das Modul ersetzt keine bestehende Listenverwaltung. Es ist ein reines Sortier- 
 ### 2.1 Das Lernprinzip
 Jedes Mal, wenn ein Nutzer einen Artikel abhakt, entsteht ein implizites räumliches Signal: Artikel, die zeitlich nah abgehakt werden, liegen räumlich nah im Laden.
 
-Aus der Abhakreihenfolge vieler Einkäufe lernt der Algorithmus eine **Distanzmatrix auf Warengruppen-Ebene** – eine numerische Annäherung daran, wie nah zwei Warengruppen im jeweiligen Laden beieinander liegen.
+Aus der Abhakreihenfolge vieler Einkäufe lernt der Algorithmus eine **Distanzmatrix auf Abteilungs-Ebene** – eine numerische Annäherung daran, wie nah zwei Abteilungen im jeweiligen Laden beieinander liegen.
 
 Diese Matrix ist:
 - **ladenspezifisch** – jeder Laden bekommt seine eigene Matrix
@@ -36,8 +36,8 @@ Diese Matrix ist:
 - **robust** – einzelne Ausreißer (Rückläufer, Pausen) verfälschen das Modell nicht
 - **anonym** – es werden keine Positionsdaten, nur Reihenfolgen gespeichert
 
-### 2.2 Warengruppen als Abstraktionsebene
-Individuelle Artikel wechseln (Sonderangebote, Neuprodukte). Warengruppen bleiben stabil. Die gesamte Lernlogik operiert auf Warengruppen-IDs, nicht auf Artikel-IDs. Die Zuordnung Artikel → Warengruppe wird als bekannt vorausgesetzt und ist bereits in der App vorhanden.
+### 2.2 Abteilungen als Abstraktionsebene
+Individuelle Artikel wechseln (Sonderangebote, Neuprodukte). Abteilungen bleiben stabil. Die gesamte Lernlogik operiert auf Abteilungs-IDs, nicht auf Artikel-IDs. Die Zuordnung Artikel → Abteilung wird als bekannt vorausgesetzt und ist bereits in der App vorhanden.
 
 ---
 
@@ -54,12 +54,12 @@ LadenProfil
   umbauVerdacht:    boolean       // Flag bei erkannter Layoutänderung
 
 DistanzMatrix
-  // Symmetrische Matrix: warengruppeId → warengruppeId → float [0..1]
+  // Symmetrische Matrix: abteilungId → abteilungId → float [0..1]
   // 0 = sehr nah, 1 = sehr weit, 0.5 = unbekannt (Initialwert)
   eintraege: Map<string, Map<string, float>>
 
 AbhakVorgang
-  warengruppeId:    string
+  abteilungId:    string
   zeitstempel:      timestamp     // für Zeitgewichtung
 ```
 
@@ -112,25 +112,25 @@ Für jedes Paar `(i, j)` mit `i < j` aus der Abhakreihenfolge:
 
 **Lernrate:** `0.1` (entspricht ~10% Gewicht des neuen Einkaufs gegenüber der Erfahrung). Kann nach Umbau-Erkennung temporär auf `0.3` erhöht werden.
 
-**Wichtig:** Nur Paare werden gelernt, bei denen beide Warengruppen auf der Einkaufsliste standen – kein Rauschen durch zufällige Beobachtungen.
+**Wichtig:** Nur Paare werden gelernt, bei denen beide Abteilungen auf der Einkaufsliste standen – kein Rauschen durch zufällige Beobachtungen.
 
 ---
 
 ### 4.2 Sortieralgorithmus
 Wird beim Start jedes Einkaufs und nach jeder Abhakung aufgerufen.
 
-**Eingabe:** Liste offener Warengruppen, aktuelle `DistanzMatrix`
+**Eingabe:** Liste offener Abteilungen, aktuelle `DistanzMatrix`
 **Ausgabe:** Sortierte Liste (optimale Reihenfolge)
 
 **Phase 1 – Greedy Nearest Neighbor:**
 ```
-startPunkt = erste Warengruppe mit niedrigstem Durchschnittswert
+startPunkt = erste Abteilung mit niedrigstem Durchschnittswert
              in der Matrix (= am wahrscheinlichsten nahe Eingang)
 pfad = [startPunkt]
-remaining = alle anderen Warengruppen
+remaining = alle anderen Abteilungen
 wiederhole bis remaining leer:
   aktuell = letztes Element in pfad
-  naechster = Warengruppe aus remaining mit kleinster distanz zu aktuell
+  naechster = Abteilung aus remaining mit kleinster distanz zu aktuell
   pfad.append(naechster)
   remaining.remove(naechster)
 ```
@@ -144,17 +144,17 @@ wiederhole bis keine Verbesserung mehr:
     sonst: rückgängig machen
 ```
 
-**Laufzeit:** Für typische Einkaufslisten (5–30 Warengruppen) unter 10ms. Kein Performance-Problem.
+**Laufzeit:** Für typische Einkaufslisten (5–30 Abteilungen) unter 10ms. Kein Performance-Problem.
 
 **Konfidenz-Schwelle:** Wenn `einkaufsAnzahl < 3`, Liste unsortiert ausgeben mit UI-Hinweis „Noch zu wenig Daten für diesen Laden."
 
 ---
 
 ### 4.3 Dynamische Neusortierung während des Einkaufs
-Nach jeder Abhakung wird der Sortieralgorithmus auf der **verbleibenden Liste** neu ausgeführt. Der aktuelle Standort des Nutzers ist implizit die zuletzt abgehakte Warengruppe.
+Nach jeder Abhakung wird der Sortieralgorithmus auf der **verbleibenden Liste** neu ausgeführt. Der aktuelle Standort des Nutzers ist implizit die zuletzt abgehakte Abteilung.
 
 ```
-nach Abhakung von Warengruppe X:
+nach Abhakung von Abteilung X:
   startPunkt = X  // Nutzer ist hier
   sortiereNeu(verbleibendeListe, startPunkt, distanzMatrix)
 ```
@@ -238,9 +238,9 @@ Nutzer wählt Laden aus (oder legt neuen an)
 ### 6.2 Während des Einkaufs
 ```
 Nutzer hakt Artikel ab
-  → Warengruppe des Artikels bestimmen
-  → AbhakVorgang {warengruppeId, timestamp} an aktuelle Session anhängen
-  → Restliste neu sortieren (Startpunkt = aktuelle Warengruppe)
+  → Abteilung des Artikels bestimmen
+  → AbhakVorgang {abteilungId, timestamp} an aktuelle Session anhängen
+  → Restliste neu sortieren (Startpunkt = aktuelle Abteilung)
   → UI aktualisieren
 ```
 
@@ -276,7 +276,7 @@ Die Sortierung soll für den Nutzer sichtbar, aber nicht aufdringlich sein. Kein
 |---|---|
 | Laufzeit Sortierung | < 50ms für Listen bis 50 Artikel |
 | Laufzeit Lernschritt | < 100ms nach Einkaufsabschluss |
-| Speicherverbrauch Matrix | < 50KB pro Laden (bei ~50 Warengruppen) |
+| Speicherverbrauch Matrix | < 50KB pro Laden (bei ~50 Abteilungen) |
 | Offline-Fähigkeit | vollständig offline, kein Backend erforderlich |
 | Datenschutz | keine Positionsdaten, keine personenbezogenen Daten in Matrix |
 
@@ -289,7 +289,7 @@ Die folgenden Punkte sind bewusst ausgeklammert und können in späteren Iterati
 
 **Eingang als Ankerpunkt:** Wenn der Eingang eines Ladens als fester Startpunkt markiert wird, verbessert sich die Sortierung in der Anfangsphase deutlich. Könnte optional durch den Nutzer bestätigt werden.
 
-**Warengruppen-Hierarchie:** Aktuell sind alle Warengruppen gleichwertig. Eine Hierarchie (z.B. „Kühlwaren" als Oberkategorie von „Milch" und „Joghurt") könnte die Matrix kompakter und robuster machen.
+**Abteilungs-Hierarchie:** Aktuell sind alle Abteilungen gleichwertig. Eine Hierarchie (z.B. „Kühlwaren" als Oberkategorie von „Milch" und „Joghurt") könnte die Matrix kompakter und robuster machen.
 
 **Explizites Feedback:** Nutzer könnte Sortiervorschlag manuell korrigieren – diese Korrekturen wären hochwertige Lernsignale mit erhöhter Lernrate.
 
@@ -298,7 +298,7 @@ Die folgenden Punkte sind bewusst ausgeklammert und können in späteren Iterati
 ## 10. Zusammenfassung
 Das Modul benötigt keine externen Daten, keine Infrastruktur und keinen Ladenplan. Es lernt ausschließlich aus dem, was bereits passiert: dem Abhaken von Artikeln. Die Implementierung ist in sich geschlossen, seiteneffektfrei gegenüber bestehenden Funktionen und jederzeit deaktivierbar.
 
-Der einzige kritische Integrationspunkt ist die **Warengruppen-Zuordnung** je Artikel – diese wird als in der App vorhanden vorausgesetzt.
+Der einzige kritische Integrationspunkt ist die **Abteilungs-Zuordnung** je Artikel – diese wird als in der App vorhanden vorausgesetzt.
 
 ---
 
@@ -310,17 +310,17 @@ Der einzige kritische Integrationspunkt ist die **Warengruppen-Zuordnung** je Ar
 
 | Vorschlag | Entspricht in ShopWithMe | Bewertung |
 |---|---|---|
-| Warengruppe | `ArtikelKategorie` | Exakte Entsprechung — bereits die "stabile Abstraktionsebene" (siehe `Artikel/kategorien`, `Geschaeft/verfuegbareKategorien`). Artikel→Warengruppe-Zuordnung ist erfüllt. |
+| Abteilung | `ArtikelKategorie` | Exakte Entsprechung — bereits die "stabile Abstraktionsebene" (siehe `Artikel/kategorien`, `Geschaeft/verfuegbareKategorien`). Artikel→Abteilung-Zuordnung ist erfüllt. |
 | LadenProfil | `Geschaeft` | Bereits vorhanden. `einkaufsAnzahl` entspricht bereits `Geschaeft.anzahlEinkaufsvorgaenge` (GitHub #30). |
 | Einkauf | `Einkaufsvorgang` | Bereits vorhanden, inkl. `geschaeft`-Bezug ("ladenId"). `lernungAbgeschlossen` ist unnötig als Feld: `ShelfOrderLearningService.lernenAus(_:context:)` wird bereits synchron beim `abschliessen()` aufgerufen (`EinkaufenView.einkaufAbschliessen()`), kein Zwischenzustand nötig. |
-| AbhakVorgang | `KaufEintrag` | **Wichtigster Befund:** `KaufEintrag` trägt bereits `kategorie` (→ warengruppeId), `datum` (→ zeitstempel, wird beim Abhaken automatisch mit `Date()` gesetzt) und `kategorieBesuchsIndex` (→ die Positions-Reihenfolge selbst, pro Warengruppe eines Einkaufsvorgangs eindeutig und bereits dedupliziert über mehrere Artikel derselben Kategorie hinweg). Für den Lernalgorithmus reicht ein Fetch aller `KaufEintrag` eines `Einkaufsvorgang`s, gruppiert nach `kategorieBesuchsIndex`. |
+| AbhakVorgang | `KaufEintrag` | **Wichtigster Befund:** `KaufEintrag` trägt bereits `kategorie` (→ abteilungId), `datum` (→ zeitstempel, wird beim Abhaken automatisch mit `Date()` gesetzt) und `kategorieBesuchsIndex` (→ die Positions-Reihenfolge selbst, pro Abteilung eines Einkaufsvorgangs eindeutig und bereits dedupliziert über mehrere Artikel derselben Kategorie hinweg). Für den Lernalgorithmus reicht ein Fetch aller `KaufEintrag` eines `Einkaufsvorgang`s, gruppiert nach `kategorieBesuchsIndex`. |
 
 ### 11.2 Fehlende Bausteine (echte neue Arbeit)
 
 - **DistanzMatrix** — existiert nicht. Die aktuelle `KategorieBesuchsStatistik` speichert nur einen **einzelnen Skalar** (`durchschnittlichePosition` je Kategorie+Geschäft), keine paarweisen Distanzen. Das ist der Kern der neuen Arbeit: ein neues `@Model` (Arbeitstitel `WarengruppenDistanz`) mit `geschaeft`, `kategorieA`, `kategorieB` (kanonisch sortiertes Paar, um Symmetrie ohne doppelte Zeilen abzubilden) und `distanz: Double`.
 - **Umbau-Erkennung** — existiert nicht, aber additiv ergänzbar: neues optionales Feld auf `Geschaeft` nach dem etablierten Muster (`private var umbauVerdachtRaw: Bool?` + Computed Property mit Fallback `false`), keine neue `VersionedSchema` nötig (siehe `docs/DECISIONS.md`).
 - **Greedy-NN + 2-opt-Sortierung** — existiert nicht (aktuell nur eine einfache Sortierung nach Einzelwert, siehe `EinkaufenView.istVor(_:_:positionen:)`). Reine Swift-Logik ohne Datenmodell-Auswirkung, gut isolierbar.
-- **Dynamische Neusortierung nach jedem Abhaken** — aktuell sortiert `EinkaufenView` die Kategorie-Gruppen zwar reaktiv (SwiftUI), aber ohne "aktueller Standort = zuletzt abgehakte Warengruppe" als Startpunkt für die Restliste. Muss ergänzt werden.
+- **Dynamische Neusortierung nach jedem Abhaken** — aktuell sortiert `EinkaufenView` die Kategorie-Gruppen zwar reaktiv (SwiftUI), aber ohne "aktueller Standort = zuletzt abgehakte Abteilung" als Startpunkt für die Restliste. Muss ergänzt werden.
 
 ### 11.3 Persistenz: SwiftData statt lokalem JSON
 
@@ -328,7 +328,7 @@ Der Vorschlag empfiehlt (§5.2) strukturiertes JSON im App-Storage. Für ShopWit
 
 ### 11.4 Reibungspunkt: Verhältnis zu `Regal`/`ShelfOrderLearningService`
 
-Der Vorschlag geht implizit von einer Warengruppen-Ebene ohne "Regal"-Zwischenschicht aus. Im aktuellen Datenmodell existiert aber `Regal` als zusätzliche, manuell zu pflegende Gruppierungsebene zwischen Warengruppe und Sortierreihenfolge (`Geschaeft.regale`, `Regal.sortIndex`, `RegalSortierModus`). Die vorgeschlagene Distanzmatrix arbeitet direkt auf Warengruppen — ein `Regal`, das mehrere Warengruppen physisch bündelt, passt nicht zu einem Modell, das paarweise Distanzen *zwischen* Warengruppen lernt (zwei Warengruppen im selben Regal könnten trotzdem unterschiedlich "nah" zu einer dritten sein). Details und Entscheidung siehe Abschnitt 13.
+Der Vorschlag geht implizit von einer Abteilungs-Ebene ohne "Regal"-Zwischenschicht aus. Im aktuellen Datenmodell existiert aber `Regal` als zusätzliche, manuell zu pflegende Gruppierungsebene zwischen Abteilung und Sortierreihenfolge (`Geschaeft.regale`, `Regal.sortIndex`, `RegalSortierModus`). Die vorgeschlagene Distanzmatrix arbeitet direkt auf Abteilungen — ein `Regal`, das mehrere Abteilungen physisch bündelt, passt nicht zu einem Modell, das paarweise Distanzen *zwischen* Abteilungen lernt (zwei Abteilungen im selben Regal könnten trotzdem unterschiedlich "nah" zu einer dritten sein). Details und Entscheidung siehe Abschnitt 13.
 
 ---
 
@@ -342,12 +342,12 @@ Empfohlene Reihenfolge — jede Phase einzeln build- und testbar, damit die App 
 - `SchemaDefinition.swift`: `WarengruppenDistanz.self` ergänzen.
 
 ### Phase 2 — Lern-Service
-- Neuer `Services/WarengruppenDistanzService.swift` (eigene Datei statt Erweiterung von `ShelfOrderLearningService`, da fachlich ein neuer, in sich geschlossener Algorithmus): `lerneAusEinkauf(_:context:)` implementiert Abschnitt 4.1 (paarweise Positions-/Zeit-Distanz, gleitender Durchschnitt, Lernrate 0.1/0.3) unter Verwendung von `KaufEintrag.kategorie`/`.datum`/`.kategorieBesuchsIndex`.
+- Neuer `Services/AbteilungsDistanzService.swift` (eigene Datei statt Erweiterung von `ShelfOrderLearningService`, da fachlich ein neuer, in sich geschlossener Algorithmus): `lerneAusEinkauf(_:context:)` implementiert Abschnitt 4.1 (paarweise Positions-/Zeit-Distanz, gleitender Durchschnitt, Lernrate 0.1/0.3) unter Verwendung von `KaufEintrag.kategorie`/`.datum`/`.kategorieBesuchsIndex`.
 - `erkenneUmbau(_:context:)` implementiert Abschnitt 4.4, setzt `Geschaeft.umbauVerdacht`.
 - Aufruf aus `EinkaufenView.einkaufAbschliessen()` zusätzlich zum bestehenden `ShelfOrderLearningService.lernenAus(...)` (oder als dessen Ersatz, siehe Phase 5).
 
 ### Phase 3 — Sortier-Algorithmus
-- Neue reine Funktion (z.B. `WarengruppenDistanzService.sortiere(offeneKategorien:startpunkt:distanzMatrix:)`), implementiert Greedy-Nearest-Neighbor + 2-opt (Abschnitt 4.2) auf `[ArtikelKategorie]`.
+- Neue reine Funktion (z.B. `AbteilungsDistanzService.sortiere(offeneKategorien:startpunkt:distanzMatrix:)`), implementiert Greedy-Nearest-Neighbor + 2-opt (Abschnitt 4.2) auf `[ArtikelKategorie]`.
 - Konfidenz-Schwelle: `einkaufsAnzahl < 3` → unsortiert + UI-Hinweis (Text nach Vorschlag §7). Hinweis: Der bestehende `ShelfOrderLearningService.mindestEinkaeufeFuerVorschlag` verwendet aktuell `5`; für Konsistenz beide Schwellen angleichen oder bewusst als zwei unabhängige Konstanten dokumentieren.
 
 ### Phase 4 — Dynamische Neusortierung + UI
@@ -358,7 +358,7 @@ Empfohlene Reihenfolge — jede Phase einzeln build- und testbar, damit die App 
 - Siehe Abschnitt 13 — als **eigenständiges GitHub-Issue** behandelt, da der Umfang (siehe dort) den der eigentlichen Sortier-Funktion übersteigt und unabhängig sequenzierbar ist. Empfohlene Reihenfolge: Phase 1–4 zuerst abschließen (liefert bereits den vollen Nutzen für Geschäfte ohne Regale, ohne Funktionsverlust für Geschäfte mit Regalen), erst danach `Regal` entfernen, damit zu keinem Zeitpunkt eine Lücke ohne jede automatische Sortierung entsteht.
 
 ### Phase 6 — Tests & Doku
-- Unit-Tests für `WarengruppenDistanzService` (Lernalgorithmus, Sortieralgorithmus, Umbau-Erkennung) nach demselben Muster wie `ShelfOrderLearningServiceTests.swift`.
+- Unit-Tests für `AbteilungsDistanzService` (Lernalgorithmus, Sortieralgorithmus, Umbau-Erkennung) nach demselben Muster wie `ShelfOrderLearningServiceTests.swift`.
 - CHANGELOG/BEDIENUNGSANLEITUNG pflegen.
 
 ---
@@ -367,7 +367,7 @@ Empfohlene Reihenfolge — jede Phase einzeln build- und testbar, damit die App 
 
 **Separates GitHub-Issue mit vollständiger Begründung: [#35](https://github.com/McBoerny/ShopWithMe/issues/35).** Diese Sektion dokumentiert nur die Kurzfassung der Entscheidung; die Begründung im Detail steht im Issue.
 
-**Kernargument:** `Regal` ist eine manuell zu pflegende Zwischenschicht (Anlegen, Umbenennen, Kategorien zuordnen, Reihenfolge ziehen) für genau das Problem, das die adaptive Sortierung aus Abschnitt 2–4 automatisch und ohne Pflegeaufwand löst — und zwar auf einer feineren, dynamischen Ebene (paarweise Distanzen statt starrer Gruppen). Nach Einführung der Warengruppen-Distanzmatrix hat `Regal` keinen Zweck mehr, den die neue Sortierung nicht besser abdeckt.
+**Kernargument:** `Regal` ist eine manuell zu pflegende Zwischenschicht (Anlegen, Umbenennen, Kategorien zuordnen, Reihenfolge ziehen) für genau das Problem, das die adaptive Sortierung aus Abschnitt 2–4 automatisch und ohne Pflegeaufwand löst — und zwar auf einer feineren, dynamischen Ebene (paarweise Distanzen statt starrer Gruppen). Nach Einführung der Abteilungs-Distanzmatrix hat `Regal` keinen Zweck mehr, den die neue Sortierung nicht besser abdeckt.
 
 **Umfang der Entfernung** (Bestandsaufnahme, 26 betroffene Dateien): `Models/Regal.swift`, `RegalSortierModus`, `Geschaeft.regale`/`regalSortierModus`(Raw)/`regal(fuer:)`, `ArtikelKategorie.regale`, `Artikel.fuehrendeKategorie`s Regal-Priorität, `Views/Geschaefte/RegalDetailView.swift`, `GeschaeftDetailView`s Regal-Sektion samt bedingtem `EditButton` (GitHub #28), `EinkaufenView.gruppen`/`sonstigeArtikel` (Regal-Pfad entfällt, `sonstigeGruppen`-Pfad wird der einzige), `NeueKategorieSheet`/`KategorieHinzufuegenSheet`/`ArtikelEditView`/`PreisschildScanView`/`AISuggestionService`/`ArtikelVerfuegbarkeitService`-Erwähnungen, `SchemaDefinition.swift`, sowie 6 betroffene Testdateien.
 
@@ -381,7 +381,7 @@ Empfohlene Reihenfolge — jede Phase einzeln build- und testbar, damit die App 
 
 **Beobachtung:** Seit derselben Änderung speichert jeder `KaufEintrag` bereits, aus welcher Kategorie tatsächlich abgehakt wurde (`kategorie`) sowie in welchem Geschäft (`geschaeft`) — die Rohdaten für eine geschäftsspezifische Auswertung lagen also vor, wurden aber nicht ausgewertet.
 
-**Algorithmus** (`WarengruppenDistanzService.gelernteKategorie(fuer:in:context:)`): zählt für ein (Artikel, Geschäft)-Paar die Häufigkeit je Kategorie über alle zugehörigen `KaufEintrag`e. Ergebnis nur, wenn:
+**Algorithmus** (`AbteilungsDistanzService.gelernteKategorie(fuer:in:context:)`): zählt für ein (Artikel, Geschäft)-Paar die Häufigkeit je Kategorie über alle zugehörigen `KaufEintrag`e. Ergebnis nur, wenn:
 - mindestens `mindestKaeufeFuerGelernteKategorie` (5) Käufe vorliegen, UND
 - die häufigste Kategorie mindestens `mehrheitsschwelleGelernteKategorie` (80%) davon ausmacht.
 

@@ -5,10 +5,10 @@ import SwiftData
 /// Reihenfolge per Drag-Handle anpassen sowie Anlegen/Löschen — aufrufbar aus
 /// ``SettingsView``.
 ///
-/// Anders als ``WarengruppeHinzufuegenSheet`` (ordnet eine bestehende Kategorie einem
+/// Anders als ``AbteilungHinzufuegenSheet`` (ordnet eine bestehende Kategorie einem
 /// Geschäft zu) bearbeitet diese Ansicht die Kategorien selbst, unabhängig von
 /// einem Geschäft.
-struct WarengruppenVerwaltungView: View {
+struct AbteilungenVerwaltungView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \ArtikelKategorie.sortIndex) private var kategorien: [ArtikelKategorie]
     @State private var zeigeNeueKategorie = false
@@ -22,7 +22,7 @@ struct WarengruppenVerwaltungView: View {
             Section {
                 ForEach(kategorien) { kategorie in
                     NavigationLink {
-                        WarengruppeBearbeitenView(kategorie: kategorie)
+                        AbteilungBearbeitenView(kategorie: kategorie)
                     } label: {
                         Label(kategorie.name, systemImage: kategorie.standardSymbol)
                             .foregroundStyle(Color(hex: kategorie.standardFarbeHex))
@@ -31,17 +31,17 @@ struct WarengruppenVerwaltungView: View {
                 .onDelete(perform: kategorieLoeschen)
                 .onMove(perform: kategorieVerschieben)
             } footer: {
-                Text("Zum Ändern von Name, Symbol oder Farbe antippen. Zum Löschen nach links wischen — Artikel dieser Warengruppe landen danach automatisch in „Sonstiges“.")
+                Text("Zum Ändern von Name, Symbol oder Farbe antippen. Zum Löschen nach links wischen — Artikel dieser Abteilung landen danach automatisch in „Sonstiges“.")
             }
         }
-        .navigationTitle("Warengruppen")
+        .navigationTitle("Abteilungen")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     zeigeNeueKategorie = true
                 } label: {
-                    Label("Warengruppe hinzufügen", systemImage: "plus")
+                    Label("Abteilung hinzufügen", systemImage: "plus")
                 }
             }
             ToolbarItem(placement: .cancellationAction) {
@@ -49,7 +49,7 @@ struct WarengruppenVerwaltungView: View {
             }
         }
         .sheet(isPresented: $zeigeNeueKategorie) {
-            NeueWarengruppeSheet(naechsterSortIndex: (kategorien.map(\.sortIndex).max() ?? -1) + 1) { _ in }
+            NeueAbteilungSheet(naechsterSortIndex: (kategorien.map(\.sortIndex).max() ?? -1) + 1) { _ in }
         }
     }
 
@@ -77,7 +77,7 @@ struct WarengruppenVerwaltungView: View {
 /// Bearbeitet Name, Symbol und Farbe einer einzelnen ``ArtikelKategorie`` sowie
 /// die ihr zugeordneten Artikel (GitHub #15) — direkt hier hinzufügbar/entfernbar,
 /// ohne für jeden Artikel einzeln über ``ArtikelEditView`` zu gehen.
-private struct WarengruppeBearbeitenView: View {
+private struct AbteilungBearbeitenView: View {
     @Bindable var kategorie: ArtikelKategorie
     @State private var zeigeArtikelHinzufuegen = false
 
@@ -103,7 +103,7 @@ private struct WarengruppeBearbeitenView: View {
                 SymbolFarbAuswahlZeile(symbolName: $kategorie.standardSymbol, farbeHex: $kategorie.standardFarbeHex)
             } footer: {
                 if kategorie.name == ArtikelKategorie.sonstigesName {
-                    Text("„Sonstiges“ ist die Auffang-Warengruppe für Artikel ohne eigene Warengruppe und kann nicht gelöscht werden.")
+                    Text("„Sonstiges“ ist die Auffang-Abteilung für Artikel ohne eigene Abteilung und kann nicht gelöscht werden.")
                 }
             }
 
@@ -121,13 +121,13 @@ private struct WarengruppeBearbeitenView: View {
             } header: {
                 Text("Artikel")
             } footer: {
-                Text("Artikel, die dieser Warengruppe zugeordnet sind. Zum Entfernen nach links wischen.")
+                Text("Artikel, die dieser Abteilung zugeordnet sind. Zum Entfernen nach links wischen.")
             }
         }
         .navigationTitle(kategorie.name)
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $zeigeArtikelHinzufuegen) {
-            ArtikelZuWarengruppeHinzufuegenSheet(kategorie: kategorie)
+            ArtikelZuAbteilungHinzufuegenSheet(kategorie: kategorie)
         }
     }
 
@@ -142,9 +142,9 @@ private struct WarengruppeBearbeitenView: View {
 }
 
 /// Sheet zum Zuordnen bestehender ``Artikel`` zu ``kategorie`` — aufrufbar aus
-/// ``WarengruppeBearbeitenView``. Tippen auf einen Artikel ordnet ihn sofort zu
-/// (kein zusätzlicher Bestätigungsschritt, analog ``WarengruppeHinzufuegenSheet``).
-private struct ArtikelZuWarengruppeHinzufuegenSheet: View {
+/// ``AbteilungBearbeitenView``. Tippen auf einen Artikel ordnet ihn sofort zu
+/// (kein zusätzlicher Bestätigungsschritt, analog ``AbteilungHinzufuegenSheet``).
+private struct ArtikelZuAbteilungHinzufuegenSheet: View {
     let kategorie: ArtikelKategorie
 
     @Environment(\.dismiss) private var dismiss
@@ -175,7 +175,7 @@ private struct ArtikelZuWarengruppeHinzufuegenSheet: View {
                     ContentUnavailableView(
                         "Keine weiteren Artikel",
                         systemImage: "carrot.fill",
-                        description: Text("Alle Artikel sind dieser Warengruppe bereits zugeordnet.")
+                        description: Text("Alle Artikel sind dieser Abteilung bereits zugeordnet.")
                     )
                 }
             }
@@ -199,7 +199,7 @@ private struct ArtikelZuWarengruppeHinzufuegenSheet: View {
 
 #Preview {
     NavigationStack {
-        WarengruppenVerwaltungView()
+        AbteilungenVerwaltungView()
     }
     .modelContainer(for: [ArtikelKategorie.self, GeschaeftTyp.self, Artikel.self, Einkaufsliste.self, EinkaufslistenEintrag.self], inMemory: true)
 }

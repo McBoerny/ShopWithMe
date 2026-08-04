@@ -44,9 +44,9 @@ die Standardeinstellung.
 ## `KaufEintragBereinigungService` (`KaufEintrag` + leer gewordene `Einkaufsvorgang`e)
 
 **Seit GitHub #76:** ein `KaufEintrag` verliert nach Abschluss seines
-`Einkaufsvorgang`s jede fachliche Funktion — `WarengruppenDistanzService` hat seinen
+`Einkaufsvorgang`s jede fachliche Funktion — `AbteilungsDistanzService` hat seinen
 Beitrag bereits synchron beim Abschluss verarbeitet
-(`WarengruppenDistanzService.verarbeiteEinkauf(_:context:)`), die Preisrolle liegt
+(`AbteilungsDistanzService.verarbeiteEinkauf(_:context:)`), die Preisrolle liegt
 vollständig bei `Preispunkt`, und die Einkaufslisten-Mitgliedschaft wurde bereits beim
 Abhaken entfernt. Es gibt deshalb fachlich keinen Grund für eine lange, gar
 nutzerkonfigurierbare Aufbewahrung wie bei der Preishistorie — die Bereinigung läuft
@@ -113,7 +113,7 @@ SwiftData unterstützt keine `@Relationship`s, deren Zielobjekt in einem *andere
 müssen im selben Store liegen. Ein zweiter Store für `KaufEintrag` (oder ein neues,
 schlankeres Preis-Modell) hätte diese Relationships daher zwangsläufig durch reine
 UUID-Referenzen mit manuellem Nachschlagen ersetzt — ein invasiver Eingriff quer durch
-`Einkaufsvorgang`, `WarengruppenDistanzService`, `BelegScanView` und die zugehörigen
+`Einkaufsvorgang`, `AbteilungsDistanzService`, `BelegScanView` und die zugehörigen
 Tests, für einen Nutzen (unabhängige Aufbewahrungsfrist), der sich wie oben gezeigt
 auch ohne Store-Trennung erreichen lässt.
 

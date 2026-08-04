@@ -46,7 +46,7 @@ struct SettingsView: View {
                         Label("Geschäfte", systemImage: "cart")
                     }
                     NavigationLink(value: SettingsNavigationsziel.kategorien) {
-                        Label("Warengruppen", systemImage: "tag")
+                        Label("Abteilungen", systemImage: "tag")
                     }
                     NavigationLink(value: SettingsNavigationsziel.geschaeftsTypen) {
                         Label("Geschäftstypen", systemImage: "square.grid.2x2")
@@ -84,7 +84,7 @@ struct SettingsView: View {
                 case .geschaefte:
                     GeschaeftListView()
                 case .kategorien:
-                    WarengruppenVerwaltungView()
+                    AbteilungenVerwaltungView()
                 case .geschaeftsTypen:
                     GeschaeftsTypenVerwaltungView()
                 case .einkaufslisten:
