@@ -99,6 +99,32 @@ struct SyncSnapshotImportServiceTests {
         #expect(alle.first?.id == lokalerTyp.id)
     }
 
+    /// Ergänzende Abdeckung zum Stale-Lookup-Nachfolgefund unten (Session
+    /// 2026-08-04): ``mergeGeschaeftsTypen`` delegiert an ``GeschaeftTyp/mitNamen(_:symbolName:context:)``,
+    /// das bei jedem Aufruf frisch aus dem `ModelContext` fetcht statt eine
+    /// Momentaufnahme vor der Schleife zwischenzuspeichern — von der
+    /// Bug-Klasse der anderen Merge-Funktionen (siehe unten) strukturell
+    /// nicht betroffen, hier trotzdem als Regressionsschutz mitgetestet.
+    @Test
+    func geschaeftstypMitGleichemNamenImSelbenBatchWirdNichtDupliziert() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.geschaeftsTypen = [
+            GeschaeftTypSnapshot(id: UUID(), name: "Lebensmittel", symbolName: "cart", farbeHex: "#FF0000", sortIndex: 0),
+            GeschaeftTypSnapshot(id: UUID(), name: "Lebensmittel", symbolName: "cart", farbeHex: "#FF0000", sortIndex: 1),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        #expect(try context.fetch(FetchDescriptor<GeschaeftTyp>()).count == 1)
+    }
+
     /// GitHub #86: automatischer Merge verlangt EXAKTEN Namen (case-insensitive)
     /// UND Distanz innerhalb der strengeren der beiden individuellen Radien —
     /// bewusst kein Teilstring-Namensvergleich mehr (siehe
@@ -150,6 +176,63 @@ struct SyncSnapshotImportServiceTests {
         #expect(lokal.kategorien.map(\.name).sorted() == ["Milchprodukte", "Obst"])
         #expect(lokal.alternativeNamen.contains("Rewe Center"))
         #expect(lokal.ignorierteArtikel.map(\.erkannterName) == ["Pfand"])
+    }
+
+    /// Stale-Lookup-Nachfolgefund (Session 2026-08-04): ``mergeArtikelKategorien``
+    /// fetchte den lokalen Bestand einmalig vor der Merge-Schleife und führte
+    /// ihn nie nach — ein zweiter gleichnamiger Remote-Eintrag im selben Batch
+    /// fand den gerade erst angelegten ersten nicht und legte eine Dublette an.
+    @Test
+    func artikelKategorieMitGleichemNamenImSelbenBatchWirdNichtDupliziert() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.artikelKategorien = [
+            ArtikelKategorieSnapshot(
+                id: UUID(), name: "Milchprodukte", standardSymbol: "drop", standardFarbeHex: "#007AFF", sortIndex: 0, geschaeftsTypIDs: []
+            ),
+            ArtikelKategorieSnapshot(
+                id: UUID(), name: "Milchprodukte", standardSymbol: "drop", standardFarbeHex: "#007AFF", sortIndex: 1, geschaeftsTypIDs: []
+            ),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        #expect(try context.fetch(FetchDescriptor<ArtikelKategorie>()).count == 1)
+    }
+
+    /// Stale-Lookup-Nachfolgefund (Session 2026-08-04): derselbe Bug wie bei
+    /// ``mergeArtikelKategorien`` — zwei gleichnamige, koordinatengleiche
+    /// Remote-Geschäfte im selben Batch erzeugten vor dem Fix zwei lokale
+    /// Dubletten statt eines Namens-/Koordinaten-Treffers.
+    @Test
+    func geschaeftMitGleichemNamenUndKoordinateImSelbenBatchWirdNichtDupliziert() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        func macheGeschaeftSnapshot() -> GeschaeftSnapshot {
+            GeschaeftSnapshot(
+                id: UUID(), name: "Aldi", typIDs: [], adresse: nil,
+                breitengrad: 52.5, laengengrad: 13.4, erkennungsradius: 100,
+                kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
+                ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
+            )
+        }
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.geschaefte = [macheGeschaeftSnapshot(), macheGeschaeftSnapshot()]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        #expect(try context.fetch(FetchDescriptor<Geschaeft>()).count == 1)
     }
 
     /// GitHub #86 (Kernfund): Zwei unterschiedlich benannte Geschäfte in
@@ -421,6 +504,61 @@ struct SyncSnapshotImportServiceTests {
         #expect(liste.enthaelt(lokalerApfel))
     }
 
+    /// Root-Cause-Fund (Session 2026-08-04, Live-Bericht "Brot doppelt auf
+    /// Urlaub-Liste"): ``mergeArtikel`` fetchte den lokalen Bestand einmalig
+    /// vor der Merge-Schleife und führte ihn nie nach. Enthielt ein einzelner
+    /// Sync-Batch mehrere gleichnamige Fremdeinträge (z.B. mehrfach schnell
+    /// hintereinander hinzugefügtes "Brot"), fand der zweite Eintrag den
+    /// gerade erst vom ersten angelegten lokalen Artikel nicht — pro
+    /// zusätzlichem Eintrag entstand ein weiterer lokaler Artikel statt eines
+    /// Alias auf den ersten.
+    @Test
+    func artikelMitGleichemNamenImSelbenBatchWirdNichtDupliziert() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        func macheArtikelSnapshot() -> ArtikelSnapshot {
+            ArtikelSnapshot(
+                id: UUID(), name: "Brot", symbolName: "birthday.cake", farbeHex: "#8E5B3A",
+                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+            )
+        }
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.artikel = [macheArtikelSnapshot(), macheArtikelSnapshot(), macheArtikelSnapshot()]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        #expect(try context.fetch(FetchDescriptor<Artikel>()).count == 1)
+    }
+
+    /// Stale-Lookup-Nachfolgefund (Session 2026-08-04): derselbe Bug wie bei
+    /// ``mergeArtikel`` — zwei Remote-Aliase mit demselben `erkannterName` im
+    /// selben Batch erzeugten vor dem Fix zwei lokale Dubletten statt dass
+    /// der zweite als bereits bekannt übersprungen wurde.
+    @Test
+    func artikelAliasMitGleichemErkanntenNamenImSelbenBatchWirdNichtDupliziert() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.artikelAliase = [
+            ArtikelAliasSnapshot(id: UUID(), erkannterName: "Vollmilch 3.5%", alternativerName: "Milch", artikelID: nil),
+            ArtikelAliasSnapshot(id: UUID(), erkannterName: "Vollmilch 3.5%", alternativerName: "Milch", artikelID: nil),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        #expect(try context.fetch(FetchDescriptor<ArtikelAlias>()).count == 1)
+    }
+
     @Test
     func einkaufslisteWirdPerNameGematchtUndAliasErlaubtSpaetereBereichAEreignisse() async throws {
         let (container, context) = try machtLeerenContainer()
@@ -467,6 +605,29 @@ struct SyncSnapshotImportServiceTests {
         await SyncImportService.importiereNeueEvents(context: context)
 
         #expect(eigeneListe.enthaelt(lokalerApfel))
+    }
+
+    /// Stale-Lookup-Nachfolgefund (Session 2026-08-04): derselbe Bug wie bei
+    /// ``mergeArtikel`` — zwei gleichnamige Remote-Listen im selben Batch
+    /// erzeugten vor dem Fix zwei lokale Dubletten statt eines Namens-Treffers.
+    @Test
+    func einkaufslisteMitGleichemNamenImSelbenBatchWirdNichtDupliziert() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.einkaufslisten = [
+            EinkaufslisteSnapshot(id: UUID(), name: "Urlaub", erstelltAm: Date()),
+            EinkaufslisteSnapshot(id: UUID(), name: "Urlaub", erstelltAm: Date()),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        #expect(try context.fetch(FetchDescriptor<Einkaufsliste>()).count == 1)
     }
 
     @Test

@@ -591,7 +591,7 @@ enum SyncSnapshotImportService {
         _ remote: [ArtikelKategorieSnapshot], typZuordnung: [UUID: GeschaeftTyp], aliase: [String: [UUID: UUID]], context: ModelContext
     ) -> [UUID: ArtikelKategorie] {
         var zuordnung: [UUID: ArtikelKategorie] = [:]
-        let alleLokalen = (try? context.fetch(FetchDescriptor<ArtikelKategorie>())) ?? []
+        var alleLokalen = (try? context.fetch(FetchDescriptor<ArtikelKategorie>())) ?? []
         // O(1) ID-Treffer statt linearem `first(where:)` pro Remote-Eintrag
         // (Performance-Fund) — der Namens-Fallback direkt darunter bleibt ein
         // linearer Scan: `localizedCaseInsensitiveCompare` ist locale-abhängig
@@ -599,7 +599,7 @@ enum SyncSnapshotImportService {
         // (z.B. `.lowercased()`) übersetzen, ohne das Matching-Verhalten in
         // Rand-Locales zu verändern — dieser Zweig greift zudem nur für
         // tatsächlich neue, noch nicht per ID/Alias bekannte Einträge.
-        let alleLokalenNachID = Dictionary(alleLokalen.map { ($0.id, $0) }, uniquingKeysWith: { erster, _ in erster })
+        var alleLokalenNachID = Dictionary(alleLokalen.map { ($0.id, $0) }, uniquingKeysWith: { erster, _ in erster })
         let geloeschteIDs = SyncTombstoneService.geloeschteIDs(art: SyncEntitaetsArt.artikelKategorie, context: context)
         for eintrag in remote {
             let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(fuer: eintrag.id, art: SyncEntitaetsArt.artikelKategorie, in: aliase)
@@ -622,6 +622,11 @@ enum SyncSnapshotImportService {
                 )
                 lokal.id = eintrag.id
                 context.insert(lokal)
+                // Sofort nachführen (siehe ``mergeEinkaufsvorgaenge``) — sonst
+                // erzeugt ein zweiter gleichnamiger Remote-Eintrag im selben
+                // Batch eine Dublette statt eines Alias-Treffers.
+                alleLokalen.append(lokal)
+                alleLokalenNachID[lokal.id] = lokal
             }
             vereinigeGeordnetFallsNoetig(&lokal.geschaeftsTypen, mit: eintrag.geschaeftsTypIDs.compactMap { typZuordnung[$0] })
             zuordnung[eintrag.id] = lokal
@@ -637,13 +642,13 @@ enum SyncSnapshotImportService {
         peerGeraeteID: String, aliase: [String: [UUID: UUID]], context: ModelContext
     ) -> [UUID: Geschaeft] {
         var zuordnung: [UUID: Geschaeft] = [:]
-        let alleLokalen = (try? context.fetch(FetchDescriptor<Geschaeft>())) ?? []
+        var alleLokalen = (try? context.fetch(FetchDescriptor<Geschaeft>())) ?? []
         // O(1) ID-Treffer statt linearem Scan — siehe Begründung in
         // ``mergeArtikelKategorien(_:typZuordnung:aliase:context:)`` (der
         // Orts-Fallback direkt darunter bleibt linear, da
         // ``GeschaeftErkennungService/istGleicherOrtFuerSyncMerge(nameA:koordinatenA:radiusA:nameB:koordinatenB:radiusB:)``
         // keine dictionary-taugliche Gleichheit ist).
-        let alleLokalenNachID = Dictionary(alleLokalen.map { ($0.id, $0) }, uniquingKeysWith: { erster, _ in erster })
+        var alleLokalenNachID = Dictionary(alleLokalen.map { ($0.id, $0) }, uniquingKeysWith: { erster, _ in erster })
         let geloeschteIDs = SyncTombstoneService.geloeschteIDs(art: SyncEntitaetsArt.geschaeft, context: context)
         for eintrag in remote {
             let remoteKoordinaten: (breitengrad: Double, laengengrad: Double)? = {
@@ -704,6 +709,11 @@ enum SyncSnapshotImportService {
                 lokal = Geschaeft(name: eintrag.name, typen: [], adresse: nil)
                 lokal.id = eintrag.id
                 context.insert(lokal)
+                // Sofort nachführen (siehe ``mergeEinkaufsvorgaenge``) — sonst
+                // erzeugt ein zweiter passender Remote-Eintrag im selben Batch
+                // eine Dublette statt eines Alias-Treffers.
+                alleLokalen.append(lokal)
+                alleLokalenNachID[lokal.id] = lokal
             }
 
             // Nur fehlende Werte ergänzen, nie überschreiben (siehe Typ-Doku).
@@ -755,10 +765,10 @@ enum SyncSnapshotImportService {
         aliase: [String: [UUID: UUID]], context: ModelContext
     ) -> [UUID: Artikel] {
         var zuordnung: [UUID: Artikel] = [:]
-        let alleLokalen = (try? context.fetch(FetchDescriptor<Artikel>())) ?? []
+        var alleLokalen = (try? context.fetch(FetchDescriptor<Artikel>())) ?? []
         // O(1) ID-Treffer statt linearem Scan — siehe Begründung in
         // ``mergeArtikelKategorien(_:typZuordnung:aliase:context:)``.
-        let alleLokalenNachID = Dictionary(alleLokalen.map { ($0.id, $0) }, uniquingKeysWith: { erster, _ in erster })
+        var alleLokalenNachID = Dictionary(alleLokalen.map { ($0.id, $0) }, uniquingKeysWith: { erster, _ in erster })
         let geloeschteIDs = SyncTombstoneService.geloeschteIDs(art: SyncEntitaetsArt.artikel, context: context)
         for eintrag in remote {
             let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(fuer: eintrag.id, art: SyncEntitaetsArt.artikel, in: aliase)
@@ -803,6 +813,12 @@ enum SyncSnapshotImportService {
             )
             neuer.id = eintrag.id
             context.insert(neuer)
+            // Sofort nachführen (siehe ``mergeEinkaufsvorgaenge``) — sonst
+            // erzeugt ein zweiter gleichnamiger Remote-Eintrag im selben Batch
+            // eine Dublette statt eines Alias-Treffers (Live-Bericht: "Brot"
+            // mehrfach auf derselben Liste).
+            alleLokalen.append(neuer)
+            alleLokalenNachID[neuer.id] = neuer
             zuordnung[eintrag.id] = neuer
         }
         return zuordnung
@@ -834,10 +850,10 @@ enum SyncSnapshotImportService {
         _ remote: [EinkaufslisteSnapshot], peerGeraeteID: String, aliase: [String: [UUID: UUID]], context: ModelContext
     ) -> [UUID: Einkaufsliste] {
         var zuordnung: [UUID: Einkaufsliste] = [:]
-        let alleLokalen = (try? context.fetch(FetchDescriptor<Einkaufsliste>())) ?? []
+        var alleLokalen = (try? context.fetch(FetchDescriptor<Einkaufsliste>())) ?? []
         // O(1) ID-Treffer statt linearem Scan — siehe Begründung in
         // ``mergeArtikelKategorien(_:typZuordnung:aliase:context:)``.
-        let alleLokalenNachID = Dictionary(alleLokalen.map { ($0.id, $0) }, uniquingKeysWith: { erster, _ in erster })
+        var alleLokalenNachID = Dictionary(alleLokalen.map { ($0.id, $0) }, uniquingKeysWith: { erster, _ in erster })
         let geloeschteIDs = SyncTombstoneService.geloeschteIDs(art: SyncEntitaetsArt.einkaufsliste, context: context)
         for eintrag in remote {
             let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(fuer: eintrag.id, art: SyncEntitaetsArt.einkaufsliste, in: aliase)
@@ -872,6 +888,11 @@ enum SyncSnapshotImportService {
             neue.id = eintrag.id
             neue.erstelltAm = eintrag.erstelltAm
             context.insert(neue)
+            // Sofort nachführen (siehe ``mergeEinkaufsvorgaenge``) — sonst
+            // erzeugt ein zweiter gleichnamiger Remote-Eintrag im selben Batch
+            // eine Dublette statt eines Alias-Treffers.
+            alleLokalen.append(neue)
+            alleLokalenNachID[neue.id] = neue
             zuordnung[eintrag.id] = neue
         }
         return zuordnung
@@ -1284,7 +1305,7 @@ enum SyncSnapshotImportService {
     /// bislang unbekannter Rohname wird ergänzt.
     @MainActor
     private static func mergeArtikelAliase(_ remote: [ArtikelAliasSnapshot], artikelZuordnung: [UUID: Artikel], context: ModelContext) {
-        let alleLokalen = (try? context.fetch(FetchDescriptor<ArtikelAlias>())) ?? []
+        var alleLokalen = (try? context.fetch(FetchDescriptor<ArtikelAlias>())) ?? []
         for eintrag in remote {
             guard eintrag.alternativerName != nil || eintrag.artikelID != nil else { continue }
             guard !alleLokalen.contains(where: { $0.erkannterName.localizedCaseInsensitiveCompare(eintrag.erkannterName) == .orderedSame })
@@ -1295,6 +1316,10 @@ enum SyncSnapshotImportService {
             )
             neuer.id = eintrag.id
             context.insert(neuer)
+            // Sofort nachführen (siehe ``mergeEinkaufsvorgaenge``) — sonst
+            // erzeugt ein zweiter Remote-Eintrag mit demselben `erkannterName`
+            // im selben Batch eine Dublette statt übersprungen zu werden.
+            alleLokalen.append(neuer)
         }
     }
 

@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.12 (Build 234) — Fix: Stale Lookup-Tabelle bei Snapshot-Merge erzeugte Namensdubletten (Root-Cause zu Live-Bericht "Brot doppelt auf Urlaub-Liste")
+
+`SyncSnapshotImportService.mergeArtikel`/`mergeGeschaefte`/`mergeEinkaufslisten`/
+`mergeArtikelKategorien`/`mergeArtikelAliase` fetchten den lokalen Namens-/ID-Abgleich
+jeweils EINMAL vor der Merge-Schleife über den Remote-Snapshot und aktualisierten ihn nie,
+wenn innerhalb derselben Schleife ein neuer lokaler Datensatz angelegt wurde. Enthielt ein
+einzelner Merge-Batch mehrere Fremdeinträge mit identischem Namen (z.B. mehrfach schnell
+hintereinander hinzugefügtes "Brot"), fand ein späterer gleichnamiger Eintrag den gerade
+erst vom vorherigen angelegten lokalen Datensatz nicht — pro zusätzlichem Eintrag entstand
+eine weitere Dublette statt eines Alias auf den ersten:
+
+- Alle fünf Funktionen führen `alleLokalen`/`alleLokalenNachID` jetzt sofort nach jedem
+  `context.insert(...)` nach — derselbe Fix, der in `mergeEinkaufsvorgaenge` (GitHub
+  #67-Erweiterung) bereits korrekt vorlag, jetzt konsistent auf alle betroffenen Stellen
+  angewendet.
+- 6 neue Regressionstests (je einer pro betroffener Funktion plus `GeschaeftTyp` als
+  strukturell unbetroffene Vergleichskontrolle): zwei/drei gleichnamige Remote-Einträge im
+  selben Batch dürfen nur einen lokalen Datensatz erzeugen.
+- Bewusst **kein** Cleanup bereits entstandener Dubletten in diesem Schritt — nur der
+  Code-Fix gegen künftige neue Fälle. Bestehende Dubletten (z.B. das doppelte "Brot")
+  bleiben bis zu einem separaten, späteren Bereinigungsschritt bestehen.
+- Verwandter Tombstone-Wachstums-Bug (`istBereitsAbgehakt` prüft keine Tombstones, lässt
+  bereits gekaufte Artikel nach der 48h-Karenzzeit zurückkehren) bleibt bewusst
+  ausgeklammert — eigenständiger Fix, noch in Diskussion (Live-Test-Fund, Session
+  2026-08-04).
+
 ## v0.12 (Build 232) — Testabdeckung für `multipeerGruppenID`-Zeitlimit nachgezogen (Nachfolgefund zu #49, Issue #98)
 
 Die in Build 230 beschriebene Umstellung von `SyncOrdnerService.multipeerGruppenID(in:)`
