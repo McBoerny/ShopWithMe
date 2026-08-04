@@ -197,11 +197,34 @@ Bereich-A-Events auflösbar, die weiterhin die ursprüngliche Peer-ID
 referenzieren — ohne diesen Fallback liefen künftige Events des betroffenen
 Peers für die zusammengeführte Entität dauerhaft ins Leere.
 
-**Bewusste Grenze:** unterschiedliche Namen für real dieselbe Entität (z.B.
-„Milch" vs. „Vollmilch") erkennt das Namens-Matching nicht — es entstehen
-zwei separate Objekte. Manuelles Zusammenführen über die vorhandene
-Kategorien-/Artikel-Verwaltung bleibt der Weg, kein automatischer
-Ähnlichkeits-Abgleich (Fehleranfälligkeit höher als der Nutzen).
+**Bewusste Grenze, jetzt mit aktiver Rückfrage statt stiller Dublette:**
+unterschiedliche, aber ähnliche Namen für real dieselbe Entität (z.B.
+„Milch" vs. „H-Milch") erkennt das automatische Namens-Matching weiterhin
+nicht als Treffer — anders als früher wird der Remote-Eintrag dafür aber
+nicht mehr sofort als zweites, unabhängiges Objekt angelegt. `mergeGeschaefte`/
+`mergeArtikel`/`mergeEinkaufslisten` (`SyncSnapshotImportService.swift`)
+prüfen vor dem Neuanlage-Zweig zusätzlich eine großzügigere Ambiguitäts-Regel
+(bei `Geschaeft` die bereits bestehende, koordinatenbasierte
+``GeschaeftErkennungService/istMehrdeutigerBeitrittsKandidat``, siehe
+`docs/GESCHAEFTSERKENNUNG.md`; bei `Artikel`/`Einkaufsliste` ein reiner
+case-insensitiver Teilstring-Treffer ohne exakte Übereinstimmung, da dort
+keine zweite Vergleichsdimension wie Koordinaten existiert). Trifft sie zu,
+wird der Remote-Eintrag als ``SyncAbgleichKandidat`` (additive, generische
+Warteschlangen-Tabelle, ein Eintrag pro `(entitaetsArt, peerGeraeteID,
+fremdeID)`) zurückgestellt statt gemergt — sichtbar über ein Badge in
+`SyncOrdnerSettingsView` („N mögliche Duplikate prüfen"), das dieselbe
+`AbgleichKandidatenSheet`-Ansicht öffnet wie der bereits bestehende
+Beitritts-Abgleich (GitHub #86, Teil 2). „Gleich" registriert einen
+`SyncEntitaetsAlias` und übernimmt den gewählten Namen; „unterschiedlich"
+legt das zurückgehaltene Objekt jetzt aktiv mit `id = fremdeID` an (übrige
+Felder ergänzen sich additiv beim nächsten Merge-Durchlauf über den
+ID-Fast-Path). Ohne Nutzerreaktion bleibt der Eintrag einfach in der
+Warteschlange stehen — kein erneutes Anlegen bei jedem weiteren Sync-Zyklus,
+kein automatischer Ähnlichkeits-Merge (Fehleranfälligkeit dafür weiterhin
+höher als der Nutzen). Manuelles Zusammenführen über die vorhandene
+Kategorien-/Artikel-Verwaltung bleibt zusätzlich möglich, für den Fall, dass
+die Ambiguitäts-Regel selbst keinen Treffer findet (z.B. „Milch" vs.
+„Vollmilch", kein Teilstring).
 
 **Abhängigkeitsreihenfolge beim Merge** (spätere Schritte brauchen die
 Zuordnungstabellen früherer): `GeschaeftTyp` → `ArtikelKategorie` →
@@ -310,7 +333,7 @@ ID-/Alias-Lookup, kein Sonderfall mehr).
 Ein so oder per Snapshot-Merge fremd materialisierter `KaufEintrag` bekommt
 bewusst **keinen** `kategorieBesuchsIndex` — er beschreibt die Laufreihenfolge
 des SENDENDEN Geräts durchs Geschäft, nicht die dieses Geräts, und würde
-`WarengruppenDistanzService` sonst mit einer erfundenen Position füttern.
+`AbteilungsDistanzService` sonst mit einer erfundenen Position füttern.
 `Einkaufsvorgang.naechsterKategorieBesuchsIndex` ignoriert indexlose Einträge
 bei der Suche nach einem bereits vergebenen Index für dieselbe Kategorie.
 
@@ -390,7 +413,7 @@ dieses Peers ein (`WarengruppenDistanzPeerZaehlerStand.zuletztGesehenerWert`)
 gegen das aktuelle Gesamtgewicht der lokalen Seite — ein unveränderter,
 wiederholt gesyncter Peer-Wert bleibt dadurch ein echtes No-op. Beide Gewichte
 sind zusätzlich bei `WarengruppenDistanz.maximaleMergeGewichtung`
-(`≈ 1 / WarengruppenDistanzService.lernrate`) gedeckelt — das lokale Lernen
+(`≈ 1 / AbteilungsDistanzService.lernrate`) gedeckelt — das lokale Lernen
 selbst ist ein exponentiell gleitender Durchschnitt mit begrenztem
 „Gedächtnis", ein ungedeckeltes Gewicht würde einem Gerät mit vielen längst
 verblassten historischen Beobachtungen eine inhaltlich nicht mehr getragene

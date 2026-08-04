@@ -86,10 +86,21 @@ struct PreispunktVerdichtungServiceTests {
         _ = container
         let (artikel, geschaeft) = artikelUndGeschaeft(context)
         let jetzt = Date()
-        // Beide Punkte in derselben Kalenderwoche, älter als die 7-Tage-Frist,
-        // aber an unterschiedlichen Tagen (sonst würde bereits Stufe 1 greifen).
-        let montag = jetzt.addingTimeInterval(-10 * 86400)
-        let mittwoch = jetzt.addingTimeInterval(-8 * 86400)
+        let kalender = Calendar.current
+        // Bewusst an den Start einer vollen Kalenderwoche verankert (nicht an
+        // feste Tagesoffsets relativ zu `jetzt`) — sonst hängt es vom
+        // Wochentag des Testlaufs ab, ob zwei fixe Offsets (z.B. -10/-8 Tage)
+        // noch in dieselbe ISO-Woche fallen oder bereits über einen
+        // Wochenwechsel rutschen (an einem Dienstag würde -10 Tage auf einen
+        // Samstag der Vorwoche fallen, -8 Tage schon auf den folgenden
+        // Montag). Zwei Kalenderwochen zurück, garantiert älter als die
+        // 7-Tage-Frist UND garantiert in derselben ISO-Woche.
+        let heute = kalender.startOfDay(for: jetzt)
+        let wochenStart = kalender.date(
+            from: kalender.dateComponents([.yearForWeekOfYear, .weekOfYear], from: heute)
+        )!
+        let montag = kalender.date(byAdding: .weekOfYear, value: -2, to: wochenStart)!
+        let mittwoch = kalender.date(byAdding: .day, value: 2, to: montag)!
 
         let niedriger = Preispunkt(artikel: artikel, geschaeft: geschaeft, preis: 1.19, datum: montag)
         let hoeher = Preispunkt(artikel: artikel, geschaeft: geschaeft, preis: 1.49, datum: mittwoch)
@@ -98,7 +109,6 @@ struct PreispunktVerdichtungServiceTests {
         try context.save()
 
         // Sicherstellen, dass beide tatsächlich in derselben ISO-Kalenderwoche liegen.
-        let kalender = Calendar.current
         try #require(
             kalender.component(.weekOfYear, from: montag) == kalender.component(.weekOfYear, from: mittwoch)
                 && kalender.component(.yearForWeekOfYear, from: montag) == kalender.component(.yearForWeekOfYear, from: mittwoch)

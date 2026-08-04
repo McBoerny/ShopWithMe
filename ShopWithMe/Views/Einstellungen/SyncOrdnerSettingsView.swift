@@ -41,6 +41,15 @@ struct SyncOrdnerSettingsView: View {
     @State private var zeigeBeitrittsAbgleich = false
     @State private var pruefeBeitrittsAbgleich = false
 
+    /// Beim laufenden Hintergrund-Sync zurückgestellte Merge-Kandidaten
+    /// (Geschäft/Artikel/Einkaufsliste) — siehe Ambiguitäts-Rückstellung in
+    /// `SyncSnapshotImportService.mergeGeschaefte`/`mergeArtikel`/
+    /// `mergeEinkaufslisten`. Anders als ``beitrittsKandidaten`` (einmaliger,
+    /// transienter Scan vor dem Beitritts-Merge) eine dauerhafte, per
+    /// `@Query` live nachgeführte Warteschlange.
+    @Query(sort: \SyncAbgleichKandidat.erkanntAm) private var abgleichWarteschlange: [SyncAbgleichKandidat]
+    @State private var zeigeAbgleichWarteschlange = false
+
     var body: some View {
         Form {
             EigenerGeraeteNameSection()
@@ -63,6 +72,18 @@ struct SyncOrdnerSettingsView: View {
                 }
             } footer: {
                 Text("Ein geteilter Ordner (z.B. iCloud Drive oder Synology Drive), über den mehrere Geräte ihre Einkaufslisten-Änderungen austauschen. Die lokale Datenbank bleibt dabei unverändert am Standardort.")
+            }
+
+            if !abgleichWarteschlange.isEmpty {
+                Section {
+                    Button {
+                        zeigeAbgleichWarteschlange = true
+                    } label: {
+                        Label("\(abgleichWarteschlange.count) mögliche Duplikate prüfen", systemImage: "exclamationmark.triangle")
+                    }
+                } footer: {
+                    Text("Diese Einträge konnten beim automatischen Sync nicht eindeutig einem vorhandenen Geschäft, Artikel oder einer Liste zugeordnet werden und warten auf deine Entscheidung.")
+                }
             }
 
             if let backup = SyncErsetzenService.vorhandenesBackup() {
@@ -172,7 +193,42 @@ struct SyncOrdnerSettingsView: View {
             Text("Bitte schließe die App jetzt vollständig (nicht nur in den Hintergrund legen) und öffne sie erneut, um den Vorgang abzuschließen.")
         }
         .sheet(isPresented: $zeigeBeitrittsAbgleich) {
-            GeschaeftsBeitrittsAbgleichSheet(kandidaten: beitrittsKandidaten, onFertig: jetztSynchronisieren)
+            // Beitritts-Moment: „unterschiedlich" bleibt bewusst wirkungslos
+            // (leere `aufUnterschiedlich`-Closure) — der direkt anschließende
+            // reguläre Merge (``jetztSynchronisieren``) legt ein neues
+            // Geschäft ganz normal selbst an, keine doppelte Aktion nötig.
+            AbgleichKandidatenSheet(
+                kandidaten: beitrittsKandidaten.map { kandidat in
+                    AbgleichAnzeige(
+                        id: kandidat.id, lokalerName: kandidat.lokalerName, fremderName: kandidat.remoteName,
+                        aufGleich: { gewaehlterName in
+                            SyncSnapshotImportService.geschaeftsKandidatBestaetigen(kandidat, gewaehlterName: gewaehlterName, context: modelContext)
+                        },
+                        aufUnterschiedlich: {}
+                    )
+                },
+                onFertig: jetztSynchronisieren
+            )
+        }
+        .sheet(isPresented: $zeigeAbgleichWarteschlange) {
+            // Laufender Sync: der Remote-Eintrag wurde bereits aktiv
+            // zurückgehalten (kein automatischer Merge) — „unterschiedlich"
+            // muss ihn hier deshalb aktiv freigeben, sonst bliebe er
+            // dauerhaft unsynchronisiert.
+            AbgleichKandidatenSheet(
+                kandidaten: abgleichWarteschlange.map { kandidat in
+                    AbgleichAnzeige(
+                        id: kandidat.id, lokalerName: kandidat.lokalerName, fremderName: kandidat.fremderName,
+                        aufGleich: { gewaehlterName in
+                            SyncSnapshotImportService.abgleichKandidatBestaetigen(kandidat, gewaehlterName: gewaehlterName, context: modelContext)
+                        },
+                        aufUnterschiedlich: {
+                            SyncSnapshotImportService.abgleichKandidatAlsUnterschiedlichBestaetigen(kandidat, context: modelContext)
+                        }
+                    )
+                },
+                onFertig: {}
+            )
         }
         // GitHub #92 (experimentell, unbelegt — siehe Issue-Kommentar zur
         // Recherche): kein `.fileImporter` wie bei der Ordnerauswahl oben,
@@ -300,23 +356,44 @@ struct SyncOrdnerSettingsView: View {
     }
 }
 
-/// Rückfrage beim Sync-Ordner-Beitritt (GitHub #86, Teil 2) für Geschäfte, die
-/// nach der großzügigen, aber nicht nach der strengen automatischen
-/// Merge-Regel übereinstimmen (``SyncSnapshotImportService/mehrdeutigeGeschaeftsKandidatenBeimBeitritt(context:)``).
-/// Pro Kandidat: „gleicher Laden" (mit Wahl, welcher Name bleibt) oder
-/// „unterschiedliche Läden" (Standard, keine Aktion — beide bleiben als
-/// getrennte Geschäfte bestehen und lassen sich bei Bedarf später manuell per
-/// Löschen bereinigen, siehe `docs/GESCHAEFTSERKENNUNG.md`).
-private struct GeschaeftsBeitrittsAbgleichSheet: View {
-    @Environment(\.modelContext) private var modelContext
+/// Entkoppeltes Anzeige-/Aktions-Modell für ``AbgleichKandidatenSheet`` —
+/// bewusst NICHT direkt an `SyncSnapshotImportService.GeschaeftsAbgleichKandidat`
+/// (transienter Beitritts-Scan, nur Geschäfte) oder ``SyncAbgleichKandidat``
+/// (persistierte Warteschlange, alle drei Bereich-B-Typen) gekoppelt, damit
+/// eine einzige Sheet-View beide, strukturell unterschiedlichen Quellen
+/// bedienen kann — der jeweilige Aufrufer übersetzt seine Kandidaten in
+/// `AbgleichAnzeige` und übergibt die passenden Aktions-Closures.
+private struct AbgleichAnzeige: Identifiable {
+    let id: UUID
+    let lokalerName: String
+    let fremderName: String
+    /// Nutzer wählt „gleich", Parameter ist der beizubehaltende Name
+    /// (lokaler oder fremder, je nach getroffener Wahl).
+    let aufGleich: (String) -> Void
+    /// Nutzer wählt „unterschiedlich" (auch der Standard bei
+    /// Nicht-Entscheidung). Beim Beitritts-Abgleich bewusst ein No-Op (der
+    /// direkt anschließende reguläre Merge entscheidet ohnehin), bei der
+    /// laufenden Warteschlange legt es das zurückgehaltene Objekt aktiv an.
+    let aufUnterschiedlich: () -> Void
+}
+
+/// Aktive Rückfrage für mehrdeutige Bereich-B-Merge-Kandidaten (Geschäft/
+/// Artikel/Einkaufsliste) — sowohl beim einmaligen Sync-Ordner-Beitritt
+/// (GitHub #86, Teil 2) als auch bei der laufenden, persistierten
+/// ``SyncAbgleichKandidat``-Warteschlange (``SyncOrdnerSettingsView``s zwei
+/// `.sheet`-Aufrufstellen). Pro Kandidat: „gleich" (mit Wahl, welcher Name
+/// bleibt) oder „unterschiedlich" (Standard bei Nicht-Entscheidung) — beide
+/// bleiben dann als getrennte Einträge bestehen und lassen sich bei Bedarf
+/// später manuell per Löschen bereinigen, siehe `docs/GESCHAEFTSERKENNUNG.md`.
+private struct AbgleichKandidatenSheet: View {
     @Environment(\.dismiss) private var dismiss
-    let kandidaten: [SyncSnapshotImportService.GeschaeftsAbgleichKandidat]
+    let kandidaten: [AbgleichAnzeige]
     let onFertig: () -> Void
 
     private enum Entscheidung: Hashable {
         case unterschiedlich
-        case gleicherLadenLokalerName
-        case gleicherLadenRemoteName
+        case gleichLokalerName
+        case gleichFremderName
     }
 
     @State private var entscheidungen: [UUID: Entscheidung] = [:]
@@ -327,21 +404,21 @@ private struct GeschaeftsBeitrittsAbgleichSheet: View {
                 VStack(alignment: .leading, spacing: 8) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("„\(kandidat.lokalerName)“").bold()
-                        Text("könnte identisch sein mit „\(kandidat.remoteName)“ vom anderen Gerät")
+                        Text("könnte identisch sein mit „\(kandidat.fremderName)“ vom anderen Gerät")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                     Picker("Entscheidung", selection: entscheidungBinding(fuer: kandidat)) {
-                        Text("Unterschiedliche Läden").tag(Entscheidung.unterschiedlich)
-                        Text("Gleicher Laden – „\(kandidat.lokalerName)“ behalten").tag(Entscheidung.gleicherLadenLokalerName)
-                        Text("Gleicher Laden – „\(kandidat.remoteName)“ übernehmen").tag(Entscheidung.gleicherLadenRemoteName)
+                        Text("Unterschiedlich").tag(Entscheidung.unterschiedlich)
+                        Text("Gleich – „\(kandidat.lokalerName)“ behalten").tag(Entscheidung.gleichLokalerName)
+                        Text("Gleich – „\(kandidat.fremderName)“ übernehmen").tag(Entscheidung.gleichFremderName)
                     }
                     .pickerStyle(.menu)
                     .labelsHidden()
                 }
                 .padding(.vertical, 4)
             }
-            .navigationTitle("Mögliche gleiche Geschäfte")
+            .navigationTitle("Mögliche Duplikate")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -349,7 +426,7 @@ private struct GeschaeftsBeitrittsAbgleichSheet: View {
                 }
             }
             .safeAreaInset(edge: .bottom) {
-                Text("Diese Geschäfte wurden unterschiedlich benannt oder liegen nicht exakt am selben Punkt — deshalb fragt die App hier nach, statt automatisch zu entscheiden. Unentschieden bleibt: zwei getrennte Geschäfte.")
+                Text("Diese Einträge wurden unterschiedlich benannt oder stimmen nicht exakt überein — deshalb fragt die App hier nach, statt automatisch zu entscheiden. Unentschieden bleibt: getrennte Einträge.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .padding()
@@ -358,7 +435,7 @@ private struct GeschaeftsBeitrittsAbgleichSheet: View {
         .interactiveDismissDisabled()
     }
 
-    private func entscheidungBinding(fuer kandidat: SyncSnapshotImportService.GeschaeftsAbgleichKandidat) -> Binding<Entscheidung> {
+    private func entscheidungBinding(fuer kandidat: AbgleichAnzeige) -> Binding<Entscheidung> {
         Binding(
             get: { entscheidungen[kandidat.id] ?? .unterschiedlich },
             set: { entscheidungen[kandidat.id] = $0 }
@@ -369,11 +446,11 @@ private struct GeschaeftsBeitrittsAbgleichSheet: View {
         for kandidat in kandidaten {
             switch entscheidungen[kandidat.id] ?? .unterschiedlich {
             case .unterschiedlich:
-                continue
-            case .gleicherLadenLokalerName:
-                SyncSnapshotImportService.geschaeftsKandidatBestaetigen(kandidat, gewaehlterName: kandidat.lokalerName, context: modelContext)
-            case .gleicherLadenRemoteName:
-                SyncSnapshotImportService.geschaeftsKandidatBestaetigen(kandidat, gewaehlterName: kandidat.remoteName, context: modelContext)
+                kandidat.aufUnterschiedlich()
+            case .gleichLokalerName:
+                kandidat.aufGleich(kandidat.lokalerName)
+            case .gleichFremderName:
+                kandidat.aufGleich(kandidat.fremderName)
             }
         }
         dismiss()

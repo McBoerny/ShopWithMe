@@ -11,7 +11,7 @@ struct SyncSnapshotImportServiceTests {
             Einkaufsvorgang.self, KaufEintrag.self, WarengruppenDistanz.self, WarengruppenDistanzPeerZaehlerStand.self,
             Einkaufsliste.self, EinkaufslistenEintrag.self, IgnorierterArtikel.self,
             SyncEvent.self, SyncEntitaetsAlias.self, SyncPeerZaehlerStand.self, SyncPeerInfo.self,
-            SyncTombstone.self, Preispunkt.self, ArtikelAlias.self,
+            SyncTombstone.self, Preispunkt.self, ArtikelAlias.self, SyncAbgleichKandidat.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
@@ -157,7 +157,15 @@ struct SyncSnapshotImportServiceTests {
     /// dürfen beim automatischen Sync-Merge NIEMALS zusammengeführt werden,
     /// selbst wenn ein Name im anderen enthalten ist ("Rewe" ⊂ "Rewe Nord") —
     /// vor dem Fix hätte der reine Koordinatenvergleich/Teilstring-Vergleich
-    /// sie fälschlich vereint.
+    /// sie fälschlich vereint. **Aktualisiert** (Ambiguitäts-Rückstellung):
+    /// dieselbe Konstellation trifft jetzt zusätzlich
+    /// `istMehrdeutigerBeitrittsKandidat` (großzügiger Treffer, aber nicht
+    /// streng genug) — statt wie vorher sofort eine zweite, unabhängige
+    /// Dublette anzulegen, bleibt der Remote-Eintrag als
+    /// ``SyncAbgleichKandidat`` zurückgestellt. Die eigentliche Garantie
+    /// bleibt unverändert bestehen: kein automatisches, stilles
+    /// Zusammenführen — nur der „nicht gemergt"-Zweig sieht jetzt anders aus
+    /// (zurückgestellt statt sofort dupliziert).
     @Test
     func geschaeftMitAehnlichemNamenAberNaheKoordinatenWirdNichtGemergt() async throws {
         let (container, context) = try machtLeerenContainer()
@@ -172,10 +180,11 @@ struct SyncSnapshotImportServiceTests {
         context.insert(lokal)
         try context.save()
 
+        let remoteID = UUID()
         var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
         snapshot.geschaefte = [
             GeschaeftSnapshot(
-                id: UUID(), name: "Rewe Nord", typIDs: [], adresse: nil,
+                id: remoteID, name: "Rewe Nord", typIDs: [], adresse: nil,
                 breitengrad: 52.5201, laengengrad: 13.4051, erkennungsradius: nil,
                 kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
                 ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
@@ -185,9 +194,15 @@ struct SyncSnapshotImportServiceTests {
 
         await SyncSnapshotImportService.importiereSnapshots(context: context)
 
+        // Kein automatisches, stilles Zusammenführen: weiterhin nur das
+        // ursprüngliche lokale "Rewe" — "Rewe Nord" bleibt zurückgestellt.
         let alleGeschaefte = try context.fetch(FetchDescriptor<Geschaeft>())
-        #expect(alleGeschaefte.count == 2)
-        #expect(Set(alleGeschaefte.map(\.name)) == ["Rewe", "Rewe Nord"])
+        #expect(alleGeschaefte.count == 1)
+        #expect(alleGeschaefte.first?.name == "Rewe")
+        let kandidaten = try context.fetch(FetchDescriptor<SyncAbgleichKandidat>())
+        #expect(kandidaten.count == 1)
+        #expect(kandidaten.first?.fremdeID == remoteID)
+        #expect(kandidaten.first?.fremderName == "Rewe Nord")
     }
 
     /// GitHub #86, Teil 2: Ein Kandidat, der genau die oben beschriebene Lücke
@@ -253,6 +268,13 @@ struct SyncSnapshotImportServiceTests {
         context.insert(typ)
         let lokal = Geschaeft(name: "Rewe", typen: [typ])
         lokal.eigeneAnzahlEinkaufsvorgaenge = 2
+        // Koordinaten auf beiden Seiten setzen (GitHub #86: automatischer
+        // Merge verlangt seither exakten Namen UND Distanz-Treffer, kein
+        // reiner Namensvergleich mehr) — ohne sie würde nie gematcht, und
+        // dieser Test würde statt des Zähler-Merges den (separat abgedeckten)
+        // Neuanlage-Fall prüfen.
+        lokal.breitengrad = 52.5200
+        lokal.laengengrad = 13.4050
         context.insert(lokal)
         try context.save()
 
@@ -261,7 +283,7 @@ struct SyncSnapshotImportServiceTests {
             var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
             snapshot.geschaefte = [
                 GeschaeftSnapshot(
-                    id: remoteID, name: "Rewe", typIDs: [], adresse: nil, breitengrad: nil, laengengrad: nil,
+                    id: remoteID, name: "Rewe", typIDs: [], adresse: nil, breitengrad: 52.5201, laengengrad: 13.4051,
                     erkennungsradius: nil, kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
                     ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: wert, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
                 ),
@@ -309,12 +331,18 @@ struct SyncSnapshotImportServiceTests {
         contextA.insert(typA)
         let geschaeftA = Geschaeft(name: "Rewe", typen: [typA])
         geschaeftA.eigeneAnzahlEinkaufsvorgaenge = 1 // Ein echter Einkauf auf Gerät A, sonst nie wieder.
+        // Koordinaten auf beiden Seiten setzen (GitHub #86, siehe Kommentar
+        // im vorherigen Test) — sonst matcht der automatische Merge nie.
+        geschaeftA.breitengrad = 52.5200
+        geschaeftA.laengengrad = 13.4050
         contextA.insert(geschaeftA)
         try contextA.save()
 
         let typB = GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")
         contextB.insert(typB)
         let geschaeftB = Geschaeft(name: "Rewe", typen: [typB]) // Per Name gematcht, kein echter Einkauf auf B.
+        geschaeftB.breitengrad = 52.5201
+        geschaeftB.laengengrad = 13.4051
         contextB.insert(geschaeftB)
         try contextB.save()
 
@@ -1107,6 +1135,10 @@ struct SyncSnapshotImportServiceTests {
         let typ = GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")
         context.insert(typ)
         let geschaeft = Geschaeft(name: "Rewe", typen: [typ])
+        // Koordinaten auf beiden Seiten setzen (GitHub #86, siehe Kommentar
+        // im ersten Zähler-Test) — sonst matcht der automatische Merge nie.
+        geschaeft.breitengrad = 52.5200
+        geschaeft.laengengrad = 13.4050
         context.insert(geschaeft)
         let liste = Einkaufsliste(name: "Einkaufsliste")
         context.insert(liste)
@@ -1116,7 +1148,7 @@ struct SyncSnapshotImportServiceTests {
         var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
         snapshot.geschaefte = [
             GeschaeftSnapshot(
-                id: remoteGeschaeftID, name: "Rewe", typIDs: [], adresse: nil, breitengrad: nil, laengengrad: nil,
+                id: remoteGeschaeftID, name: "Rewe", typIDs: [], adresse: nil, breitengrad: 52.5201, laengengrad: 13.4051,
                 erkennungsradius: nil, kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
                 ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 1, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
             ),
@@ -1227,7 +1259,7 @@ struct SyncSnapshotImportServiceTests {
     /// NICHT aus dem Snapshot übernehmen — sonst würde ein später auf diesem
     /// Gerät abgeschlossener, mit dem fremden Vorgang zusammengeführter
     /// Einkauf (``mergeEinkaufsvorgaenge``) die Laufreihenfolge des anderen
-    /// Geräts in die eigene ``WarengruppenDistanzService``-Analyse mischen
+    /// Geräts in die eigene ``AbteilungsDistanzService``-Analyse mischen
     /// (siehe Typ-Doku ``mergeKaufEintraege``).
     @Test
     func gemergterKaufEintragBekommtKeinenBesuchsindexAusDemSnapshot() async throws {
@@ -1354,7 +1386,7 @@ struct SyncSnapshotImportServiceTests {
     /// dem der gewichtete Mittelwert auf dasselbe Ergebnis wie die frühere
     /// naive 50/50-Mittelung fällt.
     @Test
-    func warengruppenDistanzWirdGewichtetGemitteltBeiGleicherBeobachtungsanzahl() async throws {
+    func abteilungsDistanzWirdGewichtetGemitteltBeiGleicherBeobachtungsanzahl() async throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
         let syncOrdner = macheTempSyncOrdner()
@@ -1382,7 +1414,7 @@ struct SyncSnapshotImportServiceTests {
     /// Peers (1 Beobachtung) nicht mehr zur Hälfte verschoben werden, sondern
     /// nur proportional zu dessen Gewicht.
     @Test
-    func warengruppenDistanzWirdNachBeobachtungsanzahlGewichtetStattNaiv50zu50Gemittelt() async throws {
+    func abteilungsDistanzWirdNachBeobachtungsanzahlGewichtetStattNaiv50zu50Gemittelt() async throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
         let syncOrdner = macheTempSyncOrdner()
@@ -1413,7 +1445,7 @@ struct SyncSnapshotImportServiceTests {
     /// erneut Richtung Peer-Wert verschieben (sonst würde derselbe Beitrag
     /// bei jedem Zyklus erneut mitgezählt, siehe ``WarengruppenDistanzPeerZaehlerStand``).
     @Test
-    func warengruppenDistanzMergeIstBeiUnveraendertemPeerStandIdempotent() async throws {
+    func abteilungsDistanzMergeIstBeiUnveraendertemPeerStandIdempotent() async throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
         let syncOrdner = macheTempSyncOrdner()
@@ -1616,5 +1648,221 @@ struct SyncSnapshotImportServiceTests {
         #expect(!FileManager.default.fileExists(atPath: SyncSnapshotExportService.preiseURL(fuerPeer: "altes-geraet", in: syncOrdner).path))
         #expect(!FileManager.default.fileExists(atPath: SyncSnapshotExportService.kaeufeOrdner(fuerPeer: "altes-geraet", in: syncOrdner).path))
         #expect(FileManager.default.fileExists(atPath: eventDatei.path))
+    }
+
+    // MARK: - Ambiguitäts-Rückstellung (SyncAbgleichKandidat)
+
+    /// Ein `Geschaeft` ohne Koordinaten auf beiden Seiten matcht nie nach der
+    /// strengen Sync-Merge-Regel (GitHub #86) — vor dieser Änderung entstand
+    /// dadurch bei jedem Sync-Zyklus eine neue Dublette. Jetzt: einmalig als
+    /// ``SyncAbgleichKandidat`` zurückgestellt, danach idempotent (kein
+    /// zweiter Kandidat, keine Dublette) über mehrere Zyklen ohne
+    /// Nutzerreaktion.
+    @Test
+    func geschaeftMehrdeutigerKandidatWirdZurueckgestelltUndIstIdempotent() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let typ = GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")
+        context.insert(typ)
+        let lokal = Geschaeft(name: "Rewe", typen: [typ])
+        context.insert(lokal)
+        try context.save()
+
+        let remoteID = UUID()
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.geschaefte = [
+            GeschaeftSnapshot(
+                id: remoteID, name: "Rewe", typIDs: [], adresse: nil, breitengrad: nil, laengengrad: nil,
+                erkennungsradius: nil, kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
+                ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 3, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
+            ),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+        #expect(try context.fetch(FetchDescriptor<Geschaeft>()).count == 1)
+        var kandidaten = try context.fetch(FetchDescriptor<SyncAbgleichKandidat>())
+        #expect(kandidaten.count == 1)
+        #expect(kandidaten.first?.entitaetsArt == SyncEntitaetsArt.geschaeft)
+        #expect(kandidaten.first?.fremdeID == remoteID)
+        #expect(kandidaten.first?.lokalerName == "Rewe")
+
+        // Zweiter Zyklus ohne Nutzerreaktion: weiterhin genau ein Kandidat,
+        // keine Dublette.
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+        #expect(try context.fetch(FetchDescriptor<Geschaeft>()).count == 1)
+        kandidaten = try context.fetch(FetchDescriptor<SyncAbgleichKandidat>())
+        #expect(kandidaten.count == 1)
+    }
+
+    /// „Gleich"-Auflösung: Alias wird registriert, Name übernommen, Kandidat
+    /// entfernt — ein anschließender Sync-Zyklus merged den Peer-Beitrag
+    /// dann ganz normal über den Alias-Fast-Path.
+    @Test
+    func geschaeftMehrdeutigerKandidatWirdAlsGleichAufgeloest() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let typ = GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")
+        context.insert(typ)
+        let lokal = Geschaeft(name: "Rewe", typen: [typ])
+        context.insert(lokal)
+        try context.save()
+
+        let remoteID = UUID()
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.geschaefte = [
+            GeschaeftSnapshot(
+                id: remoteID, name: "REWE Nord", typIDs: [], adresse: nil, breitengrad: nil, laengengrad: nil,
+                erkennungsradius: nil, kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
+                ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 4, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
+            ),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        let kandidat = try #require(try context.fetch(FetchDescriptor<SyncAbgleichKandidat>()).first)
+        SyncSnapshotImportService.abgleichKandidatBestaetigen(kandidat, gewaehlterName: "REWE Nord", context: context)
+
+        #expect(try context.fetch(FetchDescriptor<SyncAbgleichKandidat>()).isEmpty)
+        #expect(try context.fetch(FetchDescriptor<Geschaeft>()).count == 1)
+        #expect(lokal.name == "REWE Nord")
+
+        // Erneuter Zyklus: Alias löst den Remote-Eintrag jetzt direkt auf
+        // dasselbe lokale Geschäft auf, kein neuer Kandidat, Peer-Beitrag
+        // fließt additiv in den Zähler ein.
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+        #expect(try context.fetch(FetchDescriptor<Geschaeft>()).count == 1)
+        #expect(try context.fetch(FetchDescriptor<SyncAbgleichKandidat>()).isEmpty)
+        #expect(lokal.anzahlEinkaufsvorgaenge == 4)
+    }
+
+    /// „Unterschiedlich"-Auflösung: das zurückgehaltene Remote-Objekt wird
+    /// jetzt aktiv angelegt (`id = fremdeID`) — ein Folgezyklus erkennt es
+    /// danach direkt über den ID-Fast-Path, ohne erneut als mehrdeutig
+    /// aufzufallen.
+    @Test
+    func geschaeftMehrdeutigerKandidatWirdAlsUnterschiedlichAufgeloest() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let typ = GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")
+        context.insert(typ)
+        let lokal = Geschaeft(name: "Rewe", typen: [typ])
+        context.insert(lokal)
+        try context.save()
+
+        let remoteID = UUID()
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.geschaefte = [
+            GeschaeftSnapshot(
+                id: remoteID, name: "Rewe", typIDs: [], adresse: nil, breitengrad: nil, laengengrad: nil,
+                erkennungsradius: nil, kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
+                ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
+            ),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        let kandidat = try #require(try context.fetch(FetchDescriptor<SyncAbgleichKandidat>()).first)
+        SyncSnapshotImportService.abgleichKandidatAlsUnterschiedlichBestaetigen(kandidat, context: context)
+
+        #expect(try context.fetch(FetchDescriptor<SyncAbgleichKandidat>()).isEmpty)
+        let alle = try context.fetch(FetchDescriptor<Geschaeft>())
+        #expect(alle.count == 2)
+        #expect(alle.contains { $0.id == remoteID })
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+        #expect(try context.fetch(FetchDescriptor<Geschaeft>()).count == 2)
+        #expect(try context.fetch(FetchDescriptor<SyncAbgleichKandidat>()).isEmpty)
+    }
+
+    /// Neu ab dieser Änderung: `Artikel` hat keine zweite Vergleichsdimension
+    /// wie Koordinaten — Ambiguität ist deshalb ein reiner
+    /// Teilstring-Treffer ohne exakte Übereinstimmung. Deckt Rückstellung UND
+    /// beide Auflösungswege ab (leichter gehalten als die Geschaeft-Tests
+    /// oben, da dieselbe generische Auflösungslogik nur einen weiteren
+    /// `switch`-Zweig durchläuft).
+    @Test
+    func artikelMehrdeutigerKandidatWirdZurueckgestelltUndAufgeloest() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let milch = Artikel(name: "Milch", symbolName: "drop.fill", farbeHex: "#34C759")
+        context.insert(milch)
+        try context.save()
+
+        let remoteID = UUID()
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.artikel = [
+            ArtikelSnapshot(
+                id: remoteID, name: "H-Milch", symbolName: "drop.fill", farbeHex: "#34C759", kategorieIDs: [],
+                notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+            ),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        #expect(try context.fetch(FetchDescriptor<Artikel>()).count == 1)
+        let kandidat = try #require(
+            try context.fetch(FetchDescriptor<SyncAbgleichKandidat>()).first { $0.entitaetsArt == SyncEntitaetsArt.artikel }
+        )
+        #expect(kandidat.fremdeID == remoteID)
+        #expect(kandidat.fremderName == "H-Milch")
+
+        SyncSnapshotImportService.abgleichKandidatAlsUnterschiedlichBestaetigen(kandidat, context: context)
+        let alleArtikel = try context.fetch(FetchDescriptor<Artikel>())
+        #expect(alleArtikel.count == 2)
+        #expect(alleArtikel.contains { $0.id == remoteID && $0.name == "H-Milch" })
+        #expect(try context.fetch(FetchDescriptor<SyncAbgleichKandidat>()).isEmpty)
+    }
+
+    /// Wie oben, für `Einkaufsliste` — ebenfalls reiner Teilstring-Vergleich,
+    /// diesmal über die „Gleich"-Auflösung geprüft (Alias-Registrierung).
+    @Test
+    func einkaufslisteMehrdeutigerKandidatWirdZurueckgestelltUndAufgeloest() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let urlaub = Einkaufsliste(name: "Urlaub")
+        context.insert(urlaub)
+        try context.save()
+
+        let remoteID = UUID()
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.einkaufslisten = [
+            EinkaufslisteSnapshot(id: remoteID, name: "Urlaub 2024", erstelltAm: Date()),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        #expect(try context.fetch(FetchDescriptor<Einkaufsliste>()).count == 1)
+        let kandidat = try #require(
+            try context.fetch(FetchDescriptor<SyncAbgleichKandidat>()).first { $0.entitaetsArt == SyncEntitaetsArt.einkaufsliste }
+        )
+
+        SyncSnapshotImportService.abgleichKandidatBestaetigen(kandidat, gewaehlterName: urlaub.name, context: context)
+        #expect(try context.fetch(FetchDescriptor<SyncAbgleichKandidat>()).isEmpty)
+        #expect(try context.fetch(FetchDescriptor<Einkaufsliste>()).count == 1)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+        #expect(try context.fetch(FetchDescriptor<Einkaufsliste>()).count == 1)
+        #expect(try context.fetch(FetchDescriptor<SyncAbgleichKandidat>()).isEmpty)
     }
 }

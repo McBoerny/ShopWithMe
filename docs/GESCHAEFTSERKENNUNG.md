@@ -136,6 +136,25 @@ Löschfunktion bereinigbar (Tombstone propagiert die Löschung an alle Geräte),
 statt wie vorher unsichtbar und potenziell falsch automatisch vereint zu
 werden.
 
+### Aktive Rückfrage jetzt auch im laufenden Hintergrund-Sync
+
+**Status: Umgesetzt.**
+
+Ursprünglich galt die aktive Rückfrage unten („Aktive Rückfrage beim
+Sync-Ordner-Beitritt") nur für den einmaligen Beitritts-Moment — im
+laufenden Betrieb entstand bei einem koordinatenlosen `Geschaeft` (z.B. rein
+manuell angelegt, nie „Standort ergänzen" bestätigt) weiterhin eine stille
+Dublette, weil die strenge Regel oben ohne Koordinaten auf einer Seite nie
+matcht. `SyncSnapshotImportService.mergeGeschaefte` prüft deshalb vor dem
+Neuanlage-Zweig zusätzlich `istMehrdeutigerBeitrittsKandidat` (dieselbe
+Funktion wie beim Beitritt) und stellt einen Treffer als ``SyncAbgleichKandidat``
+zurück, statt sofort ein zweites Geschäft anzulegen — sichtbar über ein
+Badge in `SyncOrdnerSettingsView`, Auflösung über dieselbe generalisierte
+`AbgleichKandidatenSheet`-Ansicht wie beim Beitritt. Dasselbe Muster (dort
+mit einem reinen Teilstring- statt Koordinaten-Kriterium, da keine zweite
+Vergleichsdimension existiert) gilt seither auch für `Artikel` und
+`Einkaufsliste` — Details siehe `docs/DATENSYNCHRONISATION.md` Abschnitt 4.2.
+
 ## Aktive Rückfrage beim Sync-Ordner-Beitritt (GitHub #86, Teil 2)
 
 **Status: Umgesetzt.**

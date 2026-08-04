@@ -18,16 +18,16 @@ Die App startet immer direkt mit der Einkaufsliste.
   mittleren Tab erreichbar (siehe „Belegscan & Preisschild-Scan“ unten). Ergänzt,
   ersetzt aber nicht die weiteren Belegscan-Wege aus dem Einkaufen-Tab bzw. aus der
   Geschäfts-Detailansicht.
-- **Einstellungen** — Hilfe, Artikel- und Geschäfte-Verwaltung (inkl. Warengruppen
+- **Einstellungen** — Hilfe, Artikel- und Geschäfte-Verwaltung (inkl. Abteilungen
   pro Geschäft), Geschäftstypen-Verwaltung, Datenbank-Speicherort,
   Datensynchronisation.
 
 ## Artikel
 
-Jeder Artikel hat einen Namen, eine oder mehrere Warengruppen (z.B. Obst,
+Jeder Artikel hat einen Namen, eine oder mehrere Abteilungen (z.B. Obst,
 Milchprodukte — Mehrfachauswahl beim Bearbeiten), eine Einheit (Stück, kg, g, l,
 ml) und eine Standardmenge — die zugleich die Schrittweite ist, um die die Menge
-beim Einkaufen erhöht/verringert wird. Hat ein Artikel mehrere Warengruppen (z.B.
+beim Einkaufen erhöht/verringert wird. Hat ein Artikel mehrere Abteilungen (z.B.
 Ohropax unter „Drogerie" und „Reisebedarf"), erscheint er beim Einkaufen
 gleichzeitig in allen zugehörigen Abschnitten — abgehakt wird er dabei überall
 auf einmal. Aus welchem Abschnitt du ihn tatsächlich abhakst, merkt sich die App
@@ -36,31 +36,31 @@ Aldi aber unter „Asia" steht. Neue Artikel legst du meist direkt beim Einkaufe
 automatisch auf der Liste); in der Artikel-Verwaltung (Einstellungen) per „+“
 angelegte Artikel landen nicht automatisch auf der Liste. Beim Anlegen schlägt
 Apple Intelligence (sofern auf deinem Gerät verfügbar) automatisch eine passende
-Warengruppe vor, sobald du einen Namen eingibst — eine bereits von dir gewählte
-Warengruppe wird dabei nie überschrieben. Ist Apple
+Abteilung vor, sobald du einen Namen eingibst — eine bereits von dir gewählte
+Abteilung wird dabei nie überschrieben. Ist Apple
 Intelligence nicht verfügbar, bleibt die manuelle Auswahl jederzeit möglich.
 
 ## Geschäfte
 
 Ein Geschäft hat einen oder mehrere Typen (Lebensmittel, Drogerie, Baumarkt,
 Apotheke, …, z.B. Drogerie + Lebensmittel bei einem dm — Mehrfachauswahl beim
-Bearbeiten der Stammdaten) und optional eine Adresse. Warengruppen sind der primäre Weg, Artikel für ein Geschäft
+Bearbeiten der Stammdaten) und optional eine Adresse. Abteilungen sind der primäre Weg, Artikel für ein Geschäft
 verfügbar zu machen — direkt im Geschäft zuordenbar. Zusätzlich
 macht jeder Geschäftstyp automatisch seine in den Einstellungen hinterlegten
-Standard-Warengruppen verfügbar (siehe „Geschäftstypen“ unten) — ganz ohne sie dem
+Standard-Abteilungen verfügbar (siehe „Geschäftstypen“ unten) — ganz ohne sie dem
 einzelnen Geschäft manuell zuzuordnen; wählst du später dort noch weitere
-Warengruppen manuell aus, betrifft das nur dieses eine Geschäft, nicht generell den
-Geschäftstyp. Die Reihenfolge, in der die Warengruppen beim Einkaufen erscheinen,
+Abteilungen manuell aus, betrifft das nur dieses eine Geschäft, nicht generell den
+Geschäftstyp. Die Reihenfolge, in der die Abteilungen beim Einkaufen erscheinen,
 legst du nicht manuell fest — die App lernt sie automatisch aus deinem
 Abhakverhalten (siehe „Einkaufen“ unten).
 
-In der Detailansicht eines Geschäfts siehst du alle verfügbaren Warengruppen
+In der Detailansicht eines Geschäfts siehst du alle verfügbaren Abteilungen
 gemeinsam, alphabetisch — automatisch über den Geschäftstyp verfügbare sind mit
 „Automatisch über Geschäftstyp“ gekennzeichnet. Per Wischgeste lässt sich eine
-solche automatische Warengruppe für dieses eine Geschäft ausschließen, ohne sie
+solche automatische Abteilung für dieses eine Geschäft ausschließen, ohne sie
 generell vom Geschäftstyp zu entfernen — sie taucht danach wieder unter
-„Warengruppe hinzufügen“ auf, falls du sie doch wieder brauchst. Manuell
-zugeordnete Warengruppen entfernst du wie gewohnt per Wischgeste.
+„Abteilung hinzufügen“ auf, falls du sie doch wieder brauchst. Manuell
+zugeordnete Abteilungen entfernst du wie gewohnt per Wischgeste.
 
 **Standort beim Anlegen/Bearbeiten:** Sobald ein Geschäft Koordinaten hat, zeigt
 das Bearbeiten-Formular eine kleine Karte mit einem Pin — durch Antippen der
@@ -105,7 +105,7 @@ nach links dauerhaftem Ignorieren, nach oben dem einmaligen Verwerfen.
 ## Einkaufen
 
 Die Einkaufsliste ist global, nicht an ein Geschäft gebunden. Wählst du zusätzlich
-ein Geschäft, wird sie nach Warengruppe gruppiert. Ein Einkauf startet
+ein Geschäft, wird sie nach Abteilung gruppiert. Ein Einkauf startet
 automatisch beim Öffnen des Tabs, kein manueller Start nötig.
 
 Der Bildschirmtitel zeigt neben dem Listennamen deinen Fortschritt für diesen
@@ -125,7 +125,7 @@ Kategorien, auch wenn die App sich schon auf eine festgelegt hat — praktisch,
 um eine falsch gelernte Zuordnung zu korrigieren.
 
 Die Liste sortiert sich mit der Zeit selbst: ShopWithMe lernt aus der
-Reihenfolge, in der du Artikel abhakst, welche Warengruppen in diesem Geschäft
+Reihenfolge, in der du Artikel abhakst, welche Abteilungen in diesem Geschäft
 nah beieinanderliegen, und passt die Reihenfolge nach jeder Abhakung automatisch
 an deinen aktuellen Standort in der Liste an — ganz ohne Ladenplan oder
 Standortfreigabe. Ein kleiner Hinweis oben zeigt, ob die Reihenfolge schon
@@ -221,9 +221,9 @@ In der Einkaufslisten-Verwaltung (Einstellungen) importierst du über „MilkFor
 importieren“ eine aus der Shopping-App „MilkForUs“ exportierte Textdatei — entweder
 per Datei-Auswahl, oder direkt über die Teilen-Funktion eines anderen Apps (z.B.
 eine per Chat empfangene Datei per „Teilen“ → „ShopWithMe“). In der Vorschau siehst
-du je MilkForUs-Kategorie, ob eine bestehende Warengruppe automatisch erkannt wurde
+du je MilkForUs-Kategorie, ob eine bestehende Abteilung automatisch erkannt wurde
 (exakter Name oder KI-Vorschlag), oder ob eine neue angelegt würde — per Antippen
-lässt sich das auf eine andere bestehende Warengruppe oder „Sonstiges“ umstellen.
+lässt sich das auf eine andere bestehende Abteilung oder „Sonstiges“ umstellen.
 Bereits vorhandene Artikel werden nur auf die gewählte Liste gesetzt, nie
 dupliziert; einzelne Artikel lassen sich vor dem Übernehmen per Wischgeste aus dem
 Import ausschließen.
@@ -232,7 +232,7 @@ Import ausschließen.
 
 Über einen geteilten Ordner (z.B. iCloud Drive oder Synology Drive) gleichen
 sich mehrere Geräte gegenseitig ab — Einkaufslisten-Änderungen, Abhaken,
-Geschäfte, Artikel, Kaufhistorie und die gelernte Warengruppen-Reihenfolge.
+Geschäfte, Artikel, Kaufhistorie und die gelernte Abteilungs-Reihenfolge.
 Anders als bei „Datenbank & Speicherort“ (siehe unten) bleibt dabei die
 eigentliche Datenbank jedes Geräts unverändert an ihrem Ort — nur Änderungen
 werden ausgetauscht.
@@ -253,6 +253,14 @@ werden ausgetauscht.
   Systemabgleich zusätzlich anzustoßen, keine Fehlfunktion.
 - **Nur im Vordergrund:** Bei gesperrtem Gerät oder geschlossener App pausiert
   der automatische Abgleich — er läuft beim nächsten Öffnen sofort weiter.
+- **„N mögliche Duplikate prüfen“:** Erkennt der laufende Abgleich (nicht nur
+  beim einmaligen Einrichten) ein Geschäft, einen Artikel oder eine
+  Einkaufsliste, die einem bereits vorhandenen Eintrag ähneln, aber nicht
+  eindeutig zugeordnet werden können, wird nichts automatisch zusammengeführt
+  oder verworfen — stattdessen erscheint dieses Badge in den
+  Sync-Einstellungen. Antippen zeigt dieselbe „Gleich“/„Unterschiedlich“-Wahl
+  wie beim Einrichten; unentschiedene Einträge bleiben einfach in der Liste
+  stehen, bis du reagierst.
 - **„Synchronisierung deaktivieren“** trennt die Verbindung zum Ordner wieder,
   ohne bereits ausgetauschte Daten zu löschen.
 - **„Sync-Abgleich nötig“:** War ein Gerät länger als 30 Tage nicht in
@@ -270,16 +278,16 @@ werden ausgetauscht.
 
 - **Hilfe & Anleitungen** — kuratierte Kurzhilfe zu den komplexeren Funktionen
   (Ergänzung zu dieser Anleitung, siehe oben).
-- **Artikel / Geschäfte / Warengruppen / Einkaufslisten** — die vollständige
+- **Artikel / Geschäfte / Abteilungen / Einkaufslisten** — die vollständige
   Verwaltung (Anlegen/Bearbeiten/Löschen); die App startet immer direkt mit der
   Einkaufsliste, Artikel und Geschäfte sind daher nur noch hier erreichbar.
 - **Geschäftstypen** — legt je Geschäftstyp (Lebensmittel, Drogerie, …) fest,
-  welche Warengruppen als Standard gelten und dadurch automatisch in
+  welche Abteilungen als Standard gelten und dadurch automatisch in
   jedem Geschäft dieses Typs verfügbar sind (siehe „Geschäfte“ oben). Name,
   Symbol und Farbe eines Geschäftstyps lassen sich in derselben Ansicht ändern.
   Ist Apple Intelligence verfügbar, schlägt ein „KI-Vorschlag“-Knopf passende
-  Warengruppen vor, bevorzugt aus bereits vorhandenen Warengruppen — gerade
-  vorgeschlagene Warengruppen sind für die Dauer der Sitzung zusätzlich mit
+  Abteilungen vor, bevorzugt aus bereits vorhandenen Abteilungen — gerade
+  vorgeschlagene Abteilungen sind für die Dauer der Sitzung zusätzlich mit
   „KI-Vorschlag“ markiert. Reicht die vorinstallierte Auswahl an Geschäftstypen
   nicht aus, lässt sich hier oder direkt beim Anlegen eines Geschäfts (Abschnitt
   „Typ“) ein neuer, eigener Geschäftstyp (inkl. Symbol/Farbe) anlegen.

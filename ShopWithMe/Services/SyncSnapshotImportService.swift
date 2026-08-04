@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import SwiftUI
 
 /// Bereich-B/C/D-Import (`docs/DATENSYNCHRONISATION_VERLAUF.md`
 /// Abschnitt 5.3, Phase 3): liest Peer-Pakete (seit GitHub #82 mehrere
@@ -247,6 +248,80 @@ enum SyncSnapshotImportService {
         )
     }
 
+    // MARK: - Laufender Sync: zurückgestellte Kandidaten (``SyncAbgleichKandidat``)
+
+    /// Löst einen beim laufenden Hintergrund-Sync zurückgestellten
+    /// Merge-Kandidaten (siehe Ambiguitäts-Rückstellung in
+    /// ``mergeGeschaefte``/``mergeArtikel``/``mergeEinkaufslisten``) als
+    /// „gleiche Entität" auf — anders als ``geschaeftsKandidatBestaetigen``
+    /// (einmaliger Beitritts-Moment, transientes
+    /// ``GeschaeftsAbgleichKandidat``) arbeitet das hier auf dem persistierten
+    /// ``SyncAbgleichKandidat`` und deckt alle drei Entitätstypen ab.
+    /// Übernimmt den gewählten Namen aufs lokale Objekt, registriert einen
+    /// ``SyncEntitaetsAlias`` (damit künftige Bereich-A-``SyncEvent``s
+    /// desselben Peers auflösbar bleiben) und entfernt den
+    /// Warteschlangen-Eintrag. Wirkungslos auf das lokale Objekt, falls es
+    /// zwischenzeitlich gelöscht wurde — der Warteschlangen-Eintrag wird
+    /// trotzdem entfernt, sonst bliebe er dauerhaft hängen.
+    @MainActor
+    static func abgleichKandidatBestaetigen(_ kandidat: SyncAbgleichKandidat, gewaehlterName: String, context: ModelContext) {
+        setzeName(gewaehlterName, entitaetsArt: kandidat.entitaetsArt, lokaleID: kandidat.lokaleID, context: context)
+        SyncEntitaetsAliasService.registriere(
+            entitaetsArt: kandidat.entitaetsArt, fremdeID: kandidat.fremdeID, lokaleID: kandidat.lokaleID, context: context
+        )
+        context.delete(kandidat)
+    }
+
+    /// Löst einen zurückgestellten Kandidaten als „unterschiedliche
+    /// Entitäten" auf: legt das bisher zurückgehaltene Remote-Objekt jetzt
+    /// regulär neu an — mit `id = fremdeID`, damit der nächste reguläre
+    /// Merge-Durchlauf es sofort über den ID-Fast-Path erkennt und übrige
+    /// Felder additiv nachträgt, ohne die Ambiguitäts-Prüfung erneut zu
+    /// bemühen. Artikel-Symbol/-Farbe bekommen den Standard-Palettenwert
+    /// (analog `MilkForUsImportService`/`ArtikelListView` für neu angelegte
+    /// Artikel ohne explizite Auswahl) — der Nutzer kann sie danach wie
+    /// gewohnt in der Artikel-Verwaltung anpassen.
+    @MainActor
+    static func abgleichKandidatAlsUnterschiedlichBestaetigen(_ kandidat: SyncAbgleichKandidat, context: ModelContext) {
+        switch kandidat.entitaetsArt {
+        case SyncEntitaetsArt.geschaeft:
+            let neu = Geschaeft(name: kandidat.fremderName, typen: [], adresse: nil)
+            neu.id = kandidat.fremdeID
+            context.insert(neu)
+        case SyncEntitaetsArt.artikel:
+            let neu = Artikel(name: kandidat.fremderName, symbolName: SymbolPalette.alle[0], farbeHex: Color.artikelPalette[0])
+            neu.id = kandidat.fremdeID
+            context.insert(neu)
+        case SyncEntitaetsArt.einkaufsliste:
+            let neu = Einkaufsliste(name: kandidat.fremderName)
+            neu.id = kandidat.fremdeID
+            context.insert(neu)
+        default:
+            break
+        }
+        context.delete(kandidat)
+    }
+
+    @MainActor
+    private static func setzeName(_ name: String, entitaetsArt: String, lokaleID: UUID, context: ModelContext) {
+        switch entitaetsArt {
+        case SyncEntitaetsArt.geschaeft:
+            var deskriptor = FetchDescriptor<Geschaeft>(predicate: #Predicate { $0.id == lokaleID })
+            deskriptor.fetchLimit = 1
+            (try? context.fetch(deskriptor))?.first?.name = name
+        case SyncEntitaetsArt.artikel:
+            var deskriptor = FetchDescriptor<Artikel>(predicate: #Predicate { $0.id == lokaleID })
+            deskriptor.fetchLimit = 1
+            (try? context.fetch(deskriptor))?.first?.name = name
+        case SyncEntitaetsArt.einkaufsliste:
+            var deskriptor = FetchDescriptor<Einkaufsliste>(predicate: #Predicate { $0.id == lokaleID })
+            deskriptor.fetchLimit = 1
+            (try? context.fetch(deskriptor))?.first?.name = name
+        default:
+            break
+        }
+    }
+
     /// Diagnose für Fälle wie GitHub #52-Nachfolgefund (unsichtbare
     /// Einkaufslisten-Dublette): protokolliert nach jedem Merge-Durchlauf den
     /// kompletten lokalen Einkaufslisten-Bestand samt Eintrags-Anzahl, damit
@@ -342,8 +417,8 @@ enum SyncSnapshotImportService {
             stamm.geschaefte, typZuordnung: typZuordnung, kategorieZuordnung: kategorieZuordnung,
             peerGeraeteID: peerGeraeteID, aliase: aliase, context: context
         )
-        let artikelZuordnung = mergeArtikel(stamm.artikel, kategorieZuordnung: kategorieZuordnung, aliase: aliase, context: context)
-        let listeZuordnung = mergeEinkaufslisten(stamm.einkaufslisten, aliase: aliase, context: context)
+        let artikelZuordnung = mergeArtikel(stamm.artikel, kategorieZuordnung: kategorieZuordnung, peerGeraeteID: peerGeraeteID, aliase: aliase, context: context)
+        let listeZuordnung = mergeEinkaufslisten(stamm.einkaufslisten, peerGeraeteID: peerGeraeteID, aliase: aliase, context: context)
         mergeEinkaufslistenEintraege(
             listen.einkaufslistenEintraege, listeZuordnung: listeZuordnung, artikelZuordnung: artikelZuordnung, context: context
         )
@@ -388,8 +463,8 @@ enum SyncSnapshotImportService {
             snapshot.geschaefte, typZuordnung: typZuordnung, kategorieZuordnung: kategorieZuordnung,
             peerGeraeteID: peerGeraeteID, aliase: aliase, context: context
         )
-        let artikelZuordnung = mergeArtikel(snapshot.artikel, kategorieZuordnung: kategorieZuordnung, aliase: aliase, context: context)
-        let listeZuordnung = mergeEinkaufslisten(snapshot.einkaufslisten, aliase: aliase, context: context)
+        let artikelZuordnung = mergeArtikel(snapshot.artikel, kategorieZuordnung: kategorieZuordnung, peerGeraeteID: peerGeraeteID, aliase: aliase, context: context)
+        let listeZuordnung = mergeEinkaufslisten(snapshot.einkaufslisten, peerGeraeteID: peerGeraeteID, aliase: aliase, context: context)
         mergeEinkaufslistenEintraege(
             snapshot.einkaufslistenEintraege, listeZuordnung: listeZuordnung, artikelZuordnung: artikelZuordnung, context: context
         )
@@ -600,6 +675,32 @@ enum SyncSnapshotImportService {
                 lokal = vorhandenes
             } else {
                 guard !geloeschteIDs.contains(aufgeloesteID) else { continue }
+                // Aktive Rückstellung statt stiller Dublette: matcht der
+                // Eintrag nach der großzügigeren interaktiven Regel (Name
+                // ODER Koordinaten, z.B. weil eine Seite gar keine
+                // Koordinaten hat), aber nicht nach der strengen Regel oben,
+                // wird er dem Nutzer zur Entscheidung vorgelegt
+                // (`SyncOrdnerSettingsView`) statt sofort ein zweites,
+                // unabhängiges Geschäft anzulegen. Existiert für diesen
+                // Remote-Eintrag bereits ein Kandidat, bleibt er einfach
+                // zurückgestellt, bis der Nutzer entscheidet.
+                if let mehrdeutig = alleLokalen.first(where: {
+                    GeschaeftErkennungService.istMehrdeutigerBeitrittsKandidat(
+                        nameA: $0.name, koordinatenA: koordinatenPaar($0), radiusA: $0.erkennungsradius,
+                        nameB: eintrag.name, koordinatenB: remoteKoordinaten,
+                        radiusB: eintrag.erkennungsradius ?? GeschaeftErkennungService.koordinatenTreffertoleranz
+                    )
+                }) {
+                    if !SyncAbgleichKandidat.existiertBereits(
+                        entitaetsArt: SyncEntitaetsArt.geschaeft, peerGeraeteID: peerGeraeteID, fremdeID: eintrag.id, context: context
+                    ) {
+                        context.insert(SyncAbgleichKandidat(
+                            entitaetsArt: SyncEntitaetsArt.geschaeft, peerGeraeteID: peerGeraeteID, fremdeID: eintrag.id,
+                            fremderName: eintrag.name, lokaleID: mehrdeutig.id, lokalerName: mehrdeutig.name
+                        ))
+                    }
+                    continue
+                }
                 lokal = Geschaeft(name: eintrag.name, typen: [], adresse: nil)
                 lokal.id = eintrag.id
                 context.insert(lokal)
@@ -650,7 +751,8 @@ enum SyncSnapshotImportService {
 
     @MainActor
     private static func mergeArtikel(
-        _ remote: [ArtikelSnapshot], kategorieZuordnung: [UUID: ArtikelKategorie], aliase: [String: [UUID: UUID]], context: ModelContext
+        _ remote: [ArtikelSnapshot], kategorieZuordnung: [UUID: ArtikelKategorie], peerGeraeteID: String,
+        aliase: [String: [UUID: UUID]], context: ModelContext
     ) -> [UUID: Artikel] {
         var zuordnung: [UUID: Artikel] = [:]
         let alleLokalen = (try? context.fetch(FetchDescriptor<Artikel>())) ?? []
@@ -674,6 +776,26 @@ enum SyncSnapshotImportService {
                 continue
             }
             guard !geloeschteIDs.contains(aufgeloesteID) else { continue }
+            // Aktive Rückstellung statt stiller Dublette bei bloßem
+            // Teilstring-Treffer ohne exakte Übereinstimmung (analog
+            // ``mergeGeschaefte``, hier ohne zweite Dimension wie Koordinaten
+            // — deshalb bewusst nur Teilstring statt echter
+            // Ähnlichkeits-Heuristik) — z.B. „Milch" vom Peer trifft lokal
+            // „H-Milch". Der Nutzer entscheidet aktiv statt zweier stiller,
+            // unabhängiger Artikel.
+            if let mehrdeutig = alleLokalen.first(where: {
+                $0.name.localizedCaseInsensitiveContains(eintrag.name) || eintrag.name.localizedCaseInsensitiveContains($0.name)
+            }) {
+                if !SyncAbgleichKandidat.existiertBereits(
+                    entitaetsArt: SyncEntitaetsArt.artikel, peerGeraeteID: peerGeraeteID, fremdeID: eintrag.id, context: context
+                ) {
+                    context.insert(SyncAbgleichKandidat(
+                        entitaetsArt: SyncEntitaetsArt.artikel, peerGeraeteID: peerGeraeteID, fremdeID: eintrag.id,
+                        fremderName: eintrag.name, lokaleID: mehrdeutig.id, lokalerName: mehrdeutig.name
+                    ))
+                }
+                continue
+            }
             let neuer = Artikel(
                 name: eintrag.name, symbolName: eintrag.symbolName, farbeHex: eintrag.farbeHex,
                 kategorien: eintrag.kategorieIDs.compactMap { kategorieZuordnung[$0] },
@@ -709,7 +831,7 @@ enum SyncSnapshotImportService {
     /// Das war kein Rand-, sondern der Standardfall bei jedem Gerätebeitritt.
     @MainActor
     private static func mergeEinkaufslisten(
-        _ remote: [EinkaufslisteSnapshot], aliase: [String: [UUID: UUID]], context: ModelContext
+        _ remote: [EinkaufslisteSnapshot], peerGeraeteID: String, aliase: [String: [UUID: UUID]], context: ModelContext
     ) -> [UUID: Einkaufsliste] {
         var zuordnung: [UUID: Einkaufsliste] = [:]
         let alleLokalen = (try? context.fetch(FetchDescriptor<Einkaufsliste>())) ?? []
@@ -731,6 +853,21 @@ enum SyncSnapshotImportService {
                 continue
             }
             guard !geloeschteIDs.contains(aufgeloesteID) else { continue }
+            // Aktive Rückstellung statt stiller Dublette — analog
+            // ``mergeArtikel``, siehe Begründung dort.
+            if let mehrdeutig = alleLokalen.first(where: {
+                $0.name.localizedCaseInsensitiveContains(eintrag.name) || eintrag.name.localizedCaseInsensitiveContains($0.name)
+            }) {
+                if !SyncAbgleichKandidat.existiertBereits(
+                    entitaetsArt: SyncEntitaetsArt.einkaufsliste, peerGeraeteID: peerGeraeteID, fremdeID: eintrag.id, context: context
+                ) {
+                    context.insert(SyncAbgleichKandidat(
+                        entitaetsArt: SyncEntitaetsArt.einkaufsliste, peerGeraeteID: peerGeraeteID, fremdeID: eintrag.id,
+                        fremderName: eintrag.name, lokaleID: mehrdeutig.id, lokalerName: mehrdeutig.name
+                    ))
+                }
+                continue
+            }
             let neue = Einkaufsliste(name: eintrag.name)
             neue.id = eintrag.id
             neue.erstelltAm = eintrag.erstelltAm
@@ -1038,7 +1175,7 @@ enum SyncSnapshotImportService {
     /// mit der eigenen vermischen und so die ladenspezifische Distanzmatrix
     /// verfälschen. Der Kauf zählt trotzdem korrekt zur Historie/Preisübersicht
     /// — nur die Reihenfolge-Analyse ignoriert ihn (siehe
-    /// ``WarengruppenDistanzService/besuchsreihenfolge(fuer:)``, überspringt
+    /// ``AbteilungsDistanzService/besuchsreihenfolge(fuer:)``, überspringt
     /// `nil`-Indizes bereits bewusst).
     /// Indexierter Existenz-Check statt vollem Fetch + linearem Scan (Analyse-
     /// Fund: `mergeKaufEintraege`/`mergePreispunkte` holten bisher bei jedem

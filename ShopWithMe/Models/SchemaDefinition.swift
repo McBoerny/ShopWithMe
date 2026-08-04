@@ -42,6 +42,7 @@ enum SchemaV1: VersionedSchema {
             SyncPeerZaehlerStand.self,
             SyncPeerInfo.self,
             SyncTombstone.self,
+            SyncAbgleichKandidat.self,
         ]
     }
 }
