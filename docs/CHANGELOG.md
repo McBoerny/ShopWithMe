@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.12 (Build 241) — Vier Code-Review-Funde behoben (Datenintegritäts-Check, Sync-Merge-Performance, Doku)
+
+Aus dem vollständigen Code-Review-Durchgang vom 2026-08-05 (dafür angelegte
+GitHub-Issues #99–#108) — die vier risikoärmsten, in sich geschlossenen Funde
+zuerst umgesetzt; die größeren strukturellen Funde (u.a. #99, #102, #104,
+#105, #107, #108) folgen gestaffelt gemäß der dort festgelegten Priorität.
+
+- **#100:** `DatenintegritaetsService.istBaumelnd` prüfte `KaufEintrag.einkaufsvorgang`
+  faktisch nie auf eine baumelnde Referenz — `gueltigeIDs: nil` lieferte
+  bedingungslos `false`, unabhängig vom tatsächlichen Zustand. Jetzt mit
+  echtem `Set<PersistentIdentifier>` wie die übrigen vier geprüften Felder;
+  `istBaumelnd` braucht dadurch kein optionales `gueltigeIDs` mehr.
+- **#103:** `mergeKaufEintraege`/`mergePreispunkte`/`mergeGeschaeftBesuche`
+  prüften Existenz bisher per eigenem `fetchCount`-Aufruf PRO Remote-Eintrag —
+  jetzt wie `SyncTombstoneService.geloeschteIDs` ein einmalig vorab geladenes
+  `Set<UUID>` je Merge-Durchlauf.
+- **#106:** Neue `Decimal.FormatStyle.euro`-Konstante (`Decimal+EuroFormat.swift`,
+  analog `Decimal+CentRundung.swift`) ersetzt vier einzeln hartcodierte
+  `.currency(code: "EUR")`-Stellen. An Aufrufstellen bewusst voll qualifiziert
+  (`Decimal.FormatStyle.euro`) verwendet, nicht als kurze `.euro`-Dot-Syntax —
+  Letztere löst laut Build-Befund innerhalb einer String-Interpolation sowie
+  bei `Text(_:format:)` nicht zuverlässig auf.
+- **#101:** Klarstellender Kommentar an `SchemaV1.versionIdentifier` — die
+  SwiftData-interne Schema-Version `(1,5,0)` ist unabhängig von der
+  App-Marketing-Version und stammt aus der Zeit vor dem v0.1-Reset.
+
+Alle vier bewusst risikoarm/mechanisch, keine Verhaltensänderung für den
+Anwender, kein `@Model`-Schema betroffen. Build + vollständiger Testlauf
+(317 Tests) grün.
+
 ## v0.12 (Build 240) — Diagnose: fehlende Referenz bei nicht anwendbaren Sync-Events
 
 Live-Test-Nachfolgefund zur vorherigen Geschäfts-Aggregate-Änderung (siehe

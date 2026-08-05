@@ -20,6 +20,13 @@ import SwiftData
 /// die betroffenen Modelltypen pro Version tatsächlich eingefroren/verschachtelt
 /// werden, statt (wie hier vermieden) dieselbe lebende Klasse mehrfach zu referenzieren.
 enum SchemaV1: VersionedSchema {
+    /// Rein SwiftData-interne Versionsnummer dieses Schemas — unabhängig von
+    /// der App-Marketing-Version (`MARKETING_VERSION` in `project.yml`,
+    /// aktuell z.B. v0.12). Der Wert `(1, 5, 0)` stammt aus der Zeit vor dem
+    /// einmaligen Versions-Reset auf v0.1 (siehe `docs/DECISIONS.md`,
+    /// Abschnitt „Versionsschema") und wurde beim Reset bewusst nicht
+    /// mitgeändert, da er nur innerhalb dieser Datei und für SwiftData selbst
+    /// eine Bedeutung hat (GitHub #101).
     static var versionIdentifier: Schema.Version { Schema.Version(1, 5, 0) }
 
     static var models: [any PersistentModel.Type] {

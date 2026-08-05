@@ -91,9 +91,9 @@ private struct ArtikelPreisSpanneZeile: View {
     private var preisspannenText: String {
         guard let minimum = spanne.minimum else { return "Preis unbekannt" }
         guard let maximum = spanne.maximum, maximum != minimum else {
-            return minimum.formatted(.currency(code: "EUR"))
+            return minimum.formatted(Decimal.FormatStyle.euro)
         }
-        return "\(minimum.formatted(.currency(code: "EUR"))) – \(maximum.formatted(.currency(code: "EUR")))"
+        return "\(minimum.formatted(Decimal.FormatStyle.euro)) – \(maximum.formatted(Decimal.FormatStyle.euro))"
     }
 }
 

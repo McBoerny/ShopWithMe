@@ -34,7 +34,10 @@ struct PreisHistorieZeile: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Text(eintrag.preis, format: .currency(code: "EUR"))
+            // `.euro` allein reicht `Text(_:format:)` wegen dessen mehrerer
+            // `FormatStyle`-Overloads (anders als `Decimal.formatted(_:)`)
+            // nicht als Kontext — deshalb hier explizit qualifiziert.
+            Text(eintrag.preis, format: Decimal.FormatStyle.euro)
         }
         .contentShape(Rectangle())
         .swipeActions(edge: .leading) {

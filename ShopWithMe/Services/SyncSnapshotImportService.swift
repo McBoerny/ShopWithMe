@@ -1254,35 +1254,28 @@ enum SyncSnapshotImportService {
     /// — nur die Reihenfolge-Analyse ignoriert ihn (siehe
     /// ``AbteilungsDistanzService/besuchsreihenfolge(fuer:)``, überspringt
     /// `nil`-Indizes bereits bewusst).
-    /// Indexierter Existenz-Check statt vollem Fetch + linearem Scan (Analyse-
-    /// Fund: `mergeKaufEintraege`/`mergePreispunkte` holten bisher bei jedem
-    /// Zyklus ALLE lokalen Einträge und verglichen linear gegen jeden
-    /// Remote-Eintrag — O(n·m), wächst mit der Gesamthistorie statt nur mit
-    /// tatsächlich neuen Einträgen). Muster wie
-    /// ``SyncEventService/istBereitsBekannt(_:context:)``.
-    @MainActor
-    private static func kaufEintragExistiertLokal(id: UUID, context: ModelContext) -> Bool {
-        var deskriptor = FetchDescriptor<KaufEintrag>(predicate: #Predicate { $0.id == id })
-        deskriptor.fetchLimit = 1
-        return ((try? context.fetchCount(deskriptor)) ?? 0) > 0
-    }
-
-    /// Wie ``kaufEintragExistiertLokal(id:context:)``, für ``Preispunkt``.
-    @MainActor
-    private static func preispunktExistiertLokal(id: UUID, context: ModelContext) -> Bool {
-        var deskriptor = FetchDescriptor<Preispunkt>(predicate: #Predicate { $0.id == id })
-        deskriptor.fetchLimit = 1
-        return ((try? context.fetchCount(deskriptor)) ?? 0) > 0
-    }
-
+    /// Vorab geladenes `Set<UUID>` statt eines Existenz-Checks pro
+    /// Remote-Eintrag (Performance-Fund, analog
+    /// ``SyncTombstoneService/geloeschteIDs(art:context:)`` im selben Merge-
+    /// Durchlauf) — ursprünglich holten `mergeKaufEintraege`/`mergePreispunkte`
+    /// bei jedem Zyklus ALLE lokalen Einträge und verglichen linear gegen
+    /// jeden Remote-Eintrag (O(n·m)); ein Zwischenschritt ersetzte das durch
+    /// einen indizierten Existenz-Check PRO Remote-Eintrag (`fetchCount` mit
+    /// `id`-Prädikat, O(m) einzelne Datenbankzugriffe). Ein einmaliger
+    /// Vorab-Fetch ist nochmal günstiger (ein Zugriff statt m), unkritisch für
+    /// die Größe des lokalen Bestands: `KaufEintragBereinigungService` hält
+    /// die lokale `KaufEintrag`-Tabelle durch die 48h-Karenzzeit + tägliche
+    /// Automatik klein, unabhängig davon, ob ein Eintrag lokal oder per Sync
+    /// entstanden ist.
     @MainActor
     private static func mergeKaufEintraege(
         _ remote: [KaufEintragSnapshot], artikelZuordnung: [UUID: Artikel], einkaufsvorgangZuordnung: [UUID: Einkaufsvorgang],
         geschaeftZuordnung: [UUID: Geschaeft], kategorieZuordnung: [UUID: ArtikelKategorie], peerGeraeteID: String, context: ModelContext
     ) {
         let geloeschteIDs = SyncTombstoneService.geloeschteIDs(art: SyncEntitaetsArt.kaufEintrag, context: context)
+        let bekannteIDs = Set(((try? context.fetch(FetchDescriptor<KaufEintrag>())) ?? []).map(\.id))
         for eintrag in remote {
-            guard !kaufEintragExistiertLokal(id: eintrag.id, context: context) else { continue }
+            guard !bekannteIDs.contains(eintrag.id) else { continue }
             // Retention- oder manuell gelöschter Eintrag eines Peers, der ihn
             // selbst noch führt — Tombstone verhindert die Wiederbelebung
             // (analog Bereich-B-Merges).
@@ -1332,8 +1325,11 @@ enum SyncSnapshotImportService {
         _ remote: [PreispunktSnapshot], artikelZuordnung: [UUID: Artikel], geschaeftZuordnung: [UUID: Geschaeft], context: ModelContext
     ) {
         let geloeschteIDs = SyncTombstoneService.geloeschteIDs(art: SyncEntitaetsArt.preispunkt, context: context)
+        // Vorab geladenes Set statt Existenz-Check pro Remote-Eintrag — siehe
+        // Begründung an ``mergeKaufEintraege``.
+        let bekannteIDs = Set(((try? context.fetch(FetchDescriptor<Preispunkt>())) ?? []).map(\.id))
         for eintrag in remote {
-            guard !preispunktExistiertLokal(id: eintrag.id, context: context) else { continue }
+            guard !bekannteIDs.contains(eintrag.id) else { continue }
             guard !geloeschteIDs.contains(eintrag.id) else { continue }
             let neuer = Preispunkt(
                 artikel: eintrag.artikelID.flatMap { artikelZuordnung[$0] },
@@ -1459,23 +1455,18 @@ enum SyncSnapshotImportService {
         }
     }
 
-    /// Wie ``kaufEintragExistiertLokal(id:context:)``, für ``GeschaeftBesuch``.
-    @MainActor
-    private static func geschaeftBesuchExistiertLokal(id: UUID, context: ModelContext) -> Bool {
-        var deskriptor = FetchDescriptor<GeschaeftBesuch>(predicate: #Predicate { $0.id == id })
-        deskriptor.fetchLimit = 1
-        return ((try? context.fetchCount(deskriptor)) ?? 0) > 0
-    }
-
     /// Union nach `id` (= `id` des ursprünglichen ``Einkaufsvorgang``s), analog
     /// ``mergePreispunkte`` — ein ``GeschaeftBesuch`` ist ein unveränderliches
-    /// historisches Ereignis, kein Tombstone nötig (siehe Typ-Doku).
+    /// historisches Ereignis, kein Tombstone nötig (siehe Typ-Doku). Vorab
+    /// geladenes Set statt Existenz-Check pro Remote-Eintrag — siehe
+    /// Begründung an ``mergeKaufEintraege``.
     @MainActor
     private static func mergeGeschaeftBesuche(
         _ remote: [GeschaeftBesuchSnapshot], geschaeftZuordnung: [UUID: Geschaeft], context: ModelContext
     ) {
+        let bekannteIDs = Set(((try? context.fetch(FetchDescriptor<GeschaeftBesuch>())) ?? []).map(\.id))
         for eintrag in remote {
-            guard !geschaeftBesuchExistiertLokal(id: eintrag.id, context: context) else { continue }
+            guard !bekannteIDs.contains(eintrag.id) else { continue }
             let neuer = GeschaeftBesuch(
                 id: eintrag.id, geschaeft: eintrag.geschaeftID.flatMap { geschaeftZuordnung[$0] },
                 startZeit: eintrag.startZeit, endZeit: eintrag.endZeit, anzahlProdukte: eintrag.anzahlProdukte

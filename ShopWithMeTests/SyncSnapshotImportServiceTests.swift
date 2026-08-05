@@ -1793,12 +1793,14 @@ struct SyncSnapshotImportServiceTests {
     }
 
     /// Regressionstest für GitHub #82 (Analyse-Fund: O(n·m)-Merge-Scan) —
-    /// `mergeKaufEintraege` fetchte bisher bei jedem Zyklus ALLE lokalen
-    /// Einträge und verglich linear gegen jeden Remote-Eintrag. Dieser Test
-    /// prüft nur das beobachtbare Verhalten (bereits bekannte Einträge bleiben
-    /// unverändert, nur der genuin neue wird übernommen) — der eigentliche
-    /// Umbau auf einen indexierten Existenz-Check (``kaufEintragExistiertLokal(id:context:)``)
-    /// ist implementierungsintern nicht per Black-Box-Test nachweisbar.
+    /// `mergeKaufEintraege` fetchte ursprünglich bei jedem Zyklus ALLE lokalen
+    /// Einträge und verglich linear gegen jeden Remote-Eintrag (später über
+    /// einen indizierten Existenz-Check pro Remote-Eintrag, seit
+    /// Code-Review 2026-08-05 über ein einmalig vorab geladenes `Set<UUID>`
+    /// abgelöst). Dieser Test prüft nur das beobachtbare Verhalten (bereits
+    /// bekannte Einträge bleiben unverändert, nur der genuin neue wird
+    /// übernommen) — die konkrete interne Optimierung ist per Black-Box-Test
+    /// nicht nachweisbar.
     @Test
     func kaufEintragMergeUebersprintBereitsBekannteEintraege() async throws {
         let (container, context) = try machtLeerenContainer()

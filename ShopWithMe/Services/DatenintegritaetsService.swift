@@ -82,6 +82,7 @@ enum DatenintegritaetsService {
         let gueltigeArtikelIDs = Set(((try? context.fetch(FetchDescriptor<Artikel>())) ?? []).map(\.persistentModelID))
         let gueltigeKategorieIDs = Set(((try? context.fetch(FetchDescriptor<ArtikelKategorie>())) ?? []).map(\.persistentModelID))
         let gueltigeEinkaufslistenIDs = Set(((try? context.fetch(FetchDescriptor<Einkaufsliste>())) ?? []).map(\.persistentModelID))
+        let gueltigeEinkaufsvorgangIDs = Set(((try? context.fetch(FetchDescriptor<Einkaufsvorgang>())) ?? []).map(\.persistentModelID))
 
         var befunde: [Befund] = []
 
@@ -95,7 +96,7 @@ enum DatenintegritaetsService {
             if istBaumelnd(eintrag.artikel, gueltigeIDs: gueltigeArtikelIDs) { betroffeneFelder.append("Artikel") }
             if istBaumelnd(eintrag.geschaeft, gueltigeIDs: gueltigeGeschaeftIDs) { betroffeneFelder.append("Geschäft") }
             if istBaumelnd(eintrag.kategorie, gueltigeIDs: gueltigeKategorieIDs) { betroffeneFelder.append("Abteilung") }
-            if istBaumelnd(eintrag.einkaufsvorgang, gueltigeIDs: nil) { betroffeneFelder.append("Einkaufsvorgang") }
+            if istBaumelnd(eintrag.einkaufsvorgang, gueltigeIDs: gueltigeEinkaufsvorgangIDs) { betroffeneFelder.append("Einkaufsvorgang") }
             guard !betroffeneFelder.isEmpty else { continue }
             // Bewusst `artikelNameSnapshot`/`geschaeftNameSnapshot` statt
             // `anzeigeName`/`eintrag.artikel?.name` — letztere lesen im
@@ -238,13 +239,12 @@ enum DatenintegritaetsService {
         )
     }
 
-    /// `gueltigeIDs: nil` prüft nur, ob `objekt` überhaupt gesetzt ist, ohne
-    /// gegen eine konkrete Gültigkeitsmenge abzugleichen — für
-    /// ``KaufEintrag/einkaufsvorgang``, wo ein eigener Fetch für nur diese eine
-    /// Prüfung nicht lohnt; `persistentModelID` bleibt auch hier sicher lesbar.
-    private static func istBaumelnd<T: PersistentModel>(_ objekt: T?, gueltigeIDs: Set<PersistentIdentifier>?) -> Bool {
+    /// `nil` gilt nie als baumelnd (ein leerer Bezug ist ein gültiger
+    /// Fachzustand, siehe z.B. den `Einkaufsvorgang.einkaufsliste`-Sonderfall
+    /// weiter unten) — nur ein gesetztes `objekt`, dessen `persistentModelID`
+    /// nicht (mehr) unter `gueltigeIDs` ist, gilt als baumelnd.
+    private static func istBaumelnd<T: PersistentModel>(_ objekt: T?, gueltigeIDs: Set<PersistentIdentifier>) -> Bool {
         guard let objekt else { return false }
-        guard let gueltigeIDs else { return false }
         return !gueltigeIDs.contains(objekt.persistentModelID)
     }
 }

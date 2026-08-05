@@ -12,7 +12,7 @@ struct TagesKollisionZeile: View {
     var body: some View {
         HStack(spacing: 8) {
             Label(
-                "Heute bereits \(bestehenderPreis.formatted(.currency(code: "EUR"))) erfasst",
+                "Heute bereits \(bestehenderPreis.formatted(Decimal.FormatStyle.euro)) erfasst",
                 systemImage: "exclamationmark.triangle"
             )
             .font(.caption)
