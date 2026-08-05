@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.12 (Build 248) — GitHub #107 (1/3): Einkaufsvorgang-Abschluss-Logik extrahiert
+
+Erster Baustein der View/Domänenlogik-Entflechtung aus GitHub #107. Die
+Abschluss-Logik ("Einkauf abschließen"-Button und automatischer Abschluss
+nach Inaktivität) lebte bisher ausschließlich als private Methode in
+`EinkaufenView.swift` und konnte deshalb nie per Unit-Test abgesichert
+werden — laut `docs/DATENSYNCHRONISATION.md` §4.3 brauchte sie in Session
+2026-08-03 drei aufeinanderfolgende Live-Test-Fixes.
+
+Neu: `EinkaufsvorgangAbschlussService.schliesseAbMitDuplikaten(anker:duplikate:context:)`
+bündelt die geteilte Logik beider Aufrufstellen (`EinkaufslisteView.einkaufAbschliessen()`,
+`EinkaufenView.inaktivitaetPruefen()`) — stateloser Service nach dem im
+Projekt etablierten Muster (`context: ModelContext`-Parameter), keine neue
+`@Observable`-Architektur (dafür gibt es im Projekt keinen Präzedenzfall).
+7 neue Unit-Tests decken alle drei historischen Live-Test-Funde ab. Reines
+Struktur-Refactoring ohne Verhaltensänderung.
+
+Schritt 2/3 (BelegScanView-Persistenz-Orchestrierung) und 3/3
+(Anzeige-Filter-Logik) folgen als eigene, separat geplante Schritte.
+
 ## v0.12 (Build 247) — GitHub #102: @Attribute(.unique) auf den meistgejointen Modell-IDs
 
 Nach Prüfung des realen Bestands per `ModellIDDuplikatService` (keine

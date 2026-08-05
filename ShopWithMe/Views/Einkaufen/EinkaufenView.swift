@@ -2,28 +2,6 @@ import SwiftUI
 import SwiftData
 import MapKit
 
-/// Diagnose für den Live-Test-Fund „Einkauf abschließen auf einem Gerät
-/// beendet ungewollt einen noch aktiven Vorgang eines anderen Geräts" (Session
-/// 2026-08-03) — protokolliert je tatsächlich mitgeschlossenem Duplikat-Vorgang
-/// (aus ``EinkaufslisteView/einkaufAbschliessen()`` UND
-/// ``EinkaufenView/inaktivitaetPruefen()``, daher als freie Funktion statt
-/// Methode) dessen Geschäft, Anzahl eigener Einträge und wie lange seine
-/// letzte Aktivität (jüngster ``KaufEintrag/datum``, sonst
-/// ``Einkaufsvorgang/startZeit``) zurückliegt — Grundlage für die Entscheidung,
-/// ob ein Schwellwert („nur Duplikate schließen, die seit N Minuten inaktiv
-/// sind", analog ``EinkaufenView/inaktivitaetsSchwelleMitGeschaeft``) nötig
-/// ist, um gerade aktiv genutzte Vorgänge anderer Geräte zu verschonen.
-private func protokolliereVorDuplikatSchliessung(_ vorgang: Einkaufsvorgang) {
-    guard DatabaseDebugLogger.istAktiv else { return }
-    let letzteAktivitaet = vorgang.kaufEintraege.map(\.datum).max() ?? vorgang.startZeit
-    let sekundenSeitAktivitaet = Int(Date.now.timeIntervalSince(letzteAktivitaet))
-    DatabaseDebugLogger.log(
-        .einkaufAbschlussDuplikatGeschlossen,
-        details: "geschaeft=\(vorgang.geschaeft?.name ?? "kein Geschäft") eigeneEintraege=\(vorgang.kaufEintraege.count) "
-            + "letzteAktivitaetVorSekunden=\(sekundenSeitAktivitaet)"
-    )
-}
-
 /// Einstiegspunkt zum Einkaufen: zeigt sofort beim Öffnen die Einkaufsliste der
 /// ausgewählten ``Einkaufsliste`` an — optional nach Artikelkategorie gruppiert und
 /// sortiert (``AbteilungsDistanzService``), wenn ein Geschäft gewählt ist. Ein
@@ -279,18 +257,27 @@ struct EinkaufenView: View {
     /// ``letzteInteraktion`` mindestens die passende Schwelle vergangen ist —
     /// ``inaktivitaetsSchwelleMitGeschaeft`` mit gewähltem Geschäft, sonst
     /// ``inaktivitaetsSchwelleOhneGeschaeft`` (GitHub #51/#71-Diskussion).
-    /// Läuft dabei denselben Lernschritt wie der manuelle
-    /// "Einkauf abschließen"-Button (``EinkaufslisteView/einkaufAbschliessen()``),
-    /// aber bewusst OHNE Umbau-Hinweis — beim automatischen Schließen ist
-    /// niemand aktiv am Bildschirm, der einen nachträglichen Dialog sinnvoll
-    /// einordnen könnte; der Lernschritt selbst bleibt trotzdem wertvoll, ein
-    /// später erkannter Umbau wird beim nächsten *manuellen* Abschließen in
-    /// diesem Geschäft ganz normal gemeldet. Setzt bei gewähltem Geschäft
-    /// zusätzlich ``ausgewaehltesGeschaeft`` zurück (bestehendes Verhalten) —
-    /// ein neuer, offener Nachfolge-Vorgang entsteht danach automatisch über
-    /// den bestehenden `.onChange(of: offeneEinkaufsvorgaenge.count)`-Handler.
-    /// Geprüft per Timer (Vordergrund) und beim Zurückkehren aus dem
-    /// Hintergrund.
+    /// Läuft dabei denselben Abschluss (``EinkaufsvorgangAbschlussService``)
+    /// wie der manuelle "Einkauf abschließen"-Button
+    /// (``EinkaufslisteView/einkaufAbschliessen()``), aber bewusst OHNE
+    /// Umbau-Hinweis (Rückgabewert wird ignoriert) — beim automatischen
+    /// Schließen ist niemand aktiv am Bildschirm, der einen nachträglichen
+    /// Dialog sinnvoll einordnen könnte; der Lernschritt selbst bleibt
+    /// trotzdem wertvoll, ein später erkannter Umbau wird beim nächsten
+    /// *manuellen* Abschließen in diesem Geschäft ganz normal gemeldet. Setzt
+    /// bei gewähltem Geschäft zusätzlich ``ausgewaehltesGeschaeft`` zurück
+    /// (bestehendes Verhalten) — ein neuer, offener Nachfolge-Vorgang
+    /// entsteht danach automatisch über den bestehenden
+    /// `.onChange(of: offeneEinkaufsvorgaenge.count)`-Handler. Geprüft per
+    /// Timer (Vordergrund) und beim Zurückkehren aus dem Hintergrund.
+    ///
+    /// Anders als ``EinkaufslisteView/einkaufAbschliessen()`` löst diese
+    /// Methode den Anker selbst noch einmal per ``ModelReference`` auf und
+    /// bricht den gesamten Aufruf ab, falls er inzwischen bereits
+    /// geschlossen/gelöscht ist (GitHub #107) — das automatische Schließen
+    /// muss einen zwischenzeitlich per Sync bereits abgeschlossenen Vorgang
+    /// tolerieren, der manuelle Button-Tap dagegen operiert immer auf einem
+    /// gerade erst als offen bestätigten Vorgang.
     private func inaktivitaetPruefen() {
         guard let einkauf = aktuellerEinkauf else { return }
         let schwelle = ausgewaehltesGeschaeft != nil ? Self.inaktivitaetsSchwelleMitGeschaeft : Self.inaktivitaetsSchwelleOhneGeschaeft
@@ -311,14 +298,9 @@ struct EinkaufenView: View {
         Task {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
                 guard let einkauf = referenz.resolved(in: modelContext), !einkauf.istAbgeschlossen else { return }
-                einkauf.abschliessen()
-                AbteilungsDistanzService.verarbeiteEinkauf(einkauf, context: modelContext)
-                GeschaeftBesuchService.erfassen(fuer: einkauf, context: modelContext)
-                for weitereReferenz in weitereReferenzen {
-                    guard let weiterer = weitereReferenz.resolved(in: modelContext), !weiterer.istAbgeschlossen else { continue }
-                    protokolliereVorDuplikatSchliessung(weiterer)
-                    weiterer.abschliessen(zaehleAlsBesuch: false)
-                }
+                EinkaufsvorgangAbschlussService.schliesseAbMitDuplikaten(
+                    anker: einkauf, duplikate: weitereReferenzen, context: modelContext
+                )
             }
         }
         if hatteGeschaeft {
@@ -1087,9 +1069,11 @@ private struct EinkaufslisteView: View {
     /// ``einkaufsvorgang`` selbst, bleiben Artikel an einem übrig gebliebenen,
     /// weiterhin offenen Duplikat-Vorgang derselben Liste hängen und
     /// tauchen nach dem vermeintlichen Abschluss unverändert weiter als
-    /// abgehakt auf. Der Besuchszähler (``Geschaeft/eigeneAnzahlEinkaufsvorgaenge``)
-    /// wird dabei bewusst nur für ``einkaufsvorgang`` erhöht (``zaehleAlsBesuch``)
-    /// — alle Duplikate repräsentieren denselben physischen Ladenbesuch.
+    /// abgehakt auf. Der eigentliche Abschluss (inkl. der
+    /// ``Geschaeft/eigeneAnzahlEinkaufsvorgaenge``-``zaehleAlsBesuch``-Regel)
+    /// läuft seit GitHub #107 über ``EinkaufsvorgangAbschlussService`` —
+    /// geteilt mit ``EinkaufenView/inaktivitaetPruefen()``, siehe dort für den
+    /// Unterschied in der Anker-Behandlung.
     private func einkaufAbschliessen() {
         // Nur die Identitäten über die `await`-Grenze hinweg sichern (siehe
         // ``ModelReference``) — während des Micro-Lease-Erwerbs kann ein
@@ -1099,26 +1083,19 @@ private struct EinkaufslisteView: View {
             // Abschließen + Lernschritt sind fachlich eine Aktion → ein
             // gemeinsamer Micro-Lease statt zwei getrennter (siehe
             // `docs/DATABASE_CONCURRENCY.md` → „Gebündelte Aktionen“).
-            var umbauNeuErkannt = false
+            var ergebnis: EinkaufsvorgangAbschlussService.Ergebnis?
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
                 protokolliereAbschlussDiagnose()
-                einkaufsvorgang.abschliessen()
-                umbauNeuErkannt = AbteilungsDistanzService.verarbeiteEinkauf(einkaufsvorgang, context: modelContext)
-                GeschaeftBesuchService.erfassen(fuer: einkaufsvorgang, context: modelContext)
-                var geschlossen = 0
-                for referenz in weitereReferenzen {
-                    guard let weiterer = referenz.resolved(in: modelContext), !weiterer.istAbgeschlossen else { continue }
-                    protokolliereVorDuplikatSchliessung(weiterer)
-                    weiterer.abschliessen(zaehleAlsBesuch: false)
-                    geschlossen += 1
-                }
-                protokolliereAbschlussErgebnis(geschlosseneDuplikate: geschlossen)
+                ergebnis = EinkaufsvorgangAbschlussService.schliesseAbMitDuplikaten(
+                    anker: einkaufsvorgang, duplikate: weitereReferenzen, context: modelContext
+                )
+                protokolliereAbschlussErgebnis(geschlosseneDuplikate: ergebnis?.geschlosseneDuplikate ?? 0)
             }
             // Bewusst der Rückgabewert (nur beim erstmaligen Erkennen `true`)
             // statt des rohen `geschaeft.umbauVerdacht`-Felds, das über mehrere
             // folgende Einkäufe hinweg `true` bleibt — sonst würde der Hinweis
             // bei jedem dieser Einkäufe erneut erscheinen.
-            zeigeUmbauHinweis = umbauNeuErkannt
+            zeigeUmbauHinweis = ergebnis?.umbauNeuErkannt ?? false
             zeigeBelegScanAngebot = true
             geschaeftZuruecksetzen()
         }
