@@ -24,8 +24,11 @@ enum AbhakErgebnis: Equatable {
 /// im jeweiligen Geschäft räumlich nah beieinanderliegen.
 @Model
 final class Einkaufsvorgang {
-    /// Eindeutige Kennung.
-    var id: UUID
+    /// Eindeutige Kennung. `@Attribute(.unique)` seit GitHub #102 (vorher
+    /// unindiziert, jeder ID-Lookup im Sync-Merge war ein Full-Table-Scan) —
+    /// sicher eingeführt erst nach Prüfung des realen Bestands per
+    /// ``ModellIDDuplikatService`` auf bereits bestehende Duplikate.
+    @Attribute(.unique) var id: UUID
     /// Das Geschäft, in dem dieser Einkauf stattfindet.
     var geschaeft: Geschaeft?
     /// Die Einkaufsliste, aus der dieser Einkauf abgehakt wird.

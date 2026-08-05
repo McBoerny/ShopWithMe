@@ -36,24 +36,32 @@ struct ModellIDDuplikatServiceTests {
         #expect(ModellIDDuplikatService.pruefe(context: context).isEmpty)
     }
 
+    /// Erzeugt Duplikate bewusst auf ``ArtikelAlias`` statt auf einem der
+    /// ``ModellIDDuplikatService``-typen mit `@Attribute(.unique)`
+    /// (`Artikel`, `Geschaeft`, `Einkaufsliste`, `Einkaufsvorgang`,
+    /// `KaufEintrag`, GitHub #102) — SwiftData dedupliziert dort bereits beim
+    /// `save()` selbst (Upsert-Verhalten der Unique-Constraint, kein
+    /// harter Fehler), ein künstlich erzeugtes Duplikat käme also nie bis zur
+    /// Prüfung durch. Die Zähllogik selbst ist typ-unabhängig, ein
+    /// nicht-eindeutiger Typ genügt zur Verifikation.
     @Test
     func erkenntDoppelteIDInnerhalbEinesTyps() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
         let gemeinsameID = UUID()
-        let milch = Artikel(name: "Milch", symbolName: "cart", farbeHex: "#000000")
-        milch.id = gemeinsameID
-        let butter = Artikel(name: "Butter", symbolName: "cart", farbeHex: "#000000")
-        butter.id = gemeinsameID
-        context.insert(milch)
-        context.insert(butter)
+        let eins = ArtikelAlias(erkannterName: "Milch", alternativerName: nil, artikel: nil)
+        eins.id = gemeinsameID
+        let zwei = ArtikelAlias(erkannterName: "Butter", alternativerName: nil, artikel: nil)
+        zwei.id = gemeinsameID
+        context.insert(eins)
+        context.insert(zwei)
         try context.save()
 
         let befunde = ModellIDDuplikatService.pruefe(context: context)
 
         #expect(befunde.count == 1)
-        #expect(befunde.first?.typName == "Artikel")
+        #expect(befunde.first?.typName == "ArtikelAlias")
         #expect(befunde.first?.anzahlBetroffeneIDs == 1)
         #expect(befunde.first?.anzahlUeberzaehligeZeilen == 1)
     }
@@ -65,19 +73,19 @@ struct ModellIDDuplikatServiceTests {
 
         let idA = UUID()
         for _ in 0..<3 {
-            let artikel = Artikel(name: "Milch", symbolName: "cart", farbeHex: "#000000")
-            artikel.id = idA
-            context.insert(artikel)
+            let alias = ArtikelAlias(erkannterName: "Milch", alternativerName: nil, artikel: nil)
+            alias.id = idA
+            context.insert(alias)
         }
         let idB = UUID()
         for _ in 0..<2 {
-            let artikel = Artikel(name: "Butter", symbolName: "cart", farbeHex: "#000000")
-            artikel.id = idB
-            context.insert(artikel)
+            let alias = ArtikelAlias(erkannterName: "Butter", alternativerName: nil, artikel: nil)
+            alias.id = idB
+            context.insert(alias)
         }
         try context.save()
 
-        let befund = ModellIDDuplikatService.pruefe(context: context).first { $0.typName == "Artikel" }
+        let befund = ModellIDDuplikatService.pruefe(context: context).first { $0.typName == "ArtikelAlias" }
 
         #expect(befund?.anzahlBetroffeneIDs == 2)
         #expect(befund?.anzahlUeberzaehligeZeilen == 3)
@@ -89,11 +97,11 @@ struct ModellIDDuplikatServiceTests {
         _ = container
 
         let geteilteID = UUID()
-        let artikel = Artikel(name: "Milch", symbolName: "cart", farbeHex: "#000000")
-        artikel.id = geteilteID
+        let alias = ArtikelAlias(erkannterName: "Milch", alternativerName: nil, artikel: nil)
+        alias.id = geteilteID
         let geschaeft = Geschaeft(name: "Rewe", typen: [])
         geschaeft.id = geteilteID
-        context.insert(artikel)
+        context.insert(alias)
         context.insert(geschaeft)
         try context.save()
 

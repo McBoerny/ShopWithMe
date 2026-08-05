@@ -1,6 +1,26 @@
 # Changelog
 
-## v0.12 (Build 246) — GitHub #102 (Diagnose): Prüfwerkzeug für doppelte Modell-IDs
+## v0.12 (Build 247) — GitHub #102: @Attribute(.unique) auf den meistgejointen Modell-IDs
+
+Nach Prüfung des realen Bestands per `ModellIDDuplikatService` (keine
+Duplikate gefunden, nur ein Gerät im Sync-Verbund) `@Attribute(.unique)` auf
+`id: UUID` ergänzt bei `Artikel`, `Geschaeft`, `Einkaufsliste`,
+`Einkaufsvorgang`, `KaufEintrag` — den laut Issue meistgejointen Typen im
+Sync-Merge. Jeder `FetchDescriptor(predicate: #Predicate { $0.id == x })` auf
+diesen Typen nutzt dadurch einen Index statt eines Full-Table-Scans. Die
+übrigen ~16 `@Model`-Typen bleiben vorerst unverändert (kleinere Tabellen,
+seltener direkt per ID gejoint).
+
+Test-Fund beim Rollout: SwiftData bricht bei einem Speicherversuch mit
+bereits vergebener eindeutiger `id` nicht hart ab, sondern führt einen
+stillen Upsert durch (zwei Objekte mit derselben `id` kollabieren beim
+`save()` zu einer Zeile) — siehe Typ-Doku von `ModellIDDuplikatService` für
+Details. Ändert nichts an der bereits umgesetzten Vorsichtsmaßnahme (Prüfung
+vor der Einführung), relativiert aber das ursprünglich befürchtete
+Absturzrisiko bei einer künftigen Migration auf einem Gerät mit
+Alt-Duplikaten.
+
+## v0.12 — GitHub #102 (Diagnose): Prüfwerkzeug für doppelte Modell-IDs
 
 Vorbereitung für `@Attribute(.unique) var id: UUID` auf den app-eigenen
 Model-IDs (bislang ohne Index — jeder ID-Lookup im Sync-Merge ist ein

@@ -42,8 +42,11 @@ enum Einheit: String, Codable, CaseIterable, Identifiable {
 /// Bearbeiten-Bildschirme geändert werden.
 @Model
 final class Artikel {
-    /// Eindeutige Kennung.
-    var id: UUID
+    /// Eindeutige Kennung. `@Attribute(.unique)` seit GitHub #102 (vorher
+    /// unindiziert, jeder ID-Lookup im Sync-Merge war ein Full-Table-Scan) —
+    /// sicher eingeführt erst nach Prüfung des realen Bestands per
+    /// ``ModellIDDuplikatService`` auf bereits bestehende Duplikate.
+    @Attribute(.unique) var id: UUID
     /// Anzeigename des Artikels.
     var name: String
     /// SF-Symbol-Name — aktuell in keiner UI mehr angezeigt/editierbar, bleibt als

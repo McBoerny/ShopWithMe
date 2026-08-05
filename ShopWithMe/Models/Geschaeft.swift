@@ -10,8 +10,11 @@ import SwiftData
 /// `docs/ARCHITEKTURVORSCHLAG_ADAPTIVE_SORTIERUNG.md`).
 @Model
 final class Geschaeft {
-    /// Eindeutige Kennung.
-    var id: UUID
+    /// Eindeutige Kennung. `@Attribute(.unique)` seit GitHub #102 (vorher
+    /// unindiziert, jeder ID-Lookup im Sync-Merge war ein Full-Table-Scan) —
+    /// sicher eingeführt erst nach Prüfung des realen Bestands per
+    /// ``ModellIDDuplikatService`` auf bereits bestehende Duplikate.
+    @Attribute(.unique) var id: UUID
     /// Anzeigename des Geschäfts, z.B. "Rewe am Markt".
     var name: String
     /// Rohwert für ``typen`` von vor Einführung von ``GeschaeftTyp`` als

@@ -13,6 +13,20 @@ import SwiftData
 /// die Entscheidung "ist `.unique` sicher einführbar" genügt das, ein
 /// Rohdaten-Export (Artikel-/Geschäftsnamen, Kaufhistorie) ist dafür nicht
 /// nötig und würde unnötig private Daten offenlegen.
+///
+/// **Test-Fund beim Rollout von `@Attribute(.unique)` (GitHub #102):**
+/// entgegen der ursprünglichen Annahme eines harten Abbruchs führt SwiftData
+/// bei einem Speicherversuch mit bereits vergebenem eindeutigen Wert
+/// (zumindest im getesteten In-Memory-Store) einen stillen Upsert durch
+/// (Warnung „was remapped to a temporary identifier during save" im
+/// Konsolen-Log, kein geworfener Fehler) statt abzustürzen — zwei separat
+/// angelegte Objekte mit derselben `id` kollabieren dadurch selbst beim
+/// `context.save()` zu einer Zeile. Für die eigentliche Diagnose hier bleibt
+/// das ohne Belang (sie prüft den bereits gespeicherten Bestand, nicht das
+/// Speichern selbst), ändert aber die Risikoeinschätzung für die Migration:
+/// vermutlich kein Absturz bei bestehenden Duplikaten, eher ein stiller
+/// Datenverlust (eines der beiden „Duplikate" verschwindet unbemerkt) —
+/// weshalb die Prüfung hier trotzdem vor jeder Einführung sinnvoll bleibt.
 enum ModellIDDuplikatService {
     struct Befund: Identifiable {
         let id = UUID()

@@ -10,8 +10,11 @@ import SwiftData
 /// Menge/Notiz.
 @Model
 final class Einkaufsliste {
-    /// Eindeutige Kennung.
-    var id: UUID
+    /// Eindeutige Kennung. `@Attribute(.unique)` seit GitHub #102 (vorher
+    /// unindiziert, jeder ID-Lookup im Sync-Merge war ein Full-Table-Scan) —
+    /// sicher eingeführt erst nach Prüfung des realen Bestands per
+    /// ``ModellIDDuplikatService`` auf bereits bestehende Duplikate.
+    @Attribute(.unique) var id: UUID
     /// Anzeigename der Liste, z.B. "Wocheneinkauf".
     var name: String
     /// Zeitpunkt der Anlage — bestimmt auch die Standard-Sortierung in Auswahllisten.
