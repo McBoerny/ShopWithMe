@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.13 (Build 249) — GitHub #111: Artikel-Alias-Namen
+
+Erster von zwei Fällen aus der Aufteilung von GitHub #47/#58 (Ausprägung
+folgt separat): ein Artikel kann jetzt mehrere Alias-Namen bekommen, unter
+denen er bei der Artikelsuche zusätzlich gefunden wird (z.B. „Zahncreme“ für
+„Zahnpasta“) — im Unterschied zu einer Ausprägung bleibt es dabei derselbe
+Artikel, kein eigenes Produkt, kein eigener Preis.
+
+Kein neues Modell nötig: das bereits vorhandene `ArtikelAlias` (bisher nur
+für die Bon-Scan-Erkennung genutzt, siehe `ArtikelZuordnungsService`) trägt
+jetzt auch manuell gepflegte Aliase. Neu: `ArtikelAlias.manuellHinzufuegen(name:zu:alle:context:)`
+blockiert (statt wie `lernen(...)` stillschweigend umzuhängen), falls der
+Name bereits einem anderen Artikel gehört. UI-seitig eine neue Sektion
+„Alias-Namen“ in `ArtikelEditView` (Hinzufügen/Löschen) sowie erweiterte
+Suche in `ArtikelHinzufuegenView` (`gefilterteArtikel` prüft zusätzlich
+gegen die Aliase jedes Artikels). 3 neue Unit-Tests
+(`ArtikelAliasTests`).
+
 ## v0.12 (Build 248) — GitHub #107 (1/3): Einkaufsvorgang-Abschluss-Logik extrahiert
 
 Erster Baustein der View/Domänenlogik-Entflechtung aus GitHub #107. Die

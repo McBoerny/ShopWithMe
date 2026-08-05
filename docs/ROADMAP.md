@@ -103,6 +103,14 @@ die übrige Doku aktualisiert wird): `docs/BUILD_WORKFLOW.md`.
   `docs/DATENSYNCHRONISATION.md` Abschnitt 1, `MultipeerSyncService`-Typ-Doku.
   **Noch ohne echten Zwei-Geräte-Live-Test dieses konkreten Kanals** (siehe
   dortige „Bekannte Grenzen").
+- [x] **v0.13** — [Issue #111](https://github.com/McBoerny/ShopWithMe/issues/111):
+  Artikel-Alias-Namen — ein Artikel kann mehrere zusätzliche Suchbegriffe
+  bekommen (z.B. „Zahncreme“ für „Zahnpasta“), unter denen ihn die
+  Artikelsuche beim Einkaufen ebenfalls findet. Bleibt derselbe Artikel,
+  kein eigenes Produkt/kein eigener Preis — Abgrenzung zur weiterhin
+  offenen Artikelausprägung ([#47](https://github.com/McBoerny/ShopWithMe/issues/47),
+  siehe „Zukünftig“ unten). Wiederverwendet das bereits vorhandene
+  `ArtikelAlias`-Modell (bisher nur Bon-Scan-Erkennung) statt eines neuen Typs.
 
 Damit ist die in der Kickoff-Unterhaltung beschriebene Kernfunktionalität
 vollständig umgesetzt; weitere Ideen siehe „Zukünftig“ unten.
@@ -129,6 +137,14 @@ vollständig umgesetzt; weitere Ideen siehe „Zukünftig“ unten.
 - **Nutzungs-Tracking/Analytics**: anonymisiertes Tracking-Framework zur Analyse der
   App-Nutzung — erfassen, welche Funktionen wie häufig genutzt werden, um die Roadmap
   datengestützt priorisieren zu können.
+- **Artikelausprägung** ([#47](https://github.com/McBoerny/ShopWithMe/issues/47)):
+  ein Artikel kann mehrere konkrete Produkt-Ausprägungen mit eigenem Preis
+  haben (z.B. „Odol“/„Paradontol“/„Sebamed“ für „Zahnpasta“), im Unterschied
+  zu den bereits umgesetzten Alias-Namen (v0.13, [#111](https://github.com/McBoerny/ShopWithMe/issues/111))
+  keine reine Textsuche, sondern ein eigenständiges 1:n-Datenmodell mit
+  Preis-Kumulierung am übergeordneten Artikel. Größerer, eigener Umbau —
+  siehe verwandtes [#10](https://github.com/McBoerny/ShopWithMe/issues/10)
+  zur offenen Modellfrage.
 - **Modell-unabhängige Sync-Architektur** ([#75](https://github.com/McBoerny/ShopWithMe/issues/75)):
   die Datensynchronisation (`docs/DATENSYNCHRONISATION.md`) ist als Architektur-Muster
   bereits solide, aber die Implementierung eng an ShopWithMes konkretes Datenmodell

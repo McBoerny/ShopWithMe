@@ -40,6 +40,16 @@ Abteilung vor, sobald du einen Namen eingibst — eine bereits von dir gewählte
 Abteilung wird dabei nie überschrieben. Ist Apple
 Intelligence nicht verfügbar, bleibt die manuelle Auswahl jederzeit möglich.
 
+Einem bereits angelegten Artikel kannst du in der Artikel-Bearbeitung beliebig
+viele **Alias-Namen** geben — weitere Suchbegriffe, unter denen du beim
+Hinzufügen zur Einkaufsliste denselben Artikel findest (z.B. „Zahncreme" oder
+„Zahnreiniger" als Alias für „Zahnpasta"). Ein Alias-Name ist kein eigener
+Artikel, sondern nur ein zusätzlicher Suchbegriff für den bestehenden — für
+tatsächlich unterschiedliche Produkte (z.B. „Odol", „Paradontol", „Sebamed" als
+konkrete Zahnpasta-Marken) lege stattdessen eigene Artikel an. Ein Alias-Name
+kann jeweils nur einem Artikel zugeordnet sein; ist er bereits vergeben, zeigt
+die App an, zu welchem Artikel er gehört.
+
 ## Geschäfte
 
 Ein Geschäft hat einen oder mehrere Typen (Lebensmittel, Drogerie, Baumarkt,

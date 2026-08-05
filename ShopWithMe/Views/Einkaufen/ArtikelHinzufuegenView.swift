@@ -18,6 +18,7 @@ struct ArtikelHinzufuegenView: View {
     let einkaufsliste: Einkaufsliste
 
     @Query(sort: \Artikel.name) private var alleArtikel: [Artikel]
+    @Query private var alleAliase: [ArtikelAlias]
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
 
@@ -49,13 +50,18 @@ struct ArtikelHinzufuegenView: View {
     /// Zusätzlich zum Teilstring-Vergleich auch Singular/Plural-unabhängig
     /// (GitHub #44, ``String/passtAlsSingularPluralZu(_:)``) — pro Wort des
     /// Artikelnamens, damit auch mehrteilige Namen (z.B. "Roter Apfel") erfasst
-    /// werden, wenn nach "Äpfel" gesucht wird.
+    /// werden, wenn nach "Äpfel" gesucht wird. Zusätzlich über gepflegte
+    /// Alias-Namen (GitHub #111, z.B. "Zahncreme" für "Zahnpasta") — derselbe
+    /// Artikel bleibt dabei einmalig in der Ergebnisliste.
     private var gefilterteArtikel: [Artikel] {
         guard !getrimmterSuchtext.isEmpty else { return alleArtikel }
         return alleArtikel.filter { artikel in
             artikel.name.localizedCaseInsensitiveContains(getrimmterSuchtext)
                 || artikel.name.split(separator: " ").contains {
                     String($0).passtAlsSingularPluralZu(getrimmterSuchtext)
+                }
+                || alleAliase.contains {
+                    $0.artikel == artikel && $0.erkannterName.localizedCaseInsensitiveContains(getrimmterSuchtext)
                 }
         }
     }
@@ -249,5 +255,5 @@ private struct ArtikelAuswahlZeile: View {
 
 #Preview {
     ArtikelHinzufuegenView(einkaufsliste: Einkaufsliste(name: "Einkaufsliste"))
-        .modelContainer(for: [Artikel.self, ArtikelKategorie.self, GeschaeftTyp.self, Einkaufsliste.self, EinkaufslistenEintrag.self], inMemory: true)
+        .modelContainer(for: [Artikel.self, ArtikelAlias.self, ArtikelKategorie.self, GeschaeftTyp.self, Einkaufsliste.self, EinkaufslistenEintrag.self], inMemory: true)
 }

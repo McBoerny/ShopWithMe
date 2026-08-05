@@ -15,10 +15,14 @@ struct ArtikelEditView: View {
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \ArtikelKategorie.sortIndex) private var kategorien: [ArtikelKategorie]
     @Query private var preisHistorie: [Preispunkt]
+    @Query private var aliase: [ArtikelAlias]
+    @Query private var alleAliase: [ArtikelAlias]
 
     @State private var kiVorschlagLaeuft = false
     @State private var kiFehlermeldung: String?
     @State private var zeigeNeueKategorie = false
+    @State private var neuerAliasName = ""
+    @State private var aliasFehlermeldung: String?
 
     init(artikel: Artikel, istNeu: Bool) {
         self.artikel = artikel
@@ -27,6 +31,10 @@ struct ArtikelEditView: View {
         _preisHistorie = Query(
             filter: #Predicate<Preispunkt> { $0.artikel?.persistentModelID == artikelID },
             sort: [SortDescriptor(\.datum, order: .reverse)]
+        )
+        _aliase = Query(
+            filter: #Predicate<ArtikelAlias> { $0.artikel?.persistentModelID == artikelID },
+            sort: [SortDescriptor(\.erkannterName)]
         )
     }
 
@@ -116,6 +124,32 @@ struct ArtikelEditView: View {
                     )
                 }
 
+                if !istNeu {
+                    Section {
+                        ForEach(aliase) { alias in
+                            Text(alias.erkannterName)
+                        }
+                        .onDelete(perform: aliasEntfernen)
+
+                        HStack {
+                            TextField("Alias-Name, z.B. \"Zahncreme\"", text: $neuerAliasName)
+                                .onSubmit(aliasHinzufuegen)
+                            Button("Hinzufügen", action: aliasHinzufuegen)
+                                .disabled(neuerAliasName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        }
+
+                        if let aliasFehlermeldung {
+                            Text(aliasFehlermeldung)
+                                .font(.footnote)
+                                .foregroundStyle(.red)
+                        }
+                    } header: {
+                        Text("Alias-Namen")
+                    } footer: {
+                        Text("Unter diesen Namen wird derselbe Artikel ebenfalls gefunden, z.B. \"Zahncreme\" oder \"Zahnreiniger\" für \"Zahnpasta\".")
+                    }
+                }
+
                 if !istNeu && !preisHistorie.isEmpty {
                     Section("Preishistorie") {
                         ForEach(preisHistorie) { eintrag in
@@ -154,6 +188,28 @@ struct ArtikelEditView: View {
                     artikel.kategorien.append(kategorie)
                 }
             }
+        }
+    }
+
+    /// Legt einen neuen Alias-Namen für ``artikel`` an (GitHub #111) — blockiert
+    /// mit Fehlermeldung, falls der Name bereits einem anderen Artikel gehört
+    /// (siehe ``ArtikelAlias/manuellHinzufuegen(name:zu:alle:context:)``).
+    private func aliasHinzufuegen() {
+        aliasFehlermeldung = nil
+        do {
+            try ArtikelAlias.manuellHinzufuegen(name: neuerAliasName, zu: artikel, alle: alleAliase, context: modelContext)
+            neuerAliasName = ""
+        } catch {
+            switch error {
+            case .bereitsVergeben(let andererArtikelName):
+                aliasFehlermeldung = "„\(neuerAliasName)“ wird bereits von „\(andererArtikelName)“ verwendet."
+            }
+        }
+    }
+
+    private func aliasEntfernen(at indexSet: IndexSet) {
+        for index in indexSet {
+            modelContext.delete(aliase[index])
         }
     }
 

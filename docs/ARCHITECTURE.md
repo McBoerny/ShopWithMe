@@ -204,6 +204,17 @@ Abschnitt zurückfällt (Belegscan, Preisschild-Scan, Sync-Import).
   Sheet für exakte Menge + Notiz; Swipe links/rechts erhöht/verringert die Menge;
   Sektions-Header ohne Fortschrittszähler — Details in
   `docs/EINKAUFSLISTE_INTERAKTION.md`.
+- **Artikel-Alias-Namen** (GitHub #111, v0.13): `ArtikelAlias` — bislang nur für
+  die Bon-Scan-Erkennung genutzt (siehe oben) — trägt seit v0.13 zusätzlich
+  manuell in `ArtikelEditView` gepflegte Alias-Namen
+  (`ArtikelAlias.manuellHinzufuegen(name:zu:alle:context:)`, blockiert im
+  Unterschied zu `lernen(...)` bei Namenskollision mit einem anderen Artikel
+  statt stillschweigend umzuhängen). `ArtikelHinzufuegenView.gefilterteArtikel`
+  durchsucht neben `Artikel.name` auch diese Aliase — derselbe Artikel bleibt
+  dabei einmalig im Ergebnis. Abgrenzung zur weiterhin offenen
+  Artikelausprägung ([#47](https://github.com/McBoerny/ShopWithMe/issues/47)):
+  ein Alias ist reine Textsuche für denselben Artikel, keine eigenständige
+  Produktvariante mit eigenem Preis.
 - **Artikel hinzufügen — Mehrfachauswahl**: Tap auf eine ganze Zeile in
   `ArtikelHinzufuegenView` wählt sie aus/ab (statt sofort zu übernehmen); „Hinzufügen
   (n)“ committet die gesamte Auswahl auf einmal; ein per Direktanlage neu erstellter

@@ -66,4 +66,32 @@ extension ArtikelAlias {
         }) else { return nil }
         return (treffer.alternativerName, treffer.artikel)
     }
+
+    /// Fehlerfall beim manuellen Anlegen eines Alias-Namens über
+    /// ``ArtikelEditView`` — im Unterschied zu ``lernen(erkannterName:alternativerName:artikel:context:)``
+    /// (Scan-Erkennung) wird ein bereits an einen anderen Artikel vergebener
+    /// Name hier bewusst blockiert statt stillschweigend umgehängt.
+    enum ManuellHinzufuegenFehler: Error {
+        case bereitsVergeben(andererArtikelName: String)
+    }
+
+    /// Legt einen neuen manuell gepflegten Alias-Namen für `artikel` an
+    /// (GitHub #111). `alle` sind die bereits vorhandenen ``ArtikelAlias``-
+    /// Einträge, gegen die auf Namenskollision mit einem anderen Artikel
+    /// geprüft wird.
+    @discardableResult
+    static func manuellHinzufuegen(
+        name: String, zu artikel: Artikel, alle: [ArtikelAlias], context: ModelContext
+    ) throws(ManuellHinzufuegenFehler) -> ArtikelAlias {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let bestehender = alle.first(where: { $0.erkannterName.localizedCaseInsensitiveCompare(name) == .orderedSame }) {
+            guard bestehender.artikel == artikel else {
+                throw .bereitsVergeben(andererArtikelName: bestehender.artikel?.name ?? "einem anderen Artikel")
+            }
+            return bestehender
+        }
+        let neu = ArtikelAlias(erkannterName: name, alternativerName: nil, artikel: artikel)
+        context.insert(neu)
+        return neu
+    }
 }

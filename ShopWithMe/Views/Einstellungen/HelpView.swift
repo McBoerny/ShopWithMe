@@ -88,6 +88,22 @@ private struct HilfeThema: Identifiable {
             """
         ),
         HilfeThema(
+            titel: "Reichweite des Multipeer-Kanals",
+            text: """
+            Solange ihr gemeinsam einkauft, tauscht die App Änderungen zusätzlich \
+            direkt zwischen den Geräten aus (WLAN/Bluetooth) — der Sync-Ordner \
+            bleibt aber weiterhin die eigentliche Quelle der Wahrheit. Die Reichweite \
+            hängt davon ab, was die Geräte nutzen können: Ist nur Bluetooth aktiv, \
+            liegt sie meist bei rund 10 Metern in Innenräumen. Ist WLAN aktiv — auch \
+            ohne gemeinsames Netzwerk bzw. Internetzugang —, verbindet sich die App \
+            per Peer-to-Peer-WLAN und erreicht drinnen etwa 20–30 Meter, im Freien \
+            mit freier Sicht auch deutlich mehr. Welchen Weg die Geräte nehmen, wählt \
+            iOS automatisch; lasst am besten beides aktiviert. Verlieren sich die \
+            Geräte aus der Reichweite, gleicht die App die Änderungen einfach über \
+            den Sync-Ordner nach, sobald die Verbindung wieder da ist.
+            """
+        ),
+        HilfeThema(
             titel: "MilkForUs-Textimport",
             text: """
             In den Einstellungen unter „Einkaufslisten“ kannst du über „MilkForUs \
