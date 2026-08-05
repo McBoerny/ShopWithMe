@@ -43,6 +43,40 @@ enum SyncEntitaetsArt {
     static let geschaeftTyp = "GeschaeftTyp"
     static let kaufEintrag = "KaufEintrag"
     static let preispunkt = "Preispunkt"
+
+    /// Echtes, `RawRepresentable`-Enum NUR für Dispatch-Stellen (`switch`),
+    /// die für jede bekannte Art etwas Unterschiedliches tun müssen —
+    /// `loescheFallsVorhanden(art:id:context:)`,
+    /// `setzeName(_:entitaetsArt:lokaleID:context:)`,
+    /// `abgleichKandidatAlsUnterschiedlichBestaetigen(_:context:)` (alle
+    /// `SyncSnapshotImportService.swift`) (GitHub #108).
+    ///
+    /// **Bewusst NICHT der Speichertyp der `entitaetsArt`-Felder oben**
+    /// (bleiben `String`, z.B. `SyncTombstone.entitaetsArt`,
+    /// `SyncEntitaetsAlias.entitaetsArt`, `SyncAbgleichKandidat.entitaetsArt`):
+    /// ein Tombstone/Alias für eine von einem künftigen Peer stammende, hier
+    /// noch unbekannte Art muss weiterhin decodierbar/speicherbar bleiben —
+    /// analog `SyncEvent.artRaw` (`String`) vs. der optionalen
+    /// `SyncEventArt`-Computed-Property. `Kind(rawValue:)` liefert für einen
+    /// solchen Wert bewusst `nil` statt zu crashen; Aufrufer behandeln das wie
+    /// bisher als "keine Aktion" statt es separat zu melden.
+    ///
+    /// Der eigentliche Nutzen: kommt künftig eine neue Art hinzu (wie
+    /// `ArtikelListenKauf`, hier bewusst NICHT aufgenommen, da nie
+    /// tombstone-/alias-pflichtig, siehe dortige Typ-Doku), zwingt der
+    /// Compiler an jeder Dispatch-Stelle zu einer bewussten Entscheidung
+    /// (auch wenn die Entscheidung nur ein explizites No-Op ist), statt dass
+    /// ein vergessener Fall lautlos in einem `default:`-Zweig verschwindet.
+    enum Kind: String {
+        case artikel = "Artikel"
+        case einkaufsliste = "Einkaufsliste"
+        case geschaeft = "Geschaeft"
+        case einkaufsvorgang = "Einkaufsvorgang"
+        case artikelKategorie = "ArtikelKategorie"
+        case geschaeftTyp = "GeschaeftTyp"
+        case kaufEintrag = "KaufEintrag"
+        case preispunkt = "Preispunkt"
+    }
 }
 
 enum SyncEntitaetsAliasService {

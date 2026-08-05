@@ -328,20 +328,27 @@ enum SyncSnapshotImportService {
     /// gewohnt in der Artikel-Verwaltung anpassen.
     @MainActor
     static func abgleichKandidatAlsUnterschiedlichBestaetigen(_ kandidat: SyncAbgleichKandidat, context: ModelContext) {
-        switch kandidat.entitaetsArt {
-        case SyncEntitaetsArt.geschaeft:
+        switch SyncEntitaetsArt.Kind(rawValue: kandidat.entitaetsArt) {
+        case .geschaeft:
             let neu = Geschaeft(name: kandidat.fremderName, typen: [], adresse: nil)
             neu.id = kandidat.fremdeID
             context.insert(neu)
-        case SyncEntitaetsArt.artikel:
+        case .artikel:
             let neu = Artikel(name: kandidat.fremderName, symbolName: SymbolPalette.alle[0], farbeHex: Color.artikelPalette[0])
             neu.id = kandidat.fremdeID
             context.insert(neu)
-        case SyncEntitaetsArt.einkaufsliste:
+        case .einkaufsliste:
             let neu = Einkaufsliste(name: kandidat.fremderName)
             neu.id = kandidat.fremdeID
             context.insert(neu)
-        default:
+        case .artikelKategorie, .geschaeftTyp, .einkaufsvorgang, .kaufEintrag, .preispunkt, nil:
+            // Nur die drei per Ambiguitäts-Rückstellung erzeugbaren
+            // Kandidaten-Arten (siehe ``SyncAbgleichKandidat``) sind hier
+            // strukturell erreichbar — die übrigen bleiben explizit
+            // aufgeführt (GitHub #108), damit ein künftig neu ergänzter Fall
+            // bewusst entschieden werden muss statt lautlos in einem
+            // `default:` zu verschwinden. `nil` (unbekannter Rohwert eines
+            // neueren Peers) verhält sich wie bisher: kein Neuanlegen.
             break
         }
         context.delete(kandidat)
@@ -349,20 +356,27 @@ enum SyncSnapshotImportService {
 
     @MainActor
     private static func setzeName(_ name: String, entitaetsArt: String, lokaleID: UUID, context: ModelContext) {
+        guard let entitaetsArt = SyncEntitaetsArt.Kind(rawValue: entitaetsArt) else { return }
         switch entitaetsArt {
-        case SyncEntitaetsArt.geschaeft:
+        case .geschaeft:
             var deskriptor = FetchDescriptor<Geschaeft>(predicate: #Predicate { $0.id == lokaleID })
             deskriptor.fetchLimit = 1
             (try? context.fetch(deskriptor))?.first?.name = name
-        case SyncEntitaetsArt.artikel:
+        case .artikel:
             var deskriptor = FetchDescriptor<Artikel>(predicate: #Predicate { $0.id == lokaleID })
             deskriptor.fetchLimit = 1
             (try? context.fetch(deskriptor))?.first?.name = name
-        case SyncEntitaetsArt.einkaufsliste:
+        case .einkaufsliste:
             var deskriptor = FetchDescriptor<Einkaufsliste>(predicate: #Predicate { $0.id == lokaleID })
             deskriptor.fetchLimit = 1
             (try? context.fetch(deskriptor))?.first?.name = name
-        default:
+        case .artikelKategorie, .geschaeftTyp, .einkaufsvorgang, .kaufEintrag, .preispunkt:
+            // Nur die drei per Ambiguitäts-Rückstellung abgleichbaren
+            // Bereich-B-Typen (siehe ``SyncAbgleichKandidat``) können hier
+            // ankommen — die übrigen sind strukturell unerreichbar, bleiben
+            // aber explizit aufgeführt (GitHub #108), damit ein künftig neu
+            // ergänzter Fall bewusst entschieden werden muss statt lautlos in
+            // einem `default:` zu verschwinden.
             break
         }
     }
@@ -557,27 +571,30 @@ enum SyncSnapshotImportService {
 
     /// Löscht das lokale Objekt der passenden Art mit `id`, falls es noch
     /// existiert — der zugehörige Tombstone wurde bereits separat vermerkt
-    /// (``mergeTombstones(_:context:)``).
+    /// (``mergeTombstones(_:context:)``). Ein unbekannter Rohwert (z.B. von
+    /// einem neueren Peer mit einer hier noch unbekannten Art) bleibt
+    /// wirkungslos, analog dem bisherigen `default:`-Verhalten (GitHub #108).
     @MainActor
     private static func loescheFallsVorhanden(art: String, id: UUID, context: ModelContext) {
+        guard let art = SyncEntitaetsArt.Kind(rawValue: art) else { return }
         switch art {
-        case SyncEntitaetsArt.geschaeft:
+        case .geschaeft:
             var deskriptor = FetchDescriptor<Geschaeft>(predicate: #Predicate { $0.id == id })
             deskriptor.fetchLimit = 1
             if let objekt = try? context.fetch(deskriptor).first { context.delete(objekt) }
-        case SyncEntitaetsArt.artikel:
+        case .artikel:
             var deskriptor = FetchDescriptor<Artikel>(predicate: #Predicate { $0.id == id })
             deskriptor.fetchLimit = 1
             if let objekt = try? context.fetch(deskriptor).first { context.delete(objekt) }
-        case SyncEntitaetsArt.artikelKategorie:
+        case .artikelKategorie:
             var deskriptor = FetchDescriptor<ArtikelKategorie>(predicate: #Predicate { $0.id == id })
             deskriptor.fetchLimit = 1
             if let objekt = try? context.fetch(deskriptor).first { context.delete(objekt) }
-        case SyncEntitaetsArt.einkaufsliste:
+        case .einkaufsliste:
             var deskriptor = FetchDescriptor<Einkaufsliste>(predicate: #Predicate { $0.id == id })
             deskriptor.fetchLimit = 1
             if let objekt = try? context.fetch(deskriptor).first { context.delete(objekt) }
-        case SyncEntitaetsArt.kaufEintrag:
+        case .kaufEintrag:
             var deskriptor = FetchDescriptor<KaufEintrag>(predicate: #Predicate { $0.id == id })
             deskriptor.fetchLimit = 1
             if let objekt = try? context.fetch(deskriptor).first { context.delete(objekt) }
@@ -595,15 +612,19 @@ enum SyncSnapshotImportService {
             // Wiederbelebung. Siehe ``SyncKaeufeExportService/entferneDateien(fuerKaufEintragIDs:)``
             // für den (gebündelten, unverschachtelten) Aufräumpfad des eigenen,
             // lokal verursachten Löschens.
-        case SyncEntitaetsArt.preispunkt:
+        case .preispunkt:
             var deskriptor = FetchDescriptor<Preispunkt>(predicate: #Predicate { $0.id == id })
             deskriptor.fetchLimit = 1
             if let objekt = try? context.fetch(deskriptor).first { context.delete(objekt) }
-        case SyncEntitaetsArt.einkaufsvorgang:
+        case .einkaufsvorgang:
             var deskriptor = FetchDescriptor<Einkaufsvorgang>(predicate: #Predicate { $0.id == id })
             deskriptor.fetchLimit = 1
             if let objekt = try? context.fetch(deskriptor).first { context.delete(objekt) }
-        default:
+        case .geschaeftTyp:
+            // GeschaeftTyp wird nie per Tombstone gelöscht (fetch-or-create
+            // by Name, kein Alias-Register nötig, siehe
+            // `docs/DATENSYNCHRONISATION.md` Abschnitt 4.2) — bewusstes No-Op,
+            // kein vergessener Fall.
             break
         }
     }

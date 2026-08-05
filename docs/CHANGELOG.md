@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.12 (Build 243) — GitHub #108: SyncEntitaetsArt.Kind — echtes Enum für Dispatch-Stellen
+
+Code-Review-Fund: `SyncEntitaetsArt` war nur ein Namespace aus `static let`-
+String-Konstanten, kein echtes Enum — jeder `switch art { case
+SyncEntitaetsArt.x: … default: break }` (`loescheFallsVorhanden`, `setzeName`,
+`abgleichKandidatAlsUnterschiedlichBestaetigen` in
+`SyncSnapshotImportService.swift`) bekam dadurch keine
+Exhaustiveness-Prüfung vom Compiler — ein vergessener neuer Fall wäre lautlos
+in `default:` verschwunden.
+
+- Neues, verschachteltes `SyncEntitaetsArt.Kind: String`-Enum NUR für diese
+  drei Dispatch-Stellen — die bestehenden `SyncEntitaetsArt.xyz`-String-
+  Konstanten bleiben für Speicherung/Wire-Format unverändert (Vorwärts-
+  kompatibilität mit künftigen, hier noch unbekannten Werten eines neueren
+  Peers bliebe sonst nicht erhalten, analog `SyncEvent.artRaw`/`SyncEventArt`).
+- Alle drei Stellen switchen jetzt exhaustiv über `Kind` (kein `default:`
+  mehr) — bisher nicht relevante Fälle bleiben als explizite No-Op-Gruppen
+  sichtbar, statt implizit zu verschwinden.
+- Reiner interner Refactor, keine Verhaltensänderung. Build + vollständiger
+  Testlauf (326 Tests, unverändert) grün.
+
 ## v0.12 (Build 242) — GitHub #99: dauerhaftes Sicherheitsnetz-Faktum gegen wiederbelebte Käufe
 
 Behebt den in `docs/DATENSYNCHRONISATION.md` Abschnitt 4.7 dokumentierten
