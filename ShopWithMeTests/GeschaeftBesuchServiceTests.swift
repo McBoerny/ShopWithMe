@@ -11,7 +11,7 @@ struct GeschaeftBesuchServiceTests {
     private let schema = Schema([
         Artikel.self, ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self,
         Einkaufsvorgang.self, KaufEintrag.self, Einkaufsliste.self, EinkaufslistenEintrag.self,
-        SyncEvent.self, ArtikelGeschaeftVerfuegbarkeit.self, GeschaeftBesuch.self,
+        SyncEvent.self, ArtikelGeschaeftVerfuegbarkeit.self, GeschaeftBesuch.self, ArtikelListenKauf.self,
     ])
 
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {

@@ -168,6 +168,12 @@ final class Einkaufsvorgang {
         if let geschaeftFuerEintrag {
             ArtikelVerfuegbarkeitService.vermerkeGekauft(artikel: artikel, geschaeft: geschaeftFuerEintrag, context: context)
         }
+        if let einkaufsliste {
+            // GitHub #99: dauerhaftes Faktum fürs Sicherheitsnetz gegen
+            // wiederbelebte Käufe, unabhängig davon, ob dieser KaufEintrag
+            // später per KaufEintragBereinigungService gelöscht wird.
+            ArtikelListenKaufService.vermerkeAbgehakt(artikel: artikel, einkaufsliste: einkaufsliste, context: context)
+        }
         return .abgehakt
     }
 

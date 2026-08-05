@@ -239,6 +239,38 @@ enum DatenintegritaetsService {
         )
     }
 
+    /// Einmalige Migration (GitHub #99): sichert für jeden noch existierenden
+    /// ``KaufEintrag`` mit auflösbarem ``Artikel``/``Einkaufsliste`` das neue,
+    /// dauerhafte Sicherheitsnetz-Faktum (``ArtikelListenKauf``), bevor der
+    /// jeweilige Kaufeintrag durch die reguläre 48h-Karenzzeit
+    /// (``KaufEintragBereinigungService``) verschwindet — reduziert die
+    /// Übergangslücke direkt beim Rollout dieses Fixes. Kann naturgemäß nur
+    /// erfassen, was zu diesem Zeitpunkt noch existiert; bereits zuvor
+    /// bereinigte Käufe sind nicht rückwirkend rekonstruierbar (siehe
+    /// `docs/DATENSYNCHRONISATION.md` Abschnitt 4.7). Ein `KaufEintrag` ohne
+    /// auflösbare ``Einkaufsliste`` (z.B. ein bereits listenloser, gleich
+    /// darauf per Kaskade gelöschter Vorgang) trägt ohnehin nichts zu einem
+    /// (Artikel, Einkaufsliste)-Faktum bei — die Reihenfolge relativ zu
+    /// ``migriereGeschaeftsAggregateFallsNoetig(context:)`` ist deshalb
+    /// unkritisch.
+    ///
+    /// Idempotent (``ArtikelListenKaufService/vermerkeAbgehaktFallsNoetig(artikel:einkaufsliste:bekannt:context:)``
+    /// prüft selbst vor dem Schreiben): ein wiederholter Aufruf legt keine
+    /// Dubletten an. Läuft beim App-Start, siehe ``ShopWithMeApp``.
+    @MainActor
+    static func migriereArtikelListenKaeufeFallsNoetig(context: ModelContext) {
+        var bekannt = ArtikelListenKaufService.alleSchluessel(context: context)
+        let vorherAnzahl = bekannt.count
+        for eintrag in (try? context.fetch(FetchDescriptor<KaufEintrag>())) ?? [] {
+            guard let artikel = eintrag.artikel, let einkaufsliste = eintrag.einkaufsvorgang?.einkaufsliste else { continue }
+            ArtikelListenKaufService.vermerkeAbgehaktFallsNoetig(artikel: artikel, einkaufsliste: einkaufsliste, bekannt: &bekannt, context: context)
+        }
+        let neuVermerkt = bekannt.count - vorherAnzahl
+        guard neuVermerkt > 0 else { return }
+        try? context.save()
+        DatenintegritaetsLogger.log("\(neuVermerkt) Artikel-Listen-Kauf-Fakten rückwirkend aus bestehenden Kaufeinträgen ergänzt (GitHub #99)")
+    }
+
     /// `nil` gilt nie als baumelnd (ein leerer Bezug ist ein gültiger
     /// Fachzustand, siehe z.B. den `Einkaufsvorgang.einkaufsliste`-Sonderfall
     /// weiter unten) — nur ein gesetztes `objekt`, dessen `persistentModelID`

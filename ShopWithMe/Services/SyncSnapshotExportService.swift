@@ -222,6 +222,14 @@ enum SyncSnapshotExportService {
             )
         }
 
+        let artikelListenKaeufe = ((try? context.fetch(FetchDescriptor<ArtikelListenKauf>())) ?? [])
+            .compactMap { eintrag -> ArtikelListenKaufSnapshot? in
+                guard let artikelID = sichereID(eintrag.artikel, gueltigeIDs: gueltigeArtikelIDs),
+                      let einkaufslisteID = sichereID(eintrag.einkaufsliste, gueltigeIDs: gueltigeEinkaufslistenIDs)
+                else { return nil }
+                return ArtikelListenKaufSnapshot(artikelID: artikelID, einkaufslisteID: einkaufslisteID)
+            }
+
         let tombstones = SyncTombstoneService.alle(context: context).map {
             SyncTombstoneSnapshot(entitaetsArt: $0.entitaetsArt, geloeschteID: $0.geloeschteID, geloeschtAm: $0.geloeschtAm)
         }
@@ -244,6 +252,7 @@ enum SyncSnapshotExportService {
             warengruppenDistanzen: warengruppenDistanzen,
             artikelGeschaeftVerfuegbarkeiten: artikelGeschaeftVerfuegbarkeiten,
             geschaeftBesuche: geschaeftBesuche,
+            artikelListenKaeufe: artikelListenKaeufe,
             tombstones: tombstones
         )
     }
@@ -549,6 +558,7 @@ enum SyncSnapshotExportService {
         lernen.warengruppenDistanzen.sort { $0.id.uuidString < $1.id.uuidString }
         lernen.artikelGeschaeftVerfuegbarkeiten.sort { "\($0.artikelID)_\($0.geschaeftID)" < "\($1.artikelID)_\($1.geschaeftID)" }
         lernen.geschaeftBesuche.sort { $0.id.uuidString < $1.id.uuidString }
+        lernen.artikelListenKaeufe.sort { "\($0.artikelID)_\($0.einkaufslisteID)" < "\($1.artikelID)_\($1.einkaufslisteID)" }
         return lernen
     }
 
@@ -604,7 +614,8 @@ enum SyncSnapshotExportService {
         let lernen = SyncLernenSnapshot(
             warengruppenDistanzen: snapshot.warengruppenDistanzen,
             artikelGeschaeftVerfuegbarkeiten: snapshot.artikelGeschaeftVerfuegbarkeiten,
-            geschaeftBesuche: snapshot.geschaeftBesuche
+            geschaeftBesuche: snapshot.geschaeftBesuche,
+            artikelListenKaeufe: snapshot.artikelListenKaeufe
         )
         let vorgaenge = SyncVorgaengeSnapshot(einkaufsvorgaenge: snapshot.einkaufsvorgaenge)
         let preise = SyncPreisSnapshot(preispunkte: snapshot.preispunkte)

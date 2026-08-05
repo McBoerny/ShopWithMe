@@ -12,7 +12,7 @@ struct SyncSnapshotImportServiceTests {
             Einkaufsliste.self, EinkaufslistenEintrag.self, IgnorierterArtikel.self,
             SyncEvent.self, SyncEntitaetsAlias.self, SyncPeerZaehlerStand.self, SyncPeerInfo.self,
             SyncTombstone.self, Preispunkt.self, ArtikelAlias.self, SyncAbgleichKandidat.self,
-            ArtikelGeschaeftVerfuegbarkeit.self, GeschaeftBesuch.self,
+            ArtikelGeschaeftVerfuegbarkeit.self, GeschaeftBesuch.self, ArtikelListenKauf.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
@@ -56,7 +56,8 @@ struct SyncSnapshotImportServiceTests {
         let lernen = SyncLernenSnapshot(
             warengruppenDistanzen: snapshot.warengruppenDistanzen,
             artikelGeschaeftVerfuegbarkeiten: snapshot.artikelGeschaeftVerfuegbarkeiten,
-            geschaeftBesuche: snapshot.geschaeftBesuche
+            geschaeftBesuche: snapshot.geschaeftBesuche,
+            artikelListenKaeufe: snapshot.artikelListenKaeufe
         )
         let vorgaenge = SyncVorgaengeSnapshot(einkaufsvorgaenge: snapshot.einkaufsvorgaenge)
         let preise = SyncPreisSnapshot(preispunkte: snapshot.preispunkte)
@@ -1509,6 +1510,108 @@ struct SyncSnapshotImportServiceTests {
 
         #expect(try context.fetchCount(FetchDescriptor<ArtikelGeschaeftVerfuegbarkeit>()) == 1)
         #expect(ArtikelVerfuegbarkeitService.wurdeBereitsGekauft(apfel, in: rewe, context: context))
+    }
+
+    /// GitHub #99: Union nach (Artikel, Einkaufsliste)-Paar, kein Duplikat bei
+    /// wiederholtem Sync, kein Tombstone-Bedarf (analog
+    /// ``artikelGeschaeftVerfuegbarkeitWirdAlsExistenzTatsacheUebernommenOhneDuplikat``).
+    @Test
+    func artikelListenKaufWirdAlsExistenzTatsacheUebernommenOhneDuplikat() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759")
+        context.insert(apfel)
+        let liste = Einkaufsliste(name: "Urlaub")
+        context.insert(liste)
+        try context.save()
+
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.artikel = [
+            ArtikelSnapshot(
+                id: apfel.id, name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759",
+                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+            ),
+        ]
+        snapshot.einkaufslisten = [EinkaufslisteSnapshot(id: liste.id, name: "Urlaub", erstelltAm: liste.erstelltAm)]
+        snapshot.artikelListenKaeufe = [
+            ArtikelListenKaufSnapshot(artikelID: apfel.id, einkaufslisteID: liste.id),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+        await SyncSnapshotImportService.importiereSnapshots(context: context) // wiederholter Sync
+
+        #expect(try context.fetchCount(FetchDescriptor<ArtikelListenKauf>()) == 1)
+        #expect(ArtikelListenKaufService.istJemalsAbgehakt(artikel: apfel, einkaufsliste: liste, context: context))
+    }
+
+    /// **Regressionstest für GitHub #99** — die ursprünglich gemeldete
+    /// Live-Test-Divergenz (oszillierende Mitgliederzahl der Liste „Urlaub"):
+    /// Ein Artikel wird abgehakt, sein `KaufEintrag` läuft anschließend durch
+    /// `KaufEintragBereinigungService`s 48h-Karenzzeit ab (hier direkt
+    /// simuliert durch Löschen von `KaufEintrag`+`Einkaufsvorgang`, exakt wie
+    /// der reale Service es tut — OHNE das neue ``ArtikelListenKauf``-Faktum
+    /// anzutasten, das dieser Service nie berührt). Ein Peer mit veraltetem
+    /// `listen.json` (per Fingerabdruck-Skip nie aktualisiert) listet den
+    /// Artikel weiterhin als offenes Listenmitglied. Vor dem Fix hätte
+    /// `istBereitsAbgehakt` an dieser Stelle `false` geliefert (keine
+    /// existierenden `KaufEintrag`e mehr) und der Artikel wäre auf die offene
+    /// Liste zurückgeholt worden.
+    @Test
+    func bereitsAbgehakterArtikelUeberlebtKaufEintragBereinigungUndWirdNichtDurchStalenPeerZurueckgeholt() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let liste = Einkaufsliste(name: "Urlaub")
+        context.insert(liste)
+        let artikel = Artikel(name: "Sonnencreme", symbolName: "sun.max.fill", farbeHex: "#FFCC00")
+        context.insert(artikel)
+        let vorgang = Einkaufsvorgang(einkaufsliste: liste)
+        context.insert(vorgang)
+        _ = vorgang.artikelAbhakenOhneEventAufzeichnung(artikel, context: context)
+        try context.save()
+        #expect(!liste.enthaelt(artikel))
+        #expect(ArtikelListenKaufService.istJemalsAbgehakt(artikel: artikel, einkaufsliste: liste, context: context))
+
+        // KaufEintragBereinigungService.bereinigen() nach Ablauf der
+        // Karenzzeit: löscht KaufEintrag + leer gewordenen Vorgang, rührt
+        // ArtikelListenKauf nicht an.
+        for eintrag in try context.fetch(FetchDescriptor<KaufEintrag>()) {
+            context.delete(eintrag)
+        }
+        context.delete(vorgang)
+        try context.save()
+        #expect(try context.fetchCount(FetchDescriptor<KaufEintrag>()) == 0)
+        #expect(try context.fetchCount(FetchDescriptor<Einkaufsvorgang>()) == 0)
+
+        // Ein Peer, der die Abwahl/das Abhaken noch nicht mitbekommen hat,
+        // listet Sonnencreme in seinem (per Fingerabdruck-Skip veralteten)
+        // Snapshot weiterhin als Mitglied der Liste.
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.einkaufslisten = [EinkaufslisteSnapshot(id: liste.id, name: "Urlaub", erstelltAm: liste.erstelltAm)]
+        snapshot.artikel = [
+            ArtikelSnapshot(
+                id: artikel.id, name: "Sonnencreme", symbolName: "sun.max.fill", farbeHex: "#FFCC00",
+                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+            ),
+        ]
+        snapshot.einkaufslistenEintraege = [
+            EinkaufslistenEintragSnapshot(einkaufslisteID: liste.id, artikelID: artikel.id, menge: 1, notiz: nil),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        // Das dauerhafte Faktum verhindert die Wiederbelebung, obwohl der
+        // KaufEintrag längst weg ist.
+        #expect(!liste.enthaelt(artikel))
     }
 
     /// `docs/GESCHAEFTS_AGGREGATE.md`: Union nach `id` (= `id` des

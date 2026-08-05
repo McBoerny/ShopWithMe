@@ -31,7 +31,7 @@ struct DatenintegritaetsServiceTests {
         Artikel.self, ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self,
         Einkaufsvorgang.self, KaufEintrag.self, WarengruppenDistanz.self,
         Einkaufsliste.self, EinkaufslistenEintrag.self, IgnorierterArtikel.self,
-        SyncEvent.self, ArtikelGeschaeftVerfuegbarkeit.self, GeschaeftBesuch.self,
+        SyncEvent.self, ArtikelGeschaeftVerfuegbarkeit.self, GeschaeftBesuch.self, ArtikelListenKauf.self,
     ])
 
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {
@@ -237,5 +237,57 @@ struct DatenintegritaetsServiceTests {
 
         #expect(try context.fetchCount(FetchDescriptor<GeschaeftBesuch>()) == 1)
         #expect(try context.fetchCount(FetchDescriptor<Einkaufsvorgang>()) == 0)
+    }
+
+    /// GitHub #99: sichert für einen noch existierenden `KaufEintrag` mit
+    /// auflösbarer `Einkaufsliste` das neue Sicherheitsnetz-Faktum
+    /// (``ArtikelListenKauf``) nach — analog
+    /// ``migriertBestandVorLoeschungListenloserVorgaengeMitKaeufen``, hier mit
+    /// gesetzter Liste statt `nil`.
+    @Test
+    func migriertArtikelListenKaufAusBestehendemKaufEintrag() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let liste = Einkaufsliste(name: "Urlaub")
+        context.insert(liste)
+        let artikel = Artikel(name: "Sonnencreme", symbolName: "sun.max.fill", farbeHex: "#FFCC00")
+        context.insert(artikel)
+        let vorgang = Einkaufsvorgang(einkaufsliste: liste, startZeit: Date().addingTimeInterval(-600))
+        context.insert(vorgang)
+        vorgang.endZeit = Date()
+        let kauf = KaufEintrag(artikel: artikel, geschaeft: nil)
+        kauf.einkaufsvorgang = vorgang
+        context.insert(kauf)
+        try context.save()
+
+        DatenintegritaetsService.migriereArtikelListenKaeufeFallsNoetig(context: context)
+
+        #expect(ArtikelListenKaufService.istJemalsAbgehakt(artikel: artikel, einkaufsliste: liste, context: context))
+    }
+
+    /// Idempotenz wie bei den übrigen Migrationen: ein zweiter Aufruf legt
+    /// keine Dublette an.
+    @Test
+    func migriertArtikelListenKaufIstIdempotent() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let liste = Einkaufsliste(name: "Urlaub")
+        context.insert(liste)
+        let artikel = Artikel(name: "Sonnencreme", symbolName: "sun.max.fill", farbeHex: "#FFCC00")
+        context.insert(artikel)
+        let vorgang = Einkaufsvorgang(einkaufsliste: liste)
+        context.insert(vorgang)
+        vorgang.endZeit = Date()
+        let kauf = KaufEintrag(artikel: artikel, geschaeft: nil)
+        kauf.einkaufsvorgang = vorgang
+        context.insert(kauf)
+        try context.save()
+
+        DatenintegritaetsService.migriereArtikelListenKaeufeFallsNoetig(context: context)
+        DatenintegritaetsService.migriereArtikelListenKaeufeFallsNoetig(context: context)
+
+        #expect(try context.fetchCount(FetchDescriptor<ArtikelListenKauf>()) == 1)
     }
 }

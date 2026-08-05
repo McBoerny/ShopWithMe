@@ -1,5 +1,39 @@
 # Changelog
 
+## v0.12 (Build 242) — GitHub #99: dauerhaftes Sicherheitsnetz-Faktum gegen wiederbelebte Käufe
+
+Behebt den in `docs/DATENSYNCHRONISATION.md` Abschnitt 4.7 dokumentierten
+Live-Test-Bug (oszillierende Mitgliederzahl der Liste „Urlaub"): das
+Sicherheitsnetz gegen wiederbelebte Käufe (`istBereitsAbgehakt`) stützte sich
+ausschließlich auf noch existierende `KaufEintrag`e — `KaufEintragBereinigungService`
+löscht diese aber 48h nach Abschluss ihres Vorgangs, ohne dass der
+Artikel-/Listenbezug in einem Tombstone erhalten bleibt.
+
+- **Neu: `ArtikelListenKauf`** (Bereich D, Schema-Erweiterung — additiv, keine
+  neue `SchemaVN`/`MigrationStage` nötig, analog `ArtikelGeschaeftVerfuegbarkeit`) —
+  eine Zeile pro (Artikel, Einkaufsliste)-Paar, dauerhaft, unabhängig von der
+  48h-Karenzzeit und bewusst unabhängig von der Tombstone-Aufräum-Watermark.
+- `SyncSnapshot.aktuelleFormatVersion` auf 7 erhöht (`artikelListenKaeufe`),
+  wie bei allen vorherigen additiven Erweiterungen keine Rückwärtskompatibilität
+  nötig.
+- Geschrieben in `Einkaufsvorgang.artikelAbhakenOhneEventAufzeichnung` (lokal/
+  per Event materialisiert) sowie in `SyncSnapshotImportService.mergeKaufEintraege`
+  (Bereich-C-Snapshot-Merge, legt `KaufEintrag` direkt an).
+- Einmalige Bestandsmigration (`DatenintegritaetsService.migriereArtikelListenKaeufeFallsNoetig`)
+  sichert das Faktum beim Rollout für jeden noch existierenden `KaufEintrag`
+  nach — kann naturgemäß nur erfassen, was zu diesem Zeitpunkt noch existiert.
+- Bekannter, bewusst in Kauf genommener Randfall: `mergeArtikelListenKaeufe`
+  läuft weiterhin NACH `mergeEinkaufslistenEintraege` in der Aufrufreihenfolge,
+  ein im selben Sync-Zyklus frisch eintreffender Beleg wirkt sich deshalb erst
+  im nächsten Zyklus aus (selbstauflösend, keine Umstellung der mehrfach
+  live-getesteten Abhängigkeitsreihenfolge).
+
+Details/Begründung: `docs/DATENSYNCHRONISATION.md` Abschnitt 4.7 (Nachtrag).
+Neue Tests: `ArtikelListenKaufServiceTests`, zwei neue Fälle in
+`SyncSnapshotImportServiceTests` (inkl. Regressionstest für das ursprüngliche
+Bug-Szenario) und `DatenintegritaetsServiceTests`. Build + vollständiger
+Testlauf (326 Tests) grün.
+
 ## v0.12 (Build 241) — Vier Code-Review-Funde behoben (Datenintegritäts-Check, Sync-Merge-Performance, Doku)
 
 Aus dem vollständigen Code-Review-Durchgang vom 2026-08-05 (dafür angelegte

@@ -53,6 +53,7 @@ enum SchemaV1: VersionedSchema {
             WarengruppenDistanzPeerZaehlerStand.self,
             ArtikelGeschaeftVerfuegbarkeit.self,
             GeschaeftBesuch.self,
+            ArtikelListenKauf.self,
         ]
     }
 }

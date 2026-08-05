@@ -58,7 +58,7 @@ Zwei Kanäle mit unterschiedlicher Frequenz/Konfliktsemantik:
 | **A — zeitkritisch** | Einkaufslisten-Mitgliedschaft, Abhaken/Abwählen | `SyncEvent`, jeder Sync-Zyklus | Lamport-Uhr + `SyncKonfliktAufloesung` (Abschnitt 3) |
 | **B — Stammdaten** | `GeschaeftTyp`, `ArtikelKategorie`, `Geschaeft`, `Artikel`, `Einkaufsliste`, `ArtikelAlias` | `SyncSnapshot`, jeder Sync-Zyklus | additiv/nie destruktiv (Abschnitt 4) |
 | **C — Historie** | `Einkaufsvorgang`, `KaufEintrag`, `Preispunkt` | `SyncSnapshot` | Union nach `id` |
-| **D — Lernen** | `WarengruppenDistanz` | `SyncSnapshot` | gewichteter Mittelwert |
+| **D — Lernen** | `WarengruppenDistanz`, `ArtikelListenKauf` (seit GitHub #99) | `SyncSnapshot` | gewichteter Mittelwert bzw. Union (Abschnitt 4.7) |
 
 **Zusätzlich ein Multipeer-Beschleunigungskanal** (GitHub #49,
 ``MultipeerSyncService``) neben dem FileProvider-Kanal — rein additiv, keine
@@ -245,7 +245,14 @@ die Ambiguitäts-Regel selbst keinen Treffer findet (z.B. „Milch" vs.
 Zuordnungstabellen früherer): `GeschaeftTyp` → `ArtikelKategorie` →
 `Geschaeft` → `Artikel` → `Einkaufsliste` → `EinkaufslistenEintrag` →
 `Einkaufsvorgang` → `KaufEintrag` → `Preispunkt` → `ArtikelAlias` →
-`WarengruppenDistanz`.
+`WarengruppenDistanz` → `ArtikelGeschaeftVerfuegbarkeit`/`GeschaeftBesuch` →
+`ArtikelListenKauf`. **Bewusst NACH `EinkaufslistenEintrag`** (GitHub #99,
+siehe Abschnitt 4.7): ein im selben Zyklus frisch eintreffender
+„schon-gekauft"-Beleg wirkt sich dadurch erst im nächsten Zyklus auf dessen
+Sicherheitsnetz-Prüfung aus, nicht rückwirkend im selben Durchlauf — bewusst
+in Kauf genommen, um die hier dokumentierte, mehrfach live-getestete
+Reihenfolge nicht anzutasten (selbstauflösender Randfall, kein dauerhafter
+Fehler).
 
 ### 4.3 Einkaufsvorgang — keine geteilte Vorgangs-Identität mehr nötig
 
@@ -505,6 +512,48 @@ basierte Ausnahme zurück — bewusst kein neu geratener Zeitschwellwert,
 sondern Wiederverwendung des bereits für genau diese Frage („kann ich mich
 noch auf mein eigenes Event-Lesen verlassen") gebauten Mechanismus aus
 Abschnitt 9a.
+
+**Nachtrag (GitHub #99, behoben 2026-08-05): der Absatz oben „dauerhaft
+belastbares Faktum" stimmte nicht.** „Ich habe irgendwann einen `KaufEintrag`
+dafür" wurde ausschließlich über noch existierende `KaufEintrag`e unter noch
+existierenden `Einkaufsvorgang`en geprüft — `KaufEintragBereinigungService`
+löscht diese aber 48h nach Abschluss ihres Vorgangs, OHNE dass der
+Artikel-/Listenbezug in einem Tombstone erhalten bleibt (`SyncTombstone` für
+`.kaufEintrag` führt nur die ID des gelöschten `KaufEintrag` selbst). Ein
+Gerät verlor dadurch nach Ablauf der Karenzzeit seine einzige Evidenz, und ein
+Peer mit veraltetem (per Fingerabdruck-Skip übersprungenem) `listen.json`
+konnte den Artikel klaglos zurückholen — bestätigt per Log-Korrelation über
+mehrere Stunden oszillierender Mitgliederzahl der Liste „Urlaub".
+
+**Fix:** neues, eigenständiges Bereich-D-Faktum ``ArtikelListenKauf`` (analog
+``ArtikelGeschaeftVerfuegbarkeit``, siehe `docs/GESCHAEFTS_AGGREGATE.md`) —
+eine Zeile pro (`Artikel`, `Einkaufsliste`)-Paar, die JEDES abgehakte Häkchen
+dauerhaft festhält, unabhängig davon, ob der zugrundeliegende `KaufEintrag`
+später bereinigt wird, und bewusst OHNE Abhängigkeit von der
+Tombstone-Aufräum-Watermark (Peer-Lebenszyklus, `docs/PEER_LEBENSZYKLUS.md`)
+— die Absicherung soll unabhängig von deren Timing dauerhaft gelten.
+Geschrieben in `Einkaufsvorgang.artikelAbhakenOhneEventAufzeichnung` (lokales
+Abhaken, deckt auch den per Bereich-A-Event materialisierten Fall ab) sowie
+in `SyncSnapshotImportService.mergeKaufEintraege` (Bereich-C-Snapshot-Merge,
+der `KaufEintrag`-Objekte direkt anlegt, ohne über die genannte Funktion zu
+laufen). `istBereitsAbgehakt` prüft dieses Faktum jetzt VOR dem alten
+`vorgaengeFuerListe`-Scan, der als Fallback für Altbestand bestehen bleibt
+(siehe Bestandsmigration unten). Einmalige Bestandsmigration
+(`DatenintegritaetsService.migriereArtikelListenKaeufeFallsNoetig`) sichert
+beim Rollout dieses Fixes das Faktum für jeden zu diesem Zeitpunkt noch
+existierenden `KaufEintrag` nach — kann naturgemäß nur erfassen, was noch
+existiert, bereits zuvor bereinigte Käufe bleiben für die Übergangszeit
+unerfasst (kein neuer Schaden, derselbe Zustand wie vor diesem Fix, bis der
+Artikel das nächste Mal auf derselben Liste abgehakt wird).
+
+**Bewusst in Kauf genommener Randfall:** `mergeKaufEintraege`/die neue
+`mergeArtikelListenKaeufe` laufen in der Aufrufreihenfolge (Abschnitt 4.2)
+NACH `mergeEinkaufslistenEintraege` — ein im selben Sync-Zyklus frisch
+eintreffender Beleg für „schon gekauft" wirkt sich deshalb erst im NÄCHSTEN
+Zyklus auf die Sicherheitsnetz-Prüfung aus, nicht rückwirkend im selben
+Durchlauf. Bewusst nicht behoben (würde eine Umstellung der seit mehreren
+Live-Tests bestätigten Abhängigkeitsreihenfolge erfordern) — der Randfall
+löst sich beim nächsten Zyklus von selbst auf.
 
 ## 5. Sync-Zyklus und adaptives Polling
 

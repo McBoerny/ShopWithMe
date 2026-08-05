@@ -77,7 +77,15 @@ struct SyncSnapshot: Codable {
     /// ursprüngliche ``Einkaufsvorgang`` noch existiert (Voraussetzung dafür,
     /// dass ``Einkaufsliste/einkaufsvorgaenge`` jetzt kaskadierend löschen
     /// darf). Wieder keine Rückwärtskompatibilität nötig, siehe Version 3.
-    static let aktuelleFormatVersion = 6
+    ///
+    /// **Version 7 (GitHub #99 — dauerhaftes Sicherheitsnetz-Faktum):**
+    /// ``artikelListenKaeufe`` neu hinzugekommen, siehe ``ArtikelListenKauf``.
+    /// Ersetzt die vorherige, ausschließlich auf noch existierenden
+    /// ``KaufEintrag``en basierende Prüfung in
+    /// ``SyncSnapshotImportService/istBereitsAbgehakt(_:aufListe:alleVorgaenge:istAusDerZeitGefallen:jemalsAbgehakteSchluessel:)``,
+    /// die durch `KaufEintragBereinigungService`s 48h-Löschung ihre Evidenz
+    /// verlor. Wieder keine Rückwärtskompatibilität nötig, siehe Version 3.
+    static let aktuelleFormatVersion = 7
 
     var formatVersion: Int
     var erzeugtAm: Date
@@ -114,6 +122,8 @@ struct SyncSnapshot: Codable {
     var artikelGeschaeftVerfuegbarkeiten: [ArtikelGeschaeftVerfuegbarkeitSnapshot] = []
     /// Seit Version 6, siehe ``GeschaeftBesuch``.
     var geschaeftBesuche: [GeschaeftBesuchSnapshot] = []
+    /// Seit Version 7, siehe ``ArtikelListenKauf``.
+    var artikelListenKaeufe: [ArtikelListenKaufSnapshot] = []
     /// Absichtliche Löschungen von Bereich-B-Entitäten (``Geschaeft``,
     /// ``Artikel``, ``ArtikelKategorie``, ``Einkaufsliste``, ``KaufEintrag``,
     /// ``Preispunkt``), siehe ``SyncTombstone``.
@@ -271,6 +281,15 @@ struct GeschaeftBesuchSnapshot: Codable {
     var anzahlProdukte: Int
 }
 
+/// Seit Version 7, siehe ``ArtikelListenKauf``. Reine Existenz-Tatsache —
+/// analog ``ArtikelGeschaeftVerfuegbarkeitSnapshot``, kein Zähler, da nichts
+/// gemittelt werden muss (Union nach (``artikelID``, ``einkaufslisteID``),
+/// siehe ``SyncSnapshotImportService``).
+struct ArtikelListenKaufSnapshot: Codable {
+    var artikelID: UUID
+    var einkaufslisteID: UUID
+}
+
 struct PreispunktSnapshot: Codable {
     var id: UUID
     var artikelID: UUID?
@@ -384,11 +403,14 @@ struct SyncListenSnapshot: Codable {
 /// hier statt in einer eigenen Datei: beide ändern sich in derselben
 /// Größenordnung wie ``warengruppenDistanzen`` (bei jedem Abhaken bzw. jedem
 /// Kaufabschluss), eine weitere unabhängig fingerabdruck-geprüfte Datei hätte
-/// hier keinen zusätzlichen Nutzen gebracht.
+/// hier keinen zusätzlichen Nutzen gebracht. **Seit Version 7 zusätzlich
+/// ``artikelListenKaeufe``** (GitHub #99) — ändert sich in derselben
+/// Größenordnung (bei jedem Abhaken), dieselbe Begründung.
 struct SyncLernenSnapshot: Codable {
     var warengruppenDistanzen: [WarengruppenDistanzSnapshot]
     var artikelGeschaeftVerfuegbarkeiten: [ArtikelGeschaeftVerfuegbarkeitSnapshot] = []
     var geschaeftBesuche: [GeschaeftBesuchSnapshot] = []
+    var artikelListenKaeufe: [ArtikelListenKaufSnapshot] = []
 }
 
 /// Bereich C, Einkaufsvorgänge — eigene Datei, da `Einkaufsvorgang.endZeit`

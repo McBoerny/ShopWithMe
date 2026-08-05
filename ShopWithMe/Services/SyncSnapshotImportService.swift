@@ -484,6 +484,7 @@ enum SyncSnapshotImportService {
             lernen.artikelGeschaeftVerfuegbarkeiten, artikelZuordnung: artikelZuordnung, geschaeftZuordnung: geschaeftZuordnung, context: context
         )
         mergeGeschaeftBesuche(lernen.geschaeftBesuche, geschaeftZuordnung: geschaeftZuordnung, context: context)
+        mergeArtikelListenKaeufe(lernen.artikelListenKaeufe, artikelZuordnung: artikelZuordnung, listeZuordnung: listeZuordnung, context: context)
     }
 
     /// **Nur noch für den lokalen Backup-/Wiederherstellungs-Pfad**
@@ -536,6 +537,9 @@ enum SyncSnapshotImportService {
             snapshot.artikelGeschaeftVerfuegbarkeiten, artikelZuordnung: artikelZuordnung, geschaeftZuordnung: geschaeftZuordnung, context: context
         )
         mergeGeschaeftBesuche(snapshot.geschaeftBesuche, geschaeftZuordnung: geschaeftZuordnung, context: context)
+        mergeArtikelListenKaeufe(
+            snapshot.artikelListenKaeufe, artikelZuordnung: artikelZuordnung, listeZuordnung: listeZuordnung, context: context
+        )
     }
 
     // MARK: - Tombstones (Löschungen)
@@ -984,13 +988,24 @@ enum SyncSnapshotImportService {
         // Bestand ist während dieses gesamten Durchlaufs also bereits vollständig.
         let alleVorgaenge = (try? context.fetch(FetchDescriptor<Einkaufsvorgang>())) ?? []
         // Einmal pro Merge-Durchlauf berechnet statt pro Artikel — siehe
-        // Begründung in ``istBereitsAbgehakt(_:aufListe:alleVorgaenge:istAusDerZeitGefallen:)``.
+        // Begründung in ``istBereitsAbgehakt(_:aufListe:alleVorgaenge:istAusDerZeitGefallen:jemalsAbgehakteSchluessel:)``.
         let istAusDerZeitGefallen = SyncAktualitaetsService.istAusDerZeitGefallen(context: context)
+        // GitHub #99: dauerhaftes Faktum, siehe ``ArtikelListenKauf``. Spiegelt
+        // den Bestand zu Beginn DIESES Durchlaufs — ein im selben Zyklus per
+        // ``mergeKaufEintraege(_:artikelZuordnung:einkaufsvorgangZuordnung:geschaeftZuordnung:kategorieZuordnung:peerGeraeteID:context:)``/
+        // ``mergeArtikelListenKaeufe(_:artikelZuordnung:listeZuordnung:context:)``
+        // (beide bewusst SPÄTER in der Aufrufreihenfolge, siehe dortige
+        // Typ-Doku) neu eintreffender Beleg wirkt sich erst im nächsten Zyklus
+        // aus — ein sich selbst auflösender Randfall, kein dauerhafter Fehler.
+        let jemalsAbgehakteSchluessel = ArtikelListenKaufService.alleSchluessel(context: context)
         for eintrag in remote {
             guard let liste = listeZuordnung[eintrag.einkaufslisteID],
                   let artikel = artikelZuordnung[eintrag.artikelID],
                   !liste.enthaelt(artikel),
-                  !istBereitsAbgehakt(artikel, aufListe: liste, alleVorgaenge: alleVorgaenge, istAusDerZeitGefallen: istAusDerZeitGefallen)
+                  !istBereitsAbgehakt(
+                      artikel, aufListe: liste, alleVorgaenge: alleVorgaenge, istAusDerZeitGefallen: istAusDerZeitGefallen,
+                      jemalsAbgehakteSchluessel: jemalsAbgehakteSchluessel
+                  )
             else { continue }
             context.insert(EinkaufslistenEintrag(einkaufsliste: liste, artikel: artikel, menge: eintrag.menge, notiz: eintrag.notiz))
         }
@@ -1033,9 +1048,32 @@ enum SyncSnapshotImportService {
     /// (`Einkaufsvorgang.offenerNachfolger`). Das ist gleichwertig zu „existiert
     /// unter den Vorgängen dieser Liste überhaupt ein offener" — hier
     /// direkt so geprüft, ohne den (jetzt gelöschten) Umweg.
+    ///
+    /// **Bug (GitHub #99, behoben 2026-08-05): der obige Absatz „dauerhaft
+    /// belastbares Faktum" stimmte nicht.** „Ich habe irgendwann einen
+    /// `KaufEintrag` dafür" wurde bisher ausschließlich über noch
+    /// existierende `KaufEintrag`e unter noch existierenden `Einkaufsvorgang`en
+    /// geprüft (`vorgaengeFuerListe` unten) — `KaufEintragBereinigungService`
+    /// löscht genau diese aber 48h nach Abschluss ihres Vorgangs, OHNE dass
+    /// der Artikel-/Listenbezug in einem Tombstone erhalten bleibt. Ein Gerät
+    /// verlor dadurch nach Ablauf der Karenzzeit seine einzige Evidenz, und
+    /// ein Peer mit veraltetem `listen.json` konnte den Artikel klaglos
+    /// zurückholen (Live-Test-Beleg: oszillierende Mitgliederzahl der Liste
+    /// „Urlaub" über mehrere Stunden). ``ArtikelListenKauf``
+    /// (`jemalsAbgehakteSchluessel`) behebt das als dauerhaftes, von der
+    /// 48h-Karenzzeit unabhängiges Faktum und wird deshalb VOR dem
+    /// `vorgaengeFuerListe`-Scan geprüft; Letzterer bleibt als Fallback für
+    /// Altbestand, den die einmalige Bestandsmigration
+    /// (``DatenintegritaetsService/migriereArtikelListenKaeufeFallsNoetig(context:)``)
+    /// nicht mehr rekonstruieren konnte (bereits vor dieser Migration
+    /// bereinigte Käufe).
     private static func istBereitsAbgehakt(
-        _ artikel: Artikel, aufListe liste: Einkaufsliste, alleVorgaenge: [Einkaufsvorgang], istAusDerZeitGefallen: Bool
+        _ artikel: Artikel, aufListe liste: Einkaufsliste, alleVorgaenge: [Einkaufsvorgang], istAusDerZeitGefallen: Bool,
+        jemalsAbgehakteSchluessel: Set<ArtikelListenKaufService.Schluessel>
     ) -> Bool {
+        if jemalsAbgehakteSchluessel.contains(ArtikelListenKaufService.Schluessel(artikelID: artikel.id, einkaufslisteID: liste.id)) {
+            return true
+        }
         let vorgaengeFuerListe = alleVorgaenge.filter { $0.einkaufsliste == liste }
         guard vorgaengeFuerListe.contains(where: { $0.kaufEintraege.contains { $0.artikel == artikel } }) else { return false }
         guard istAusDerZeitGefallen else { return true }
@@ -1274,6 +1312,13 @@ enum SyncSnapshotImportService {
     ) {
         let geloeschteIDs = SyncTombstoneService.geloeschteIDs(art: SyncEntitaetsArt.kaufEintrag, context: context)
         let bekannteIDs = Set(((try? context.fetch(FetchDescriptor<KaufEintrag>())) ?? []).map(\.id))
+        // GitHub #99: dauerhaftes Sicherheitsnetz-Faktum, auch für
+        // KaufEintraege, die nicht über das lokale Abhaken
+        // (`Einkaufsvorgang.artikelAbhakenOhneEventAufzeichnung`), sondern
+        // direkt per Bereich-C-Snapshot-Merge neu entstehen — dieser Zweig
+        // legt `KaufEintrag`-Objekte direkt an, ohne über jene Funktion zu
+        // laufen, bräuchte also sonst eine eigene Lücke im Sicherheitsnetz.
+        var bekannteArtikelListenSchluessel = ArtikelListenKaufService.alleSchluessel(context: context)
         for eintrag in remote {
             guard !bekannteIDs.contains(eintrag.id) else { continue }
             // Retention- oder manuell gelöschter Eintrag eines Peers, der ihn
@@ -1310,6 +1355,12 @@ enum SyncSnapshotImportService {
             neuer.artikelNameSnapshot = eintrag.artikelNameSnapshot
             neuer.geschaeftNameSnapshot = eintrag.geschaeftNameSnapshot
             context.insert(neuer)
+
+            if let artikel = neuer.artikel, let einkaufsliste = neuer.einkaufsvorgang?.einkaufsliste {
+                ArtikelListenKaufService.vermerkeAbgehaktFallsNoetig(
+                    artikel: artikel, einkaufsliste: einkaufsliste, bekannt: &bekannteArtikelListenSchluessel, context: context
+                )
+            }
         }
     }
 
@@ -1472,6 +1523,36 @@ enum SyncSnapshotImportService {
                 startZeit: eintrag.startZeit, endZeit: eintrag.endZeit, anzahlProdukte: eintrag.anzahlProdukte
             )
             context.insert(neuer)
+        }
+    }
+
+    /// Reine Existenz-Tatsache (GitHub #99), kein Zähler/Mittelwert wie bei
+    /// ``mergeWarengruppenDistanzen`` — Union nach (``Artikel``,
+    /// ``Einkaufsliste``)-Paar, kein Tombstone nötig (wird vom Nutzer nie
+    /// direkt gelöscht, siehe ``ArtikelListenKauf``-Typ-Doku). Vorab geladenes
+    /// Set statt Existenz-Check pro Remote-Eintrag, mit Nachführen innerhalb
+    /// der Schleife (Muster wie ``mergeArtikel``) — verhindert Dubletten,
+    /// falls derselbe Peer-Batch mehrere Einträge desselben Paares enthält.
+    ///
+    /// **Bewusst nach ``mergeEinkaufslistenEintraege(_:listeZuordnung:artikelZuordnung:context:)``
+    /// in der Aufrufreihenfolge belassen** (nicht vorgezogen, obwohl dieser
+    /// Merge dessen Sicherheitsnetz-Prüfung eigentlich zuarbeitet): ein in
+    /// DEMSELBEN Zyklus frisch eintreffender Beleg für „schon gekauft" wird
+    /// dadurch erst im JEWEILS NÄCHSTEN Zyklus für die Sicherheitsnetz-Prüfung
+    /// wirksam, nicht sofort im selben Durchlauf — ein bewusst in Kauf
+    /// genommener, sich selbst auflösender Randfall (System konvergiert beim
+    /// nächsten Zyklus), um die bestehende, mehrfach live-getestete
+    /// Abhängigkeitsreihenfolge (`docs/DATENSYNCHRONISATION.md` Abschnitt 4.2)
+    /// nicht anzutasten.
+    @MainActor
+    private static func mergeArtikelListenKaeufe(
+        _ remote: [ArtikelListenKaufSnapshot], artikelZuordnung: [UUID: Artikel], listeZuordnung: [UUID: Einkaufsliste],
+        context: ModelContext
+    ) {
+        var bekannt = ArtikelListenKaufService.alleSchluessel(context: context)
+        for eintrag in remote {
+            guard let artikel = artikelZuordnung[eintrag.artikelID], let einkaufsliste = listeZuordnung[eintrag.einkaufslisteID] else { continue }
+            ArtikelListenKaufService.vermerkeAbgehaktFallsNoetig(artikel: artikel, einkaufsliste: einkaufsliste, bekannt: &bekannt, context: context)
         }
     }
 
