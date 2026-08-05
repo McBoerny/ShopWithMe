@@ -1,6 +1,19 @@
 # Changelog
 
-## v0.12 (Build 245) — GitHub #104: G-Counter-Baustein doppelt implementiert
+## v0.12 (Build 246) — GitHub #102 (Diagnose): Prüfwerkzeug für doppelte Modell-IDs
+
+Vorbereitung für `@Attribute(.unique) var id: UUID` auf den app-eigenen
+Model-IDs (bislang ohne Index — jeder ID-Lookup im Sync-Merge ist ein
+Full-Table-Scan). Laut Migrations-Kriterium (`docs/DECISIONS.md`) ist die
+Unique-Constraint-Einführung strukturell riskant, falls im realen Bestand
+bereits doppelte `id`-Werte existieren (Migration würde fehlschlagen).
+
+Neu: `ModellIDDuplikatService.pruefe(context:)` prüft alle ~21 `@Model`-Typen
+mit eigener `id: UUID` auf Duplikate und meldet je Typ nur Anzahl betroffener
+IDs/überzähliger Zeilen — bewusst ohne die IDs oder Inhalte selbst
+preiszugeben. Über Einstellungen → Debugging → „Modell-ID-Duplikate" manuell
+auslösbar. Das eigentliche `@Attribute(.unique)` folgt erst nach einer
+sauberen Prüfung auf einem echten Gerätestand.
 
 `SyncPeerZaehlerStand` und `WarengruppenDistanzPeerZaehlerStand` enthielten dieselbe
 "nur bei tatsächlicher Änderung schreiben"-Entscheidungslogik für

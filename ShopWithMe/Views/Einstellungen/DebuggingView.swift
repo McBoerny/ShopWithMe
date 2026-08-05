@@ -65,6 +65,8 @@ struct DebuggingView: View {
 
             DatenintegritaetSection()
 
+            ModellIDDuplikatSection()
+
             #if DEBUG
             SuchradiusUeberschreibungSection()
             #endif
@@ -426,6 +428,42 @@ private struct DatenintegritaetSection: View {
             zeigeNeustartHinweis = true
         } catch {
             resetFehlermeldung = error.localizedDescription
+        }
+    }
+}
+
+/// Manuell auslösbare Diagnose für GitHub #102: prüft, ob bereits doppelte
+/// `id`-Werte innerhalb eines `@Model`-Typs existieren — Voraussetzung dafür,
+/// `@Attribute(.unique)` auf den app-eigenen `id`-Feldern sicher einführen zu
+/// können (eine Unique-Constraint-Migration würde bei bestehenden Duplikaten
+/// fehlschlagen). Zeigt bewusst nur Typname und Anzahl, nie die betroffenen
+/// IDs oder Inhalte selbst (siehe ``ModellIDDuplikatService``).
+private struct ModellIDDuplikatSection: View {
+    @Environment(\.modelContext) private var modelContext
+    @State private var wurdeGeprueft = false
+    @State private var befunde: [ModellIDDuplikatService.Befund] = []
+
+    var body: some View {
+        Section {
+            if wurdeGeprueft {
+                if befunde.isEmpty {
+                    Text("Keine doppelten IDs gefunden.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(befunde) { befund in
+                        Text(befund.beschreibung)
+                            .font(.caption)
+                    }
+                }
+            }
+            Button("Auf doppelte Modell-IDs prüfen") {
+                befunde = ModellIDDuplikatService.pruefe(context: modelContext)
+                wurdeGeprueft = true
+            }
+        } header: {
+            Text("Modell-ID-Duplikate (GitHub #102)")
+        } footer: {
+            Text("Prüft, ob innerhalb eines Datentyps (Artikel, Geschäft, …) bereits dieselbe ID mehrfach vergeben wurde — Voraussetzung, um künftig eindeutige IDs technisch zu erzwingen. Zeigt nur Typname und Anzahl, keine Inhalte.")
         }
     }
 }
