@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.12 (Build 244) — GitHub #105: "Sofort nachführen"-Cache-Pattern gebündelt
+
+Code-Review-Fund: `mergeArtikelKategorien`, `mergeGeschaefte`, `mergeArtikel`
+und `mergeEinkaufslisten` (`SyncSnapshotImportService.swift`) wiederholten
+denselben Aufbau wortgleich viermal (lokalen Bestand vorab fetchen, per
+Dictionary indizieren, bei Neuanlage sofort nachführen).
+
+- Neuer, generischer `LokalerBestandCache<T: IdentifizierbaresModell>`
+  kapselt Fetch + ID-Index + `nachfuehren(_:)` — alle vier Funktionen nutzen
+  ihn jetzt statt der Handimplementierung. Das jeweils unterschiedliche
+  Matching (Name/Koordinaten/Ambiguitäts-Regel) bleibt unverändert je
+  Funktion, da es keine dictionary-taugliche Gleichheit ist.
+- Bewusst NICHT auf `mergeEinkaufsvorgaenge` ausgeweitet — dessen
+  `offenerTreffer`-Fallback hat eine eigene, separat gehärtete Sonderrolle;
+  nicht mit diesem risikoärmeren Refactor vermischt.
+- Reiner interner Refactor, keine Verhaltensänderung. Build + vollständiger
+  Testlauf (326 Tests, unverändert) grün.
+
 ## v0.12 (Build 243) — GitHub #108: SyncEntitaetsArt.Kind — echtes Enum für Dispatch-Stellen
 
 Code-Review-Fund: `SyncEntitaetsArt` war nur ein Namespace aus `static let`-
