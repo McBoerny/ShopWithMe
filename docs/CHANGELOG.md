@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.12 (Build 245) — GitHub #104: G-Counter-Baustein doppelt implementiert
+
+`SyncPeerZaehlerStand` und `WarengruppenDistanzPeerZaehlerStand` enthielten dieselbe
+"nur bei tatsächlicher Änderung schreiben"-Entscheidungslogik für
+`merkeEigenenZuwachsDesPeers` wortgleich zweimal, unterschieden nur im Namen des
+Fremdschlüsselfelds (`geschaeftID` vs. `distanzID`). Gemeinsame Logik nach neuem
+`GCounterPeerZustandService.merkeEigenenZuwachsDesPeers<T: PersistentModel>(...)`
+extrahiert (generisch über einen `ReferenceWritableKeyPath<T, Int>` fürs Zählerfeld).
+Bewusst NICHT der Fetch selbst extrahiert (bleibt je Typ mit seinem eigenen, konkreten
+`#Predicate` bestehen) — ein generischer `#Predicate` über `Self` ist unzuverlässig.
+Reines Struktur-Refactoring ohne Verhaltensänderung.
+
 ## v0.12 (Build 244) — GitHub #105: "Sofort nachführen"-Cache-Pattern gebündelt
 
 Code-Review-Fund: `mergeArtikelKategorien`, `mergeGeschaefte`, `mergeArtikel`

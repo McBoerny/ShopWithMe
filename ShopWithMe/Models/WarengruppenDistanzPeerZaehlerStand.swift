@@ -55,7 +55,9 @@ extension WarengruppenDistanzPeerZaehlerStand {
     /// ``WarengruppenDistanz/beobachtungsAnzahl`` bildet die Summe erst beim
     /// Lesen. Schreibt nur bei tatsächlicher Änderung (sonst würde jeder
     /// Sync-Zyklus eine Store-Änderung erzwingen, selbst ohne neue echte
-    /// Beobachtung — dieselbe Überlegung wie bei ``SyncPeerZaehlerStand``).
+    /// Beobachtung — dieselbe Überlegung wie bei ``SyncPeerZaehlerStand``);
+    /// Entscheidungslogik dafür geteilt mit ``SyncPeerZaehlerStand``, siehe
+    /// ``GCounterPeerZustandService``.
     static func merkeEigenenZuwachsDesPeers(
         peerGeraeteID: String, distanzID: UUID, eigenerWertDesPeers: Int, context: ModelContext
     ) {
@@ -63,11 +65,13 @@ extension WarengruppenDistanzPeerZaehlerStand {
             predicate: #Predicate { $0.peerGeraeteID == peerGeraeteID && $0.distanzID == distanzID }
         )
         deskriptor.fetchLimit = 1
-        if let bestehender = try? context.fetch(deskriptor).first {
-            guard bestehender.zuletztGesehenerWert != eigenerWertDesPeers else { return }
-            bestehender.zuletztGesehenerWert = eigenerWertDesPeers
-        } else {
-            context.insert(WarengruppenDistanzPeerZaehlerStand(peerGeraeteID: peerGeraeteID, distanzID: distanzID, zuletztGesehenerWert: eigenerWertDesPeers))
-        }
+        let bestehender = try? context.fetch(deskriptor).first
+        GCounterPeerZustandService.merkeEigenenZuwachsDesPeers(
+            bestehender: bestehender, eigenerWertDesPeers: eigenerWertDesPeers, zuletztGesehenerWert: \.zuletztGesehenerWert,
+            erzeugeNeuen: {
+                WarengruppenDistanzPeerZaehlerStand(peerGeraeteID: peerGeraeteID, distanzID: distanzID, zuletztGesehenerWert: eigenerWertDesPeers)
+            },
+            context: context
+        )
     }
 }

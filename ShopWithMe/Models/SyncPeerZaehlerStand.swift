@@ -45,7 +45,8 @@ extension SyncPeerZaehlerStand {
     /// die Summe erst beim Lesen. Schreibt nur bei tatsächlicher Änderung
     /// (sonst würde jeder Sync-Zyklus eine Store-Änderung erzwingen, selbst
     /// ohne neuen echten Einkauf — dieselbe Überlegung wie bei
-    /// ``SyncPeerInfo``).
+    /// ``SyncPeerInfo``); Entscheidungslogik dafür geteilt mit
+    /// ``WarengruppenDistanzPeerZaehlerStand``, siehe ``GCounterPeerZustandService``.
     static func merkeEigenenZuwachsDesPeers(
         peerGeraeteID: String, geschaeftID: UUID, eigenerWertDesPeers: Int, context: ModelContext
     ) {
@@ -53,11 +54,11 @@ extension SyncPeerZaehlerStand {
             predicate: #Predicate { $0.peerGeraeteID == peerGeraeteID && $0.geschaeftID == geschaeftID }
         )
         deskriptor.fetchLimit = 1
-        if let bestehender = try? context.fetch(deskriptor).first {
-            guard bestehender.zuletztGesehenerWert != eigenerWertDesPeers else { return }
-            bestehender.zuletztGesehenerWert = eigenerWertDesPeers
-        } else {
-            context.insert(SyncPeerZaehlerStand(peerGeraeteID: peerGeraeteID, geschaeftID: geschaeftID, zuletztGesehenerWert: eigenerWertDesPeers))
-        }
+        let bestehender = try? context.fetch(deskriptor).first
+        GCounterPeerZustandService.merkeEigenenZuwachsDesPeers(
+            bestehender: bestehender, eigenerWertDesPeers: eigenerWertDesPeers, zuletztGesehenerWert: \.zuletztGesehenerWert,
+            erzeugeNeuen: { SyncPeerZaehlerStand(peerGeraeteID: peerGeraeteID, geschaeftID: geschaeftID, zuletztGesehenerWert: eigenerWertDesPeers) },
+            context: context
+        )
     }
 }
