@@ -220,7 +220,17 @@ einen Artikel bereits Produkte mit Produktnamen für das gerade erkannte Geschä
 hinterlegt (siehe Abschnitt „Artikel“), erkennt die App darüber hinaus auch das
 konkrete Produkt — die Position zeigt dann zusätzlich klein „Erkanntes Produkt:
 …“ an, und der erfasste Preis landet direkt bei diesem Produkt statt nur beim
-generischen Artikel. Nicht
+generischen Artikel. Ist noch kein Produktname für dieses Geschäft hinterlegt, die
+Position aber (per Textabgleich oder KI) trotzdem einem Artikel zugeordnet, legt
+die App automatisch ein neues, eigenständiges Produkt an, statt den Preis im
+gemeinsamen Basis-Eintrag des Artikels zu vermischen — verschiedene Marken
+desselben Artikels behalten dadurch von Anfang an getrennte Preishistorien, auch
+ohne dass du sie vorher manuell unter „Artikel“ anlegst. Lässt du das Namensfeld
+dabei unverändert, dient der kleine Original-Beleg-Text als Name des neuen
+Produkts; benennst du das Feld bewusst um (z.B. auf „Paradontol Zahncreme“ statt
+„Zahnpasta“), wird dein bestätigter Name verwendet — tippst du denselben Namen
+später in einem anderen Geschäft erneut ein, erkennt die App das bereits
+bestehende Produkt wieder, statt ein weiteres anzulegen. Nicht
 benötigte Positionen kannst du vor der Übernahme entfernen: Wischen nach links
 löscht eine Position nur für diesen Scan, Wischen nach rechts ignoriert sie
 dauerhaft für dieses Geschäft (z.B. für wiederkehrende Pfand-/Rabattzeilen).

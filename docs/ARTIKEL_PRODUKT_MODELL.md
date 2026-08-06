@@ -128,6 +128,55 @@ Artikel, Alias-Namen, Produkte, Produktnamen und deren Preise sind jetzt
 vollständig modelliert, synchronisiert, aggregiert, verwaltbar und werden
 beim Belegscan automatisch erkannt.
 
+## Automatische Neuanlage beim Belegscan (Folgearbeit zu #47/#116)
+
+**Status: umgesetzt (v0.14).** Schritt 5/5 deckte nur den Fall ab, dass für
+den erkannten Bon-Text bereits ein ``Produktname`` existiert. In allen
+anderen Fällen, in denen ``ArtikelZuordnungsService`` trotzdem einen
+``Artikel`` liefert (Substring-Treffer, KI-Vorschlag, oder manuelle
+Artikel-Zuweisung/-Neuanlage in der Prüf-Ansicht ohne Produktwahl), bekam
+``PreispunktService.erfassen`` bislang `produkt: nil` und fiel dort
+automatisch auf `Produkt.standardProdukt(fuer:context:)` zurück — das
+geteilte Platzhalter-Produkt des Artikels. Mehrere tatsächlich
+unterschiedliche, dem Nutzer noch nicht als eigenes ``Produkt`` bekannte
+Marken landeten dadurch in derselben Preishistorie und überschrieben sich
+gegenseitig (Slowly-Changing-Dimension-Vergleichsschlüssel schließt
+`produkt` mit ein, siehe `PreispunktService.swift`).
+
+**Bewusst ausgenommen: ein gelernter Alias-Treffer** (`ArtikelZuordnungsService.Quelle.alias`)
+— ein Alias meint laut Regel oben dieselbe generische Sache in anderer
+Schreibweise, kein eigenständiges Produkt, und bleibt deshalb unverändert
+beim Standardprodukt.
+
+`Produkt.aufgeloestesOderNeuesProdukt(klarname:erkannterName:artikel:geschaeft:context:)`
+(`Models/Produkt.swift`), aufgerufen aus `BelegScanView.uebernehmen()` nach
+Auflösung von `geschaeftFuerPreispunkt`, aber vor dem eigentlichen
+`PreispunktService.erfassen(...)`:
+
+1. **Produktidentität bestimmen**: Das Artikel-Textfeld der Prüf-Ansicht
+   zeigt standardmäßig den generischen Artikelnamen (nicht den Bon-Text,
+   siehe `docs/BELEGSCAN.md`) — bleibt der vom Nutzer bestätigte Name
+   (`klarname`) deshalb identisch zum Artikelnamen, trüge er keine
+   unterscheidende Information. In diesem (häufigsten) Fall dient
+   stattdessen der rohe erkannte Bon-Text (`erkannterName`) als
+   Produktidentität. Weicht `klarname` bewusst vom Artikelnamen ab (Nutzer
+   hat umbenannt, z.B. auf „Paradontol Zahncreme“), gilt er als Identität.
+2. **Duplikat-Vermeidung**: Vor einer Neuanlage wird unter
+   `artikel.produkte` (ohne das `istStandard`-Platzhalter-Produkt) nach
+   einem beidseitigen Teilstring-Treffer auf die Produktidentität gesucht —
+   findet sich eins (z.B. weil derselbe Klarname schon an einem anderen
+   Geschäft verwendet wurde), wird es wiederverwendet statt dupliziert.
+3. **Produktname nur mit Geschäft**: Ohne Treffer entsteht ein neues
+   `Produkt(name: produktidentitaet, artikel:)`. Ist zusätzlich ein
+   Geschäft bekannt, wird ergänzend ein `Produktname(name: erkannterName,
+   produkt:, geschaeft:)` angelegt (sofern noch nicht vorhanden) — ohne
+   Geschäft (z.B. Einkaufsvorgang ohne gewähltes Geschäft) entsteht nur das
+   `Produkt` selbst, da `Produktname` laut Regel 3 geschäftsabhängig ist.
+
+Tests: `ProduktTests.swift` (Namensfindung, Duplikat-Wiederverwendung,
+Standardprodukt-Ausschluss, Verhalten ohne Geschäft),
+`ArtikelZuordnungsServiceTests.swift` (`Quelle` je Zuordnungsstufe).
+
 ## Die drei Ebenen
 
 ```

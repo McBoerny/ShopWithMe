@@ -101,4 +101,65 @@ extension Produkt {
     var minimum: Decimal? { preispunkteRekursiv.map(\.preis).min() }
     /// Höchster erfasster Preis über ``preispunkteRekursiv``.
     var maximum: Decimal? { preispunkteRekursiv.map(\.preis).max() }
+
+    /// Löst beim Belegscan ein konkretes ``Produkt`` für einen automatisch (per
+    /// Artikel-Substring oder KI, nicht per Alias oder bereits bekanntem
+    /// ``Produktname``) zugeordneten ``Artikel`` auf oder legt bei Bedarf eines
+    /// neu an — Folgearbeit zu GitHub #47/#116, siehe
+    /// `docs/ARTIKEL_PRODUKT_MODELL.md` → „Automatische Neuanlage beim
+    /// Belegscan“. Ohne diese Auflösung würde ``PreispunktService.erfassen``
+    /// sonst immer auf das geteilte ``standardProdukt(fuer:context:)`` des
+    /// Artikels zurückfallen — verschiedene, noch nicht als ``Produktname``
+    /// hinterlegte Produkte desselben Artikels würden sich dort gegenseitig die
+    /// Preishistorie überschreiben.
+    ///
+    /// - `klarname`: vom Nutzer in der Prüf-Ansicht bestätigter Anzeigename
+    ///   (Artikel-Textfeld). Weicht er vom generischen `artikel.name` ab (der
+    ///   Nutzer hat also bewusst umbenannt), gilt er als Produktidentität —
+    ///   Grundlage sowohl für `Produkt.name` bei Neuanlage als auch für den
+    ///   Abgleich gegen bereits bestehende, gleichnamige Geschwister-Produkte
+    ///   (verhindert Dubletten, wenn derselbe Klarname erneut auftaucht, z.B.
+    ///   an einem anderen Geschäft).
+    /// - Bleibt `klarname == artikel.name` (Normalfall, das Textfeld zeigt
+    ///   standardmäßig den generischen Artikelnamen, siehe `docs/BELEGSCAN.md`),
+    ///   trägt `klarname` keine unterscheidende Information — dann dient
+    ///   stattdessen der rohe erkannte Bon-Text (`erkannterName`) als
+    ///   Produktidentität, sonst würden mehrere tatsächlich unterschiedliche,
+    ///   nur zufällig nicht umbenannte Produkte fälschlich unter demselben
+    ///   Namen zusammengeführt.
+    /// - `geschaeft`: bei bekanntem Geschäft entsteht zusätzlich ein
+    ///   ``Produktname`` (`erkannterName` → Produkt, geschäftsspezifisch) —
+    ///   ohne Geschäft nur das ``Produkt`` selbst (`Produkt.name` ist
+    ///   geschäftsunabhängig, nur ``Produktname`` ist es nicht).
+    @MainActor
+    static func aufgeloestesOderNeuesProdukt(
+        klarname: String, erkannterName: String, artikel: Artikel, geschaeft: Geschaeft?, context: ModelContext
+    ) -> Produkt? {
+        let getrimmterKlarname = klarname.trimmingCharacters(in: .whitespacesAndNewlines)
+        let getrimmterErkannterName = erkannterName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let produktIdentitaet = getrimmterKlarname.localizedCaseInsensitiveCompare(artikel.name) != .orderedSame
+            ? getrimmterKlarname
+            : getrimmterErkannterName
+        guard !produktIdentitaet.isEmpty else { return nil }
+
+        let produkt: Produkt
+        if let bestehendes = artikel.produkte.first(where: {
+            !$0.istStandard
+                && ($0.name.localizedCaseInsensitiveContains(produktIdentitaet)
+                    || produktIdentitaet.localizedCaseInsensitiveContains($0.name))
+        }) {
+            produkt = bestehendes
+        } else {
+            produkt = Produkt(name: produktIdentitaet, artikel: artikel)
+            context.insert(produkt)
+        }
+
+        if let geschaeft, !getrimmterErkannterName.isEmpty,
+           !produkt.produktnamen.contains(where: {
+               $0.geschaeft == geschaeft && $0.name.localizedCaseInsensitiveCompare(getrimmterErkannterName) == .orderedSame
+           }) {
+            context.insert(Produktname(name: getrimmterErkannterName, produkt: produkt, geschaeft: geschaeft))
+        }
+        return produkt
+    }
 }

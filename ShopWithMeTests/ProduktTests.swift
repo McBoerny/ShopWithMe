@@ -12,6 +12,115 @@ struct ProduktTests {
         return (container, container.mainContext)
     }
 
+    // MARK: - Automatische Neuanlage beim Belegscan (Folgearbeit zu GitHub #47/#116)
+
+    @Test
+    func aufgeloestesOderNeuesProduktLegtNeuesAnMitBonTextAlsIdentitaetOhneUmbenennung() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let zahnpasta = Artikel(name: "Zahnpasta", symbolName: "sparkles", farbeHex: "#AF52DE")
+        context.insert(zahnpasta)
+        let rewe = Geschaeft(name: "Rewe", typen: [])
+        context.insert(rewe)
+
+        // Klarname == Artikelname (Nutzer hat das Feld nicht umbenannt) — die
+        // Produktidentität kommt dann vom rohen Bon-Text, nicht vom generischen
+        // Artikelnamen (sonst würden verschiedene Marken zusammenfallen).
+        let produkt = Produkt.aufgeloestesOderNeuesProdukt(
+            klarname: "Zahnpasta", erkannterName: "COL-ZAH", artikel: zahnpasta, geschaeft: rewe, context: context
+        )
+
+        #expect(produkt?.name == "COL-ZAH")
+        #expect(produkt?.artikel === zahnpasta)
+        #expect(produkt?.istStandard == false)
+        #expect(produkt?.produktnamen.count == 1)
+        #expect(produkt?.produktnamen.first?.name == "COL-ZAH")
+        #expect(produkt?.produktnamen.first?.geschaeft === rewe)
+    }
+
+    @Test
+    func aufgeloestesOderNeuesProduktNutztBestaetigtenKlarnamenBeiUmbenennung() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let zahnpasta = Artikel(name: "Zahnpasta", symbolName: "sparkles", farbeHex: "#AF52DE")
+        context.insert(zahnpasta)
+        let rewe = Geschaeft(name: "Rewe", typen: [])
+        context.insert(rewe)
+
+        let produkt = Produkt.aufgeloestesOderNeuesProdukt(
+            klarname: "Paradontol Zahncreme", erkannterName: "PARAD ZAHNCR", artikel: zahnpasta, geschaeft: rewe, context: context
+        )
+
+        #expect(produkt?.name == "Paradontol Zahncreme")
+        #expect(produkt?.produktnamen.first?.name == "PARAD ZAHNCR")
+    }
+
+    @Test
+    func aufgeloestesOderNeuesProduktFindetBestehendesGleichnamigesProduktWieder() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let zahnpasta = Artikel(name: "Zahnpasta", symbolName: "sparkles", farbeHex: "#AF52DE")
+        context.insert(zahnpasta)
+        let bestehendes = Produkt(name: "Paradontol Zahncreme", artikel: zahnpasta)
+        context.insert(bestehendes)
+        let aldi = Geschaeft(name: "Aldi", typen: [])
+        context.insert(aldi)
+
+        // Nutzer benennt bei Aldi bewusst auf denselben Klarnamen um, den er bei
+        // Rewe schon kennt — soll dasselbe Produkt wiederverwenden, nicht
+        // dupliziert werden, und nur einen neuen Produktnamen fürs Geschäft anlegen.
+        let produkt = Produkt.aufgeloestesOderNeuesProdukt(
+            klarname: "Paradontol Zahncreme", erkannterName: "PARADONTOL", artikel: zahnpasta, geschaeft: aldi, context: context
+        )
+
+        #expect(produkt === bestehendes)
+        let alleProdukte = try context.fetch(FetchDescriptor<Produkt>())
+        #expect(alleProdukte.count == 1)
+        #expect(bestehendes.produktnamen.count == 1)
+        #expect(bestehendes.produktnamen.first?.geschaeft === aldi)
+    }
+
+    @Test
+    func aufgeloestesOderNeuesProduktIgnoriertStandardProduktBeimDuplikatCheck() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let zahnpasta = Artikel(name: "Zahnpasta", symbolName: "sparkles", farbeHex: "#AF52DE")
+        context.insert(zahnpasta)
+        _ = Produkt.standardProdukt(fuer: zahnpasta, context: context)
+
+        // Ohne Umbenennung würde die Produktidentität "COL-ZAH" (Bon-Text) sein
+        // — das Standard-Platzhalterprodukt heißt "Zahnpasta" und darf hier
+        // nicht als vermeintliches Duplikat wiederverwendet werden.
+        let produkt = Produkt.aufgeloestesOderNeuesProdukt(
+            klarname: "Zahnpasta", erkannterName: "COL-ZAH", artikel: zahnpasta, geschaeft: nil, context: context
+        )
+
+        #expect(produkt?.istStandard == false)
+        #expect(produkt?.name == "COL-ZAH")
+        let alleProdukte = try context.fetch(FetchDescriptor<Produkt>())
+        #expect(alleProdukte.count == 2)
+    }
+
+    @Test
+    func aufgeloestesOderNeuesProduktOhneGeschaeftLegtKeinenProduktnameAn() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let zahnpasta = Artikel(name: "Zahnpasta", symbolName: "sparkles", farbeHex: "#AF52DE")
+        context.insert(zahnpasta)
+
+        let produkt = Produkt.aufgeloestesOderNeuesProdukt(
+            klarname: "Paradontol Zahncreme", erkannterName: "PARADONTOL", artikel: zahnpasta, geschaeft: nil, context: context
+        )
+
+        #expect(produkt?.name == "Paradontol Zahncreme")
+        #expect(produkt?.produktnamen.isEmpty == true)
+    }
+
     @Test
     func standardProduktLegtNeuesAnFallsNochKeinsExistiert() throws {
         let (container, context) = try machtLeerenContainer()

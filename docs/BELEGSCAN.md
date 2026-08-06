@@ -295,6 +295,14 @@ bestehenden, generischen `Artikel` zugeordnet, dreistufig:
    leeren String oder einem Namen, der zu keinem `Artikel` exakt passt, gilt die
    Stufe als erfolglos.
 
+Liefert nur der Artikel einen Treffer (Stufe 2/3, oder eine manuelle
+Zuweisung/Neuanlage in der Prüf-Ansicht), ohne dass bereits ein passender
+``Produktname`` bekannt ist, legt `BelegScanView.uebernehmen()` automatisch ein
+neues, eigenständiges ``Produkt`` an (Ausnahme: Stufe 1, Alias-Treffer, bleibt
+bewusst beim Standard-Produkt des Artikels) — siehe
+`docs/ARTIKEL_PRODUKT_MODELL.md` → „Automatische Neuanlage beim Belegscan“ für
+die Namensfindung und Duplikat-Vermeidung.
+
 Bleiben alle drei Stufen erfolglos, gilt die Position als **neu erkannt**.
 `ArtikelZuordnungsService.textBasierteZuordnung(...)` bündelt Stufe 1+2 als
 eigene, ohne KI direkt testbare Funktion (analog

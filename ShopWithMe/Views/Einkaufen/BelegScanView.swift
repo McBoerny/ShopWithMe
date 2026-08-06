@@ -260,6 +260,7 @@ struct BelegScanView: View {
                         preisText: "\(position.einzelpreis.aufCentGerundet)",
                         zugeordneterArtikel: zuordnung.artikel,
                         zugeordnetesProdukt: zuordnung.produkt,
+                        zuordnungsQuelle: zuordnung.quelle,
                         boundingBox: scanErgebnis.ocrZeilen.boundingBox(fuerArtikelName: position.artikelName),
                         bestehenderPreisHeute: bestehenderPreisHeute
                     ))
@@ -308,6 +309,9 @@ struct BelegScanView: View {
         let positionsArtikelReferenzen = positionen.map { ModelReference($0.effektivZugeordneterArtikel) }
         // GitHub #47, Schritt 5/5 — analog `positionsArtikelReferenzen`.
         let positionsProduktReferenzen = positionen.map { ModelReference($0.effektivZugeordnetesProdukt) }
+        // Folgearbeit zu GitHub #47/#116 (automatische Produkt-Neuanlage unten) —
+        // reiner Enum-Wert, keine `ModelReference` nötig.
+        let positionsQuelleReferenzen = positionen.map(\.zuordnungsQuelle)
 
         Task {
             // Geocoding braucht Netzwerk (async) und muss daher vor dem
@@ -354,7 +358,7 @@ struct BelegScanView: View {
                           let preis = Decimal(string: position.preisText.replacingOccurrences(of: ",", with: "."))
                     else { continue }
                     let artikel = positionsArtikelReferenzen[index]?.resolved(in: modelContext)
-                    let produkt = positionsProduktReferenzen[index]?.resolved(in: modelContext)
+                    var produkt = positionsProduktReferenzen[index]?.resolved(in: modelContext)
 
                     let geschaeftFuerPreispunkt: Geschaeft?
                     switch kontext {
@@ -389,6 +393,22 @@ struct BelegScanView: View {
                         // Kein laufender Einkauf, also keine operative Rolle — hier
                         // entsteht ausschließlich ein ``Preispunkt``, kein ``KaufEintrag``.
                         geschaeftFuerPreispunkt = erkanntesGeschaeftFrisch
+                    }
+
+                    // Folgearbeit zu GitHub #47/#116: nur ein Alias- oder bereits
+                    // bekannter Produktname-Treffer bringt an dieser Stelle schon
+                    // ein `produkt` mit (siehe ``ArtikelZuordnungsService``). Bei
+                    // Substring-/KI-Treffer oder manueller Artikel-Zuweisung ohne
+                    // Produktwahl (``zuordnungsQuelle != .alias``) sonst automatisch
+                    // ein neues, eigenständiges Produkt auflösen/anlegen statt im
+                    // geteilten Standardprodukt des Artikels zu landen — siehe
+                    // `docs/ARTIKEL_PRODUKT_MODELL.md` → „Automatische Neuanlage
+                    // beim Belegscan“.
+                    if produkt == nil, let artikel, positionsQuelleReferenzen[index] != .alias {
+                        produkt = Produkt.aufgeloestesOderNeuesProdukt(
+                            klarname: name, erkannterName: erkannterName, artikel: artikel,
+                            geschaeft: geschaeftFuerPreispunkt, context: modelContext
+                        )
                     }
 
                     // Tages-Kollision (GitHub #76-Folgearbeit): Anwender hat „Bisherigen
@@ -495,6 +515,12 @@ private struct BearbeitbarePosition: Identifiable {
     /// für die tatsächlich beim Speichern verwendete, gegen manuelle
     /// Korrekturen abgesicherte Fassung.
     var zugeordnetesProdukt: Produkt?
+    /// Welche Zuordnungsstufe ``zugeordneterArtikel`` geliefert hat (`nil` ohne
+    /// automatischen Treffer, z.B. nach manueller Zuweisung/Neuanlage über
+    /// ``PositionsZeile/artikelZuweisen(_:)``) — Grundlage für die
+    /// automatische Produkt-Neuanlage in ``BelegScanView/uebernehmen()``, siehe
+    /// ``ArtikelZuordnungsService/Quelle``.
+    var zuordnungsQuelle: ArtikelZuordnungsService.Quelle?
     /// Position dieser Zeile im Original-Beleg (Visions normalisiertes
     /// Koordinatensystem), ermittelt über ``ErkannteZeile/boundingBox(fuerArtikelName:)``
     /// — `nil`, wenn sich keine OCR-Zeile eindeutig zuordnen ließ (dann bietet
@@ -822,6 +848,10 @@ private struct PositionsZeile: View {
     private func artikelZuweisen(_ artikel: Artikel) {
         position.artikelName = artikel.name
         position.zugeordneterArtikel = artikel
+        // Manuelle Zuweisung überschreibt eine ggf. vorherige automatische
+        // Quelle (z.B. Alias) — zählt für die automatische Produkt-Neuanlage
+        // in ``BelegScanView/uebernehmen()`` wie ein Substring-/KI-Treffer.
+        position.zuordnungsQuelle = nil
         istFokussiert = false
     }
 

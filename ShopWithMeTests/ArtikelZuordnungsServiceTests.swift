@@ -33,6 +33,42 @@ struct ArtikelZuordnungsServiceTests {
 
         #expect(ergebnis?.alias == nil)
         #expect(ergebnis?.artikel === milch)
+        #expect(ergebnis?.quelle == .artikelSubstring)
+    }
+
+    // MARK: - Zuordnungs-Quelle (Folgearbeit zu GitHub #47/#116, automatische
+    // Produkt-Neuanlage in `BelegScanView` nur bei Substring-/KI-Treffer)
+
+    @Test
+    func textBasierteZuordnungMarkiertAliasTrefferAlsQuelleAlias() {
+        let zahnpasta = Artikel(name: "Zahnpasta", symbolName: "sparkles", farbeHex: "#AF52DE")
+        let alias = ArtikelAlias(erkannterName: "COL-ZAH", alternativerName: "Colgate", artikel: zahnpasta)
+
+        let ergebnis = ArtikelZuordnungsService.textBasierteZuordnung(
+            erkannterName: "COL-ZAH",
+            bekannteAliase: [alias],
+            alleArtikel: [zahnpasta]
+        )
+
+        #expect(ergebnis?.quelle == .alias)
+    }
+
+    @Test
+    func textBasierteZuordnungMarkiertProduktnameTrefferAlsQuelleProduktname() {
+        let zahnpasta = Artikel(name: "Zahnpasta", symbolName: "sparkles", farbeHex: "#AF52DE")
+        let paradontol = Produkt(name: "Paradontol Zahncreme", artikel: zahnpasta)
+        let rewe = Geschaeft(name: "Rewe", typen: [])
+        let produktname = Produktname(name: "Parad Zahncr", produkt: paradontol, geschaeft: rewe)
+
+        let ergebnis = ArtikelZuordnungsService.textBasierteZuordnung(
+            erkannterName: "PARAD ZAHNCR 75ML",
+            bekannteAliase: [],
+            alleArtikel: [zahnpasta],
+            geschaeft: rewe,
+            bekannteProduktnamen: [produktname]
+        )
+
+        #expect(ergebnis?.quelle == .produktname)
     }
 
     @Test
