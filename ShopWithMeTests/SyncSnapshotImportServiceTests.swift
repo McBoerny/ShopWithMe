@@ -342,52 +342,6 @@ struct SyncSnapshotImportServiceTests {
         #expect(kandidaten.first?.fremderName == "Rewe Nord")
     }
 
-    /// GitHub #86, Teil 2: Ein Kandidat, der genau die oben beschriebene Lücke
-    /// (großzügiger Treffer, aber nicht streng genug für den automatischen
-    /// Merge) trifft, muss beim Beitritts-Scan gefunden werden — und nach
-    /// aktiver Bestätigung mit dem gewählten Namen tatsächlich zusammengeführt
-    /// werden, statt wie im Test oben als zwei getrennte Geschäfte zu enden.
-    @Test
-    func mehrdeutigerBeitrittsKandidatWirdGefundenUndNachBestaetigungGemergt() async throws {
-        let (container, context) = try machtLeerenContainer()
-        _ = container
-        let syncOrdner = macheTempSyncOrdner()
-        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
-        defer { SyncOrdnerService.ordnerEntfernen() }
-
-        let lokal = Geschaeft(name: "Rewe", typen: [])
-        lokal.breitengrad = 52.5200
-        lokal.laengengrad = 13.4050
-        context.insert(lokal)
-        try context.save()
-
-        let remoteID = UUID()
-        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
-        snapshot.geschaefte = [
-            GeschaeftSnapshot(
-                id: remoteID, name: "Rewe Nord", typIDs: [], adresse: nil,
-                breitengrad: 52.5201, laengengrad: 13.4051, erkennungsradius: nil,
-                kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
-                ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
-            ),
-        ]
-        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
-
-        let kandidaten = await SyncSnapshotImportService.mehrdeutigeGeschaeftsKandidatenBeimBeitritt(context: context)
-        #expect(kandidaten.count == 1)
-        let kandidat = try #require(kandidaten.first)
-        #expect(kandidat.lokalerName == "Rewe")
-        #expect(kandidat.remoteName == "Rewe Nord")
-        #expect(kandidat.remoteID == remoteID)
-
-        SyncSnapshotImportService.geschaeftsKandidatBestaetigen(kandidat, gewaehlterName: "Rewe Nord", context: context)
-        await SyncSnapshotImportService.importiereSnapshots(context: context)
-
-        let alleGeschaefte = try context.fetch(FetchDescriptor<Geschaeft>())
-        #expect(alleGeschaefte.count == 1)
-        #expect(alleGeschaefte.first?.name == "Rewe Nord")
-    }
-
     /// Prüft das grundlegende G-Counter-Verhalten (siehe
     /// `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 17): der
     /// Gesamtwert ist die Summe aus dem eigenen Anteil und dem zuletzt

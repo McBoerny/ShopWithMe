@@ -157,35 +157,25 @@ Vergleichsdimension existiert) gilt seither auch für `Artikel` und
 
 ## Aktive Rückfrage beim Sync-Ordner-Beitritt (GitHub #86, Teil 2)
 
-**Status: Umgesetzt.**
+**Status: Entfernt (v0.14).**
 
-Der Beitritt zu einem Sync-Ordner mit bestehenden Peer-Daten ist — anders als
-der laufende Hintergrund-Sync — ein einmaliger, klar abgegrenzter,
-nutzerinitiierter Moment (`SyncOrdnerSettingsView`, „Zusammenführen"-Wahl).
-Hier lohnt sich eine aktive Rückfrage, die im laufenden Betrieb (Kategorie
-"seltener Restfall", siehe oben) bewusst nicht eingeführt wurde:
+Ursprünglich eine aktive Rückfrage analog zum Abschnitt oben, aber für den
+einmaligen „Zusammenführen"-Moment beim Beitritt zu einem Sync-Ordner mit
+bestehenden Peer-Daten. Die „Zusammenführen"-Wahl selbst wurde entfernt
+(`SyncOrdnerSettingsView`, Nutzerentscheidung nach einem Live-Fund mit
+Endlosschleifen-Risiko rund um „Ersetzen" — siehe
+`docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitte 47/48): der Beitritt zu
+einer Gruppe mit bestehenden Daten läuft jetzt ausschließlich über
+„Ersetzen" (sichert den lokalen Stand, übernimmt danach ausschließlich den
+Gruppenstand). Damit entfiel auch der dazugehörige Vorprüfungs-Mechanismus
+(`SyncSnapshotImportService.mehrdeutigeGeschaeftsKandidatenBeimBeitritt(context:)`,
+`GeschaeftsAbgleichKandidat`, `geschaeftsKandidatBestaetigen(_:gewaehlterName:context:)`)
+vollständig — er hatte ohnehin nur den jetzt nicht mehr existierenden
+Merge-Pfad abgesichert.
 
-- `GeschaeftErkennungService.istMehrdeutigerBeitrittsKandidat(...)` markiert
-  jedes Paar, das nach der großzügigen `istGleicherOrt`-Regel (mit dem
-  größeren der beiden Radien als Toleranz) übereinstimmt, aber NICHT nach der
-  strengen `istGleicherOrtFuerSyncMerge`-Regel — genau die Differenzmenge, die
-  vor dem #86-Fix automatisch (und riskant) zusammengeführt worden wäre.
-- `SyncSnapshotImportService.mehrdeutigeGeschaeftsKandidatenBeimBeitritt(context:)`
-  liest dafür ausschließlich die Bereich-B-Stammdaten (`stamm.json`) aller
-  Peer-Ordner — reines Lesen, kein Merge, keine Zustandsänderung — und
-  vergleicht jedes remote `GeschaeftSnapshot` gegen den lokalen Bestand.
-- Gibt es Treffer, zeigt `GeschaeftsBeitrittsAbgleichSheet`
-  (`SyncOrdnerSettingsView.swift`) sie vor dem eigentlichen Merge zur
-  Entscheidung an: „gleicher Laden" (mit Wahl, welcher der beiden Namen
-  bleibt) oder „unterschiedliche Läden" (Standard bei Nichtentscheidung).
-- Eine „gleicher Laden"-Bestätigung registriert vorab einen
-  `SyncEntitaetsAlias` (`SyncSnapshotImportService.geschaeftsKandidatBestaetigen(_:gewaehlterName:context:)`)
-  und übernimmt den gewählten Namen — der danach laufende reguläre
-  `SyncPollingService.syncZyklus()` erkennt die `remoteID` dadurch bereits
-  über den ID-Fast-Path in `mergeGeschaefte`, ohne die strenge Regel erneut
-  zu bemühen.
-- Ohne gefundene Kandidaten entfällt der Zwischenschritt vollständig, der
-  Merge läuft wie gewohnt direkt.
+`GeschaeftErkennungService.istMehrdeutigerBeitrittsKandidat(...)` selbst
+bleibt bestehen — sie wird weiterhin vom Abschnitt oben (laufender
+Hintergrund-Sync, ``SyncAbgleichKandidat``-Warteschlange) genutzt.
 
 ## UI-Fluss
 

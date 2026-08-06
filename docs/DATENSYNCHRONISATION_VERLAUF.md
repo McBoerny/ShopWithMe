@@ -3066,3 +3066,49 @@ Vordergrund-Wechsel (`onChange(of: scenePhase)`, kein frischer
 Wipe-und-Neuaufbau vorausgegangen) bleibt die Prüfung unverändert aktiv —
 eine echte Entfernung aus der Gruppe während App im Hintergrund war, wird
 weiterhin normal erkannt.
+
+## 48. „Zusammenführen“-Wahl beim Sync-Beitritt entfernt (Nutzerentscheidung)
+
+**Entscheidung (2026-08-06):** Direkt im Anschluss an den Live-Fund in
+Abschnitt 47 hat der Nutzer entschieden, die „Zusammenführen"-Option in der
+„Bestehende Daten gefunden"-Wahl beim Sync-Ordner-Beitritt ganz zu entfernen
+(`SyncOrdnerSettingsView`, GitHub #63). Der Beitritt zu einer Gruppe mit
+bereits vorhandenen Peer-Daten läuft seither ausschließlich über „Ersetzen"
+(+ „Abbrechen") — der lokale Bestand wird vorher lokal gesichert
+(wiederherstellbar über „Backup wiederherstellen") und danach vollständig
+durch den Gruppenstand ersetzt.
+
+**Warum (Nutzerkontext):** Kein technischer Bug, sondern eine bewusste
+Vereinfachung nach den beiden aufeinanderfolgenden Live-Funden in Abschnitt
+46/47 rund um den „Ersetzen"-Pfad — ein einziger, klar definierter
+Beitritts-Ablauf statt zweier unterschiedlich riskanter Pfade.
+
+**Entfernter Code (vollständig, nicht nur der UI-Button):**
+- `SyncOrdnerSettingsView.swift`: der „Zusammenführen"-Button im
+  `confirmationDialog` „Bestehende Daten gefunden", die Funktion
+  `beitrittsAbgleichPruefenUndSynchronisieren()`, die zugehörigen `@State`-
+  Variablen (`beitrittsKandidaten`, `zeigeBeitrittsAbgleich`,
+  `pruefeBeitrittsAbgleich`), das `.sheet(isPresented: $zeigeBeitrittsAbgleich)`
+  sowie das `.overlay` mit dem Lade-Indikator „Prüfe auf mögliche gleiche
+  Geschäfte…".
+- `SyncSnapshotImportService.swift`: `GeschaeftsAbgleichKandidat`,
+  `mehrdeutigeGeschaeftsKandidatenBeimBeitritt(context:)`,
+  `geschaeftsKandidatBestaetigen(_:gewaehlterName:context:)` — allesamt nur
+  vom entfernten Beitritts-Pfad genutzt.
+  `GeschaeftErkennungService.istMehrdeutigerBeitrittsKandidat(...)` selbst
+  bleibt bestehen (weiterhin genutzt vom laufenden Hintergrund-Sync, siehe
+  `docs/GESCHAEFTSERKENNUNG.md`).
+- `SyncSnapshotImportServiceTests.swift`: der zugehörige Test
+  `mehrdeutigerBeitrittsKandidatWirdGefundenUndNachBestaetigungGemergt` —
+  der zugrunde liegende Mechanismus bleibt indirekt weiterhin über
+  `geschaeftMehrdeutigerKandidatWirdZurueckgestelltUndAufgeloest` (laufender
+  Sync, unverändert bestehende Testreihe) abgedeckt.
+- `docs/GESCHAEFTSERKENNUNG.md`: Abschnitt „Aktive Rückfrage beim
+  Sync-Ordner-Beitritt (GitHub #86, Teil 2)" auf „Status: Entfernt"
+  umgestellt statt gelöscht (historische Nachvollziehbarkeit).
+
+**Nicht betroffen:** Die laufende Hintergrund-Sync-Ambiguitätsprüfung
+(``SyncAbgleichKandidat``-Warteschlange, „N mögliche Duplikate prüfen" in
+den Sync-Einstellungen) bleibt vollständig unverändert bestehen — sie deckt
+einen strukturell anderen Fall ab (laufender Betrieb, nicht der einmalige
+Beitritts-Moment) und war von Abschnitt 47 nicht betroffen.

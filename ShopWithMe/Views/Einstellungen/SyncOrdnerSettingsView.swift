@@ -39,14 +39,6 @@ struct SyncOrdnerSettingsView: View {
     @State private var zeigeNeustartHinweis = false
     @State private var zeigeBackupWiederherstellenBestaetigung = false
 
-    /// GitHub #86, Teil 2: mehrdeutige Geschäfts-Kandidaten, die vor dem
-    /// eigentlichen Beitritts-Merge aktiv bestätigt werden sollen — leer,
-    /// solange ``beitrittsAbgleichPruefenUndSynchronisieren()`` noch prüft
-    /// oder keine gefunden wurden.
-    @State private var beitrittsKandidaten: [SyncSnapshotImportService.GeschaeftsAbgleichKandidat] = []
-    @State private var zeigeBeitrittsAbgleich = false
-    @State private var pruefeBeitrittsAbgleich = false
-
     /// Beim laufenden Hintergrund-Sync zurückgestellte Merge-Kandidaten
     /// (Geschäft/Artikel/Einkaufsliste) — siehe Ambiguitäts-Rückstellung in
     /// `SyncSnapshotImportService.mergeGeschaefte`/`mergeArtikel`/
@@ -178,14 +170,12 @@ struct SyncOrdnerSettingsView: View {
                 fehlermeldung = error.localizedDescription
             }
         }
-        // GitHub #63: Alternative zum automatischen Zusammenführen, falls der
-        // gewählte Ordner bereits Daten anderer Geräte enthält — z.B. für
-        // private Kaufhistorie, die nicht additiv in eine geteilte
-        // Gruppen-Historie einfließen soll (siehe ``SyncErsetzenService``).
+        // GitHub #63: der gewählte Ordner enthält bereits Daten anderer
+        // Geräte — die frühere „Zusammenführen"-Wahl (GitHub #86, Teil 2)
+        // wurde entfernt (siehe `docs/DATENSYNCHRONISATION_VERLAUF.md`
+        // Abschnitt 48), „Ersetzen" ist jetzt der einzige Weg, einer
+        // bestehenden Gruppe beizutreten.
         .confirmationDialog("Bestehende Daten gefunden", isPresented: $zeigeBeitrittsWahl) {
-            Button("Zusammenführen") {
-                beitrittsAbgleichPruefenUndSynchronisieren()
-            }
             Button("Ersetzen", role: .destructive) {
                 ersetzenGetappt()
             }
@@ -194,7 +184,7 @@ struct SyncOrdnerSettingsView: View {
                 ausgewaehlterOrdner = nil
             }
         } message: {
-            Text("In diesem Ordner sind bereits Daten anderer Geräte vorhanden. „Zusammenführen“ übernimmt sie zusätzlich zu deinen eigenen. „Ersetzen“ sichert deine lokalen Daten (wiederherstellbar bei Austritt) und übernimmt danach ausschließlich den Stand der anderen Geräte — dafür muss die App danach einmal neu gestartet werden.")
+            Text("In diesem Ordner sind bereits Daten anderer Geräte vorhanden. „Ersetzen“ sichert deine lokalen Daten (wiederherstellbar bei Austritt) und übernimmt danach ausschließlich den Stand der anderen Geräte — dafür muss die App danach einmal neu gestartet werden.")
         }
         .confirmationDialog("Synchronisierung deaktivieren", isPresented: $zeigeAustrittsWahl) {
             Button("Vorherigen Stand wiederherstellen") {
@@ -220,24 +210,6 @@ struct SyncOrdnerSettingsView: View {
             Button("OK") {}
         } message: {
             Text("Bitte schließe die App jetzt vollständig (nicht nur in den Hintergrund legen) und öffne sie erneut, um den Vorgang abzuschließen.")
-        }
-        .sheet(isPresented: $zeigeBeitrittsAbgleich) {
-            // Beitritts-Moment: „unterschiedlich" bleibt bewusst wirkungslos
-            // (leere `aufUnterschiedlich`-Closure) — der direkt anschließende
-            // reguläre Merge (``jetztSynchronisieren``) legt ein neues
-            // Geschäft ganz normal selbst an, keine doppelte Aktion nötig.
-            AbgleichKandidatenSheet(
-                kandidaten: beitrittsKandidaten.map { kandidat in
-                    AbgleichAnzeige(
-                        id: kandidat.id, lokalerName: kandidat.lokalerName, fremderName: kandidat.remoteName,
-                        aufGleich: { gewaehlterName in
-                            SyncSnapshotImportService.geschaeftsKandidatBestaetigen(kandidat, gewaehlterName: gewaehlterName, context: modelContext)
-                        },
-                        aufUnterschiedlich: {}
-                    )
-                },
-                onFertig: jetztSynchronisieren
-            )
         }
         .sheet(isPresented: $zeigeAbgleichWarteschlange) {
             // Laufender Sync: der Remote-Eintrag wurde bereits aktiv
@@ -268,13 +240,6 @@ struct SyncOrdnerSettingsView: View {
                 ICloudSyncTriggerPicker(ordner: ausgewaehlterOrdner, isPresented: $zeigeSyncTriggerPicker)
             }
         }
-        .overlay {
-            if pruefeBeitrittsAbgleich {
-                ProgressView("Prüfe auf mögliche gleiche Geschäfte…")
-                    .padding()
-                    .glassCard()
-            }
-        }
     }
 
     private var letzterOrdnerSyncText: String {
@@ -301,29 +266,11 @@ struct SyncOrdnerSettingsView: View {
         }
     }
 
-    /// Vor dem eigentlichen Beitritts-Merge (GitHub #86, Teil 2): prüft auf
-    /// mehrdeutige Geschäfts-Kandidaten (großzügige, aber nicht strenge
-    /// Übereinstimmung) und fragt bei Bedarf aktiv nach, statt sie der jetzt
-    /// strengeren automatischen Merge-Regel stillschweigend zu überlassen —
-    /// nur für diesen einmaligen, nutzerinitiierten Beitritts-Moment, nicht
-    /// für den laufenden Hintergrund-Sync (siehe `docs/GESCHAEFTSERKENNUNG.md`).
-    private func beitrittsAbgleichPruefenUndSynchronisieren() {
-        pruefeBeitrittsAbgleich = true
-        Task {
-            let kandidaten = await SyncSnapshotImportService.mehrdeutigeGeschaeftsKandidatenBeimBeitritt(context: modelContext)
-            pruefeBeitrittsAbgleich = false
-            if kandidaten.isEmpty {
-                jetztSynchronisieren()
-            } else {
-                beitrittsKandidaten = kandidaten
-                zeigeBeitrittsAbgleich = true
-            }
-        }
-    }
-
     /// Legt den Ordner fest. Enthält er bereits Daten anderer Geräte (GitHub
-    /// #63), fragt eine Wahl zwischen Zusammenführen und Ersetzen — sonst
-    /// löst das direkt einen ersten Sync-Zyklus aus (GitHub #39, Phase 5
+    /// #63), fragt eine Bestätigung für „Ersetzen" (die frühere
+    /// „Zusammenführen"-Alternative wurde entfernt, siehe
+    /// `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 48) — sonst löst das
+    /// direkt einen ersten Sync-Zyklus aus (GitHub #39, Phase 5
     /// „Gruppen-Setup"), statt dass die Person erst noch manuell auf „Jetzt
     /// synchronisieren" tippen muss.
     private func ordnerFestlegen(_ ordner: URL) {
@@ -442,12 +389,14 @@ struct SyncOrdnerSettingsView: View {
 }
 
 /// Entkoppeltes Anzeige-/Aktions-Modell für ``AbgleichKandidatenSheet`` —
-/// bewusst NICHT direkt an `SyncSnapshotImportService.GeschaeftsAbgleichKandidat`
-/// (transienter Beitritts-Scan, nur Geschäfte) oder ``SyncAbgleichKandidat``
-/// (persistierte Warteschlange, alle drei Bereich-B-Typen) gekoppelt, damit
-/// eine einzige Sheet-View beide, strukturell unterschiedlichen Quellen
-/// bedienen kann — der jeweilige Aufrufer übersetzt seine Kandidaten in
-/// `AbgleichAnzeige` und übergibt die passenden Aktions-Closures.
+/// bewusst nicht direkt an ``SyncAbgleichKandidat`` (persistierte
+/// Warteschlange) gekoppelt, der Aufrufer übersetzt seine Kandidaten in
+/// `AbgleichAnzeige` und übergibt die passenden Aktions-Closures. Ursprünglich
+/// (GitHub #86, Teil 2) auch vom einmaligen Sync-Ordner-Beitritts-Abgleich
+/// genutzt — diese zweite Quelle wurde entfernt (siehe
+/// `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 48), die Entkopplung
+/// bleibt trotzdem bestehen, da sie die Sheet-View unabhängig vom konkreten
+/// Kandidaten-Typ hält.
 private struct AbgleichAnzeige: Identifiable {
     let id: UUID
     let lokalerName: String
@@ -456,20 +405,17 @@ private struct AbgleichAnzeige: Identifiable {
     /// (lokaler oder fremder, je nach getroffener Wahl).
     let aufGleich: (String) -> Void
     /// Nutzer wählt „unterschiedlich" (auch der Standard bei
-    /// Nicht-Entscheidung). Beim Beitritts-Abgleich bewusst ein No-Op (der
-    /// direkt anschließende reguläre Merge entscheidet ohnehin), bei der
-    /// laufenden Warteschlange legt es das zurückgehaltene Objekt aktiv an.
+    /// Nicht-Entscheidung) — legt das zurückgehaltene Objekt aktiv an.
     let aufUnterschiedlich: () -> Void
 }
 
 /// Aktive Rückfrage für mehrdeutige Bereich-B-Merge-Kandidaten (Geschäft/
-/// Artikel/Einkaufsliste) — sowohl beim einmaligen Sync-Ordner-Beitritt
-/// (GitHub #86, Teil 2) als auch bei der laufenden, persistierten
-/// ``SyncAbgleichKandidat``-Warteschlange (``SyncOrdnerSettingsView``s zwei
-/// `.sheet`-Aufrufstellen). Pro Kandidat: „gleich" (mit Wahl, welcher Name
-/// bleibt) oder „unterschiedlich" (Standard bei Nicht-Entscheidung) — beide
-/// bleiben dann als getrennte Einträge bestehen und lassen sich bei Bedarf
-/// später manuell per Löschen bereinigen, siehe `docs/GESCHAEFTSERKENNUNG.md`.
+/// Artikel/Einkaufsliste) aus der laufenden, persistierten
+/// ``SyncAbgleichKandidat``-Warteschlange. Pro Kandidat: „gleich" (mit Wahl,
+/// welcher Name bleibt) oder „unterschiedlich" (Standard bei
+/// Nicht-Entscheidung) — beide bleiben dann als getrennte Einträge bestehen
+/// und lassen sich bei Bedarf später manuell per Löschen bereinigen, siehe
+/// `docs/GESCHAEFTSERKENNUNG.md`.
 private struct AbgleichKandidatenSheet: View {
     @Environment(\.dismiss) private var dismiss
     let kandidaten: [AbgleichAnzeige]

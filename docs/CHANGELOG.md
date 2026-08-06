@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.14 (Build 265) — „Zusammenführen“-Option beim Sync-Beitritt entfernt
+
+Nutzerentscheidung nach den beiden Live-Funden rund um „Ersetzen"
+(vorherige Einträge): der Sync-Ordner-Beitritt zu einer Gruppe mit
+bestehenden Peer-Daten bietet jetzt nur noch „Ersetzen“ (+ „Abbrechen“) an,
+„Zusammenführen“ wurde vollständig entfernt — inklusive des zugehörigen,
+nur dafür genutzten Beitritts-Vorprüfungsmechanismus (GitHub #86, Teil 2:
+`SyncSnapshotImportService.mehrdeutigeGeschaeftsKandidatenBeimBeitritt`,
+`GeschaeftsAbgleichKandidat`, `geschaeftsKandidatBestaetigen`, zugehöriger
+Unit-Test). Die laufende Hintergrund-Merge-Ambiguitätsprüfung („N mögliche
+Duplikate prüfen“) ist davon unberührt. Details:
+`docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 48.
+
 ## v0.14 (Build 264) — Neustart-Schleife nach „Ersetzen“: Gerät hielt sich fälschlich für aus der Sync-Gruppe entfernt
 
 Bugfix (Nutzerbericht, Live-Test direkt nach dem vorherigen Fix): Nach

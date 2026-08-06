@@ -282,13 +282,15 @@ eigentliche Datenbank jedes Geräts unverändert an ihrem Ort — nur Änderunge
 werden ausgetauscht.
 
 - **Einrichten:** Einstellungen → „Datensynchronisation“ → „Ordner wählen…“.
-  Enthält der gewählte Ordner bereits Daten anderer Geräte (z.B. weil ein
-  Mitnutzer schon eingerichtet hat), werden sie beim Verknüpfen mit deinem
-  eigenen Bestand zusammengeführt. Erkennt die App dabei Geschäfte, die
-  möglicherweise identisch sind (ähnlicher Name und/oder ganz in der Nähe),
-  fragt sie vor dem Zusammenführen einmalig nach: „Gleicher Laden“ (mit Wahl,
-  welcher der beiden Namen bleibt) oder „Unterschiedliche Läden“. Ohne
-  Entscheidung bleiben beide als getrennte Geschäfte bestehen.
+  Ist der gewählte Ordner noch leer (niemand sonst hat ihn bisher verwendet),
+  startet direkt der erste Abgleich. Enthält er bereits Daten anderer Geräte
+  (z.B. weil ein Mitnutzer schon eingerichtet hat), fragt die App vor dem
+  Verknüpfen nach Bestätigung für „Ersetzen“: dein bisheriger lokaler Bestand
+  wird zuerst lokal gesichert (wiederherstellbar über „Backup
+  wiederherstellen“, solange die Synchronisierung aktiv bleibt) und danach
+  vollständig durch den Stand der anderen Geräte ersetzt — dafür muss die App
+  einmal neu gestartet werden. „Abbrechen“ verwirft die Ordnerauswahl wieder,
+  ohne etwas zu ändern.
 - **Läuft automatisch,** solange die App im Vordergrund ist — kein manueller
   Sync-Tap nötig. Für den seltenen Fall, dass du sofort statt in ein paar
   Sekunden abgleichen möchtest, gibt es zwei gleichwertige manuelle Auslöser:
@@ -324,14 +326,13 @@ werden ausgetauscht.
   bestehender Nahbereich-Verbindung außerdem eine kleine Statuszeile
   („N Geräte verbunden“) linksbündig unter dem Listennamen im
   Einkaufen-Bildschirm.
-- **„N mögliche Duplikate prüfen“:** Erkennt der laufende Abgleich (nicht nur
-  beim einmaligen Einrichten) ein Geschäft, einen Artikel oder eine
-  Einkaufsliste, die einem bereits vorhandenen Eintrag ähneln, aber nicht
-  eindeutig zugeordnet werden können, wird nichts automatisch zusammengeführt
-  oder verworfen — stattdessen erscheint dieses Badge in den
-  Sync-Einstellungen. Antippen zeigt dieselbe „Gleich“/„Unterschiedlich“-Wahl
-  wie beim Einrichten; unentschiedene Einträge bleiben einfach in der Liste
-  stehen, bis du reagierst.
+- **„N mögliche Duplikate prüfen“:** Erkennt der laufende Abgleich ein
+  Geschäft, einen Artikel oder eine Einkaufsliste, die einem bereits
+  vorhandenen Eintrag ähneln, aber nicht eindeutig zugeordnet werden können,
+  wird nichts automatisch zusammengeführt oder verworfen — stattdessen
+  erscheint dieses Badge in den Sync-Einstellungen. Antippen zeigt eine
+  „Gleich“/„Unterschiedlich“-Wahl; unentschiedene Einträge bleiben einfach in
+  der Liste stehen, bis du reagierst.
 - **„Synchronisierung deaktivieren“** trennt die Verbindung zum Ordner wieder,
   ohne bereits ausgetauschte Daten zu löschen.
 - **„Sync-Abgleich nötig“:** War ein Gerät länger als 30 Tage nicht in
