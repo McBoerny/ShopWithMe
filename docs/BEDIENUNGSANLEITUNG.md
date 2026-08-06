@@ -39,6 +39,10 @@ Apple Intelligence (sofern auf deinem Gerät verfügbar) automatisch eine passen
 Abteilung vor, sobald du einen Namen eingibst — eine bereits von dir gewählte
 Abteilung wird dabei nie überschrieben. Ist Apple
 Intelligence nicht verfügbar, bleibt die manuelle Auswahl jederzeit möglich.
+In der Artikel-Bearbeitung zeigt die Abteilungs-Sektion nur die bereits
+zugeordneten Abteilungen (zum Entfernen nach links wischen); über „Abteilung
+hinzufügen“ öffnet sich eine durchsuchbare Liste aller übrigen Abteilungen zur
+Auswahl, mit der Möglichkeit, dort direkt eine neue Abteilung anzulegen.
 
 Einem bereits angelegten Artikel kannst du in der Artikel-Bearbeitung beliebig
 viele **Alias-Namen** geben — weitere Suchbegriffe, unter denen du beim

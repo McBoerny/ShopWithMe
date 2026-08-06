@@ -21,7 +21,7 @@ struct ArtikelEditView: View {
 
     @State private var kiVorschlagLaeuft = false
     @State private var kiFehlermeldung: String?
-    @State private var zeigeNeueKategorie = false
+    @State private var zeigeKategorieHinzufuegen = false
     @State private var neuerAliasName = ""
     @State private var aliasFehlermeldung: String?
     @State private var neuesProduktEntwurf: Produkt?
@@ -66,27 +66,15 @@ struct ArtikelEditView: View {
                 }
 
                 Section {
-                    ForEach(kategorien) { kategorie in
-                        Button {
-                            kategorieToggeln(kategorie)
-                        } label: {
-                            HStack {
-                                Label(kategorie.name, systemImage: kategorie.standardSymbol)
-                                    .foregroundStyle(.primary)
-                                Spacer()
-                                if artikel.kategorien.contains(kategorie) {
-                                    Image(systemName: "checkmark")
-                                        .foregroundStyle(Color.accentColor)
-                                }
-                            }
-                        }
-                        .buttonStyle(.plain)
+                    ForEach(artikel.kategorien) { kategorie in
+                        Label(kategorie.name, systemImage: kategorie.standardSymbol)
                     }
+                    .onDelete(perform: kategorieEntfernen)
 
                     Button {
-                        zeigeNeueKategorie = true
+                        zeigeKategorieHinzufuegen = true
                     } label: {
-                        Label("Neue Abteilung anlegen", systemImage: "plus")
+                        Label("Abteilung hinzufügen", systemImage: "plus")
                     }
 
                     if kiVorschlagLaeuft {
@@ -226,10 +214,8 @@ struct ArtikelEditView: View {
             .task(id: artikel.name) {
                 await kategorieAutomatischVorschlagen()
             }
-            .sheet(isPresented: $zeigeNeueKategorie) {
-                NeueAbteilungSheet(naechsterSortIndex: (kategorien.map(\.sortIndex).max() ?? -1) + 1) { kategorie in
-                    artikel.kategorien.append(kategorie)
-                }
+            .sheet(isPresented: $zeigeKategorieHinzufuegen) {
+                KategorieHinzufuegenSheet(artikel: artikel)
             }
             .sheet(item: $neuesProduktEntwurf) { entwurf in
                 ProduktEditView(produkt: entwurf, istNeu: true)
@@ -276,12 +262,10 @@ struct ArtikelEditView: View {
         }
     }
 
-    private func kategorieToggeln(_ kategorie: ArtikelKategorie) {
+    private func kategorieEntfernen(at indexSet: IndexSet) {
         var aktuelle = artikel.kategorien
-        if let index = aktuelle.firstIndex(of: kategorie) {
+        for index in indexSet.sorted(by: >) {
             aktuelle.remove(at: index)
-        } else {
-            aktuelle.append(kategorie)
         }
         artikel.kategorien = aktuelle
     }
@@ -318,6 +302,60 @@ struct ArtikelEditView: View {
             }
         } catch {
             kiFehlermeldung = "KI-Vorschlag nicht verfügbar: \(error.localizedDescription)"
+        }
+    }
+}
+
+/// Sheet zum Zuordnen bestehender ``ArtikelKategorie``n zu ``artikel`` — analog
+/// ``ArtikelZuAbteilungHinzufuegenSheet`` (dort umgekehrte Richtung: Artikel zu
+/// einer Kategorie zuordnen). Tippen auf eine Abteilung ordnet sie sofort zu
+/// (kein zusätzlicher Bestätigungsschritt), das Sheet bleibt offen, um mehrere
+/// Abteilungen nacheinander hinzufügen zu können.
+private struct KategorieHinzufuegenSheet: View {
+    @Bindable var artikel: Artikel
+
+    @Environment(\.dismiss) private var dismiss
+    @Query(sort: \ArtikelKategorie.sortIndex) private var alleKategorien: [ArtikelKategorie]
+    @State private var suchtext = ""
+    @State private var zeigeNeueAbteilung = false
+
+    private var nichtZugeordneteKategorien: [ArtikelKategorie] {
+        let uebrige = alleKategorien.filter { !artikel.kategorien.contains($0) }
+        guard !suchtext.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return uebrige }
+        return uebrige.filter { $0.name.localizedCaseInsensitiveContains(suchtext) }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(nichtZugeordneteKategorien) { kategorie in
+                    Button {
+                        artikel.kategorien.append(kategorie)
+                    } label: {
+                        Label(kategorie.name, systemImage: kategorie.standardSymbol)
+                            .foregroundStyle(.primary)
+                    }
+                }
+
+                Button {
+                    zeigeNeueAbteilung = true
+                } label: {
+                    Label("Neue Abteilung anlegen", systemImage: "plus")
+                }
+            }
+            .searchable(text: $suchtext, prompt: "Abteilung suchen")
+            .navigationTitle("Abteilung hinzufügen")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Fertig") { dismiss() }
+                }
+            }
+            .sheet(isPresented: $zeigeNeueAbteilung) {
+                NeueAbteilungSheet(naechsterSortIndex: (alleKategorien.map(\.sortIndex).max() ?? -1) + 1) { kategorie in
+                    artikel.kategorien.append(kategorie)
+                }
+            }
         }
     }
 }
