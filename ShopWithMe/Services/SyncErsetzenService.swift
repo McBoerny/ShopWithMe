@@ -252,21 +252,19 @@ enum SyncErsetzenService {
     /// leeren) Context gemäß der ausstehenden Aktion und löscht sie
     /// anschließend — ohne Wirkung, falls keine Aktion aussteht.
     ///
-    /// **Rückgabewert `true`, falls tatsächlich eine Aktion ausgeführt
-    /// wurde** — nötig für den Aufrufer (``ShopWithMeApp``), um
-    /// `SyncPollingService.starten(context:ueberspringeRueckkehrerErkennung:)`
-    /// korrekt zu parametrisieren: direkt nach einem frischen Wipe-und-
-    /// Neuaufbau existiert der eigene Peer-Unterordner im Sync-Ordner noch
-    /// nicht (der wird erst beim ersten eigenen Export-Zyklus angelegt,
-    /// siehe ``SyncSnapshotExportService/exportierePaket(context:importErfolgreich:)``)
-    /// — die Rückkehrer-Erkennung darf in diesem einen Fall nicht sofort
-    /// greifen, sonst hält sich das Gerät fälschlich für aus der Gruppe
-    /// entfernt (Live-Fund, siehe `docs/DATENSYNCHRONISATION_VERLAUF.md`
-    /// Abschnitt 47).
-    @discardableResult
+    /// **Hinweis zur Rückkehrer-Erkennung:** Ob direkt danach
+    /// `SyncPollingService`s Rückkehrer-Erkennung übersprungen werden muss
+    /// (der eigene Peer-Unterordner existiert nach einem frischen
+    /// Wipe-und-Neuaufbau noch nicht), wird NICHT über den Rückgabewert
+    /// dieser Funktion gesteuert — ein früherer Versuch dazu verlor eine
+    /// Race Condition gegen `.onChange(of: scenePhase)` in `ShopWithMeApp`
+    /// praktisch immer (Live-Fund, `docs/DATENSYNCHRONISATION_VERLAUF.md`
+    /// Abschnitt 49). Siehe stattdessen
+    /// ``SyncPollingService/ueberspringeRueckkehrerErkennungBeimNaechstenStart``,
+    /// synchron in `ShopWithMeApp.init()` gesetzt.
     @MainActor
-    static func fuehreAusstehendeAktionAus(context: ModelContext) async -> Bool {
-        guard let aktion = ausstehendeAktion else { return false }
+    static func fuehreAusstehendeAktionAus(context: ModelContext) async {
+        guard let aktion = ausstehendeAktion else { return }
         ausstehendeAktion = nil
 
         switch aktion {
@@ -321,7 +319,7 @@ enum SyncErsetzenService {
         case .wiederherstellenAusBackup:
             guard let daten = try? Data(contentsOf: backupURL),
                   let backup = try? JSONDecoder().decode(SyncErsetzenBackup.self, from: daten)
-            else { return true }
+            else { return }
             // Sentinel-Geräte-ID statt der eigenen: verhindert einen
             // Phantom-``SyncPeerInfo``-Eintrag und Kollisionen mit echter
             // Peer-Zähler-Buchhaltung (``SyncPeerZaehlerStand``).
@@ -344,7 +342,6 @@ enum SyncErsetzenService {
             EinkaufsvorgangAbschlussService.schliesseAlleOffenenEinkaufsvorgaenge(context: context)
             try? context.save()
         }
-        return true
     }
 
     /// Stellt die zum Zeitpunkt des Backups lokal bekannten ``SyncEvent``s

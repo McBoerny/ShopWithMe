@@ -3112,3 +3112,63 @@ Beitritts-Ablauf statt zweier unterschiedlich riskanter Pfade.
 den Sync-Einstellungen) bleibt vollständig unverändert bestehen — sie deckt
 einen strukturell anderen Fall ab (laufender Betrieb, nicht der einmalige
 Beitritts-Moment) und war von Abschnitt 47 nicht betroffen.
+
+## 49. Live-Fund: Abschnitt-47-Fix wirkungslos — Race Condition zwischen `.task` und `.onChange(of: scenePhase)`
+
+**Gemeldet vom Nutzer:** Trotz Abschnitt 47 trat exakt dieselbe
+Neustart-Schleife weiterhin auf — nach dem Neustart war der gesetzte
+Sync-Ordner sofort wieder undefiniert, „Wieder beitreten" öffnete erneut die
+Ordnerauswahl, derselbe Kreislauf von vorn.
+
+**Ursache:** Der Abschnitt-47-Fix übergab die Information „gerade einen
+Wipe-und-Neuaufbau ausgeführt, Rückkehrer-Erkennung diesmal überspringen"
+ausschließlich als Parameter über EINEN der beiden Aufrufer von
+``SyncPollingService/starten(context:)``. `ShopWithMeApp.swift` hat aber
+zwei voneinander unabhängige Aufrufer ohne garantierte Reihenfolge — genau
+das dokumentierte der bestehende Kommentar in `SyncPollingService.starten`
+bereits vorher, ohne dass die Konsequenz für den neuen Parameter erkannt
+wurde:
+
+```swift
+.task {
+    await SyncErsetzenService.fuehreAusstehendeAktionAus(context: ...)   // asynchron, wartet auf Datei-I/O
+    syncPollingService.starten(context: ..., ueberspringeRueckkehrerErkennung: true)  // kommt SPÄT
+}
+...
+.onChange(of: scenePhase) { _, neuePhase in
+    case .active:
+        syncPollingService.starten(context: ...)   // KEIN Parameter, Default false — kommt beim App-Start fast immer ZUERST
+}
+```
+
+`scenePhase` wechselt beim App-Start typischerweise sehr früh von
+`.inactive`/`.background` zu `.active` und feuert `.onChange` praktisch
+sofort — deutlich bevor der asynchrone Peer-Import in `.task` fertig ist.
+Der `.onChange`-Aufruf gewinnt das Rennen fast immer, startet die
+Polling-Schleife (`schleife == nil` beim ersten Aufruf) OHNE den Skip, die
+Rückkehrer-Erkennung greift ungeschützt, entfernt lokal den Sync-Ordner.
+Wenn `.task` danach seinen eigenen `starten(...)`-Aufruf MIT dem Skip
+nachreicht, greift `guard schleife == nil else { return }` bereits — die
+Schleife läuft ja schon (vom `.onChange`-Aufruf gestartet) — der Aufruf ist
+also ein wirkungsloses No-Op. Der Skip-Parameter kam damit in der Praxis so
+gut wie nie zum Zug.
+
+**Fix:** Die Information wird nicht mehr als Parameter zwischen zwei
+nebenläufigen Aufrufern durchgereicht, sondern als
+`nonisolated(unsafe) static var ueberspringeRueckkehrerErkennungBeimNaechstenStart`
+auf ``SyncPollingService`` synchron in `ShopWithMeApp.init()` gesetzt —
+BEVOR `body` (und damit `.task`/`.onChange(of: scenePhase)`) überhaupt
+existiert, also raceunabhängig egal welcher der beiden Aufrufer zuerst
+`starten(context:)` aufruft. `starten(context:)` selbst konsumiert das Flag
+beim ersten Aufruf dieser Sitzung (liest + setzt auf `false`, geschützt vom
+ohnehin bestehenden `schleife == nil`-Guard, `@MainActor`-seriell). Der
+Parameter `ueberspringeRueckkehrerErkennung` entfällt wieder;
+`SyncErsetzenService.fuehreAusstehendeAktionAus(context:)` liefert wieder
+`Void` statt `Bool` zurück, da der Rückgabewert nicht mehr gebraucht wird.
+
+**Lehre:** Ein Fix, der eine Race Condition beheben soll, aber die
+Information nur über EINEN von mehreren nebenläufigen, gleichrangigen
+Aufrufern weiterreicht, behebt die Race nicht — er verlagert sie nur
+dorthin, welcher Aufrufer zuerst drankommt. Statt jedem Aufrufer dieselbe
+Information einzeln beizubringen, muss die Information race-unabhängig
+VOR allen möglichen Aufrufern feststehen (hier: `init()`, vor `body`).

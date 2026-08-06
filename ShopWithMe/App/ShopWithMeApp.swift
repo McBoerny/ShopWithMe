@@ -33,6 +33,12 @@ struct ShopWithMeApp: App {
         // werden — danach ist der Zustand bereits wieder "kein Store" und
         // nicht mehr von einer regulären Erstinstallation unterscheidbar.
         let wiederherstellungAusstehend = SyncErsetzenService.ausstehendeAktion != nil
+        // Race-frei HIER gesetzt, synchron und vor `body` (siehe Doku bei
+        // `SyncPollingService.ueberspringeRueckkehrerErkennungBeimNaechstenStart`
+        // für die Begründung — ein früherer Versuch, dieselbe Information nur
+        // über den `.task`-Aufrufer als Parameter durchzureichen, verlor das
+        // Rennen gegen `.onChange(of: scenePhase)` praktisch immer).
+        SyncPollingService.ueberspringeRueckkehrerErkennungBeimNaechstenStart = wiederherstellungAusstehend
         SyncErsetzenService.loescheStoreDateiFallsAusstehend(url: konfiguration.url)
 
         DatabaseDebugLogger.log(.storeOpenStart, details: konfiguration.url.path)
@@ -127,14 +133,8 @@ struct ShopWithMeApp: App {
                     // physisch geleerter Store — jetzt aus Peer-Snapshot oder
                     // lokalem Backup befüllen, bevor das normale Polling
                     // beginnt. Ohne Wirkung, falls nichts aussteht.
-                    let geradeErsetztOderWiederhergestellt = await SyncErsetzenService.fuehreAusstehendeAktionAus(context: modelContainer.mainContext)
-                    // `ueberspringeRueckkehrerErkennung` s. Parameter-Doku
-                    // dort — verhindert eine Neustart-Schleife direkt nach
-                    // einem frischen Wipe-und-Neuaufbau.
-                    syncPollingService.starten(
-                        context: modelContainer.mainContext,
-                        ueberspringeRueckkehrerErkennung: geradeErsetztOderWiederhergestellt
-                    )
+                    await SyncErsetzenService.fuehreAusstehendeAktionAus(context: modelContainer.mainContext)
+                    syncPollingService.starten(context: modelContainer.mainContext)
                     multipeerSyncService.starten(context: modelContainer.mainContext)
                 }
         }

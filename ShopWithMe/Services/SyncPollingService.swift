@@ -76,21 +76,31 @@ final class SyncPollingService: ObservableObject {
     private var schleife: Task<Void, Never>?
     private let icloudBeobachter = SyncICloudAenderungsBeobachter()
 
+    /// Race-frei synchron in `ShopWithMeApp.init()` gesetzt — BEVOR `body`
+    /// (und damit `.task`/`.onChange(of: scenePhase)`, die beiden
+    /// nebenläufigen Aufrufer von ``starten(context:)`` ohne garantierte
+    /// Reihenfolge zueinander) überhaupt existieren. Ein früherer Ansatz
+    /// reichte dieselbe Information stattdessen als Parameter NUR über den
+    /// `.task`-Aufrufer durch — verlor das Rennen aber praktisch immer gegen
+    /// `.onChange(of: scenePhase)` (feuert beim App-Start meist SOFORT,
+    /// während `.task` noch auf den asynchronen Peer-Import wartet), sodass
+    /// der Skip faktisch nie griff (Live-Fund direkt nach dem ersten
+    /// Fix-Versuch, siehe `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt
+    /// 49). Wird beim ersten ``starten(context:)``-Aufruf dieser Sitzung
+    /// konsumiert (auf `false` zurückgesetzt) — dank des `schleife == nil`-
+    /// Guards direkt darunter ist das trotz zweier möglicher Aufrufer
+    /// eindeutig, da beide auf dem `@MainActor` seriell laufen. Bewusst
+    /// `nonisolated(unsafe)` statt actor-isoliert (analog
+    /// ``DatabaseLeaseService/storeURL``), damit `ShopWithMeApp.init()` —
+    /// selbst nicht `@MainActor` — den Wert synchron setzen kann, bevor
+    /// `body` (und damit jeder mögliche Aufrufer von ``starten(context:)``)
+    /// überhaupt existiert.
+    nonisolated(unsafe) static var ueberspringeRueckkehrerErkennungBeimNaechstenStart = false
+
     /// Startet den Polling-Loop (wirkungslos, falls bereits gestartet) — führt
     /// sofort einen ersten Sync-Zyklus aus, bevor das erste Intervall
     /// abgewartet wird.
-    ///
-    /// - Parameter ueberspringeRueckkehrerErkennung: `true` genau dann, wenn
-    ///   dieser Aufruf unmittelbar auf einen frischen Wipe-und-Neuaufbau
-    ///   folgt (``SyncErsetzenService/fuehreAusstehendeAktionAus(context:)``
-    ///   hat gerade eine Aktion ausgeführt) — der eigene Peer-Unterordner im
-    ///   Sync-Ordner existiert in diesem Fall noch nicht (wird erst vom
-    ///   ersten `syncZyklus()` selbst angelegt, siehe
-    ///   ``SyncSnapshotExportService/exportierePaket(context:importErfolgreich:)``),
-    ///   die Rückkehrer-Erkennung unten würde das Gerät sonst fälschlich für
-    ///   aus der Gruppe entfernt halten und eine Neustart-Schleife auslösen
-    ///   (Live-Fund, `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 47).
-    func starten(context: ModelContext, ueberspringeRueckkehrerErkennung: Bool = false) {
+    func starten(context: ModelContext) {
         self.context = context
         icloudBeobachter.starten { [weak self] in
             Task { @MainActor [weak self] in
@@ -98,6 +108,8 @@ final class SyncPollingService: ObservableObject {
             }
         }
         guard schleife == nil else { return }
+        let ueberspringeRueckkehrerErkennung = Self.ueberspringeRueckkehrerErkennungBeimNaechstenStart
+        Self.ueberspringeRueckkehrerErkennungBeimNaechstenStart = false
         // Niedrige Priorität (GitHub #55): der Loop startet direkt beim
         // App-Start bzw. bei jeder Rückkehr aus dem Hintergrund, exakt dann,
         // wenn SwiftUI mit dem initialen Rendering/Layout um den MainActor
@@ -110,17 +122,16 @@ final class SyncPollingService: ObservableObject {
             // ist der einzige Punkt, der garantiert vor jedem möglichen
             // `syncZyklus()` dieser Session erreicht wird, unabhängig davon,
             // ob `starten(context:)` über `RootView().task` oder
-            // `.onChange(of: scenePhase)` ausgelöst wurde (siehe
-            // `ShopWithMeApp` — zwischen beiden Auslösern gibt es keine
-            // garantierte Reihenfolge). Bei `false` (definitiv ausgeschlossen)
-            // sofort Backup + Sync-Ordner-Entfernung, KEIN weiterer
-            // `syncZyklus()` in dieser Session — dadurch kann kein
-            // veralteter Bestand mehr exportiert werden, bevor der Nutzer
-            // überhaupt vom Ausschluss erfährt.
+            // `.onChange(of: scenePhase)` ausgelöst wurde. Bei `false`
+            // (definitiv ausgeschlossen) sofort Backup + Sync-Ordner-
+            // Entfernung, KEIN weiterer `syncZyklus()` in dieser Session —
+            // dadurch kann kein veralteter Bestand mehr exportiert werden,
+            // bevor der Nutzer überhaupt vom Ausschluss erfährt.
             //
-            // `ueberspringeRueckkehrerErkennung` lässt genau diesen einen
-            // Aufruf aus (siehe Parameter-Doku oben) — die Prüfung greift
-            // beim nächsten regulären Vordergrund-Wechsel wieder normal.
+            // `ueberspringeRueckkehrerErkennung` (oben konsumiert, siehe
+            // Doku bei ``ueberspringeRueckkehrerErkennungBeimNaechstenStart``)
+            // lässt genau diesen einen Aufruf aus — die Prüfung greift beim
+            // nächsten regulären Vordergrund-Wechsel wieder normal.
             if !ueberspringeRueckkehrerErkennung,
                let ordner = SyncOrdnerService.gewaehlterOrdner(),
                await SyncOrdnerService.binIchNochMitglied(in: ordner) == false {

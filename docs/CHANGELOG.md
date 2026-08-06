@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.14 (Build 266) — Neustart-Schleife: vorheriger Fix wirkungslos durch Race Condition mit `.onChange(of: scenePhase)`
+
+Bugfix (Nutzerbericht: derselbe Fehler trat trotz des vorherigen Fixes
+identisch weiter auf). Der Abschnitt-47-Fix übergab die „Rückkehrer-
+Erkennung überspringen"-Information nur als Parameter über den `.task`-
+Aufrufer von `SyncPollingService.starten(context:)` — `ShopWithMeApp` hat
+aber einen zweiten, unabhängigen Aufrufer (`.onChange(of: scenePhase)`),
+der beim App-Start fast immer zuerst feuert und dadurch den Skip praktisch
+nie zum Zug kommen ließ. Die Information wird jetzt stattdessen synchron in
+`ShopWithMeApp.init()` gesetzt (`SyncPollingService.ueberspringeRueckkehrerErkennungBeimNaechstenStart`,
+`nonisolated(unsafe)`, analog `DatabaseLeaseService.storeURL`) — bevor
+`body` und damit beide möglichen Aufrufer überhaupt existieren, also
+race-unabhängig. Details: `docs/DATENSYNCHRONISATION_VERLAUF.md`
+Abschnitt 49.
+
 ## v0.14 (Build 265) — „Zusammenführen“-Option beim Sync-Beitritt entfernt
 
 Nutzerentscheidung nach den beiden Live-Funden rund um „Ersetzen"
