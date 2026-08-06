@@ -29,11 +29,7 @@ struct ShopWithMeApp: App {
 
         DatabaseDebugLogger.log(.storeOpenStart, details: konfiguration.url.path)
         do {
-            modelContainer = try ModelContainer(
-                for: schema,
-                migrationPlan: SchemaDefinition.migrationPlan,
-                configurations: [konfiguration]
-            )
+            modelContainer = try Self.oeffneContainer(schema: schema, konfiguration: konfiguration)
         } catch {
             // Log ist Best-Effort: `fatalError` beendet den Prozess sofort danach,
             // das asynchrone Schreiben des Log-Eintrags kann daher vereinzelt nicht
@@ -59,6 +55,28 @@ struct ShopWithMeApp: App {
         DatenintegritaetsService.raeumeLeereListenloseVorgaengeAuf(context: context)
         DatenintegritaetsService.pruefe(context: context)
         try? context.save()
+    }
+
+    /// Öffnet den `ModelContainer` — bei einem Migrationsfehler (GitHub #119:
+    /// ein Gerät, dessen Store eine Zwischenstufe des additiven Schema-
+    /// Verlaufs vor der ersten echten `MigrationStage` trägt, siehe
+    /// `docs/DECISIONS.md`, "Explizite SwiftData-Migrationslogik ab v1.5")
+    /// ist der Store über SwiftData nicht mehr reparierbar. Einziger Ausweg:
+    /// den unlesbaren Store physisch verwerfen und aus einem Peer-Snapshot
+    /// wiederherstellen (siehe ``SyncErsetzenService``) — anders als
+    /// ``SyncErsetzenService/planeErsetzenDurchPeer(context:)`` OHNE
+    /// Vorher-Backup, weil der Store zu diesem Zeitpunkt gar nicht mehr
+    /// offen ist. Jeder lokale, noch nicht synchronisierte Stand geht dabei
+    /// unwiederbringlich verloren — strukturell unvermeidbar, sobald der
+    /// Store gar nicht mehr geöffnet werden kann.
+    private static func oeffneContainer(schema: Schema, konfiguration: ModelConfiguration) throws -> ModelContainer {
+        do {
+            return try ModelContainer(for: schema, migrationPlan: SchemaDefinition.migrationPlan, configurations: [konfiguration])
+        } catch {
+            DatabaseDebugLogger.log(.storeOpenFailure, details: "Migration fehlgeschlagen, verwerfe Store und stelle aus Peer-Snapshot wieder her: \(error)")
+            SyncErsetzenService.loescheUnlesbarenStoreUndPlaneWiederherstellung(url: konfiguration.url)
+            return try ModelContainer(for: schema, migrationPlan: SchemaDefinition.migrationPlan, configurations: [konfiguration])
+        }
     }
 
     var body: some Scene {

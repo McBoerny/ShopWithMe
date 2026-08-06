@@ -213,6 +213,22 @@ enum SyncErsetzenService {
         }
     }
 
+    /// Verwirft einen Store, der beim Öffnen bereits nicht mehr migrierbar
+    /// war (GitHub #119, siehe ``ShopWithMeApp/oeffneContainer(schema:konfiguration:)``),
+    /// und merkt „Ersetzen durch Peer" für den bereits laufenden Start vor —
+    /// anders als ``planeErsetzenDurchPeer(context:)`` OHNE Vorher-Backup: der
+    /// Store war beim Aufruf bereits ungeöffnet, es gibt nichts zu sichern.
+    /// `fuehreAusstehendeAktionAus(context:)` importiert danach normal aus
+    /// dem Sync-Ordner, sobald der frisch angelegte Container bereitsteht.
+    static func loescheUnlesbarenStoreUndPlaneWiederherstellung(url: URL) {
+        let ordner = url.deletingLastPathComponent()
+        let basisname = url.lastPathComponent
+        for suffix in ["", "-wal", "-shm"] {
+            try? FileManager.default.removeItem(at: ordner.appendingPathComponent(basisname + suffix))
+        }
+        ausstehendeAktion = .ersetzenDurchPeer
+    }
+
     /// Füllt den (nach ``loescheStoreDateiFallsAusstehend(url:)`` frischen,
     /// leeren) Context gemäß der ausstehenden Aktion und löscht sie
     /// anschließend — ohne Wirkung, falls keine Aktion aussteht.

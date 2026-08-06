@@ -148,6 +148,31 @@ ist erst gerechtfertigt, wenn bestehende Daten tatsächlich transformiert werden
 Version einzufrieren/zu verschachteln, statt (wie hier vermieden) dieselbe lebende
 Klasse mehrfach in verschiedenen `VersionedSchema`s zu referenzieren.
 
+**Korrektur (GitHub #119, "unknown model version"-Crash):** Mit der ersten
+echten `MigrationStage` (`SchemaV1` → `SchemaV2`, GitHub #112, v0.14) zeigte
+sich eine dritte Falle, zusätzlich zu den beiden oben: `SchemaV1Frozen.swift`
+friert das Modell exakt zu EINEM Zeitpunkt ein (Commit `3f38616`). Jedes
+Bestandsgerät, das zwischen einer früheren additiven Änderung (z.B. GitHub
+#99/#102, beide rein additiv und bis dahin unkritisch unter der einzigen
+`SchemaV1` gelaufen) und genau diesem eingefrorenen Zeitpunkt pausiert hatte,
+trägt einen on-disk-Schema-Fingerabdruck, der weder `SchemaV1` noch
+`SchemaV2` entspricht — die gestufte Migrations-Engine bricht dann mit
+`Cannot use staged migration with an unknown model version` ab. Betrifft
+praktisch jedes Gerät, das nicht exakt bis zum Einfrier-Commit mitgelaufen
+ist, bevor die erste echte `MigrationStage` auf ein Gerät trifft.
+
+**Fix:** ``ShopWithMeApp/oeffneContainer(schema:konfiguration:)`` fängt einen
+gescheiterten `ModelContainer`-Öffnungsversuch ab, verwirft den nicht mehr
+migrierbaren Store physisch
+(``SyncErsetzenService/loescheUnlesbarenStoreUndPlaneWiederherstellung(url:)``)
+und baut ihn frisch als aktuelles Schema auf; der bereits bestehende
+`SyncErsetzenService`/`SyncSnapshotImportService`-Mechanismus füllt ihn
+danach automatisch aus dem Sync-Ordner wieder auf. Anders als beim regulären
+`SyncErsetzenService.planeErsetzenDurchPeer(context:)` ist dabei kein
+Vorher-Backup möglich (der Store war beim Fehlschlag bereits ungeöffnet) —
+jeder lokale, noch nicht synchronisierte Stand geht verloren. Gilt für jede
+künftige `MigrationStage` gleichermaßen, nicht nur für diesen einen Vorfall.
+
 ## Git-Autor (lokal, nur dieses Repo)
 
 `user.name`/`user.email` wurden nur lokal für dieses Repo gesetzt (nicht global), da

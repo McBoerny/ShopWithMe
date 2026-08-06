@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.14 (Build 257) — Belegscan legt bei fehlendem Produktname automatisch ein neues Produkt an (Folgearbeit zu GitHub #47/#116)
+
+Bugfix: Lieferte die Zuordnung beim Belegscan nur einen ``Artikel`` (Substring-
+Treffer, KI-Vorschlag oder manuelle Zuweisung/Neuanlage in der Prüf-Ansicht),
+aber noch keinen bekannten ``Produktname`` für das erkannte Geschäft, landete
+der erfasste Preis bislang immer im geteilten Platzhalter-Standardprodukt des
+Artikels — mehrere tatsächlich unterschiedliche Marken desselben Artikels
+überschrieben sich dadurch gegenseitig in der Preishistorie. `BelegScanView`
+löst jetzt über `Produkt.aufgeloestesOderNeuesProdukt(...)` in diesem Fall
+automatisch ein eigenständiges Produkt auf oder legt eins neu an (Ausnahme:
+ein reiner Alias-Treffer bleibt bewusst beim Standardprodukt). Produktname
+kommt dabei vom bestätigten Anzeigenamen, falls der Nutzer ihn bewusst vom
+Artikelnamen abweichend umbenannt hat, sonst vom rohen Bon-Text — inkl.
+Wiedererkennung eines bereits existierenden, gleichnamigen Produkts, um
+Dubletten zu vermeiden. 9 neue Tests. Details: `docs/ARTIKEL_PRODUKT_MODELL.md`
+→ „Automatische Neuanlage beim Belegscan“.
+
 ## v0.14 (Build 254) — GitHub #116: Scan-Zuordnung erkennt Produktnamen (GitHub #47, Schritt 5/5 — Feature komplett)
 
 Letzter Baustein von #47: `ArtikelZuordnungsService` bekommt eine neue
