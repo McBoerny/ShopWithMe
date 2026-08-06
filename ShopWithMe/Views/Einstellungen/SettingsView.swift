@@ -24,6 +24,7 @@ private enum SettingsNavigationsziel: Hashable {
     case artikel
     case geschaefte
     case kategorien
+    case produkte
     case geschaeftsTypen
     case einkaufslisten
     case preishistorie
@@ -47,6 +48,9 @@ struct SettingsView: View {
                     }
                     NavigationLink(value: SettingsNavigationsziel.kategorien) {
                         Label("Abteilungen", systemImage: "tag")
+                    }
+                    NavigationLink(value: SettingsNavigationsziel.produkte) {
+                        Label("Produkte", systemImage: "shippingbox")
                     }
                     NavigationLink(value: SettingsNavigationsziel.geschaeftsTypen) {
                         Label("Geschäftstypen", systemImage: "square.grid.2x2")
@@ -85,6 +89,8 @@ struct SettingsView: View {
                     GeschaeftListView()
                 case .kategorien:
                     AbteilungenVerwaltungView()
+                case .produkte:
+                    ProduktVerwaltungView()
                 case .geschaeftsTypen:
                     GeschaeftsTypenVerwaltungView()
                 case .einkaufslisten:

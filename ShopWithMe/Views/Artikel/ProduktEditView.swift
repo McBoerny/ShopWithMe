@@ -52,6 +52,9 @@ struct ProduktEditView: View {
                 Section {
                     TextField("Name", text: $produkt.name)
                         .font(.title3)
+                    if let artikelName = produkt.artikel?.name {
+                        LabeledContent("Artikel", value: artikelName)
+                    }
                 } footer: {
                     Text("Der konkrete Produktname, z.B. \"Paradontol Zahncreme\".")
                 }

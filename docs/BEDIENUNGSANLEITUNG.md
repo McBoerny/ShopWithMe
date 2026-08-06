@@ -348,6 +348,12 @@ werden ausgetauscht.
 - **Artikel / Geschäfte / Abteilungen / Einkaufslisten** — die vollständige
   Verwaltung (Anlegen/Bearbeiten/Löschen); die App startet immer direkt mit der
   Einkaufsliste, Artikel und Geschäfte sind daher nur noch hier erreichbar.
+- **Produkte** — durchsuchbare Übersicht aller Produkte artikelübergreifend
+  (z.B. um schnell „Paradontol“ zu finden, ohne vorher zu wissen, dass es unter
+  „Zahnpasta“ hängt). Zeigt zu jedem Produkt den zugehörigen Artikel und
+  navigiert zur selben Bearbeitungsansicht wie unter „Artikel“ (Name,
+  Produktnamen je Geschäft, Preishistorie). Neue Produkte anlegen oder
+  löschen geht weiterhin nur über den jeweiligen Artikel (siehe oben).
 - **Geschäftstypen** — legt je Geschäftstyp (Lebensmittel, Drogerie, …) fest,
   welche Abteilungen als Standard gelten und dadurch automatisch in
   jedem Geschäft dieses Typs verfügbar sind (siehe „Geschäfte“ oben). Name,
