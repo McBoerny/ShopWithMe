@@ -25,11 +25,21 @@ struct ShopWithMeApp: App {
         // Hintergrund-Timer trotz `stoppen()` noch nebenläufig lief (siehe
         // `docs/DATABASE_CONCURRENCY.md`). Deshalb erst hier, ganz am Anfang
         // eines frischen Prozesses, an dem garantiert noch nichts geöffnet ist.
+        //
+        // GitHub #119: Steht bereits eine Wiederherstellung aus (der Store
+        // wurde also in einer vorherigen Sitzung verworfen, siehe
+        // ``oeffneContainer(schema:konfiguration:mitMigrationsplan:)``), MUSS
+        // das VOR dem `loescheStoreDateiFallsAusstehend`-Aufruf ausgelesen
+        // werden — danach ist der Zustand bereits wieder "kein Store" und
+        // nicht mehr von einer regulären Erstinstallation unterscheidbar.
+        let wiederherstellungAusstehend = SyncErsetzenService.ausstehendeAktion != nil
         SyncErsetzenService.loescheStoreDateiFallsAusstehend(url: konfiguration.url)
 
         DatabaseDebugLogger.log(.storeOpenStart, details: konfiguration.url.path)
         do {
-            modelContainer = try Self.oeffneContainer(schema: schema, konfiguration: konfiguration)
+            modelContainer = try Self.oeffneContainer(
+                schema: schema, konfiguration: konfiguration, mitMigrationsplan: !wiederherstellungAusstehend
+            )
         } catch {
             // Log ist Best-Effort: `fatalError` beendet den Prozess sofort danach,
             // das asynchrone Schreiben des Log-Eintrags kann daher vereinzelt nicht
@@ -78,12 +88,25 @@ struct ShopWithMeApp: App {
     /// ob der Store-Datei zwischenzeitlich gelöscht wurde — reproduziert bei
     /// GitHub #119, deckt sich mit Berichten im Apple Developer Forum). Der
     /// verworfene, für den nächsten Start vorgemerkte Store wird deshalb erst
-    /// beim NÄCHSTEN Prozessstart tatsächlich neu geöffnet (durch
-    /// ``SyncErsetzenService/loescheStoreDateiFallsAusstehend(url:)`` +
-    /// ``SyncErsetzenService/fuehreAusstehendeAktionAus(context:)``, wie beim
-    /// bereits bestehenden Wipe-und-Neuaufbau-Mechanismus) — dieser eine
-    /// Absturz bleibt unvermeidbar, aber einmalig statt dauerhaft.
-    private static func oeffneContainer(schema: Schema, konfiguration: ModelConfiguration) throws -> ModelContainer {
+    /// beim NÄCHSTEN Prozessstart tatsächlich neu geöffnet.
+    ///
+    /// **`mitMigrationsplan: false` bei bereits ausstehender Wiederherstellung
+    /// (Live-Test-Nachtrag GitHub #119):** Auch ein tatsächlich per
+    /// `destroyPersistentStore` vollständig verworfener, also GARANTIERT
+    /// leerer Store scheiterte auf dem Testgerät beim nächsten
+    /// Prozessstart am selben `Cannot use staged migration with an unknown
+    /// model version`-Fehler, solange `migrationPlan:` übergeben wurde — die
+    /// Staged-Migration-Engine verlangt offenbar zwingend eine erkennbare
+    /// Ausgangsversion, auch für einen frisch angelegten Store ohne jede
+    /// Historie. Ein leerer Store hat aber ohnehin nichts zu migrieren, daher
+    /// öffnet dieser eine Aufruf (ausgelöst über ``wiederherstellungAusstehend``
+    /// in ``init()``) bewusst ohne `migrationPlan:` — umgeht die
+    /// Staged-Migration-Engine für diesen Fall vollständig, statt auf ihr
+    /// korrektes Verhalten bei leeren Stores angewiesen zu sein.
+    private static func oeffneContainer(schema: Schema, konfiguration: ModelConfiguration, mitMigrationsplan: Bool) throws -> ModelContainer {
+        guard mitMigrationsplan else {
+            return try ModelContainer(for: schema, configurations: [konfiguration])
+        }
         do {
             return try ModelContainer(for: schema, migrationPlan: SchemaDefinition.migrationPlan, configurations: [konfiguration])
         } catch {
