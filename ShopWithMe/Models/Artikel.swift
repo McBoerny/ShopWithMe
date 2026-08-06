@@ -93,6 +93,14 @@ final class Artikel {
     /// hält den Namen dauerhaft fest).
     @Relationship(deleteRule: .nullify, inverse: \Preispunkt.artikel)
     var preispunkte: [Preispunkt] = []
+    /// Konkrete Produkte dieses Artikels (GitHub #47, z.B. "Odol"/"Paradontol"
+    /// für "Zahnpasta") — inverse zu ``Produkt/artikel``. Kaskadierend: ein
+    /// Produkt ist ohne seinen Artikel bedeutungslos (analog
+    /// ``einkaufslistenEintraege``). Enthält auch das automatisch angelegte
+    /// Platzhalter-Produkt (``Produkt/istStandard``), solange der Nutzer noch
+    /// kein eigenes benennt. Siehe `docs/ARTIKEL_PRODUKT_MODELL.md`.
+    @Relationship(deleteRule: .cascade, inverse: \Produkt.artikel)
+    var produkte: [Produkt] = []
 
     /// Rohwert für ``einheit``. Optional gespeichert, damit vor Einführung dieses
     /// Attributs angelegte Artikel beim automatischen Laden nicht abstürzen — ein

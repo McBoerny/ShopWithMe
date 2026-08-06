@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.14 (Build 250) — GitHub #112: Produkt/Produktname-Datenmodell (GitHub #47, Schritt 1/5)
+
+Fundament für die Artikel→Produkt→Produktname-Hierarchie
+(`docs/ARTIKEL_PRODUKT_MODELL.md`): neue Modelle `Produkt` (rekursiv
+selbstreferenzierend für Varianten wie Packungsgrößen, `istStandard`-Flag für
+automatisch angelegte Platzhalter) und `Produktname` (geschäftsabhängiger
+Name desselben Produkts). `Artikel`/`Preispunkt`/`EinkaufslistenEintrag`
+bekommen die dafür nötigen neuen, additiven Relationships —
+`Preispunkt.artikel` bleibt zusätzlich gepflegt, keine bestehende Stelle
+musste umgebaut werden.
+
+Erste echte strukturelle SwiftData-Migration dieses Projekts: `SchemaV1`
+(`Models/SchemaV1Frozen.swift`) friert alle 23 bisherigen Modelltypen
+verschachtelt ein, `SchemaV2` referenziert die live weiterentwickelten Typen,
+eine `MigrationStage.custom` verknüpft bestehende Preispunkte/Listeneinträge
+automatisch mit einem Platzhalter-Produkt ihres Artikels. Verifiziert mit
+einem echten, vor der Modelländerung angelegten On-Disk-Store
+(`ProduktMigrationTests.swift`), nicht nur einem frischen In-Memory-Store —
+etabliert damit das Migrationsmuster auch für künftige strukturelle
+Änderungen (z.B. #88). 9 neue Unit-Tests. Bewusst keine sichtbare
+Funktionsänderung — UI/Sync/Preis-Aggregation folgen in den Schritten 2–5.
+
 ## v0.13 (Build 249) — GitHub #111: Artikel-Alias-Namen
 
 Erster von zwei Fällen aus der Aufteilung von GitHub #47/#58 (Ausprägung

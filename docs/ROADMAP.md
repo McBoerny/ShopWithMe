@@ -137,14 +137,17 @@ vollständig umgesetzt; weitere Ideen siehe „Zukünftig“ unten.
 - **Nutzungs-Tracking/Analytics**: anonymisiertes Tracking-Framework zur Analyse der
   App-Nutzung — erfassen, welche Funktionen wie häufig genutzt werden, um die Roadmap
   datengestützt priorisieren zu können.
-- **Artikelausprägung** ([#47](https://github.com/McBoerny/ShopWithMe/issues/47)):
-  ein Artikel kann mehrere konkrete Produkt-Ausprägungen mit eigenem Preis
-  haben (z.B. „Odol“/„Paradontol“/„Sebamed“ für „Zahnpasta“), im Unterschied
-  zu den bereits umgesetzten Alias-Namen (v0.13, [#111](https://github.com/McBoerny/ShopWithMe/issues/111))
-  keine reine Textsuche, sondern ein eigenständiges 1:n-Datenmodell mit
-  Preis-Kumulierung am übergeordneten Artikel. Größerer, eigener Umbau —
-  siehe verwandtes [#10](https://github.com/McBoerny/ShopWithMe/issues/10)
-  zur offenen Modellfrage.
+- **Artikel → Produkt → Produktname** ([#47](https://github.com/McBoerny/ShopWithMe/issues/47)):
+  ein Artikel kann mehrere konkrete Produkte mit eigenem Preis haben (z.B.
+  „Odol“/„Paradontol“/„Sebamed“ für „Zahnpasta“, rekursiv für Varianten wie
+  Packungsgrößen), im Unterschied zu den bereits umgesetzten Alias-Namen
+  (v0.13, [#111](https://github.com/McBoerny/ShopWithMe/issues/111)) keine
+  reine Textsuche, sondern ein eigenständiges 1:n-Datenmodell mit
+  Preis-Kumulierung am übergeordneten Produkt. Ein Produkt kann zusätzlich
+  je Geschäft einen eigenen Produktnamen haben. Vollständiges Konzept
+  (noch nicht implementiert): `docs/ARTIKEL_PRODUKT_MODELL.md`. Größerer,
+  eigener Umbau — siehe verwandtes [#10](https://github.com/McBoerny/ShopWithMe/issues/10)
+  zur damit beantworteten Modellfrage.
 - **Modell-unabhängige Sync-Architektur** ([#75](https://github.com/McBoerny/ShopWithMe/issues/75)):
   die Datensynchronisation (`docs/DATENSYNCHRONISATION.md`) ist als Architektur-Muster
   bereits solide, aber die Implementierung eng an ShopWithMes konkretes Datenmodell

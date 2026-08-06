@@ -16,6 +16,12 @@ final class EinkaufslistenEintrag {
     var einkaufsliste: Einkaufsliste?
     /// Der Artikel, um den es geht.
     var artikel: Artikel?
+    /// Das konkrete Produkt, falls beim Hinzufügen eines von mehreren
+    /// Produkten des Artikels gewählt wurde (GitHub #47, z.B. "Paradontol
+    /// Zahncreme" statt nur "Zahnpasta") — `nil` bei genereller Auswahl ohne
+    /// Produktwahl. Rein additiv, ändert nichts am bisherigen
+    /// Artikel-zentrierten Verhalten. Siehe `docs/ARTIKEL_PRODUKT_MODELL.md`.
+    var produkt: Produkt?
     /// Aktuell auf dieser Liste gewünschte Menge — startet bei
     /// ``Artikel/mengenSchritt`` und wird beim Einkaufen in dessen Schritten
     /// verändert (siehe ``mengeErhoehen()``/``mengeVerringern()``).
@@ -26,10 +32,11 @@ final class EinkaufslistenEintrag {
     /// Zeitpunkt, zu dem der Artikel auf diese Liste gesetzt wurde.
     var erstelltAm: Date
 
-    init(einkaufsliste: Einkaufsliste?, artikel: Artikel?, menge: Double, notiz: String? = nil) {
+    init(einkaufsliste: Einkaufsliste?, artikel: Artikel?, produkt: Produkt? = nil, menge: Double, notiz: String? = nil) {
         self.id = UUID()
         self.einkaufsliste = einkaufsliste
         self.artikel = artikel
+        self.produkt = produkt
         self.menge = menge
         self.notiz = notiz
         self.erstelltAm = Date()

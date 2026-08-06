@@ -1410,8 +1410,14 @@ enum SyncSnapshotImportService {
         for eintrag in remote {
             guard !bekannteIDs.contains(eintrag.id) else { continue }
             guard !geloeschteIDs.contains(eintrag.id) else { continue }
+            // Produkt-Auflösung hier bewusst nur lokal über den bereits
+            // aufgelösten Artikel (Platzhalter-Produkt) — echte
+            // geräteübergreifende Produkt-Synchronisation folgt in GitHub #47
+            // Schritt 2/5, siehe `docs/ARTIKEL_PRODUKT_MODELL.md`.
+            let artikel = eintrag.artikelID.flatMap { artikelZuordnung[$0] }
             let neuer = Preispunkt(
-                artikel: eintrag.artikelID.flatMap { artikelZuordnung[$0] },
+                artikel: artikel,
+                produkt: artikel.map { Produkt.standardProdukt(fuer: $0, context: context) },
                 geschaeft: eintrag.geschaeftID.flatMap { geschaeftZuordnung[$0] },
                 preis: eintrag.preis,
                 datum: eintrag.datum,

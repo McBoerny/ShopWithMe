@@ -70,6 +70,7 @@ struct PreispunktZuordnenSheet: View {
                                     .foregroundStyle(Color.accentColor)
                             }
                         }
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
 
@@ -94,6 +95,7 @@ struct PreispunktZuordnenSheet: View {
                                         .foregroundStyle(Color.accentColor)
                                 }
                             }
+                            .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                     }
@@ -156,6 +158,7 @@ struct PreispunktZuordnenSheet: View {
                 let alias = getrimmterAlias.isEmpty ? nil : getrimmterAlias
                 eintragFrisch.alternativerName = alias
                 eintragFrisch.artikel = artikel
+                eintragFrisch.produkt = artikel.map { Produkt.standardProdukt(fuer: $0, context: modelContext) }
                 if !erkannterName.isEmpty {
                     ArtikelAlias.lernen(erkannterName: erkannterName, alternativerName: alias, artikel: artikel, context: modelContext)
                 }
@@ -170,5 +173,5 @@ struct PreispunktZuordnenSheet: View {
     eintrag.artikelNameSnapshot = "COL-ZAH"
     eintrag.produktName = "COL-ZAH"
     return PreispunktZuordnenSheet(eintrag: eintrag)
-        .modelContainer(for: [Artikel.self, ArtikelKategorie.self, GeschaeftTyp.self, Preispunkt.self, ArtikelAlias.self], inMemory: true)
+        .modelContainer(for: [Artikel.self, ArtikelKategorie.self, GeschaeftTyp.self, Preispunkt.self, ArtikelAlias.self, Produkt.self, Produktname.self], inMemory: true)
 }

@@ -29,14 +29,16 @@ enum PreispunktService {
         nameFallback: String = "",
         context: ModelContext
     ) -> Preispunkt {
+        let produkt = artikel.map { Produkt.standardProdukt(fuer: $0, context: context) }
         if let artikel, let letzter = letzterPreispunkt(fuerArtikel: artikel, geschaeft: geschaeft, context: context) {
             if letzter.preis == preis {
                 letzter.datum = datum
+                letzter.produkt = produkt
                 return letzter
             }
         }
         let neuer = Preispunkt(
-            artikel: artikel, geschaeft: geschaeft, preis: preis, datum: datum,
+            artikel: artikel, produkt: produkt, geschaeft: geschaeft, preis: preis, datum: datum,
             produktName: produktName, alternativerName: alternativerName
         )
         if artikel == nil {

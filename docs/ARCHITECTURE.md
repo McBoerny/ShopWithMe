@@ -68,19 +68,34 @@ notiz: String?                                                     ursprungsGera
 einheitRaw: String?                  Preispunkt (GitHub #76 — Preishistorie, unabhängig vom Einkaufsvorgang)
 mengenSchrittRaw: Double?            ──────────
 ┌einkaufslistenEintraege:            id: UUID
-│ [EinkaufslistenEintrag]            artikel: Artikel?  (nullify)
-│                                    geschaeft: Geschaeft?  (cascade)
-├preispunkte: [Preispunkt]           preis: Decimal
-│ (nullify)                          datum: Date
-│                                    produktName/alternativerName: String?
+│ [EinkaufslistenEintrag]            artikel: Artikel?  (nullify, weiterhin gepflegt)
+│                                    produkt: Produkt?  (GitHub #47, seit v0.14)
+├preispunkte: [Preispunkt]           geschaeft: Geschaeft?  (cascade)
+│ (nullify)                          preis: Decimal
+├produkte: [Produkt]                 datum: Date
+│ (cascade, GitHub #47, seit v0.14)  produktName/alternativerName: String?
 Einkaufsliste                        EinkaufslistenEintrag           ArtikelAlias (GitHub #76 — Mitlernen)
 ─────────────                        ─────────────────────           ─────────────
 id: UUID                             id: UUID                        id: UUID
 name: String                         einkaufsliste: Einkaufsliste?   erkannterName: String
 erstelltAm: Date                     artikel: Artikel? ─────────────┘ alternativerName: String?
-└eintraege: [EinkaufslistenEintrag]  menge: Double                   artikel: Artikel?
+└eintraege: [EinkaufslistenEintrag]  produkt: Produkt? (seit v0.14)   artikel: Artikel?
+                                      menge: Double
                                       notiz: String?
                                       erstelltAm: Date
+
+Produkt (GitHub #47, seit v0.14)          Produktname (GitHub #47, seit v0.14)
+────────                                  ───────────
+id: UUID                                  id: UUID
+name: String                              name: String  (geschäftsabhängig)
+artikel: Artikel?  (cascade)              produkt: Produkt?
+elternProdukt: Produkt?  (rekursiv,       geschaeft: Geschaeft?
+  z.B. Packungsgrößen)
+┌unterProdukte: [Produkt] (cascade)
+├produktnamen: [Produktname] (cascade)
+├preispunkte: [Preispunkt] (nullify)
+istStandard: Bool  (automatisch angelegter
+  Platzhalter, siehe standardProdukt(fuer:context:))
 
 WarengruppenDistanz                       IgnorierterGeschaeftsVorschlag
 ───────────────────                       ──────────────────────────────
@@ -100,6 +115,16 @@ artikel: Artikel?                         geschaeft: Geschaeft?
 geschaeft: Geschaeft?                     startZeit/endZeit: Date
 (reine Existenz-Tatsache, kein Zähler)     anzahlProdukte: Int
 ```
+
+**`Produkt`/`Produktname` (GitHub #47, Schritt 1/5, v0.14):** erste echte
+strukturelle SwiftData-Migration dieses Projekts (`SchemaV1` → `SchemaV2`,
+`Models/SchemaV1Frozen.swift`/`Models/SchemaDefinition.swift`) — bislang war
+jede Modelländerung additiv-optional und brauchte keine `MigrationStage`
+(siehe `docs/DECISIONS.md`). Ein `MigrationStage.custom` verknüpft beim
+ersten Start nach dem Update automatisch jeden bereits bestehenden
+`Preispunkt`/`EinkaufslistenEintrag` mit einem Platzhalter-`Produkt` seines
+Artikels (`Produkt.standardProdukt(fuer:context:)`). Vollständiges Konzept
+inkl. der noch offenen Schritte 2–5: `docs/ARTIKEL_PRODUKT_MODELL.md`.
 
 **`Einkaufsvorgang.einkaufsliste` seit v0.12 `cascade`** (vormals `nullify`,
 siehe `docs/GESCHAEFTS_AGGREGATE.md`): Löschen einer `Einkaufsliste` löscht
@@ -211,10 +236,10 @@ Abschnitt zurückfällt (Belegscan, Preisschild-Scan, Sync-Import).
   Unterschied zu `lernen(...)` bei Namenskollision mit einem anderen Artikel
   statt stillschweigend umzuhängen). `ArtikelHinzufuegenView.gefilterteArtikel`
   durchsucht neben `Artikel.name` auch diese Aliase — derselbe Artikel bleibt
-  dabei einmalig im Ergebnis. Abgrenzung zur weiterhin offenen
-  Artikelausprägung ([#47](https://github.com/McBoerny/ShopWithMe/issues/47)):
-  ein Alias ist reine Textsuche für denselben Artikel, keine eigenständige
-  Produktvariante mit eigenem Preis.
+  dabei einmalig im Ergebnis. Abgrenzung zum weiterhin offenen
+  Artikel→Produkt→Produktname-Konzept ([#47](https://github.com/McBoerny/ShopWithMe/issues/47),
+  `docs/ARTIKEL_PRODUKT_MODELL.md`): ein Alias ist reine Textsuche für
+  denselben Artikel, kein eigenständiges Produkt mit eigenem Preis.
 - **Artikel hinzufügen — Mehrfachauswahl**: Tap auf eine ganze Zeile in
   `ArtikelHinzufuegenView` wählt sie aus/ab (statt sofort zu übernehmen); „Hinzufügen
   (n)“ committet die gesamte Auswahl auf einmal; ein per Direktanlage neu erstellter

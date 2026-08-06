@@ -20,6 +20,12 @@ final class Preispunkt {
     /// Der Artikel, dessen Preis beobachtet wurde (kann `nil` werden, wenn der
     /// Artikel später gelöscht wird).
     var artikel: Artikel?
+    /// Das konkrete Produkt, dessen Preis beobachtet wurde (GitHub #47) —
+    /// inverse zu ``Produkt/preispunkte``. Fachlich der eigentliche
+    /// Preisträger (siehe `docs/ARTIKEL_PRODUKT_MODELL.md`); ``artikel``
+    /// bleibt zusätzlich gepflegt als der über viele bestehende Stellen
+    /// bereits genutzte, direkte Bezug zum übergreifenden Artikel.
+    var produkt: Produkt?
     /// Das Geschäft, in dem der Preis beobachtet wurde.
     var geschaeft: Geschaeft?
     /// Der zuletzt beobachtete Preis.
@@ -41,6 +47,7 @@ final class Preispunkt {
 
     init(
         artikel: Artikel?,
+        produkt: Produkt? = nil,
         geschaeft: Geschaeft?,
         preis: Decimal,
         datum: Date = Date(),
@@ -49,6 +56,7 @@ final class Preispunkt {
     ) {
         self.id = UUID()
         self.artikel = artikel
+        self.produkt = produkt
         self.geschaeft = geschaeft
         self.preis = preis
         self.datum = datum

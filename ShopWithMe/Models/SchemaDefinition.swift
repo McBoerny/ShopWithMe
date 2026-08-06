@@ -1,33 +1,13 @@
 import SwiftData
 
-/// Version 1 des SwiftData-Schemas.
-///
-/// **Wichtig (siehe `docs/DECISIONS.md`, "Duplicate version checksums"-Vorfall):**
-/// Dieses Projekt pflegt Modelle als flache, einzige Klassen (`Models/*.swift`) statt
-/// pro Schema-Version verschachtelter/eingefrorener Typen. Eine zusätzliche
-/// ``VersionedSchema`` (`SchemaV2`, …), die dieselben lebenden Modell-Typen
-/// referenziert, hat deshalb exakt denselben Prüfsummen-Hash wie ``SchemaV1`` — SwiftData
-/// crasht dann beim Öffnen eines bestehenden Stores mit
-/// `NSInvalidArgumentException: Duplicate version checksums detected`, weil zwei
-/// verschiedene deklarierte Versionen auf ein identisches Schema abbilden.
-/// **Für rein additive, optionale neue Attribute bleibt es daher bei dieser einzigen
-/// ``SchemaV1`` + der defensiven Regel aus `docs/DECISIONS.md`** (neues Attribut
-/// optional deklarieren, ggf. über ein Computed-Property mit sicherem Fallback
-/// kapseln wie ``Geschaeft/umbauVerdacht``) — SwiftDatas klassische automatische
-/// Lightweight-Migration übernimmt die neue Spalte dann anstandslos. Eine echte neue
-/// ``VersionedSchema`` samt ``MigrationStage`` ist erst nötig, wenn bestehende Daten
-/// tatsächlich transformiert werden müssen (`.custom`) — und setzt dann voraus, dass
-/// die betroffenen Modelltypen pro Version tatsächlich eingefroren/verschachtelt
-/// werden, statt (wie hier vermieden) dieselbe lebende Klasse mehrfach zu referenzieren.
-enum SchemaV1: VersionedSchema {
-    /// Rein SwiftData-interne Versionsnummer dieses Schemas — unabhängig von
-    /// der App-Marketing-Version (`MARKETING_VERSION` in `project.yml`,
-    /// aktuell z.B. v0.12). Der Wert `(1, 5, 0)` stammt aus der Zeit vor dem
-    /// einmaligen Versions-Reset auf v0.1 (siehe `docs/DECISIONS.md`,
-    /// Abschnitt „Versionsschema") und wurde beim Reset bewusst nicht
-    /// mitgeändert, da er nur innerhalb dieser Datei und für SwiftData selbst
-    /// eine Bedeutung hat (GitHub #101).
-    static var versionIdentifier: Schema.Version { Schema.Version(1, 5, 0) }
+/// Version 2 des SwiftData-Schemas — fügt ``Produkt``/``Produktname`` hinzu
+/// und erweitert ``Artikel``/``Preispunkt``/``EinkaufslistenEintrag`` um die
+/// dafür nötigen Relationships (GitHub #47, Schritt 1/5, v0.13). Referenziert
+/// die aktuellen, lebenden Modell-Typen aus `Models/*.swift` — im Unterschied
+/// zu ``SchemaV1`` (`SchemaV1Frozen.swift`), das den eingefrorenen Vorzustand
+/// verschachtelt nachbildet. Siehe `docs/ARTIKEL_PRODUKT_MODELL.md`.
+enum SchemaV2: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(2, 0, 0) }
 
     static var models: [any PersistentModel.Type] {
         [
@@ -54,22 +34,53 @@ enum SchemaV1: VersionedSchema {
             ArtikelGeschaeftVerfuegbarkeit.self,
             GeschaeftBesuch.self,
             ArtikelListenKauf.self,
+            Produkt.self,
+            Produktname.self,
         ]
     }
 }
 
-/// Migrationsplan für das SwiftData-Schema. Aktuell ohne Stages, da bislang jede
-/// Datenmodell-Änderung additiv und optional war (siehe ``SchemaV1`` für die
-/// Begründung, warum das bewusst keine zusätzliche ``VersionedSchema`` erzeugt).
+/// Migrationsplan für das SwiftData-Schema — erste echte strukturelle
+/// Migration dieses Projekts (``SchemaV1`` → ``SchemaV2``, siehe
+/// `docs/ARTIKEL_PRODUKT_MODELL.md`). Frühere Änderungen waren additiv-optional
+/// und brauchten keine ``MigrationStage`` (siehe `docs/DECISIONS.md`).
 enum ShopWithMeMigrationPlan: SchemaMigrationPlan {
-    static var schemas: [any VersionedSchema.Type] { [SchemaV1.self] }
-    static var stages: [MigrationStage] { [] }
+    static var schemas: [any VersionedSchema.Type] { [SchemaV1.self, SchemaV2.self] }
+    static var stages: [MigrationStage] { [migrateV1toV2] }
+
+    /// Verknüpft jeden ``Preispunkt``/``EinkaufslistenEintrag`` mit bereits
+    /// gesetztem ``Artikel``, aber noch ohne ``Produkt`` (zwangsläufig JEDER
+    /// bereits bestehende, da ``Produkt`` vor dieser Migration nicht
+    /// existierte), mit dem Platzhalter-Produkt seines Artikels — siehe
+    /// ``Produkt/standardProdukt(fuer:context:)``. Läuft nach der
+    /// automatischen Lightweight-Migration der neuen, additiv-optionalen
+    /// Relationships (``Artikel/produkte``, ``Preispunkt/produkt``,
+    /// ``EinkaufslistenEintrag/produkt``), bevor die App diese Daten zum
+    /// ersten Mal liest.
+    static let migrateV1toV2 = MigrationStage.custom(
+        fromVersion: SchemaV1.self,
+        toVersion: SchemaV2.self,
+        willMigrate: nil,
+        didMigrate: { context in
+            let preispunkte = (try? context.fetch(FetchDescriptor<Preispunkt>())) ?? []
+            for punkt in preispunkte {
+                guard punkt.produkt == nil, let artikel = punkt.artikel else { continue }
+                punkt.produkt = Produkt.standardProdukt(fuer: artikel, context: context)
+            }
+            let eintraege = (try? context.fetch(FetchDescriptor<EinkaufslistenEintrag>())) ?? []
+            for eintrag in eintraege {
+                guard eintrag.produkt == nil, let artikel = eintrag.artikel else { continue }
+                eintrag.produkt = Produkt.standardProdukt(fuer: artikel, context: context)
+            }
+            try? context.save()
+        }
+    )
 }
 
 /// Zentrale Definition des SwiftData-Schemas, damit an allen Stellen, die einen
 /// `ModelContainer`/`ModelConfiguration` aufbauen, dieselbe Modell-Liste sowie
 /// derselbe Migrationsplan verwendet werden.
 enum SchemaDefinition {
-    static let schema = Schema(versionedSchema: SchemaV1.self)
+    static let schema = Schema(versionedSchema: SchemaV2.self)
     static let migrationPlan = ShopWithMeMigrationPlan.self
 }
