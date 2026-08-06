@@ -401,6 +401,41 @@ exaktem Gleichstand die lexikographisch kleinere `id` als stabiler Tiebreaker
 Fetch-Reihenfolge nicht garantierter Treffer zu inkonsistenten Zeitfenstern
 zwischen Geräten führen.
 
+**Nachtrag (Nutzerbericht 2026-08-06): `offenerTreffer` matchte auch alte,
+längst vergessene lokale Vorgänge.** Der Zweig war ursprünglich nur für den
+Fall gedacht, dass zwei Geräte VOR ihrem ersten Sync unabhängig je einen
+frischen, leeren Vorgang anlegen — prüfte das aber nicht: ein Gerät, das die
+Sync-Gruppe (neu) verlässt/verlässt und wieder beitritt (Peer-Lebenszyklus,
+`docs/PEER_LEBENSZYKLUS.md`), aus einem lokalen Backup wiederherstellt, oder
+schlicht länger standalone mit lokalen Einkaufslisten gearbeitet hat, bevor
+ein Sync-Ordner (neu) verknüpft wird, kann einen alten, nie geschlossenen
+Vorgang mit bereits eigenen `KaufEintrag`en für dieselbe (Geschäft,
+Liste)-Kombination haben. Traf der `offenerTreffer`-Zweig darauf, wurde er
+blind mit dem tatsächlich aktiven Vorgang eines Peers aliasiert — dessen
+eigene, u.U. längst veraltete Käufe blieben hängen und erschienen zusätzlich
+in der listenweiten "abgehakt"-Ansicht des zusammengeführten Vorgangs
+(sichtbar als zu viele, fälschlich schon abgehakt wirkende Artikel).
+
+Zwei unabhängige Fixes:
+1. **Am eigentlichen Beitrittsmoment:**
+   ``EinkaufsvorgangAbschlussService/schliesseAlleOffenenEinkaufsvorgaenge(context:)``
+   schließt jeden aktuell offenen lokalen Vorgang (jeder zählt normal als
+   eigener Besuch) — aufgerufen aus `SyncOrdnerSettingsView.ordnerFestlegen(_:)`
+   (Erst- UND Wieder-Beitritt, vor dem ersten Sync-Zyklus mit dem neuen
+   Ordner) sowie aus `SyncErsetzenService.fuehreAusstehendeAktionAus`s
+   `.wiederherstellenAusBackup`-Fall (nach dem Import des eigenen
+   Backup-Snapshots). Bewusst NICHT im `.ersetzenDurchPeer`-Fall — der
+   importierte Snapshot dort gehört einem echten, aktuell aktiven Peer,
+   dessen offene Vorgänge genau deshalb offen bleiben sollen.
+2. **Zusätzliche Absicherung im Merge selbst:** der `offenerTreffer`-Zweig
+   verlangt jetzt zusätzlich `$0.kaufEintraege.isEmpty` — ein Kandidat mit
+   bereits eigenen Käufen ist per Definition kein frischer Race-Kandidat mehr.
+   Nebeneffekt in einem sehr schmalen Randfall (Gerät A hakt vor dem
+   allerersten Sync bereits einen Artikel ab, bevor der Treffer mit Gerät B
+   stattfindet): der Besuch wird dann doppelt gezählt statt dedupliziert —
+   betrifft nur Besuchszähler/-protokoll, nicht die Live-Ansicht (die ist
+   ohnehin listenweit, nicht vorgangsbezogen).
+
 **Neu anzulegender Vorgang braucht eine auflösbare Liste:** Referenziert ein
 empfangener Snapshot-Eintrag weder ein bekanntes Geschäft noch eine bekannte
 Liste (weil beide Referenzen bereits auf dem sendenden Gerät baumelten und

@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.14 (Build 262) — Alter offener Einkaufsvorgang wird beim Sync-(Wieder-)Beitritt nicht mehr fälschlich mit einem aktiven Peer-Vorgang vermischt
+
+Bugfix (Nutzerbericht): Hatte ein Gerät vor einem (Wieder-)Beitritt zu einer
+Sync-Gruppe — Erstbeitritt, Wieder-Beitritt nach Entfernung aus der Gruppe,
+oder Wiederherstellung aus dem lokalen Backup — noch einen alten, nie
+geschlossenen `Einkaufsvorgang` mit bereits eigenen `KaufEintrag`en für
+dieselbe Geschäft+Liste-Kombination, matchte `SyncSnapshotImportService`s
+`offenerTreffer`-Merge ihn blind gegen einen tatsächlich aktiven Vorgang eines
+Peers — die eigenen, veralteten Käufe blieben hängen und erschienen zusätzlich
+als (fälschlich) abgehakt in der listenweiten Ansicht. Neue
+`EinkaufsvorgangAbschlussService.schliesseAlleOffenenEinkaufsvorgaenge(context:)`
+schließt jetzt alle lokal offenen Vorgänge am eigentlichen Beitrittsmoment
+(`SyncOrdnerSettingsView.ordnerFestlegen(_:)`, `SyncErsetzenService`s
+Backup-Wiederherstellung), zusätzlich verlangt der `offenerTreffer`-Zweig
+selbst jetzt einen leeren lokalen Kandidaten. 5 neue Tests. Details:
+`docs/DATENSYNCHRONISATION.md` §4.3.
+
 ## v0.14 (Build 257) — Belegscan legt bei fehlendem Produktname automatisch ein neues Produkt an (Folgearbeit zu GitHub #47/#116)
 
 Bugfix: Lieferte die Zuordnung beim Belegscan nur einen ``Artikel`` (Substring-

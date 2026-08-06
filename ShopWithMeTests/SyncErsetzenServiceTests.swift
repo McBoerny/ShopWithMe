@@ -417,6 +417,38 @@ struct SyncErsetzenServiceTests {
         #expect(SyncErsetzenService.ausstehendeAktion == nil)
     }
 
+    /// Regressionstest (Nutzerbericht 2026-08-06): ein zum Sicherungszeitpunkt
+    /// noch offener Einkaufsvorgang im eigenen Backup (z.B. bei einer
+    /// Korruptions-Wiederherstellung ohne Sync-Ordner-Austritt,
+    /// ``SyncOrdnerSettingsView/backupWiederherstellenGetappt()``) muss nach
+    /// der Wiederherstellung geschlossen sein — sonst matcht ihn der nächste
+    /// Sync-Zyklus über ``SyncSnapshotImportService``s `offenerTreffer`
+    /// blind gegen einen tatsächlich aktiven Vorgang eines Peers und
+    /// vermischt dessen eigene, längst veraltete Käufe in die listenweite
+    /// "abgehakt"-Ansicht (`docs/DATENSYNCHRONISATION.md` §4.3).
+    @Test
+    func fuehreAusstehendeAktionAusSchliesstOffenenVorgangAusWiederhergestelltemBackup() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        defer { SyncErsetzenService.loescheBackup() }
+        defer { raeumeAusstehendeAktionAuf() }
+
+        let (backupContainer, backupContext) = try machtLeerenContainer()
+        _ = backupContainer
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        backupContext.insert(liste)
+        let offenerVorgang = Einkaufsvorgang(einkaufsliste: liste)
+        backupContext.insert(offenerVorgang)
+        try backupContext.save()
+        try SyncErsetzenService.erstelleBackup(context: backupContext)
+        setzeAusstehendeAktion(.wiederherstellenAusBackup)
+
+        await SyncErsetzenService.fuehreAusstehendeAktionAus(context: context)
+
+        let wiederhergestellterVorgang = try #require(context.fetch(FetchDescriptor<Einkaufsvorgang>()).first)
+        #expect(wiederhergestellterVorgang.istAbgeschlossen)
+    }
+
     // MARK: - SyncEvent-Wiederherstellung (GitHub #80)
 
     @Test

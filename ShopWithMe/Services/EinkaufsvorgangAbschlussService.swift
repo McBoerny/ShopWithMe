@@ -88,4 +88,34 @@ enum EinkaufsvorgangAbschlussService {
                 + "letzteAktivitaetVorSekunden=\(sekundenSeitAktivitaet)"
         )
     }
+
+    /// Schließt ALLE aktuell offenen Einkaufsvorgänge unabhängig voneinander ab
+    /// — jeder für sich wie ein eigenständiger Anker ohne Duplikate (siehe
+    /// ``schliesseAbMitDuplikaten(anker:duplikate:context:)``), zählt also
+    /// normal als eigener Besuch und fließt normal ins Distanzlernen ein.
+    ///
+    /// Für den Moment, in dem ein Gerät (neu) an einer Sync-Gruppe teilnimmt
+    /// (Erstbeitritt, Wieder-Beitritt nach Entfernung, Backup-Wiederherstellung
+    /// bei weiterhin verknüpftem Sync-Ordner, `SyncOrdnerSettingsView`/
+    /// `SyncErsetzenService`) — ohne das würde ein lokal noch offener,
+    /// möglicherweise längst vergessener Vorgang über
+    /// ``SyncSnapshotImportService``s `offenerTreffer`-Matching blind mit
+    /// einem tatsächlich gerade aktiven Vorgang eines Peers aliasiert. Seine
+    /// bereits vorhandenen eigenen `KaufEintrag`e blieben dadurch am
+    /// zusammengeführten Vorgang hängen und erschienen zusätzlich in der
+    /// listenweiten "abgehakt"-Ansicht (`docs/DATENSYNCHRONISATION.md` §4.3)
+    /// — auch wenn sie mit der aktuellen Gruppenaktivität nichts zu tun haben.
+    ///
+    /// Bewusst NICHT aufgerufen für einen frisch importierten Peer-Snapshot
+    /// (``SyncErsetzenService``, Fall `.ersetzenDurchPeer`) — dessen offene
+    /// Vorgänge gehören echten, aktuell aktiven Peers und sollen genau
+    /// deshalb offen bleiben.
+    @discardableResult
+    static func schliesseAlleOffenenEinkaufsvorgaenge(context: ModelContext) -> Int {
+        let offene = (try? context.fetch(FetchDescriptor<Einkaufsvorgang>(predicate: #Predicate { $0.endZeit == nil }))) ?? []
+        for vorgang in offene {
+            schliesseAbMitDuplikaten(anker: vorgang, duplikate: [], context: context)
+        }
+        return offene.count
+    }
 }

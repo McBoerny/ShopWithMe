@@ -1124,6 +1124,56 @@ struct SyncSnapshotImportServiceTests {
         #expect(eigenerVorgang.endZeit == abschlusszeit)
     }
 
+    /// Regressionstest (Nutzerbericht 2026-08-06, Peer-Beitritt/-Rückkehr):
+    /// ein lokal offener Vorgang mit bereits eigenen `KaufEintrag`en (kein
+    /// frischer, leerer Race-Kandidat wie im Nachbartest oben, sondern ein
+    /// alter, vor einem (Wieder-)Beitritt vergessener Rest) darf NICHT per
+    /// `offenerTreffer` mit einem tatsächlich aktiven Vorgang eines Peers
+    /// zusammengeführt werden — sonst blieben seine eigenen, u.U. längst
+    /// veralteten Käufe zusätzlich in der listenweiten "abgehakt"-Ansicht des
+    /// zusammengeführten Vorgangs hängen (`docs/DATENSYNCHRONISATION.md`
+    /// §4.3). ``EinkaufsvorgangAbschlussService/schliesseAlleOffenenEinkaufsvorgaenge(context:)``
+    /// verhindert das bereits beim eigentlichen Beitrittsmoment — dieser
+    /// Test deckt die zusätzliche, unabhängige Absicherung im Merge selbst ab.
+    @Test
+    func offenerVorgangMitEigenenKaufEintraegenWirdNichtAlsOffenerTrefferGematcht() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
+        // Gerät hat einen ALTEN, offenen Einkaufsvorgang mit bereits eigenen
+        // Käufen — z.B. aus der Zeit vor einem Wieder-Beitritt zur Sync-Gruppe.
+        let alterVorgang = Einkaufsvorgang(einkaufsliste: liste)
+        context.insert(alterVorgang)
+        let alterKauf = KaufEintrag(artikel: nil, geschaeft: nil, datum: Date())
+        context.insert(alterKauf)
+        alterKauf.einkaufsvorgang = alterVorgang
+        try context.save()
+
+        // Peer hat für DIESELBE Liste unabhängig einen eigenen, tatsächlich
+        // aktiven, noch offenen Einkaufsvorgang.
+        let remoteVorgangID = UUID()
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.einkaufslisten = [EinkaufslisteSnapshot(id: liste.id, name: "Einkaufsliste", erstelltAm: liste.erstelltAm)]
+        snapshot.einkaufsvorgaenge = [
+            EinkaufsvorgangSnapshot(id: remoteVorgangID, geschaeftID: nil, einkaufslisteID: liste.id, startZeit: Date(), endZeit: nil),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        // Zwei getrennte offene Vorgänge statt einer Vermischung — der alte
+        // behält seinen eigenen Kaufeintrag, der neu angelegte hat keinen.
+        let vorgaenge = try context.fetch(FetchDescriptor<Einkaufsvorgang>())
+        #expect(vorgaenge.count == 2)
+        #expect(alterVorgang.kaufEintraege.count == 1)
+        let neuerVorgang = vorgaenge.first { $0.persistentModelID != alterVorgang.persistentModelID }
+        #expect(neuerVorgang?.kaufEintraege.isEmpty == true)
+    }
+
     /// Regressionstest für einen echten Zwei-Geräte-Live-Test-Fund
     /// (2026-07-31): Enthält ein einzelner Peer-Snapshot MEHRERE Einträge, die
     /// alle denselben, für dieses Gerät noch unbekannten offenen Vorgang für

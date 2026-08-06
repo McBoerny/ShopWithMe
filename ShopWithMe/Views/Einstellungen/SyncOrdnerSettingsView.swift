@@ -317,6 +317,15 @@ struct SyncOrdnerSettingsView: View {
             try SyncOrdnerService.ordnerFestlegen(ordner)
             ausgewaehlterOrdner = ordner
             fehlermeldung = nil
+            // Vor dem ersten Sync-Zyklus mit diesem Ordner: ein lokal noch
+            // offener Einkaufsvorgang aus der Zeit vor dem (Wieder-)Beitritt
+            // darf nicht unverändert stehen bleiben — sonst matcht ihn
+            // `SyncSnapshotImportService.mergeEinkaufsvorgaenge`s
+            // `offenerTreffer`-Zweig blind gegen einen tatsächlich aktiven
+            // Vorgang eines Peers und vermischt dessen eigene, u.U. längst
+            // veraltete Käufe in die listenweite Anzeige (siehe
+            // ``EinkaufsvorgangAbschlussService/schliesseAlleOffenenEinkaufsvorgaenge(context:)``).
+            EinkaufsvorgangAbschlussService.schliesseAlleOffenenEinkaufsvorgaenge(context: modelContext)
             if SyncOrdnerService.hatVorhandenePeers(in: ordner) {
                 zeigeBeitrittsWahl = true
             } else {

@@ -1313,7 +1313,22 @@ enum SyncSnapshotImportService {
                 }
                 continue
             } else if let offenerTreffer = Einkaufsvorgang.kanonischer(unter: alleLokalen.filter({
-                $0.endZeit == nil && $0.geschaeft == remoteGeschaeft && $0.einkaufsliste == remoteListe
+                // `kaufEintraege.isEmpty` (Nachtrag): der Zweig soll
+                // ausschließlich den Fall abdecken, dass zwei Geräte VOR
+                // ihrem ersten Sync unabhängig je einen frischen, leeren
+                // Vorgang für dieselbe Kombination angelegt haben — ein
+                // solcher Kandidat hat per Definition noch keine eigenen
+                // Käufe. Ein alter, lokal offen gebliebener Vorgang MIT
+                // bereits vorhandenen `KaufEintrag`en ist nie dieser Fall,
+                // sondern typischerweise ein vor einem (Wieder-)Beitritt
+                // vergessener Rest (siehe
+                // ``EinkaufsvorgangAbschlussService/schliesseAlleOffenenEinkaufsvorgaenge(context:)``,
+                // die genau das beim eigentlichen Beitrittsmoment bereits
+                // verhindert) — ohne diese Prüfung würden seine eigenen,
+                // u.U. längst veralteten Käufe zusätzlich in die listenweite
+                // "abgehakt"-Ansicht des zusammengeführten Vorgangs
+                // einfließen.
+                $0.endZeit == nil && $0.kaufEintraege.isEmpty && $0.geschaeft == remoteGeschaeft && $0.einkaufsliste == remoteListe
             })) {
                 if offenerTreffer.id != eintrag.id {
                     SyncEntitaetsAliasService.registriere(

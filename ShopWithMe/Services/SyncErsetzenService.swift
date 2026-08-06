@@ -321,6 +321,14 @@ enum SyncErsetzenService {
                 context.insert(neuer)
             }
             stelleSyncEventsWiederHer(backup.bekannteSyncEvents, context: context)
+            // Das eigene Backup kann einen zum Sicherungszeitpunkt noch
+            // offenen Einkaufsvorgang enthalten — bei weiterhin verknüpftem
+            // Sync-Ordner (``SyncOrdnerSettingsView/backupWiederherstellenGetappt()``,
+            // Korruptions-Recovery ohne Austritt) würde der sonst vom
+            // nächsten Sync-Zyklus blind mit einem tatsächlich aktiven
+            // Vorgang eines Peers zusammengeführt (siehe
+            // ``EinkaufsvorgangAbschlussService/schliesseAlleOffenenEinkaufsvorgaenge(context:)``).
+            EinkaufsvorgangAbschlussService.schliesseAlleOffenenEinkaufsvorgaenge(context: context)
             try? context.save()
         }
     }

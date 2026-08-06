@@ -214,4 +214,55 @@ struct EinkaufsvorgangAbschlussServiceTests {
         #expect(geschaeft.umbauVerdacht == false)
         #expect(duplikat.istAbgeschlossen)
     }
+
+    // MARK: - schliesseAlleOffenenEinkaufsvorgaenge (Sync-(Wieder-)Beitritt)
+
+    @Test
+    func schliesseAlleOffenenEinkaufsvorgaengeSchliesstJedenUnabhaengigUndZaehltJedenAlsEigenenBesuch() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let geschaeftA = Geschaeft(name: "Rewe", typen: [lebensmittelTyp()])
+        let geschaeftB = Geschaeft(name: "Edeka", typen: [lebensmittelTyp()])
+        context.insert(geschaeftA)
+        context.insert(geschaeftB)
+        let listeEins = Einkaufsliste(name: "Wocheneinkauf")
+        let listeZwei = Einkaufsliste(name: "Urlaub")
+        context.insert(listeEins)
+        context.insert(listeZwei)
+        // Zwei völlig unabhängige, alte offene Vorgänge für unterschiedliche
+        // Geschäft+Liste-Kombinationen — z.B. lokal entstanden, bevor das
+        // Gerät (wieder) einer Sync-Gruppe beitritt.
+        let ersterVorgang = Einkaufsvorgang(geschaeft: geschaeftA, einkaufsliste: listeEins)
+        let zweiterVorgang = Einkaufsvorgang(geschaeft: geschaeftB, einkaufsliste: listeZwei)
+        context.insert(ersterVorgang)
+        context.insert(zweiterVorgang)
+
+        let anzahl = EinkaufsvorgangAbschlussService.schliesseAlleOffenenEinkaufsvorgaenge(context: context)
+
+        #expect(anzahl == 2)
+        #expect(ersterVorgang.istAbgeschlossen)
+        #expect(zweiterVorgang.istAbgeschlossen)
+        #expect(geschaeftA.eigeneAnzahlEinkaufsvorgaenge == 1)
+        #expect(geschaeftB.eigeneAnzahlEinkaufsvorgaenge == 1)
+    }
+
+    @Test
+    func schliesseAlleOffenenEinkaufsvorgaengeLaesstBereitsAbgeschlosseneUnberuehrt() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let geschaeft = Geschaeft(name: "Rewe", typen: [lebensmittelTyp()])
+        context.insert(geschaeft)
+        let bereitsAbgeschlossen = Einkaufsvorgang(geschaeft: geschaeft)
+        context.insert(bereitsAbgeschlossen)
+        let abschlusszeit = Date().addingTimeInterval(-1000)
+        bereitsAbgeschlossen.abschliessen(am: abschlusszeit, zaehleAlsBesuch: false)
+
+        let anzahl = EinkaufsvorgangAbschlussService.schliesseAlleOffenenEinkaufsvorgaenge(context: context)
+
+        #expect(anzahl == 0)
+        #expect(bereitsAbgeschlossen.endZeit == abschlusszeit)
+        #expect(geschaeft.eigeneAnzahlEinkaufsvorgaenge == 0)
+    }
 }
