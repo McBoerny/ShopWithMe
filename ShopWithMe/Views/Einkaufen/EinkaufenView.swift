@@ -1711,6 +1711,11 @@ private struct ArtikelAbhakZeile: View {
                             .accessibilityLabel("Artikel gehört mehreren Kategorien an und erscheint in mehreren Abschnitten")
                     }
                 }
+                if let produktName = eintrag?.produkt?.name {
+                    Text(produktName)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 if let notiz = eintrag?.notiz, !notiz.isEmpty {
                     Text(notiz)
                         .font(.caption)

@@ -1,11 +1,11 @@
 # Artikel/Produkt/Produktname-Modell (GitHub #47)
 
-**Status: Schritte 1–3/5 umgesetzt** ([#112](https://github.com/McBoerny/ShopWithMe/issues/112)
+**Status: Schritte 1–4/5 umgesetzt** ([#112](https://github.com/McBoerny/ShopWithMe/issues/112)
 Datenmodell + Migration, [#113](https://github.com/McBoerny/ShopWithMe/issues/113)
 Sync-Integration, [#114](https://github.com/McBoerny/ShopWithMe/issues/114)
-Preis-Aggregation) — Schritte 4–5 (UI, Scan-Zuordnung) noch offen, siehe
-Umsetzungsplan in #47. Präzisiert und ersetzt die ursprüngliche Formulierung
-in
+Preis-Aggregation, [#115](https://github.com/McBoerny/ShopWithMe/issues/115)
+UI) — Schritt 5 (Scan-Zuordnung) noch offen, siehe Umsetzungsplan in #47.
+Präzisiert und ersetzt die ursprüngliche Formulierung in
 [#47](https://github.com/McBoerny/ShopWithMe/issues/47) (dort noch
 "Ausprägung" genannt) — siehe Diskussion vom 2026-08-06. Abgegrenzt von, aber
 verwandt mit den bereits umgesetzten Artikel-Alias-Namen
@@ -77,6 +77,27 @@ was unter diesem Artikel verkauft wurde"-Sicht und musste nicht geändert
 werden. Die eigentliche Lücke lag allein auf `Produkt` selbst (nur
 Doc-Kommentar zu Regel 2, keine Implementierung) — dort ist sie jetzt
 geschlossen, `ArtikelPreisSpanne` bleibt unverändert.
+
+## Umsetzungsstand Schritt 4/5 (v0.14)
+
+Erste sichtbare UI dieses gesamten Features: `ArtikelEditView` bekommt eine
+Sektion "Produkte" (nur oberste Ebene, ohne das automatisch angelegte
+Platzhalter-Produkt), von dort per Tap navigierbar zur neuen
+`ProduktEditView` (Name, Produktnamen je Geschäft, eigene Preishistorie —
+analog `ArtikelEditView`). In `ArtikelHinzufuegenView` bekommt ein Artikel
+mit mehr als einem eigenen Produkt zusätzlich einen Chevron-Button, der ein
+Produktwahl-Sheet öffnet — der bestehende Sofort-Tap (GitHub #6/#45) bleibt
+dabei bewusst unverändert (fügt weiterhin ohne festgelegtes Produkt hinzu).
+Das gewählte Produkt erscheint danach klein unter dem Artikelnamen auf der
+Einkaufsliste (`EinkaufenView`, gleiches Muster wie die bestehende
+`notiz`-Anzeige).
+
+**Nebenbei korrigiert:** `docs/BEDIENUNGSANLEITUNG.md` riet im
+Alias-Namen-Abschnitt (aus #111, vor Existenz von `Produkt` geschrieben) für
+unterschiedliche Marken fälschlich noch zu separaten **Artikeln** — das ist
+jetzt auf **Produkte** korrigiert.
+
+Details/vollständige Liste betroffener Dateien: [#115](https://github.com/McBoerny/ShopWithMe/issues/115).
 
 ## Die drei Ebenen
 

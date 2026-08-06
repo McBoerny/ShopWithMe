@@ -127,9 +127,13 @@ Artikels (`Produkt.standardProdukt(fuer:context:)`). Seit Schritt 2/5 auch
 Teil der Datensynchronisation (`SyncSnapshot`-Version 8, siehe
 `docs/DATENSYNCHRONISATION.md` Abschnitt 4.2/4.6) — `mergeProdukte` matcht
 namensbasiert **innerhalb desselben Artikels**, bewusst ohne die bei
-Artikel/Geschäft vorhandene Ambiguitäts-Rückstellung (noch keine eigene
-Verwaltungs-UI). Vollständiges Konzept inkl. der noch offenen Schritte 3–5:
-`docs/ARTIKEL_PRODUKT_MODELL.md`.
+Artikel/Geschäft vorhandene Ambiguitäts-Rückstellung. Seit Schritt 4/5 erste
+sichtbare UI: `ArtikelEditView` (Sektion "Produkte") → `ProduktEditView`
+(Name, Produktnamen je Geschäft, eigene Preishistorie); bei mehreren eigenen
+Produkten bekommt die Zeile in `ArtikelHinzufuegenView` zusätzlich einen
+Chevron zur Produktwahl — der etablierte Sofort-Tap (GitHub #6/#45) bleibt
+unverändert. Vollständiges Konzept inkl. des noch offenen Schritts 5
+(Scan-Zuordnung): `docs/ARTIKEL_PRODUKT_MODELL.md`.
 
 **`Einkaufsvorgang.einkaufsliste` seit v0.12 `cascade`** (vormals `nullify`,
 siehe `docs/GESCHAEFTS_AGGREGATE.md`): Löschen einer `Einkaufsliste` löscht

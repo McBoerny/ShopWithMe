@@ -17,12 +17,15 @@ struct ArtikelEditView: View {
     @Query private var preisHistorie: [Preispunkt]
     @Query private var aliase: [ArtikelAlias]
     @Query private var alleAliase: [ArtikelAlias]
+    @Query private var produkte: [Produkt]
 
     @State private var kiVorschlagLaeuft = false
     @State private var kiFehlermeldung: String?
     @State private var zeigeNeueKategorie = false
     @State private var neuerAliasName = ""
     @State private var aliasFehlermeldung: String?
+    @State private var neuesProduktEntwurf: Produkt?
+    @State private var bearbeitetesProdukt: Produkt?
 
     init(artikel: Artikel, istNeu: Bool) {
         self.artikel = artikel
@@ -35,6 +38,14 @@ struct ArtikelEditView: View {
         _aliase = Query(
             filter: #Predicate<ArtikelAlias> { $0.artikel?.persistentModelID == artikelID },
             sort: [SortDescriptor(\.erkannterName)]
+        )
+        // Nur oberste Ebene (kein `elternProdukt`) und ohne das automatisch
+        // angelegte Platzhalter-Produkt (``Produkt/istStandard``) — Rekursion
+        // (Unter-Produkte, z.B. Packungsgrößen) hat bewusst noch keine UI
+        // (GitHub #47, Schritt 4/5).
+        _produkte = Query(
+            filter: #Predicate<Produkt> { $0.artikel?.persistentModelID == artikelID && !$0.istStandard && $0.elternProdukt == nil },
+            sort: [SortDescriptor(\.name)]
         )
     }
 
@@ -150,6 +161,38 @@ struct ArtikelEditView: View {
                     }
                 }
 
+                if !istNeu {
+                    Section {
+                        ForEach(produkte) { produkt in
+                            Button {
+                                bearbeitetesProdukt = produkt
+                            } label: {
+                                HStack {
+                                    Text(produkt.name)
+                                        .foregroundStyle(.primary)
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption)
+                                        .foregroundStyle(.tertiary)
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .onDelete(perform: produktLoeschen)
+
+                        Button {
+                            neuesProduktAnlegen()
+                        } label: {
+                            Label("Neues Produkt anlegen", systemImage: "plus")
+                        }
+                    } header: {
+                        Text("Produkte")
+                    } footer: {
+                        Text("Konkrete Produkte dieses Artikels, z.B. \"Odol\" oder \"Paradontol\" für \"Zahnpasta\" — jedes mit eigenem Preis und eigenen Namen je Geschäft.")
+                    }
+                }
+
                 if !istNeu && !preisHistorie.isEmpty {
                     Section("Preishistorie") {
                         ForEach(preisHistorie) { eintrag in
@@ -188,6 +231,12 @@ struct ArtikelEditView: View {
                     artikel.kategorien.append(kategorie)
                 }
             }
+            .sheet(item: $neuesProduktEntwurf) { entwurf in
+                ProduktEditView(produkt: entwurf, istNeu: true)
+            }
+            .sheet(item: $bearbeitetesProdukt) { produkt in
+                ProduktEditView(produkt: produkt, istNeu: false)
+            }
         }
     }
 
@@ -210,6 +259,20 @@ struct ArtikelEditView: View {
     private func aliasEntfernen(at indexSet: IndexSet) {
         for index in indexSet {
             modelContext.delete(aliase[index])
+        }
+    }
+
+    /// Legt einen neuen Produkt-Entwurf für ``artikel`` an (GitHub #47,
+    /// Schritt 4/5) — analog ``ArtikelHinzufuegenView/neuenArtikelAnlegen()``:
+    /// erst beim Sichern in ``ProduktEditView`` tatsächlich in den
+    /// Model-Context eingefügt, Abbrechen verwirft ihn folgenlos.
+    private func neuesProduktAnlegen() {
+        neuesProduktEntwurf = Produkt(name: "", artikel: artikel)
+    }
+
+    private func produktLoeschen(at indexSet: IndexSet) {
+        for index in indexSet {
+            modelContext.delete(produkte[index])
         }
     }
 
@@ -264,5 +327,5 @@ struct ArtikelEditView: View {
         artikel: Artikel(name: "Vollmilch", symbolName: "refrigerator.fill", farbeHex: "#5AC8FA"),
         istNeu: true
     )
-    .modelContainer(for: [Artikel.self, ArtikelKategorie.self, GeschaeftTyp.self, Einkaufsliste.self, EinkaufslistenEintrag.self], inMemory: true)
+    .modelContainer(for: [Artikel.self, ArtikelKategorie.self, GeschaeftTyp.self, Einkaufsliste.self, EinkaufslistenEintrag.self, ArtikelAlias.self, Produkt.self, Produktname.self], inMemory: true)
 }

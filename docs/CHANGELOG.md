@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.14 (Build 253) — GitHub #115: UI für Produkt/Produktname (GitHub #47, Schritt 4/5)
+
+Erste sichtbare UI dieses gesamten Features (Schritte 1–3 waren reines
+Fundament ohne Funktionsänderung): `ArtikelEditView` bekommt eine Sektion
+"Produkte" (nur oberste Ebene, ohne das automatisch angelegte
+Platzhalter-Produkt), von dort per Tap zur neuen `ProduktEditView`
+navigierbar (Name, Produktnamen je Geschäft, eigene Preishistorie — analog
+`ArtikelEditView`). `ArtikelHinzufuegenView` bekommt bei Artikeln mit mehr
+als einem eigenen Produkt zusätzlich einen Chevron-Button für ein
+Produktwahl-Sheet — der bestehende Sofort-Tap (GitHub #6/#45) bleibt
+bewusst unverändert. Das gewählte Produkt erscheint danach klein unter dem
+Artikelnamen auf der Einkaufsliste (`EinkaufenView`, gleiches Muster wie die
+bestehende `notiz`-Anzeige).
+
+Nebenbei korrigiert: `docs/BEDIENUNGSANLEITUNG.md` riet im
+Alias-Namen-Abschnitt (aus #111, vor Existenz von `Produkt` geschrieben) für
+unterschiedliche Marken fälschlich noch zu separaten Artikeln — jetzt auf
+Produkte korrigiert.
+
 ## v0.14 (Build 252) — GitHub #114: Rekursive Preis-Aggregation für Produkt (GitHub #47, Schritt 3/5)
 
 `Produkt.minimum`/`.maximum` implementieren jetzt die in

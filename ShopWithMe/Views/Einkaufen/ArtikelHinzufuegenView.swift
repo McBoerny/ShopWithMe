@@ -19,6 +19,7 @@ struct ArtikelHinzufuegenView: View {
 
     @Query(sort: \Artikel.name) private var alleArtikel: [Artikel]
     @Query private var alleAliase: [ArtikelAlias]
+    @Query private var alleProdukte: [Produkt]
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
 
@@ -37,6 +38,10 @@ struct ArtikelHinzufuegenView: View {
     /// eines gelegentlichen automatischen Aktivierens durch SwiftUI.
     @State private var sucheAktiv = false
     @State private var neuerArtikelEntwurf: Artikel?
+    /// Artikel, für den gerade das Produktwahl-Sheet offen ist (GitHub #47,
+    /// Schritt 4/5) — nur relevant für Artikel mit mehreren eigenen Produkten,
+    /// siehe ``produkte(fuer:)``.
+    @State private var artikelFuerProduktwahl: Artikel?
     // SwiftUI setzt die an `.sheet(item:)` gebundene Property bereits vor dem
     // Aufruf von `onDismiss` auf `nil` zurück — ``nachNeuanlageAufraeumen`` braucht
     // daher eine eigene, davon unabhängige Referenz auf den zuletzt angelegten
@@ -64,6 +69,16 @@ struct ArtikelHinzufuegenView: View {
                     $0.artikel == artikel && $0.erkannterName.localizedCaseInsensitiveContains(getrimmterSuchtext)
                 }
         }
+    }
+
+    /// Eigene, oberste-Ebene-Produkte von `artikel` (GitHub #47) — ohne das
+    /// automatisch angelegte Platzhalter-Produkt (``Produkt/istStandard``) und
+    /// ohne Unter-Produkte (keine Rekursions-UI, siehe ``ProduktEditView``).
+    /// Nur bei mehr als einem Treffer zeigt die Suche eine Produktwahl an
+    /// (``ProduktWahlSheet``) — bei null oder einem Produkt bleibt der
+    /// bisherige Sofort-Tap unverändert (GitHub #6/#45).
+    private func produkte(fuer artikel: Artikel) -> [Produkt] {
+        alleProdukte.filter { $0.artikel == artikel && !$0.istStandard && $0.elternProdukt == nil }
     }
 
     private var existiertGenau: Bool {
@@ -98,17 +113,32 @@ struct ArtikelHinzufuegenView: View {
                     Section(gruppe.buchstabe) {
                         ForEach(gruppe.artikel) { artikel in
                             let bereitsAufListe = einkaufsliste.enthaelt(artikel)
-                            Button {
-                                if bereitsAufListe {
-                                    entfernen(artikel)
-                                } else {
-                                    hinzufuegen(artikel)
+                            let produkteDesArtikels = produkte(fuer: artikel)
+                            HStack(spacing: 0) {
+                                Button {
+                                    if bereitsAufListe {
+                                        entfernen(artikel)
+                                    } else {
+                                        hinzufuegen(artikel)
+                                    }
+                                    suchfeldFuerNaechsteEingabeZuruecksetzen()
+                                } label: {
+                                    ArtikelAuswahlZeile(artikel: artikel, bereitsAufListe: bereitsAufListe)
                                 }
-                                suchfeldFuerNaechsteEingabeZuruecksetzen()
-                            } label: {
-                                ArtikelAuswahlZeile(artikel: artikel, bereitsAufListe: bereitsAufListe)
+                                .buttonStyle(.plain)
+
+                                if produkteDesArtikels.count > 1 {
+                                    Button {
+                                        artikelFuerProduktwahl = artikel
+                                    } label: {
+                                        Image(systemName: "chevron.right.circle")
+                                            .foregroundStyle(.secondary)
+                                            .padding(.leading, 10)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel("Produkt wählen")
+                                }
                             }
-                            .buttonStyle(.plain)
                         }
                     }
                 }
@@ -157,6 +187,11 @@ struct ArtikelHinzufuegenView: View {
             .sheet(item: $neuerArtikelEntwurf, onDismiss: nachNeuanlageAufraeumen) { entwurf in
                 ArtikelEditView(artikel: entwurf, istNeu: true)
             }
+            .sheet(item: $artikelFuerProduktwahl) { artikel in
+                ProduktWahlSheet(artikel: artikel, produkte: produkte(fuer: artikel)) { produkt in
+                    produktWaehlen(produkt, fuer: artikel)
+                }
+            }
         }
     }
 
@@ -188,6 +223,28 @@ struct ArtikelHinzufuegenView: View {
                       let einkaufslisteFrisch = einkaufslisteReferenz.resolved(in: modelContext)
                 else { return }
                 einkaufslisteFrisch.artikelEntfernen(artikelFrisch, context: modelContext)
+            }
+        }
+    }
+
+    /// Setzt `produkt` auf dem ``EinkaufslistenEintrag`` von `artikel` — legt
+    /// den Eintrag bei Bedarf zuerst an (GitHub #47, Schritt 4/5), damit die
+    /// Produktwahl auch für einen noch nicht auf der Liste stehenden Artikel
+    /// funktioniert, ohne einen separaten Tap auf die Zeile selbst zu
+    /// erzwingen.
+    private func produktWaehlen(_ produkt: Produkt?, fuer artikel: Artikel) {
+        let artikelReferenz = ModelReference(artikel)
+        let einkaufslisteReferenz = ModelReference(einkaufsliste)
+        let produktReferenz = ModelReference(produkt)
+        Task {
+            await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                guard let artikelFrisch = artikelReferenz.resolved(in: modelContext),
+                      let einkaufslisteFrisch = einkaufslisteReferenz.resolved(in: modelContext)
+                else { return }
+                let produktFrisch = produktReferenz?.resolved(in: modelContext)
+                let eintrag = einkaufslisteFrisch.eintrag(fuer: artikelFrisch)
+                    ?? einkaufslisteFrisch.artikelHinzufuegen(artikelFrisch, context: modelContext)
+                eintrag.produkt = produktFrisch
             }
         }
     }
@@ -253,7 +310,57 @@ private struct ArtikelAuswahlZeile: View {
     }
 }
 
+/// Sheet zur Wahl eines konkreten ``Produkt``s eines Artikels mit mehreren
+/// eigenen Produkten (GitHub #47, Schritt 4/5) — nur erreichbar über den
+/// Chevron in ``ArtikelHinzufuegenView``, der bestehende Sofort-Tap zum
+/// Hinzufügen/Entfernen bleibt davon unberührt.
+private struct ProduktWahlSheet: View {
+    let artikel: Artikel
+    let produkte: [Produkt]
+    let onAuswahl: (Produkt?) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Button {
+                    onAuswahl(nil)
+                    dismiss()
+                } label: {
+                    Text("Kein bestimmtes Produkt")
+                }
+                ForEach(produkte) { produkt in
+                    Button {
+                        onAuswahl(produkt)
+                        dismiss()
+                    } label: {
+                        Text(produkt.name)
+                            .foregroundStyle(.primary)
+                    }
+                }
+            }
+            .navigationTitle("Produkt wählen")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    VStack(spacing: 0) {
+                        Text("Produkt wählen")
+                            .font(.headline)
+                        Text(artikel.name)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Abbrechen") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
 #Preview {
     ArtikelHinzufuegenView(einkaufsliste: Einkaufsliste(name: "Einkaufsliste"))
-        .modelContainer(for: [Artikel.self, ArtikelAlias.self, ArtikelKategorie.self, GeschaeftTyp.self, Einkaufsliste.self, EinkaufslistenEintrag.self], inMemory: true)
+        .modelContainer(for: [Artikel.self, ArtikelAlias.self, ArtikelKategorie.self, GeschaeftTyp.self, Einkaufsliste.self, EinkaufslistenEintrag.self, Produkt.self, Produktname.self], inMemory: true)
 }

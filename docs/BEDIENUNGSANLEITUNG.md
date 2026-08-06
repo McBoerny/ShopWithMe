@@ -43,12 +43,25 @@ Intelligence nicht verfügbar, bleibt die manuelle Auswahl jederzeit möglich.
 Einem bereits angelegten Artikel kannst du in der Artikel-Bearbeitung beliebig
 viele **Alias-Namen** geben — weitere Suchbegriffe, unter denen du beim
 Hinzufügen zur Einkaufsliste denselben Artikel findest (z.B. „Zahncreme" oder
-„Zahnreiniger" als Alias für „Zahnpasta"). Ein Alias-Name ist kein eigener
-Artikel, sondern nur ein zusätzlicher Suchbegriff für den bestehenden — für
-tatsächlich unterschiedliche Produkte (z.B. „Odol", „Paradontol", „Sebamed" als
-konkrete Zahnpasta-Marken) lege stattdessen eigene Artikel an. Ein Alias-Name
-kann jeweils nur einem Artikel zugeordnet sein; ist er bereits vergeben, zeigt
-die App an, zu welchem Artikel er gehört.
+„Zahnreiniger" als Alias für „Zahnpasta"). Ein Alias-Name ist kein eigenes
+Produkt, sondern nur ein zusätzlicher Suchbegriff für den bestehenden Artikel
+— für tatsächlich unterschiedliche Produkte (z.B. „Odol", „Paradontol",
+„Sebamed" als konkrete Zahnpasta-Marken) leg stattdessen **Produkte** an
+(siehe unten). Ein Alias-Name kann jeweils nur einem Artikel zugeordnet sein;
+ist er bereits vergeben, zeigt die App an, zu welchem Artikel er gehört.
+
+In derselben Artikel-Bearbeitung kannst du außerdem beliebig viele
+**Produkte** anlegen — konkrete, kaufbare Dinge mit eigenem Preis, die zu
+diesem Artikel gehören (z.B. „Odol", „Paradontol Zahncreme", „Sebamed" für
+„Zahnpasta"). Tippe auf ein Produkt, um es zu bearbeiten: dort kannst du ihm
+je Geschäft einen eigenen **Produktnamen** geben (derselbe Artikel kann in
+Geschäft A anders auf dem Preisschild stehen als in Geschäft B) und siehst
+seine eigene Preishistorie. Hat ein Artikel mehr als ein Produkt, zeigt
+„Artikel hinzufügen" beim entsprechenden Eintrag zusätzlich einen kleinen
+Pfeil zum Antippen — darüber wählst du, welches Produkt konkret gemeint ist;
+der Name erscheint danach klein unter dem Artikel auf der Einkaufsliste. Ohne
+diese Auswahl (einfacher Tap wie bisher) landet der Artikel weiterhin ohne
+festgelegtes Produkt auf der Liste.
 
 ## Geschäfte
 
