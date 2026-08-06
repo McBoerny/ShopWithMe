@@ -1,3 +1,4 @@
+import CoreData
 import Foundation
 import SwiftData
 
@@ -220,7 +221,25 @@ enum SyncErsetzenService {
     /// Store war beim Aufruf bereits ungeöffnet, es gibt nichts zu sichern.
     /// `fuehreAusstehendeAktionAus(context:)` importiert danach normal aus
     /// dem Sync-Ordner, sobald der frisch angelegte Container bereitsteht.
+    ///
+    /// **`destroyPersistentStore` statt reiner `FileManager`-Löschung
+    /// (GitHub #119, Live-Test-Nachtrag):** Ein erster Entwurf löschte nur
+    /// `default.store`/`-wal`/`-shm` per `FileManager.removeItem` — auf
+    /// einem echten Gerät blieb der exakt gleiche „unknown model
+    /// version"-Fehler danach bestehen, auch nach einem echten
+    /// Prozess-Neustart. `NSPersistentStoreCoordinator.destroyPersistentStore`
+    /// ist Core Datas eigene, dafür vorgesehene API („It is not possible to
+    /// unlink a database file safely out from underneath another thread or
+    /// process, so this API performs a truncation" — SDK-Header
+    /// `NSPersistentStoreCoordinator.h`) und behandelt Journal-/WAL-Dateien
+    /// sowie Store-Metadaten vollständiger als ein manuelles Raten der
+    /// Begleitdateinamen. Die manuelle `FileManager`-Löschung bleibt zusätzlich
+    /// als Fallback bestehen, falls `destroyPersistentStore` selbst (z.B. bei
+    /// bereits korrumpierten Metadaten) fehlschlägt.
     static func loescheUnlesbarenStoreUndPlaneWiederherstellung(url: URL) {
+        let koordinator = NSPersistentStoreCoordinator(managedObjectModel: NSManagedObjectModel())
+        try? koordinator.destroyPersistentStore(at: url, ofType: NSSQLiteStoreType, options: nil)
+
         let ordner = url.deletingLastPathComponent()
         let basisname = url.lastPathComponent
         for suffix in ["", "-wal", "-shm"] {

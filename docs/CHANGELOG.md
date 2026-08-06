@@ -14,7 +14,7 @@ ein reiner Alias-Treffer bleibt bewusst beim Standardprodukt). Produktname
 kommt dabei vom bestätigten Anzeigenamen, falls der Nutzer ihn bewusst vom
 Artikelnamen abweichend umbenannt hat, sonst vom rohen Bon-Text — inkl.
 Wiedererkennung eines bereits existierenden, gleichnamigen Produkts, um
-Dubletten zu vermeiden. 9 neue Tests. Details: `docs/ARTIKEL_PRODUKT_MODELL.md`
+Dubletten zu vermeiden. 7 neue Tests. Details: `docs/ARTIKEL_PRODUKT_MODELL.md`
 → „Automatische Neuanlage beim Belegscan“.
 
 ## v0.14 (Build 254) — GitHub #116: Scan-Zuordnung erkennt Produktnamen (GitHub #47, Schritt 5/5 — Feature komplett)
