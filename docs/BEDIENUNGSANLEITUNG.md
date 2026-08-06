@@ -300,6 +300,14 @@ werden ausgetauscht.
   Versuch, den Systemabgleich zusätzlich anzustoßen, keine Fehlfunktion.
 - **Nur im Vordergrund:** Bei gesperrtem Gerät oder geschlossener App pausiert
   der automatische Abgleich — er läuft beim nächsten Öffnen sofort weiter.
+- **„Neustart steht noch aus“:** Nach Aktionen, die einen kompletten
+  Neuaufbau des Datenbestands vormerken (z.B. „Ersetzen“ beim Verknüpfen
+  eines bereits von anderen Geräten genutzten Ordners, Wiederherstellen aus
+  einem Backup), pausiert die Synchronisierung automatisch bis zum
+  angeforderten Neustart — „Ordner wählen…“, „Synchronisierung
+  deaktivieren“ und „Jetzt synchronisieren“ sind währenddessen ausgeblendet
+  bzw. deaktiviert, ein Hinweis-Banner erinnert an den ausstehenden
+  Neustart.
 - **Schnellerer Abgleich in der Nähe:** Öffnest du gemeinsam mit einer anderen
   Person, die dieselbe Liste eingerichtet hat, gleichzeitig den
   Einkaufen-Bildschirm, tauscht die App Häkchen/neue Artikel zusätzlich direkt

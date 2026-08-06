@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.14 (Build 263) — Hintergrund-Sync lief nach „Ersetzen“/Wiederherstellen bis zum Neustart unbegrenzt mit dem alten Bestand weiter
+
+Bugfix (Nutzerbericht): Nach einem „Ersetzen durch Peer" oder einer
+Wiederherstellung (Sync-Ordner-Beitritt mit fremden Daten, Backup-
+Wiederherstellung, Korruptions-Recovery) fordert die App zu einem Neustart
+auf, um den Neuaufbau abzuschließen — der weiterhin laufende
+`SyncPollingService`/`SyncICloudAenderungsBeobachter`/`MultipeerSyncService`
+synchronisierten aber bis zu diesem Neustart unverändert weiter: der neue
+Sync-Ordner-Pfad war bereits aktiv, während der In-Memory-Datenbestand noch
+der alte war — je länger der Neustart auf sich warten ließ, desto mehr wurde
+im Hintergrund mit der falschen Kombination aus altem Bestand und neuem
+Ordner synchronisiert. Alle sechs Aufrufstellen (`SyncOrdnerSettingsView`,
+`RootView.vollAbgleichAusloesen()`, `DebuggingView`) stoppen die drei Dienste
+jetzt sofort beim Vormerken der Aktion statt erst beim Neustart;
+`SyncOrdnerSettingsView` blendet zusätzlich „Jetzt synchronisieren“, „Ordner
+wählen…“ und „Synchronisierung deaktivieren“ bis zum Neustart aus, damit auch
+ein manueller Tap die Lücke nicht mehr offen lässt. Details:
+`docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 46.
+
 ## v0.14 (Build 262) — Alter offener Einkaufsvorgang wird beim Sync-(Wieder-)Beitritt nicht mehr fälschlich mit einem aktiven Peer-Vorgang vermischt
 
 Bugfix (Nutzerbericht): Hatte ein Gerät vor einem (Wieder-)Beitritt zu einer

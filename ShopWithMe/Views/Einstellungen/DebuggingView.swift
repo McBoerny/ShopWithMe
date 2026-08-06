@@ -301,6 +301,8 @@ private struct StatuskonsolidierungSection: View {
 /// Referenzen über die normale SwiftData-API selbst zum Absturz führen kann.
 private struct DatenintegritaetSection: View {
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var syncPollingService: SyncPollingService
+    @EnvironmentObject private var multipeerSyncService: MultipeerSyncService
     @State private var bericht = DatenintegritaetsService.letzterBericht
     @State private var logGroesse = DatenintegritaetsLogger.gesamtGroesse()
     @State private var zeigeTeilen = false
@@ -412,10 +414,19 @@ private struct DatenintegritaetSection: View {
         resetFehlermeldung = nil
         do {
             try SyncErsetzenService.planeErsetzenDurchPeer(context: modelContext)
-            zeigeNeustartHinweis = true
+            neustartAusstehendMachen()
         } catch {
             resetFehlermeldung = error.localizedDescription
         }
+    }
+
+    /// Stoppt den Hintergrund-Sync sofort statt erst beim Neustart — siehe
+    /// ``SyncOrdnerSettingsView/neustartAusstehendMachen()`` für die
+    /// ausführliche Begründung (gleiche Race Condition, gleicher Mechanismus).
+    private func neustartAusstehendMachen() {
+        syncPollingService.stoppen()
+        multipeerSyncService.stoppen()
+        zeigeNeustartHinweis = true
     }
 
     /// Merkt den Neuaufbau aus einem JETZT erstellten Snapshot des eigenen
@@ -425,7 +436,7 @@ private struct DatenintegritaetSection: View {
         resetFehlermeldung = nil
         do {
             try SyncErsetzenService.planeBereinigungBaumelnderReferenzen(context: modelContext)
-            zeigeNeustartHinweis = true
+            neustartAusstehendMachen()
         } catch {
             resetFehlermeldung = error.localizedDescription
         }

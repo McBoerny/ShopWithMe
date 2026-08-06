@@ -28,6 +28,7 @@ struct RootView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var syncPollingService: SyncPollingService
+    @EnvironmentObject private var multipeerSyncService: MultipeerSyncService
     @State private var ausstehenderMilkForUsImport: AusstehenderImport?
     @State private var zeigeAusDerZeitGefallenDialog = false
     @State private var zeigeNeustartHinweisNachVollAbgleich = false
@@ -168,6 +169,13 @@ struct RootView: View {
                 if SyncDebugLogger.istAktiv {
                     SyncDebugLogger.log(.vollAbgleichEingeleitet, details: "")
                 }
+                // Sofort stoppen statt erst beim Neustart (siehe
+                // ``SyncOrdnerSettingsView/neustartAusstehendMachen()``) —
+                // sonst würde der weiterlaufende Hintergrund-Sync bis zum
+                // Neustart mit dem alten, gleich zu verwerfenden Bestand
+                // weiterarbeiten.
+                syncPollingService.stoppen()
+                multipeerSyncService.stoppen()
                 zeigeNeustartHinweisNachVollAbgleich = true
             } catch {
                 // Seltener Fehlerfall (z.B. eigener Snapshot-Export

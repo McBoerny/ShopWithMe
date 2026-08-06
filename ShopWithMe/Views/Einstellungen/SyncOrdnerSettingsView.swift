@@ -23,6 +23,11 @@ struct SyncOrdnerSettingsView: View {
     @State private var zeigeOrdnerauswahl = false
     @State private var fehlermeldung: String?
     @State private var ausgewaehlterOrdner: URL? = SyncOrdnerService.gewaehlterOrdner()
+    /// Initialisiert aus ``SyncErsetzenService/ausstehendeAktion`` statt aus
+    /// einem eigenen, separat zu pflegenden Flag (Single Source of Truth) —
+    /// übersteht dadurch auch ein Verlassen/erneutes Öffnen dieser View, ohne
+    /// dass zwischenzeitlich neu gestartet wurde. Siehe ``planeUndZeigeNeustartHinweis(_:)``.
+    @State private var neustartAusstehend = SyncErsetzenService.ausstehendeAktion != nil
     @State private var wirdSynchronisiert = false
     @State private var letzterSyncErfolgreich = false
     /// GitHub #92 (experimentell): kurz einen Dokumenten-Picker auf den
@@ -76,14 +81,23 @@ struct SyncOrdnerSettingsView: View {
                 }
             }
 
+            if neustartAusstehend {
+                Section {
+                    Label("Ein Neustart der App steht noch aus, um den letzten Vorgang abzuschließen. Die Synchronisierung ist bis dahin pausiert.", systemImage: "arrow.clockwise.circle")
+                        .foregroundStyle(.orange)
+                }
+            }
+
             Section {
                 Button("Ordner wählen…") {
                     zeigeOrdnerauswahl = true
                 }
+                .disabled(neustartAusstehend)
                 if ausgewaehlterOrdner != nil {
                     Button("Synchronisierung deaktivieren", role: .destructive) {
                         deaktivierenGetappt()
                     }
+                    .disabled(neustartAusstehend)
                 }
             } footer: {
                 Text("Ein geteilter Ordner (z.B. iCloud Drive oder Synology Drive), über den mehrere Geräte ihre Einkaufslisten-Änderungen austauschen. Die lokale Datenbank bleibt dabei unverändert am Standardort.")
@@ -121,7 +135,7 @@ struct SyncOrdnerSettingsView: View {
                 }
             }
 
-            if ausgewaehlterOrdner != nil {
+            if ausgewaehlterOrdner != nil && !neustartAusstehend {
                 Section {
                     Button {
                         // GitHub #92 (experimentell): nur bei diesem
@@ -365,10 +379,33 @@ struct SyncOrdnerSettingsView: View {
     private func ersetzenGetappt() {
         do {
             try SyncErsetzenService.planeErsetzenDurchPeer(context: modelContext)
-            zeigeNeustartHinweis = true
+            neustartAusstehendMachen()
         } catch {
             fehlermeldung = error.localizedDescription
         }
+    }
+
+    /// Stoppt den Hintergrund-Sync (Polling-Loop inkl. iCloud-Beobachter
+    /// sowie den Multipeer-Kanal) SOFORT, sobald eine Ersetzen-/
+    /// Wiederherstellen-Aktion vorgemerkt ist — nicht erst beim Neustart.
+    ///
+    /// **Warum nötig, obwohl der eigentliche Datenaustausch ohnehin erst beim
+    /// nächsten Prozessstart passiert** (siehe Typ-Doku ``SyncErsetzenService``):
+    /// der neue Sync-Ordner-Pfad selbst (`UserDefaults`-Bookmark) ist schon
+    /// beim Verknüpfen aktiv, während der In-Memory-Datenbestand
+    /// (``ModelContainer``) bis zum Neustart unverändert der ALTE bleibt.
+    /// Ohne diesen Stopp würde ``SyncPollingService`` in dieser Lücke
+    /// weiterhin periodisch (5s/60s) und reaktiv (``SyncICloudAenderungsBeobachter``)
+    /// den neuen Ordner mit dem alten, gleich zu verwerfenden Bestand
+    /// bedienen — je länger der Neustart auf sich warten lässt, desto mehr
+    /// Zyklen laufen unnötig. Die drei UI-Buttons unten (``zeigeOrdnerauswahl``-
+    /// Formular) werden zusätzlich deaktiviert, damit auch ein manuelles
+    /// „Jetzt synchronisieren" in der Zwischenzeit nicht mehr möglich ist.
+    private func neustartAusstehendMachen() {
+        syncPollingService.stoppen()
+        multipeerSyncService.stoppen()
+        neustartAusstehend = true
+        zeigeNeustartHinweis = true
     }
 
     private func deaktivierenGetappt() {
@@ -385,7 +422,7 @@ struct SyncOrdnerSettingsView: View {
             try SyncErsetzenService.planeWiederherstellenAusBackup()
             SyncOrdnerService.ordnerEntfernen()
             ausgewaehlterOrdner = nil
-            zeigeNeustartHinweis = true
+            neustartAusstehendMachen()
         } catch {
             fehlermeldung = error.localizedDescription
         }
@@ -397,7 +434,7 @@ struct SyncOrdnerSettingsView: View {
     private func backupWiederherstellenGetappt() {
         do {
             try SyncErsetzenService.planeWiederherstellenAusBackup()
-            zeigeNeustartHinweis = true
+            neustartAusstehendMachen()
         } catch {
             fehlermeldung = error.localizedDescription
         }

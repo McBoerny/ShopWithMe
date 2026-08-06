@@ -2940,3 +2940,60 @@ Wert deshalb explizit auf den gesicherten Originalwert zurück.
 `formatVersion` von `SyncErsetzenBackup` auf 2 erhöht; `bekannteSyncEvents`
 ist bewusst optional (`nil` statt `[]` als Default), damit ein noch im alten
 Format auf der Platte liegendes Backup weiterhin decodierbar bleibt.
+
+## 46. Race Condition: Hintergrund-Sync lief bis zum Neustart unbegrenzt mit dem alten Bestand weiter
+
+**Gemeldet vom Nutzer:** Beim Neu-Setzen des Sync-Ordners fragt die App nach
+einem Neustart, aber unabhängig davon scheint schon vor dem Neustart im
+Hintergrund synchronisiert zu werden — je länger man mit dem Neustart
+wartet, desto mehr. Verdacht: Vermischung von aktuellem Datenbestand und
+Sync-Bestand.
+
+**Ursache:** Zwei Zustandsebenen wechseln beim Ersetzen-/Wiederherstellen-
+Mechanismus (``SyncErsetzenService``, Abschnitt 13) zu unterschiedlichen
+Zeitpunkten:
+
+| Zustand | Wechselt wann |
+|---|---|
+| Sync-Ordner-Bookmark (`UserDefaults`, `SyncOrdnerService.ordnerFestlegen`) | sofort beim Verknüpfen |
+| In-Memory-Datenbestand (`ModelContainer`) | erst beim nächsten Prozessstart (`ShopWithMeApp.init()`) |
+| `SyncPollingService`/`SyncICloudAenderungsBeobachter`/`MultipeerSyncService` | liefen bis zu diesem Fix ununterbrochen weiter, nur an `scenePhase` gekoppelt, nicht an eine ausstehende `SyncErsetzenService`-Aktion |
+
+Abschnitt 13 löste bereits eine frühere, andere Sorge (physisches Löschen der
+Store-Datei bei noch laufendem Sync-Zyklus, Absturzrisiko) durch die
+Verschiebung des eigentlichen Datenaustauschs auf den nächsten Prozessstart.
+Diese Lösung deckt aber NICHT den hier gemeldeten Fall ab: der
+`SyncPollingService`-Loop (5s/60s-Intervall) sowie der reaktive
+`SyncICloudAenderungsBeobachter` liefen bis zum tatsächlichen Neustart
+weiter unverändert mit dem alten `ModelContext` — jeder Zyklus liest den
+Ordnerpfad frisch (kein Caching pro Session, siehe Zeile 146-150 in
+`SyncPollingService.syncZyklus()`, bewusst so für den Zusammenführen-Fall)
+und exportierte damit bei jedem Tick den alten, gleich zu verwerfenden
+Bestand in den neuen Ordner bzw. importierte fremde Daten in den alten,
+gleich zu verwerfenden Context. Zusätzlich blieb im „Ersetzen"-Fall der
+Button „Jetzt synchronisieren" in ``SyncOrdnerSettingsView`` sichtbar und
+aktiv, ein manueller Tap hätte denselben Effekt unabhängig vom Loop-Zustand
+ausgelöst.
+
+**Fix:** An allen sechs Aufrufstellen, die `SyncErsetzenService.planeErsetzenDurchPeer`/
+`planeWiederherstellenAusBackup`/`planeBereinigungBaumelnderReferenzen`
+aufrufen (``SyncOrdnerSettingsView`` dreimal, ``RootView/vollAbgleichAusloesen()``,
+``DebuggingView``s `DatenintegritaetSection` zweimal), wird unmittelbar
+danach `syncPollingService.stoppen()` und `multipeerSyncService.stoppen()`
+aufgerufen — nicht erst beim Neustart. Da diese Aktionen ohnehin nicht mehr
+rückgängig gemacht werden (der jeweilige "Neustart nötig"-Alert hat nur
+„OK", kein „Abbrechen"), ist ein erneutes Starten der Dienste vor dem
+Neustart nicht nötig. Zusätzlich merkt sich ``SyncOrdnerSettingsView`` den
+Zustand über ein aus ``SyncErsetzenService/ausstehendeAktion`` initialisiertes
+`neustartAusstehend`-Flag (Single Source of Truth, übersteht auch ein
+Verlassen/Wiederbetreten der View ohne Neustart) und blendet „Jetzt
+synchronisieren", „Ordner wählen…" und „Synchronisierung deaktivieren" bis
+zum Neustart aus bzw. deaktiviert sie, damit auch ein manueller Trigger die
+Lücke nicht mehr offen lässt.
+
+**Restliches, bewusst nicht geschlossenes Zeitfenster:** Ein zum Zeitpunkt
+des Stopps bereits laufender Sync-Zyklus wird (wie in Abschnitt 13
+begründet) nur kooperativ zum Abbruch aufgefordert, nicht abgewartet — es
+kann also noch genau EIN begonnener Zyklus zu Ende laufen. Anders als vorher
+skaliert das Zeitfenster damit nicht mehr mit der Wartezeit bis zum
+Neustart, sondern ist auf diesen einen, bereits laufenden Zyklus begrenzt.
