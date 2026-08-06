@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.14 (Build 252) — GitHub #114: Rekursive Preis-Aggregation für Produkt (GitHub #47, Schritt 3/5)
+
+`Produkt.minimum`/`.maximum` implementieren jetzt die in
+`docs/ARTIKEL_PRODUKT_MODELL.md` (Regel 2) bereits dokumentierte, bisher aber
+nicht umgesetzte Kumulierung: ein Produkt mit `unterProdukte` (z.B.
+Packungsgrößen) summiert deren Preise rekursiv über beliebig viele Ebenen,
+statt nur eigene `preispunkte` zu betrachten (`preispunkteRekursiv`).
+
+Präzisierung gegenüber dem ursprünglichen Plan-Text ("`ArtikelPreisSpanne` um
+Produkt-Ebene erweitern"): `ArtikelPreisSpanne` erwies sich bei der
+Umsetzung als bereits korrekt und unverändert lauffähig (gruppiert ohnehin
+alle Preispunkte eines Artikels unabhängig von der Produkt-Hierarchie) — die
+eigentliche Lücke lag allein auf `Produkt` selbst, siehe
+`docs/ARTIKEL_PRODUKT_MODELL.md`. 4 neue Unit-Tests. Bewusst weiterhin keine
+sichtbare Funktionsänderung (kein UI-Verwender vor Schritt 4/5).
+
 ## v0.14 (Build 251) — GitHub #113: Sync-Integration von Produkt/Produktname (GitHub #47, Schritt 2/5)
 
 `Produkt`/`Produktname` (seit Schritt 1/5, v0.14) sind jetzt Teil der

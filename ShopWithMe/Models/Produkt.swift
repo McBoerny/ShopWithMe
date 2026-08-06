@@ -75,4 +75,20 @@ extension Produkt {
         context.insert(neues)
         return neues
     }
+
+    /// Alle ``Preispunkt``e dieses Produkts UND (rekursiv) aller
+    /// ``unterProdukte`` — Grundlage für ``minimum``/``maximum`` (GitHub #47,
+    /// Schritt 3/5). Summiert bewusst immer über den gesamten Teilbaum statt
+    /// nur über Blätter: bleibt dadurch auch dann korrekt, wenn ein
+    /// Nicht-Blatt entgegen der Regel in `docs/ARTIKEL_PRODUKT_MODELL.md`
+    /// (Regel 2) doch einen eigenen ``Preispunkt`` trägt.
+    var preispunkteRekursiv: [Preispunkt] {
+        preispunkte + unterProdukte.flatMap(\.preispunkteRekursiv)
+    }
+
+    /// Niedrigster erfasster Preis über ``preispunkteRekursiv``, `nil` falls
+    /// keiner der Einträge einen Preis hat.
+    var minimum: Decimal? { preispunkteRekursiv.map(\.preis).min() }
+    /// Höchster erfasster Preis über ``preispunkteRekursiv``.
+    var maximum: Decimal? { preispunkteRekursiv.map(\.preis).max() }
 }

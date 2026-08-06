@@ -1,10 +1,11 @@
 # Artikel/Produkt/Produktname-Modell (GitHub #47)
 
-**Status: Schritte 1–2/5 umgesetzt** ([#112](https://github.com/McBoerny/ShopWithMe/issues/112)
+**Status: Schritte 1–3/5 umgesetzt** ([#112](https://github.com/McBoerny/ShopWithMe/issues/112)
 Datenmodell + Migration, [#113](https://github.com/McBoerny/ShopWithMe/issues/113)
-Sync-Integration) — Schritte 3–5 (Preis-Aggregation, UI, Scan-Zuordnung) noch
-offen, siehe Umsetzungsplan in #47. Präzisiert und ersetzt die ursprüngliche
-Formulierung in
+Sync-Integration, [#114](https://github.com/McBoerny/ShopWithMe/issues/114)
+Preis-Aggregation) — Schritte 4–5 (UI, Scan-Zuordnung) noch offen, siehe
+Umsetzungsplan in #47. Präzisiert und ersetzt die ursprüngliche Formulierung
+in
 [#47](https://github.com/McBoerny/ShopWithMe/issues/47) (dort noch
 "Ausprägung" genannt) — siehe Diskussion vom 2026-08-06. Abgegrenzt von, aber
 verwandt mit den bereits umgesetzten Artikel-Alias-Namen
@@ -58,6 +59,24 @@ Artikel/Geschäft. Kann bei Bedarf in einem späteren Schritt ergänzt werden.
 die echte, synchronisierte Zuordnung auf; nur wenn ein Peer noch keine
 Produkt-Synchronisation kennt (oder keine `produktID` mitschickt), greift
 weiterhin der Schritt-1-Fallback auf `Produkt.standardProdukt(fuer:context:)`.
+
+## Umsetzungsstand Schritt 3/5 (v0.14)
+
+`Produkt.minimum`/`.maximum` (über `preispunkteRekursiv`) implementieren jetzt
+Regel 2 unten: ein Produkt mit `unterProdukte` kumuliert deren Preise (rekursiv,
+beliebig tief), statt nur eigene `preispunkte` zu betrachten.
+
+**Präzisierung gegenüber dem ursprünglichen Plan-Text:** Der Umsetzungsplan in
+#47 nannte diesen Schritt "`ArtikelPreisSpanne` um Produkt-Ebene erweitern".
+Bei der Umsetzung zeigte sich: `ArtikelPreisSpanne`
+(`Models/ArtikelPreisSpanne.swift`, einzige Verwendung in
+`GeschaeftPreisUebersichtView.swift`) gruppiert bereits alle `Preispunkt`e
+eines Artikels unabhängig vom zugehörigen `Produkt` — bleibt dadurch
+unabhängig von der Produkt-Hierarchie eine korrekte "Preisspanne über alles,
+was unter diesem Artikel verkauft wurde"-Sicht und musste nicht geändert
+werden. Die eigentliche Lücke lag allein auf `Produkt` selbst (nur
+Doc-Kommentar zu Regel 2, keine Implementierung) — dort ist sie jetzt
+geschlossen, `ArtikelPreisSpanne` bleibt unverändert.
 
 ## Die drei Ebenen
 
