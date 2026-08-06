@@ -211,7 +211,12 @@ einem deiner vorhandenen Artikel zuzuordnen — gelingt das, zeigt das Feld den
 generischen Namen (z.B. „Zahnpasta“) mit dem Original-Beleg-Text „COL-ZAH“ klein
 darunter; gelingt es nicht, ist die Position als „Neu erkannt“ markiert. Tippst du
 ins Namensfeld, schlägt dir die App passende vorhandene Artikel zum Antippen vor,
-oder du legst über „„…“ neu anlegen“ direkt einen neuen Artikel an. Nicht
+oder du legst über „„…“ neu anlegen“ direkt einen neuen Artikel an. Hast du für
+einen Artikel bereits Produkte mit Produktnamen für das gerade erkannte Geschäft
+hinterlegt (siehe Abschnitt „Artikel“), erkennt die App darüber hinaus auch das
+konkrete Produkt — die Position zeigt dann zusätzlich klein „Erkanntes Produkt:
+…“ an, und der erfasste Preis landet direkt bei diesem Produkt statt nur beim
+generischen Artikel. Nicht
 benötigte Positionen kannst du vor der Übernahme entfernen: Wischen nach links
 löscht eine Position nur für diesen Scan, Wischen nach rechts ignoriert sie
 dauerhaft für dieses Geschäft (z.B. für wiederkehrende Pfand-/Rabattzeilen).

@@ -1,10 +1,11 @@
 # Artikel/Produkt/Produktname-Modell (GitHub #47)
 
-**Status: Schritte 1–4/5 umgesetzt** ([#112](https://github.com/McBoerny/ShopWithMe/issues/112)
+**Status: vollständig umgesetzt** ([#112](https://github.com/McBoerny/ShopWithMe/issues/112)
 Datenmodell + Migration, [#113](https://github.com/McBoerny/ShopWithMe/issues/113)
 Sync-Integration, [#114](https://github.com/McBoerny/ShopWithMe/issues/114)
 Preis-Aggregation, [#115](https://github.com/McBoerny/ShopWithMe/issues/115)
-UI) — Schritt 5 (Scan-Zuordnung) noch offen, siehe Umsetzungsplan in #47.
+UI, [#116](https://github.com/McBoerny/ShopWithMe/issues/116)
+Scan-Zuordnung) — alle 5 Schritte aus dem Umsetzungsplan in #47 fertig.
 Präzisiert und ersetzt die ursprüngliche Formulierung in
 [#47](https://github.com/McBoerny/ShopWithMe/issues/47) (dort noch
 "Ausprägung" genannt) — siehe Diskussion vom 2026-08-06. Abgegrenzt von, aber
@@ -98,6 +99,34 @@ unterschiedliche Marken fälschlich noch zu separaten **Artikeln** — das ist
 jetzt auf **Produkte** korrigiert.
 
 Details/vollständige Liste betroffener Dateien: [#115](https://github.com/McBoerny/ShopWithMe/issues/115).
+
+## Umsetzungsstand Schritt 5/5 (v0.14) — Feature komplett
+
+`ArtikelZuordnungsService` bekommt eine neue Matching-Stufe zwischen
+gelerntem `ArtikelAlias` und dem generischen Artikel-Namens-Teilstring-
+Abgleich: Abgleich gegen `Produktname` **innerhalb des erkannten
+Geschäfts**. Ein erfolgreicher Treffer liefert sowohl den Artikel als auch
+das konkrete `Produkt` — `BelegScanView` reicht dieses Produkt danach direkt
+an `PreispunktService.erfassen` durch, statt wie zuvor immer nur beim
+Platzhalter-Standardprodukt zu landen. `PreispunktService`s interne
+Slowly-Changing-Dimension-Logik (`letzterPreispunkt`) berücksichtigt jetzt
+zusätzlich das Produkt, damit zwei echte Produkte desselben Artikels+Geschäfts
+(z.B. „Odol" und „Paradontol" für „Zahnpasta" bei Rewe) unabhängige
+Preishistorien behalten, statt sich beim Scannen gegenseitig zu
+überschreiben.
+
+**Bewusst nicht angetastet:** `PreisschildScanView` nutzt
+`ArtikelZuordnungsService` bereits vor diesem Schritt nicht (eigene,
+parallele Zuordnungslogik) — bleibt hier unverändert, wäre ein eigener,
+unabhängiger Aufräum-Schritt (siehe `docs/ARCHITECTURE.md`). `KaufEintrag`
+bekommt weiterhin kein `produkt`-Feld (seit GitHub #76 ohne Preisrolle).
+
+Details: [#116](https://github.com/McBoerny/ShopWithMe/issues/116).
+
+Damit sind alle 5 Schritte aus dem Umsetzungsplan in #47 abgeschlossen —
+Artikel, Alias-Namen, Produkte, Produktnamen und deren Preise sind jetzt
+vollständig modelliert, synchronisiert, aggregiert, verwaltbar und werden
+beim Belegscan automatisch erkannt.
 
 ## Die drei Ebenen
 

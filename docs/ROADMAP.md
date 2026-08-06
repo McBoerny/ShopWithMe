@@ -107,10 +107,21 @@ die übrige Doku aktualisiert wird): `docs/BUILD_WORKFLOW.md`.
   Artikel-Alias-Namen — ein Artikel kann mehrere zusätzliche Suchbegriffe
   bekommen (z.B. „Zahncreme“ für „Zahnpasta“), unter denen ihn die
   Artikelsuche beim Einkaufen ebenfalls findet. Bleibt derselbe Artikel,
-  kein eigenes Produkt/kein eigener Preis — Abgrenzung zur weiterhin
-  offenen Artikelausprägung ([#47](https://github.com/McBoerny/ShopWithMe/issues/47),
-  siehe „Zukünftig“ unten). Wiederverwendet das bereits vorhandene
+  kein eigenes Produkt/kein eigener Preis — Abgrenzung zu Artikel → Produkt
+  → Produktname (v0.14, siehe unten). Wiederverwendet das bereits vorhandene
   `ArtikelAlias`-Modell (bisher nur Bon-Scan-Erkennung) statt eines neuen Typs.
+- [x] **v0.14** — [Issue #47](https://github.com/McBoerny/ShopWithMe/issues/47):
+  Artikel → Produkt → Produktname — ein Artikel kann mehrere konkrete
+  Produkte mit eigenem Preis haben (z.B. „Odol“/„Paradontol“/„Sebamed“ für
+  „Zahnpasta“, rekursiv für Varianten wie Packungsgrößen), jedes Produkt
+  zusätzlich je Geschäft einen eigenen Produktnamen. In fünf Teilschritten
+  umgesetzt ([#112](https://github.com/McBoerny/ShopWithMe/issues/112)–[#116](https://github.com/McBoerny/ShopWithMe/issues/116)):
+  Datenmodell + erste strukturelle SwiftData-Migration dieses Projekts,
+  Sync-Integration, rekursive Preis-Aggregation, UI
+  (`ArtikelEditView`/`ProduktEditView`/`ArtikelHinzufuegenView`), Scan-
+  Zuordnung (`ArtikelZuordnungsService` erkennt jetzt auch Produktnamen).
+  Details: `docs/ARTIKEL_PRODUKT_MODELL.md`. Beantwortet außerdem die
+  Modellfrage aus [#10](https://github.com/McBoerny/ShopWithMe/issues/10).
 
 Damit ist die in der Kickoff-Unterhaltung beschriebene Kernfunktionalität
 vollständig umgesetzt; weitere Ideen siehe „Zukünftig“ unten.
@@ -137,17 +148,6 @@ vollständig umgesetzt; weitere Ideen siehe „Zukünftig“ unten.
 - **Nutzungs-Tracking/Analytics**: anonymisiertes Tracking-Framework zur Analyse der
   App-Nutzung — erfassen, welche Funktionen wie häufig genutzt werden, um die Roadmap
   datengestützt priorisieren zu können.
-- **Artikel → Produkt → Produktname** ([#47](https://github.com/McBoerny/ShopWithMe/issues/47)):
-  ein Artikel kann mehrere konkrete Produkte mit eigenem Preis haben (z.B.
-  „Odol“/„Paradontol“/„Sebamed“ für „Zahnpasta“, rekursiv für Varianten wie
-  Packungsgrößen), im Unterschied zu den bereits umgesetzten Alias-Namen
-  (v0.13, [#111](https://github.com/McBoerny/ShopWithMe/issues/111)) keine
-  reine Textsuche, sondern ein eigenständiges 1:n-Datenmodell mit
-  Preis-Kumulierung am übergeordneten Produkt. Ein Produkt kann zusätzlich
-  je Geschäft einen eigenen Produktnamen haben. Vollständiges Konzept
-  (noch nicht implementiert): `docs/ARTIKEL_PRODUKT_MODELL.md`. Größerer,
-  eigener Umbau — siehe verwandtes [#10](https://github.com/McBoerny/ShopWithMe/issues/10)
-  zur damit beantworteten Modellfrage.
 - **Modell-unabhängige Sync-Architektur** ([#75](https://github.com/McBoerny/ShopWithMe/issues/75)):
   die Datensynchronisation (`docs/DATENSYNCHRONISATION.md`) ist als Architektur-Muster
   bereits solide, aber die Implementierung eng an ShopWithMes konkretes Datenmodell

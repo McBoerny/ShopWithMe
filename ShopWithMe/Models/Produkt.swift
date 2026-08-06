@@ -63,17 +63,27 @@ extension Produkt {
     /// Namen — ein Nutzer könnte ein echtes Produkt zufällig identisch zum
     /// Artikel benennen).
     static func standardProdukt(fuer artikel: Artikel, context: ModelContext) -> Produkt {
-        let artikelID = artikel.persistentModelID
-        var deskriptor = FetchDescriptor<Produkt>(
-            predicate: #Predicate { $0.istStandard && $0.artikel?.persistentModelID == artikelID }
-        )
-        deskriptor.fetchLimit = 1
-        if let bestehendes = try? context.fetch(deskriptor).first {
+        if let bestehendes = bestehendesStandardProdukt(fuer: artikel, context: context) {
             return bestehendes
         }
         let neues = Produkt(name: artikel.name, artikel: artikel, istStandard: true)
         context.insert(neues)
         return neues
+    }
+
+    /// Wie ``standardProdukt(fuer:context:)``, legt aber **keins** an, falls
+    /// noch keins existiert (`nil` statt Neuanlage) — für reine Lese-/
+    /// Vorschau-Zwecke wie `PreispunktService.vorhandenerPunktHeute(...)`
+    /// (GitHub #47, Schritt 5/5), wo ein Seiteneffekt (Neuanlage während
+    /// einer bloßen Prüfung, z.B. beim erneuten Verarbeiten eines Scans ohne
+    /// Übernahme) unerwünscht wäre.
+    static func bestehendesStandardProdukt(fuer artikel: Artikel, context: ModelContext) -> Produkt? {
+        let artikelID = artikel.persistentModelID
+        var deskriptor = FetchDescriptor<Produkt>(
+            predicate: #Predicate { $0.istStandard && $0.artikel?.persistentModelID == artikelID }
+        )
+        deskriptor.fetchLimit = 1
+        return try? context.fetch(deskriptor).first
     }
 
     /// Alle ``Preispunkt``e dieses Produkts UND (rekursiv) aller

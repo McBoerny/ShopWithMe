@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.14 (Build 254) — GitHub #116: Scan-Zuordnung erkennt Produktnamen (GitHub #47, Schritt 5/5 — Feature komplett)
+
+Letzter Baustein von #47: `ArtikelZuordnungsService` bekommt eine neue
+Matching-Stufe zwischen gelerntem `ArtikelAlias` und dem generischen
+Artikel-Namens-Teilstring-Abgleich — Abgleich gegen `Produktname`
+**innerhalb des beim Belegscan erkannten Geschäfts**. Ein Treffer liefert
+sowohl Artikel als auch das konkrete `Produkt`; `BelegScanView` reicht dieses
+Produkt direkt an `PreispunktService.erfassen` durch, statt wie bisher immer
+nur beim Platzhalter-Standardprodukt zu landen. `PreispunktService`s
+Slowly-Changing-Dimension-Vergleich (welcher Preispunkt gilt als "derselbe,
+nur aktualisiert") berücksichtigt jetzt zusätzlich das Produkt, damit zwei
+echte Produkte desselben Artikels+Geschäfts unabhängige Preishistorien
+behalten. Die Positions-Zeile im Belegscan zeigt bei Treffer zusätzlich den
+erkannten Produktnamen an. 9 neue Tests.
+
+Bewusst unangetastet: `PreisschildScanView` (eigene, parallele
+Zuordnungslogik, nutzte `ArtikelZuordnungsService` schon vorher nicht) und
+`KaufEintrag` (weiterhin ohne `produkt`-Feld, seit GitHub #76 ohne
+Preisrolle).
+
+**Damit ist GitHub #47 (Artikel → Produkt → Produktname) nach 5 Schritten
+vollständig umgesetzt** — Datenmodell, Migration, Sync, Preis-Aggregation,
+UI und Scan-Zuordnung, siehe `docs/ARTIKEL_PRODUKT_MODELL.md`.
+
 ## v0.14 (Build 253) — GitHub #115: UI für Produkt/Produktname (GitHub #47, Schritt 4/5)
 
 Erste sichtbare UI dieses gesamten Features (Schritte 1–3 waren reines

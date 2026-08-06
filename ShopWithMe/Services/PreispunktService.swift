@@ -17,11 +17,20 @@ enum PreispunktService {
     /// ``BelegScanView``/``PreisschildScanView``) — mit ``artikel`` leitet
     /// ``Preispunkt/init(artikel:geschaeft:preis:datum:produktName:alternativerName:)``
     /// den Schnappschuss-Namen selbst ab.
+    /// `produkt` (GitHub #47, Schritt 5/5): optional bereits bekanntes,
+    /// konkretes Produkt (z.B. per ``ArtikelZuordnungsService``-Produktname-
+    /// Treffer) — ohne Angabe weiterhin Fallback auf
+    /// ``Produkt/standardProdukt(fuer:context:)`` (Schritt 1/5). Fließt auch
+    /// in den SCD-Vergleichsschlüssel von ``letzterPreispunkt(fuerArtikel:produkt:geschaeft:context:)``
+    /// ein, damit zwei echte Produkte desselben Artikels+Geschäfts (z.B.
+    /// „Odol" und „Paradontol" für „Zahnpasta") unabhängige Preishistorien
+    /// behalten, statt sich gegenseitig zu überschreiben.
     @discardableResult
     @MainActor
     static func erfassen(
         preis: Decimal,
         artikel: Artikel?,
+        produkt: Produkt? = nil,
         geschaeft: Geschaeft?,
         datum: Date,
         produktName: String?,
@@ -29,16 +38,16 @@ enum PreispunktService {
         nameFallback: String = "",
         context: ModelContext
     ) -> Preispunkt {
-        let produkt = artikel.map { Produkt.standardProdukt(fuer: $0, context: context) }
-        if let artikel, let letzter = letzterPreispunkt(fuerArtikel: artikel, geschaeft: geschaeft, context: context) {
+        let aufgeloestesProdukt = produkt ?? artikel.map { Produkt.standardProdukt(fuer: $0, context: context) }
+        if let artikel, let letzter = letzterPreispunkt(fuerArtikel: artikel, produkt: aufgeloestesProdukt, geschaeft: geschaeft, context: context) {
             if letzter.preis == preis {
                 letzter.datum = datum
-                letzter.produkt = produkt
+                letzter.produkt = aufgeloestesProdukt
                 return letzter
             }
         }
         let neuer = Preispunkt(
-            artikel: artikel, produkt: produkt, geschaeft: geschaeft, preis: preis, datum: datum,
+            artikel: artikel, produkt: aufgeloestesProdukt, geschaeft: geschaeft, preis: preis, datum: datum,
             produktName: produktName, alternativerName: alternativerName
         )
         if artikel == nil {
@@ -49,27 +58,36 @@ enum PreispunktService {
     }
 
     /// Bewusst nur nach **einer** Beziehung (``Artikel``) live gefetcht, die
-    /// zweite Bedingung (``Geschaeft``, kann `nil` sein) läuft in Swift —
-    /// dasselbe defensive Muster wie in `ArtikelPreisVerlaufView`, siehe dort
-    /// für die Begründung (GitHub #33).
+    /// übrigen Bedingungen (``Geschaeft``/``Produkt``, beide `nil`-fähig)
+    /// laufen in Swift — dasselbe defensive Muster wie in
+    /// `ArtikelPreisVerlaufView`, siehe dort für die Begründung (GitHub #33).
     @MainActor
-    private static func letzterPreispunkt(fuerArtikel artikel: Artikel, geschaeft: Geschaeft?, context: ModelContext) -> Preispunkt? {
+    private static func letzterPreispunkt(fuerArtikel artikel: Artikel, produkt: Produkt?, geschaeft: Geschaeft?, context: ModelContext) -> Preispunkt? {
         let artikelID = artikel.persistentModelID
         let deskriptor = FetchDescriptor<Preispunkt>(predicate: #Predicate { $0.artikel?.persistentModelID == artikelID })
         let geschaeftID = geschaeft?.persistentModelID
+        let produktID = produkt?.persistentModelID
         return ((try? context.fetch(deskriptor)) ?? [])
-            .filter { $0.geschaeft?.persistentModelID == geschaeftID }
+            .filter { $0.geschaeft?.persistentModelID == geschaeftID && $0.produkt?.persistentModelID == produktID }
             .max { $0.datum < $1.datum }
     }
 
-    /// Der aktuell bekannte Preispunkt für (`artikel`, `geschaeft`), falls sein
-    /// `datum` auf denselben Kalendertag wie `amDatum` fällt — Grundlage für die
-    /// interaktive Tages-Kollisionsabfrage beim Scannen (siehe `BelegScanView`/
-    /// `PreisschildScanView`, GitHub #76-Folgearbeit). `nil` ohne `artikel` (kein
-    /// sinnvoller Vergleichsschlüssel) oder ohne Treffer am selben Tag.
+    /// Der aktuell bekannte Preispunkt für (`artikel`, `produkt`, `geschaeft`),
+    /// falls sein `datum` auf denselben Kalendertag wie `amDatum` fällt —
+    /// Grundlage für die interaktive Tages-Kollisionsabfrage beim Scannen
+    /// (siehe `BelegScanView`/`PreisschildScanView`, GitHub #76-Folgearbeit).
+    /// `produkt: nil` (Default) matcht gegen das bereits **bestehende**
+    /// Platzhalter-Standardprodukt des Artikels (``Produkt/bestehendesStandardProdukt(fuer:context:)``,
+    /// legt bewusst keins an — reine Prüfung, kein Seiteneffekt). `nil` ohne
+    /// `artikel` (kein sinnvoller Vergleichsschlüssel) oder ohne Treffer am
+    /// selben Tag.
     @MainActor
-    static func vorhandenerPunktHeute(artikel: Artikel?, geschaeft: Geschaeft?, amDatum: Date, context: ModelContext) -> Preispunkt? {
-        guard let artikel, let letzter = letzterPreispunkt(fuerArtikel: artikel, geschaeft: geschaeft, context: context)
+    static func vorhandenerPunktHeute(
+        artikel: Artikel?, produkt: Produkt? = nil, geschaeft: Geschaeft?, amDatum: Date, context: ModelContext
+    ) -> Preispunkt? {
+        guard let artikel else { return nil }
+        let aufgeloestesProdukt = produkt ?? Produkt.bestehendesStandardProdukt(fuer: artikel, context: context)
+        guard let letzter = letzterPreispunkt(fuerArtikel: artikel, produkt: aufgeloestesProdukt, geschaeft: geschaeft, context: context)
         else { return nil }
         return Calendar.current.isDate(letzter.datum, inSameDayAs: amDatum) ? letzter : nil
     }

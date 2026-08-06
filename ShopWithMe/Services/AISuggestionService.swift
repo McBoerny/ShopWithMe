@@ -62,7 +62,7 @@ enum AISuggestionService {
     /// Ermittelt für einen auf einem Kassenbon erkannten, oft abgekürzten oder
     /// markenspezifischen Artikelnamen (z.B. „COL-ZAH“ oder „Bio Vollmilch 3,5%“)
     /// den inhaltlich am besten passenden bestehenden, generischen ``Artikel`` —
-    /// genutzt von ``ArtikelZuordnungsService/zuordnen(erkannterName:bekannterVerlauf:alleArtikel:)``
+    /// genutzt von ``ArtikelZuordnungsService/zuordnen(erkannterName:bekannteAliase:alleArtikel:geschaeft:bekannteProduktnamen:)``
     /// als letzte Stufe, nur falls einfacherer Textabgleich erfolglos war (siehe
     /// `docs/BELEGSCAN.md`).
     static func artikelMatch(

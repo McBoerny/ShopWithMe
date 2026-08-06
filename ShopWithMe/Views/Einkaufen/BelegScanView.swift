@@ -226,6 +226,9 @@ struct BelegScanView: View {
                 }
                 geschaeftAbgleichen(erkannterName: ergebnis.geschaeftName, erkannteAdresse: ergebnis.geschaeftAdresse)
                 let bekannteAliase = (try? modelContext.fetch(FetchDescriptor<ArtikelAlias>())) ?? []
+                // GitHub #47, Schritt 5/5 — geschäftsabhängiger Produktname-Abgleich,
+                // siehe ``ArtikelZuordnungsService``.
+                let bekannteProduktnamen = (try? modelContext.fetch(FetchDescriptor<Produktname>())) ?? []
                 var neuePositionen: [BearbeitbarePosition] = []
                 for position in ergebnis.positionen {
                     if IgnorierterArtikel.istIgnoriert(position.artikelName, geschaeft: erkanntesGeschaeft, unter: alleIgnoriertenArtikel) {
@@ -234,7 +237,9 @@ struct BelegScanView: View {
                     let zuordnung = await ArtikelZuordnungsService.zuordnen(
                         erkannterName: position.artikelName,
                         bekannteAliase: bekannteAliase,
-                        alleArtikel: alleArtikel
+                        alleArtikel: alleArtikel,
+                        geschaeft: erkanntesGeschaeft,
+                        bekannteProduktnamen: bekannteProduktnamen
                     )
                     // Tages-Kollisionsprüfung (GitHub #76-Folgearbeit): existiert für
                     // den zugeordneten Artikel bereits ein Preispunkt vom selben
@@ -245,7 +250,7 @@ struct BelegScanView: View {
                     var bestehenderPreisHeute: Decimal?
                     if let artikel = zuordnung.artikel {
                         bestehenderPreisHeute = PreispunktService.vorhandenerPunktHeute(
-                            artikel: artikel, geschaeft: erkanntesGeschaeft, amDatum: belegDatum, context: modelContext
+                            artikel: artikel, produkt: zuordnung.produkt, geschaeft: erkanntesGeschaeft, amDatum: belegDatum, context: modelContext
                         )?.preis
                         if bestehenderPreisHeute == position.einzelpreis { bestehenderPreisHeute = nil }
                     }
@@ -254,6 +259,7 @@ struct BelegScanView: View {
                         artikelName: zuordnung.alias ?? zuordnung.artikel.flatMap { modelContext.existiertNochImStore($0) ? $0.name : nil } ?? position.artikelName,
                         preisText: "\(position.einzelpreis.aufCentGerundet)",
                         zugeordneterArtikel: zuordnung.artikel,
+                        zugeordnetesProdukt: zuordnung.produkt,
                         boundingBox: scanErgebnis.ocrZeilen.boundingBox(fuerArtikelName: position.artikelName),
                         bestehenderPreisHeute: bestehenderPreisHeute
                     ))
@@ -300,6 +306,8 @@ struct BelegScanView: View {
         }()
         let positionen = bearbeitbarePositionen ?? []
         let positionsArtikelReferenzen = positionen.map { ModelReference($0.effektivZugeordneterArtikel) }
+        // GitHub #47, Schritt 5/5 — analog `positionsArtikelReferenzen`.
+        let positionsProduktReferenzen = positionen.map { ModelReference($0.effektivZugeordnetesProdukt) }
 
         Task {
             // Geocoding braucht Netzwerk (async) und muss daher vor dem
@@ -346,6 +354,7 @@ struct BelegScanView: View {
                           let preis = Decimal(string: position.preisText.replacingOccurrences(of: ",", with: "."))
                     else { continue }
                     let artikel = positionsArtikelReferenzen[index]?.resolved(in: modelContext)
+                    let produkt = positionsProduktReferenzen[index]?.resolved(in: modelContext)
 
                     let geschaeftFuerPreispunkt: Geschaeft?
                     switch kontext {
@@ -389,13 +398,13 @@ struct BelegScanView: View {
                     let behalteBestehenden = position.bestehenderPreisHeute != nil && position.behalteBestehendenPreisHeute
                     if position.bestehenderPreisHeute != nil, !behalteBestehenden,
                        let vorhandenerPunkt = PreispunktService.vorhandenerPunktHeute(
-                           artikel: artikel, geschaeft: geschaeftFuerPreispunkt, amDatum: belegDatum, context: modelContext
+                           artikel: artikel, produkt: produkt, geschaeft: geschaeftFuerPreispunkt, amDatum: belegDatum, context: modelContext
                        ) {
                         PreispunktService.ersetzeVorhandenenPunkt(vorhandenerPunkt, context: modelContext)
                     }
                     if !behalteBestehenden {
                         PreispunktService.erfassen(
-                            preis: preis, artikel: artikel, geschaeft: geschaeftFuerPreispunkt, datum: belegDatum,
+                            preis: preis, artikel: artikel, produkt: produkt, geschaeft: geschaeftFuerPreispunkt, datum: belegDatum,
                             produktName: produktName, alternativerName: neuerAlternativerName, nameFallback: name, context: modelContext
                         )
                     }
@@ -472,7 +481,7 @@ struct BelegScanView: View {
 /// ursprünglich erkannte Produktname und wird als ``Preispunkt/produktName``
 /// übernommen, damit die Preishistorie weiterhin nach Marke/Produkt unterscheidet.
 /// `zugeordneterArtikel` ist bereits beim Einlesen über
-/// ``ArtikelZuordnungsService/zuordnen(erkannterName:bekannterVerlauf:alleArtikel:)``
+/// ``ArtikelZuordnungsService/zuordnen(erkannterName:bekannteAliase:alleArtikel:geschaeft:bekannteProduktnamen:)``
 /// ermittelt (siehe ``BelegScanView/verarbeite(bild:)``).
 private struct BearbeitbarePosition: Identifiable {
     let id = UUID()
@@ -480,6 +489,12 @@ private struct BearbeitbarePosition: Identifiable {
     var artikelName: String
     var preisText: String
     var zugeordneterArtikel: Artikel?
+    /// Über ``Produktname`` erkanntes konkretes Produkt (GitHub #47, Schritt
+    /// 5/5) — `nil`, solange nur der generische Artikel (Stufe 1/3 des
+    /// Zuordnungs-Abgleichs) getroffen wurde. Siehe ``effektivZugeordnetesProdukt``
+    /// für die tatsächlich beim Speichern verwendete, gegen manuelle
+    /// Korrekturen abgesicherte Fassung.
+    var zugeordnetesProdukt: Produkt?
     /// Position dieser Zeile im Original-Beleg (Visions normalisiertes
     /// Koordinatensystem), ermittelt über ``ErkannteZeile/boundingBox(fuerArtikelName:)``
     /// — `nil`, wenn sich keine OCR-Zeile eindeutig zuordnen ließ (dann bietet
@@ -509,6 +524,19 @@ private struct BearbeitbarePosition: Identifiable {
               zugeordneterArtikel.name.localizedCaseInsensitiveCompare(artikelName) == .orderedSame
         else { return nil }
         return zugeordneterArtikel
+    }
+
+    /// ``zugeordnetesProdukt``, aber nur solange ``effektivZugeordneterArtikel``
+    /// noch greift UND das Produkt tatsächlich zu diesem Artikel gehört
+    /// (GitHub #47, Schritt 5/5) — schützt insbesondere gegen den Fall, dass
+    /// der Anwender die automatische Artikel-Zuordnung manuell auf einen
+    /// anderen Artikel korrigiert (``PositionsZeile/artikelZuweisen(_:)``),
+    /// ohne dass ``zugeordnetesProdukt`` dabei separat zurückgesetzt wird.
+    var effektivZugeordnetesProdukt: Produkt? {
+        guard let effektivZugeordneterArtikel, let zugeordnetesProdukt,
+              zugeordnetesProdukt.artikel == effektivZugeordneterArtikel
+        else { return nil }
+        return zugeordnetesProdukt
     }
 }
 
@@ -726,6 +754,11 @@ private struct PositionsZeile: View {
                 Label("Wird verknüpft mit „\(artikel.name)“", systemImage: "checkmark.circle")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if let produkt = position.effektivZugeordnetesProdukt {
+                    Text("Erkanntes Produkt: \(produkt.name)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             } else {
                 Label("Neu erkannt", systemImage: "sparkles")
                     .font(.caption)

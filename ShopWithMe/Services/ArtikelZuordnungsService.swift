@@ -1,13 +1,20 @@
 import Foundation
 
 /// Ordnet einen auf einem Kassenbon erkannten Artikelnamen automatisch einem
-/// bestehenden, generischen ``Artikel`` zu — konsistent für alle drei
-/// ``BelegScanKontext``e (``BelegScanView``), siehe `docs/BELEGSCAN.md` →
-/// „Automatische Artikel-Zuordnung“.
+/// bestehenden, generischen ``Artikel`` (und, sofern erkennbar, einem
+/// konkreten ``Produkt``) zu — konsistent für alle drei ``BelegScanKontext``e
+/// (``BelegScanView``), siehe `docs/BELEGSCAN.md` → „Automatische
+/// Artikel-Zuordnung“ und `docs/ARTIKEL_PRODUKT_MODELL.md` (GitHub #47,
+/// Schritt 5/5).
 enum ArtikelZuordnungsService {
-    /// Textbasierte Zuordnung ohne KI, in zwei Stufen:
+    /// Textbasierte Zuordnung ohne KI, in drei Stufen:
     /// 1. Gelernter Alias (``ArtikelAlias/passend(fuerErkannterName:in:)``).
-    /// 2. Einfacher, beidseitiger Teilstring-Abgleich gegen alle vorhandenen
+    /// 2. Gelernter ``Produktname`` **innerhalb des übergebenen `geschaeft`s**
+    ///    (GitHub #47, Schritt 5/5) — liefert zusätzlich das konkrete
+    ///    ``Produkt``, dessen ``Artikel`` sonst nur über Stufe 3 gefunden
+    ///    würde. Ohne `geschaeft` (z.B. ``BelegScanKontext/unbekannt``, noch
+    ///    kein Treffer) wirkungslos.
+    /// 3. Einfacher, beidseitiger Teilstring-Abgleich gegen alle vorhandenen
     ///    ``Artikel`` (ersetzt die frühere, auf `.geschaeft`/`.unbekannt`
     ///    beschränkte private `BelegScanView.passendesArtikel(fuer:)`).
     ///
@@ -16,33 +23,50 @@ enum ArtikelZuordnungsService {
     static func textBasierteZuordnung(
         erkannterName: String,
         bekannteAliase: [ArtikelAlias],
-        alleArtikel: [Artikel]
-    ) -> (alias: String?, artikel: Artikel?)? {
+        alleArtikel: [Artikel],
+        geschaeft: Geschaeft? = nil,
+        bekannteProduktnamen: [Produktname] = []
+    ) -> (alias: String?, artikel: Artikel?, produkt: Produkt?)? {
         if let gelernt = ArtikelAlias.passend(fuerErkannterName: erkannterName, in: bekannteAliase) {
-            return gelernt
+            return (gelernt.alias, gelernt.artikel, nil)
         }
         let name = erkannterName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return nil }
+        if let geschaeft,
+           let produktTreffer = bekannteProduktnamen.first(where: {
+               $0.geschaeft == geschaeft
+                   && ($0.name.localizedCaseInsensitiveContains(name) || name.localizedCaseInsensitiveContains($0.name))
+           }),
+           let artikel = produktTreffer.produkt?.artikel {
+            return (nil, artikel, produktTreffer.produkt)
+        }
         guard let treffer = alleArtikel.first(where: {
             $0.name.localizedCaseInsensitiveContains(name) || name.localizedCaseInsensitiveContains($0.name)
         }) else { return nil }
-        return (nil, treffer)
+        return (nil, treffer, nil)
     }
 
-    /// Volle Zuordnungs-Pipeline: erst ``textBasierteZuordnung(erkannterName:bekannteAliase:alleArtikel:)``;
+    /// Volle Zuordnungs-Pipeline: erst
+    /// ``textBasierteZuordnung(erkannterName:bekannteAliase:alleArtikel:geschaeft:bekannteProduktnamen:)``;
     /// bleibt die erfolglos und ist lokale KI verfügbar
     /// (``AISuggestionService/istVerfuegbar``), wird zusätzlich
     /// ``AISuggestionService/artikelMatch(fuerName:bekannteArtikel:)`` befragt und
-    /// deren Vorschlag exakt gegen ``alleArtikel`` aufgelöst. Liefert `(nil, nil)`,
+    /// deren Vorschlag exakt gegen ``alleArtikel`` aufgelöst (liefert dabei nie ein
+    /// ``Produkt`` — die KI kennt nur Artikelnamen). Liefert `(nil, nil, nil)`,
     /// wenn keine Stufe einen Treffer findet — die Position gilt dann als „neu
     /// erkannt“ (siehe ``BelegScanView``).
     @MainActor
     static func zuordnen(
         erkannterName: String,
         bekannteAliase: [ArtikelAlias],
-        alleArtikel: [Artikel]
-    ) async -> (alias: String?, artikel: Artikel?) {
-        if let treffer = textBasierteZuordnung(erkannterName: erkannterName, bekannteAliase: bekannteAliase, alleArtikel: alleArtikel) {
+        alleArtikel: [Artikel],
+        geschaeft: Geschaeft? = nil,
+        bekannteProduktnamen: [Produktname] = []
+    ) async -> (alias: String?, artikel: Artikel?, produkt: Produkt?) {
+        if let treffer = textBasierteZuordnung(
+            erkannterName: erkannterName, bekannteAliase: bekannteAliase, alleArtikel: alleArtikel,
+            geschaeft: geschaeft, bekannteProduktnamen: bekannteProduktnamen
+        ) {
             return treffer
         }
         guard AISuggestionService.istVerfuegbar,
@@ -51,11 +75,11 @@ enum ArtikelZuordnungsService {
                   bekannteArtikel: alleArtikel.map(\.name)
               )
         else {
-            return (nil, nil)
+            return (nil, nil, nil)
         }
         let treffer = alleArtikel.first {
             $0.name.localizedCaseInsensitiveCompare(kiVorschlag.passenderArtikel) == .orderedSame
         }
-        return (nil, treffer)
+        return (nil, treffer, nil)
     }
 }

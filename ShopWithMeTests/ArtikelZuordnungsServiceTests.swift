@@ -47,4 +47,85 @@ struct ArtikelZuordnungsServiceTests {
 
         #expect(ergebnis == nil)
     }
+
+    // MARK: - Produktname-Matching (GitHub #47, Schritt 5/5)
+
+    @Test
+    func textBasierteZuordnungFindetProduktnameInnerhalbGeschaeft() {
+        let zahnpasta = Artikel(name: "Zahnpasta", symbolName: "sparkles", farbeHex: "#AF52DE")
+        let paradontol = Produkt(name: "Paradontol Zahncreme", artikel: zahnpasta)
+        let rewe = Geschaeft(name: "Rewe", typen: [])
+        let produktname = Produktname(name: "Parad Zahncr", produkt: paradontol, geschaeft: rewe)
+
+        let ergebnis = ArtikelZuordnungsService.textBasierteZuordnung(
+            erkannterName: "PARAD ZAHNCR 75ML",
+            bekannteAliase: [],
+            alleArtikel: [zahnpasta],
+            geschaeft: rewe,
+            bekannteProduktnamen: [produktname]
+        )
+
+        #expect(ergebnis?.artikel === zahnpasta)
+        #expect(ergebnis?.produkt === paradontol)
+    }
+
+    @Test
+    func textBasierteZuordnungIgnoriertProduktnameAusAnderemGeschaeft() {
+        let zahnpasta = Artikel(name: "Zahnpasta", symbolName: "sparkles", farbeHex: "#AF52DE")
+        let paradontol = Produkt(name: "Paradontol Zahncreme", artikel: zahnpasta)
+        let rewe = Geschaeft(name: "Rewe", typen: [])
+        let aldi = Geschaeft(name: "Aldi", typen: [])
+        let produktname = Produktname(name: "Parad Zahncr", produkt: paradontol, geschaeft: rewe)
+
+        // Gescannt bei Aldi, Produktname aber nur für Rewe hinterlegt — kein
+        // Produkt-Treffer, fällt auf reinen Artikel-Teilstring-Abgleich zurück
+        // (hier ohne Treffer, da "Parad Zahncr" keinen Teilstring von
+        // "Zahnpasta" bildet und umgekehrt).
+        let ergebnis = ArtikelZuordnungsService.textBasierteZuordnung(
+            erkannterName: "PARAD ZAHNCR 75ML",
+            bekannteAliase: [],
+            alleArtikel: [zahnpasta],
+            geschaeft: aldi,
+            bekannteProduktnamen: [produktname]
+        )
+
+        #expect(ergebnis == nil)
+    }
+
+    @Test
+    func textBasierteZuordnungBevorzugtGelerntenAliasVorProduktname() {
+        let zahnpasta = Artikel(name: "Zahnpasta", symbolName: "sparkles", farbeHex: "#AF52DE")
+        let alias = ArtikelAlias(erkannterName: "PARAD ZAHNCR 75ML", alternativerName: "Paradontol (Alias)", artikel: zahnpasta)
+        let paradontol = Produkt(name: "Paradontol Zahncreme", artikel: zahnpasta)
+        let rewe = Geschaeft(name: "Rewe", typen: [])
+        let produktname = Produktname(name: "Parad Zahncr", produkt: paradontol, geschaeft: rewe)
+
+        let ergebnis = ArtikelZuordnungsService.textBasierteZuordnung(
+            erkannterName: "PARAD ZAHNCR 75ML",
+            bekannteAliase: [alias],
+            alleArtikel: [zahnpasta],
+            geschaeft: rewe,
+            bekannteProduktnamen: [produktname]
+        )
+
+        #expect(ergebnis?.alias == "Paradontol (Alias)")
+        #expect(ergebnis?.produkt == nil)
+    }
+
+    @Test
+    func textBasierteZuordnungOhneGeschaeftUeberspringtProduktnameStufe() {
+        let zahnpasta = Artikel(name: "Zahnpasta", symbolName: "sparkles", farbeHex: "#AF52DE")
+        let paradontol = Produkt(name: "Paradontol Zahncreme", artikel: zahnpasta)
+        let rewe = Geschaeft(name: "Rewe", typen: [])
+        let produktname = Produktname(name: "Parad Zahncr", produkt: paradontol, geschaeft: rewe)
+
+        let ergebnis = ArtikelZuordnungsService.textBasierteZuordnung(
+            erkannterName: "PARAD ZAHNCR 75ML",
+            bekannteAliase: [],
+            alleArtikel: [zahnpasta],
+            bekannteProduktnamen: [produktname]
+        )
+
+        #expect(ergebnis == nil)
+    }
 }

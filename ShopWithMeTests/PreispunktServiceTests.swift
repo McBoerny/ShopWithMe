@@ -8,7 +8,7 @@ struct PreispunktServiceTests {
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {
         let schema = Schema([
             Artikel.self, ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self,
-            Preispunkt.self, ArtikelAlias.self, SyncTombstone.self,
+            Preispunkt.self, ArtikelAlias.self, SyncTombstone.self, Produkt.self, Produktname.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
@@ -82,6 +82,47 @@ struct PreispunktServiceTests {
         _ = container
         let (_, geschaeft) = artikelUndGeschaeft(context)
         #expect(PreispunktService.vorhandenerPunktHeute(artikel: nil, geschaeft: geschaeft, amDatum: Date(), context: context) == nil)
+    }
+
+    // MARK: - Produkt-Scoping (GitHub #47, Schritt 5/5)
+
+    @Test
+    func erfassenHaeltZweiProdukteDesselbenArtikelsUnabhaengig() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let (artikel, geschaeft) = artikelUndGeschaeft(context)
+        let odol = Produkt(name: "Odol", artikel: artikel)
+        context.insert(odol)
+        let paradontol = Produkt(name: "Paradontol", artikel: artikel)
+        context.insert(paradontol)
+        let jetzt = Date()
+
+        PreispunktService.erfassen(
+            preis: 1.99, artikel: artikel, produkt: odol, geschaeft: geschaeft, datum: jetzt,
+            produktName: nil, alternativerName: nil, context: context
+        )
+        PreispunktService.erfassen(
+            preis: 2.49, artikel: artikel, produkt: paradontol, geschaeft: geschaeft, datum: jetzt,
+            produktName: nil, alternativerName: nil, context: context
+        )
+
+        let alle = try context.fetch(FetchDescriptor<Preispunkt>())
+        #expect(alle.count == 2)
+        #expect(alle.first { $0.produkt === odol }?.preis == 1.99)
+        #expect(alle.first { $0.produkt === paradontol }?.preis == 2.49)
+
+        // Erneutes Erfassen desselben Preises für Odol darf NICHT den
+        // Paradontol-Preispunkt finden/überschreiben — weiterhin genau 2
+        // Punkte, Odol-Punkt bekommt nur ein neues `datum`.
+        let spaeter = jetzt.addingTimeInterval(3600)
+        PreispunktService.erfassen(
+            preis: 1.99, artikel: artikel, produkt: odol, geschaeft: geschaeft, datum: spaeter,
+            produktName: nil, alternativerName: nil, context: context
+        )
+        let nachWiederholung = try context.fetch(FetchDescriptor<Preispunkt>())
+        #expect(nachWiederholung.count == 2)
+        #expect(nachWiederholung.first { $0.produkt === odol }?.datum == spaeter)
+        #expect(nachWiederholung.first { $0.produkt === paradontol }?.preis == 2.49)
     }
 
     @Test

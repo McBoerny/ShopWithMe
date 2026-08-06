@@ -132,8 +132,14 @@ sichtbare UI: `ArtikelEditView` (Sektion "Produkte") → `ProduktEditView`
 (Name, Produktnamen je Geschäft, eigene Preishistorie); bei mehreren eigenen
 Produkten bekommt die Zeile in `ArtikelHinzufuegenView` zusätzlich einen
 Chevron zur Produktwahl — der etablierte Sofort-Tap (GitHub #6/#45) bleibt
-unverändert. Vollständiges Konzept inkl. des noch offenen Schritts 5
-(Scan-Zuordnung): `docs/ARTIKEL_PRODUKT_MODELL.md`.
+unverändert. Seit Schritt 5/5 (Feature komplett) erkennt
+`ArtikelZuordnungsService` beim Belegscan zusätzlich `Produktname`-Treffer
+innerhalb des erkannten Geschäfts; `PreispunktService` führt seitdem pro
+Produkt (nicht mehr nur pro Artikel) eine eigene Slowly-Changing-Dimension-
+Preishistorie. **`PreisschildScanView` bewusst unangetastet** — nutzt
+`ArtikelZuordnungsService` bereits seit vor diesem Feature nicht (eigene,
+parallele Zuordnungslogik), wäre ein eigener, unabhängiger Aufräum-Schritt.
+Vollständiges Konzept: `docs/ARTIKEL_PRODUKT_MODELL.md`.
 
 **`Einkaufsvorgang.einkaufsliste` seit v0.12 `cascade`** (vormals `nullify`,
 siehe `docs/GESCHAEFTS_AGGREGATE.md`): Löschen einer `Einkaufsliste` löscht
