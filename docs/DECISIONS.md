@@ -162,16 +162,28 @@ praktisch jedes Gerät, das nicht exakt bis zum Einfrier-Commit mitgelaufen
 ist, bevor die erste echte `MigrationStage` auf ein Gerät trifft.
 
 **Fix:** ``ShopWithMeApp/oeffneContainer(schema:konfiguration:)`` fängt einen
-gescheiterten `ModelContainer`-Öffnungsversuch ab, verwirft den nicht mehr
+gescheiterten `ModelContainer`-Öffnungsversuch ab und verwirft den nicht mehr
 migrierbaren Store physisch
-(``SyncErsetzenService/loescheUnlesbarenStoreUndPlaneWiederherstellung(url:)``)
-und baut ihn frisch als aktuelles Schema auf; der bereits bestehende
-`SyncErsetzenService`/`SyncSnapshotImportService`-Mechanismus füllt ihn
-danach automatisch aus dem Sync-Ordner wieder auf. Anders als beim regulären
-`SyncErsetzenService.planeErsetzenDurchPeer(context:)` ist dabei kein
-Vorher-Backup möglich (der Store war beim Fehlschlag bereits ungeöffnet) —
-jeder lokale, noch nicht synchronisierte Stand geht verloren. Gilt für jede
-künftige `MigrationStage` gleichermaßen, nicht nur für diesen einen Vorfall.
+(``SyncErsetzenService/loescheUnlesbarenStoreUndPlaneWiederherstellung(url:)``).
+Anders als beim regulären `SyncErsetzenService.planeErsetzenDurchPeer(context:)`
+ist dabei kein Vorher-Backup möglich (der Store war beim Fehlschlag bereits
+ungeöffnet) — jeder lokale, noch nicht synchronisierte Stand geht verloren.
+
+**Korrektur 2 (kein In-Process-Retry):** Ein erster Entwurf versuchte nach dem
+Verwerfen sofort erneut, im selben Prozess einen frischen `ModelContainer` zu
+öffnen. Live-Test (GitHub #119) zeigte, dass dieser zweite Versuch zuverlässig
+identisch scheitert — SwiftData/CoreData behält den
+Staged-Migration-Manager-Zustand offenbar prozessweit bei, unabhängig davon,
+ob die Store-Datei zwischenzeitlich gelöscht wurde (deckt sich mit Berichten im
+Apple Developer Forum zu genau diesem Fehlerbild). Der Fix merkt den
+Wiederaufbau deshalb nur vor (`SyncErsetzenService.ausstehendeAktion =
+.ersetzenDurchPeer`) und lässt den ursprünglichen Fehler unverändert
+weiterlaufen — ein einmaliger, unvermeidbarer Absturz, danach öffnet der
+NÄCHSTE Prozessstart den (bereits gelöschten) Store frisch und
+``SyncErsetzenService/fuehreAusstehendeAktionAus(context:)`` füllt ihn aus dem
+Sync-Ordner wieder auf, exakt wie beim bereits bestehenden
+Wipe-und-Neuaufbau-Mechanismus. Gilt für jede künftige `MigrationStage`
+gleichermaßen, nicht nur für diesen einen Vorfall.
 
 ## Git-Autor (lokal, nur dieses Repo)
 

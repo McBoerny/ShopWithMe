@@ -69,13 +69,27 @@ struct ShopWithMeApp: App {
     /// offen ist. Jeder lokale, noch nicht synchronisierte Stand geht dabei
     /// unwiederbringlich verloren — strukturell unvermeidbar, sobald der
     /// Store gar nicht mehr geöffnet werden kann.
+    ///
+    /// **Bewusst KEIN sofortiger Retry im selben Prozess:** Ein
+    /// zurückliegender fehlgeschlagener Staged-Migration-Versuch scheitert
+    /// bei einem erneuten `ModelContainer`-Aufruf im selben Prozess
+    /// zuverlässig identisch (SwiftData/CoreData behält den
+    /// Migrations-Manager-Zustand offenbar prozessweit bei, unabhängig davon,
+    /// ob der Store-Datei zwischenzeitlich gelöscht wurde — reproduziert bei
+    /// GitHub #119, deckt sich mit Berichten im Apple Developer Forum). Der
+    /// verworfene, für den nächsten Start vorgemerkte Store wird deshalb erst
+    /// beim NÄCHSTEN Prozessstart tatsächlich neu geöffnet (durch
+    /// ``SyncErsetzenService/loescheStoreDateiFallsAusstehend(url:)`` +
+    /// ``SyncErsetzenService/fuehreAusstehendeAktionAus(context:)``, wie beim
+    /// bereits bestehenden Wipe-und-Neuaufbau-Mechanismus) — dieser eine
+    /// Absturz bleibt unvermeidbar, aber einmalig statt dauerhaft.
     private static func oeffneContainer(schema: Schema, konfiguration: ModelConfiguration) throws -> ModelContainer {
         do {
             return try ModelContainer(for: schema, migrationPlan: SchemaDefinition.migrationPlan, configurations: [konfiguration])
         } catch {
-            DatabaseDebugLogger.log(.storeOpenFailure, details: "Migration fehlgeschlagen, verwerfe Store und stelle aus Peer-Snapshot wieder her: \(error)")
+            DatabaseDebugLogger.log(.storeOpenFailure, details: "Migration fehlgeschlagen, verwerfe Store für Wiederherstellung beim nächsten Start: \(error)")
             SyncErsetzenService.loescheUnlesbarenStoreUndPlaneWiederherstellung(url: konfiguration.url)
-            return try ModelContainer(for: schema, migrationPlan: SchemaDefinition.migrationPlan, configurations: [konfiguration])
+            throw error
         }
     }
 
