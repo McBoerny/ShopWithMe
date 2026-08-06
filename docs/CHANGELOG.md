@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.14 (Build 251) — GitHub #113: Sync-Integration von Produkt/Produktname (GitHub #47, Schritt 2/5)
+
+`Produkt`/`Produktname` (seit Schritt 1/5, v0.14) sind jetzt Teil der
+geräteübergreifenden Datensynchronisation (`SyncSnapshot`-Version 7→8).
+`mergeProdukte` matcht wie das bestehende `mergeArtikel`-Muster (ID/Alias →
+exakter Name → Neuanlage), der Namensabgleich läuft aber bewusst
+**innerhalb desselben, bereits aufgelösten Artikels** statt global, damit
+gleichnamige Produkte unter verschiedenen Artikeln nicht fälschlich
+zusammenfallen. Rekursive `elternProdukt`-Zuordnung (Packungsgrößen) läuft in
+einem zweiten Durchlauf, da ein Kind-Eintrag in der Sync-Liste vor seinem
+Eltern-Eintrag stehen kann. `mergeProduktnamen` ist rein additiv, analog dem
+bestehenden `ArtikelAlias`-Merge.
+
+Bewusst ohne die bei `mergeArtikel`/`mergeGeschaefte` vorhandene
+Ambiguitäts-Rückstellung (`SyncAbgleichKandidat`) — Produkt hat noch keine
+eigene Verwaltungs-UI (folgt in Schritt 4/5), ein gelegentlich doppelt
+angelegtes, ähnlich benanntes Produkt ist ein geringeres Risiko als bei
+Artikel/Geschäft.
+
+`Preispunkt`/`EinkaufslistenEintrag` lösen ihr `Produkt` jetzt bevorzugt über
+die echte synchronisierte Zuordnung auf, mit Fallback auf das
+Schritt-1-Platzhalterprodukt bei älteren Peers. 6 neue Tests
+(`ProduktSyncTests.swift`). Bewusst weiterhin keine sichtbare
+Funktionsänderung.
+
 ## v0.14 (Build 250) — GitHub #112: Produkt/Produktname-Datenmodell (GitHub #47, Schritt 1/5)
 
 Fundament für die Artikel→Produkt→Produktname-Hierarchie

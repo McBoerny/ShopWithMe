@@ -43,6 +43,10 @@ enum SyncEntitaetsArt {
     static let geschaeftTyp = "GeschaeftTyp"
     static let kaufEintrag = "KaufEintrag"
     static let preispunkt = "Preispunkt"
+    /// Seit GitHub #47, Schritt 2/5 — namensbasiert gematcht wie Artikel/
+    /// Geschäft, daher alias-/tombstone-pflichtig (anders als ``Produktname``,
+    /// das analog ``ArtikelAlias`` keinen eigenen Fall bekommt).
+    static let produkt = "Produkt"
 
     /// Echtes, `RawRepresentable`-Enum NUR für Dispatch-Stellen (`switch`),
     /// die für jede bekannte Art etwas Unterschiedliches tun müssen —
@@ -76,6 +80,7 @@ enum SyncEntitaetsArt {
         case geschaeftTyp = "GeschaeftTyp"
         case kaufEintrag = "KaufEintrag"
         case preispunkt = "Preispunkt"
+        case produkt = "Produkt"
     }
 }
 

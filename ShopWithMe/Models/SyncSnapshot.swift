@@ -85,7 +85,13 @@ struct SyncSnapshot: Codable {
     /// ``SyncSnapshotImportService/istBereitsAbgehakt(_:aufListe:alleVorgaenge:istAusDerZeitGefallen:jemalsAbgehakteSchluessel:)``,
     /// die durch `KaufEintragBereinigungService`s 48h-Löschung ihre Evidenz
     /// verlor. Wieder keine Rückwärtskompatibilität nötig, siehe Version 3.
-    static let aktuelleFormatVersion = 7
+    ///
+    /// **Version 8 (GitHub #47, Schritt 2/5 — Produkt/Produktname):**
+    /// ``produkte``/``produktnamen`` neu hinzugekommen, siehe ``Produkt``/
+    /// ``Produktname`` und `docs/ARTIKEL_PRODUKT_MODELL.md`. ``PreispunktSnapshot``/
+    /// ``EinkaufslistenEintragSnapshot`` bekommen zusätzlich `produktID`.
+    /// Wieder keine Rückwärtskompatibilität nötig, siehe Version 3.
+    static let aktuelleFormatVersion = 8
 
     var formatVersion: Int
     var erzeugtAm: Date
@@ -128,6 +134,10 @@ struct SyncSnapshot: Codable {
     /// ``Artikel``, ``ArtikelKategorie``, ``Einkaufsliste``, ``KaufEintrag``,
     /// ``Preispunkt``), siehe ``SyncTombstone``.
     var tombstones: [SyncTombstoneSnapshot]
+    /// Seit Version 8, siehe ``Produkt``.
+    var produkte: [ProduktSnapshot] = []
+    /// Seit Version 8, siehe ``Produktname``.
+    var produktnamen: [ProduktnameSnapshot] = []
 }
 
 struct GeschaeftTypSnapshot: Codable {
@@ -215,6 +225,8 @@ struct EinkaufslistenEintragSnapshot: Codable {
     var artikelID: UUID
     var menge: Double
     var notiz: String?
+    /// Seit Version 8 (GitHub #47), siehe ``EinkaufslistenEintrag/produkt``.
+    var produktID: UUID?
 }
 
 struct SyncTombstoneSnapshot: Codable {
@@ -300,6 +312,8 @@ struct PreispunktSnapshot: Codable {
     var alternativerName: String?
     var artikelNameSnapshot: String
     var geschaeftNameSnapshot: String
+    /// Seit Version 8 (GitHub #47), siehe ``Preispunkt/produkt``.
+    var produktID: UUID?
 }
 
 struct ArtikelAliasSnapshot: Codable {
@@ -307,6 +321,26 @@ struct ArtikelAliasSnapshot: Codable {
     var erkannterName: String
     var alternativerName: String?
     var artikelID: UUID?
+}
+
+/// Seit Version 8, siehe ``Produkt``. `elternProduktID` kann in der Liste vor
+/// seinem eigenen Eintrag stehen (kein garantierte Reihenfolge) — der Import
+/// löst die Eltern-Beziehung deshalb in einem zweiten Durchlauf auf, siehe
+/// ``SyncSnapshotImportService``.
+struct ProduktSnapshot: Codable {
+    var id: UUID
+    var name: String
+    var artikelID: UUID?
+    var elternProduktID: UUID?
+    var istStandard: Bool
+}
+
+/// Seit Version 8, siehe ``Produktname``.
+struct ProduktnameSnapshot: Codable {
+    var id: UUID
+    var name: String
+    var produktID: UUID?
+    var geschaeftID: UUID?
 }
 
 // MARK: - Paket-Format für den laufenden Peer-Sync-Zyklus (GitHub #82)
@@ -378,6 +412,10 @@ struct SyncStammSnapshot: Codable {
     var artikel: [ArtikelSnapshot]
     var einkaufslisten: [EinkaufslisteSnapshot]
     var artikelAliase: [ArtikelAliasSnapshot]
+    /// Seit GitHub #47, Schritt 2/5, siehe ``Produkt``.
+    var produkte: [ProduktSnapshot] = []
+    /// Seit GitHub #47, Schritt 2/5, siehe ``Produktname``.
+    var produktnamen: [ProduktnameSnapshot] = []
 }
 
 /// Bereich A, Sicherheitsnetz-Kopie des vollständigen Einkaufslisten-Inhalts

@@ -56,7 +56,7 @@ Zwei Kanäle mit unterschiedlicher Frequenz/Konfliktsemantik:
 | Bereich | Inhalt | Kanal | Konfliktregel |
 |---|---|---|---|
 | **A — zeitkritisch** | Einkaufslisten-Mitgliedschaft, Abhaken/Abwählen | `SyncEvent`, jeder Sync-Zyklus | Lamport-Uhr + `SyncKonfliktAufloesung` (Abschnitt 3) |
-| **B — Stammdaten** | `GeschaeftTyp`, `ArtikelKategorie`, `Geschaeft`, `Artikel`, `Einkaufsliste`, `ArtikelAlias` | `SyncSnapshot`, jeder Sync-Zyklus | additiv/nie destruktiv (Abschnitt 4) |
+| **B — Stammdaten** | `GeschaeftTyp`, `ArtikelKategorie`, `Geschaeft`, `Artikel`, `Einkaufsliste`, `ArtikelAlias`, `Produkt`, `Produktname` (seit v0.14, GitHub #47) | `SyncSnapshot`, jeder Sync-Zyklus | additiv/nie destruktiv (Abschnitt 4) |
 | **C — Historie** | `Einkaufsvorgang`, `KaufEintrag`, `Preispunkt` | `SyncSnapshot` | Union nach `id` |
 | **D — Lernen** | `WarengruppenDistanz`, `ArtikelListenKauf` (seit GitHub #99) | `SyncSnapshot` | gewichteter Mittelwert bzw. Union (Abschnitt 4.7) |
 
@@ -196,6 +196,8 @@ haben. Matching-Strategie je Typ:
 | `KaufEintrag` | ID (unveränderliche Historie, nie gemergt, nur ergänzt) | — |
 | `Preispunkt` (seit v4, GitHub #76) | ID (unveränderliche Historie, nie gemergt, nur ergänzt) | Absender hat SCD-Kompression bereits vorgenommen (`PreispunktService`) |
 | `ArtikelAlias` (seit v4, GitHub #76) | case-insensitiver `erkannterName` | nie destruktiv — ein bereits lokal bekannter Alias wird nie überschrieben |
+| `Produkt` (seit v8, GitHub #47) | ID/Alias, sonst case-insensitiver Name **innerhalb desselben Artikels** | Alias bei abweichender ID; bewusst ohne Ambiguitäts-Rückstellung (noch keine Verwaltungs-UI, siehe `docs/ARTIKEL_PRODUKT_MODELL.md`) |
+| `Produktname` (seit v8, GitHub #47) | (Produkt, Geschäft, case-insensitiver Name) | nie destruktiv, analog `ArtikelAlias` — kein Alias-Register |
 | `WarengruppenDistanz` | (Geschäft, KategorieA, KategorieB) | gewichteter Mittelwert bei Treffer |
 
 **`Einkaufsliste` bewusst namensbasiert statt ID-basiert:** Jedes Gerät legt
@@ -243,8 +245,10 @@ die Ambiguitäts-Regel selbst keinen Treffer findet (z.B. „Milch" vs.
 
 **Abhängigkeitsreihenfolge beim Merge** (spätere Schritte brauchen die
 Zuordnungstabellen früherer): `GeschaeftTyp` → `ArtikelKategorie` →
-`Geschaeft` → `Artikel` → `Einkaufsliste` → `EinkaufslistenEintrag` →
-`Einkaufsvorgang` → `KaufEintrag` → `Preispunkt` → `ArtikelAlias` →
+`Geschaeft` → `Artikel` → `Produkt` (GitHub #47, einzige Abhängigkeit:
+`Artikel`) → `Einkaufsliste` → `EinkaufslistenEintrag` →
+`Einkaufsvorgang` → `KaufEintrag` → `Preispunkt` → `Produktname` (GitHub #47,
+braucht `Produkt`+`Geschaeft`) → `ArtikelAlias` →
 `WarengruppenDistanz` → `ArtikelGeschaeftVerfuegbarkeit`/`GeschaeftBesuch` →
 `ArtikelListenKauf`. **Bewusst NACH `EinkaufslistenEintrag`** (GitHub #99,
 siehe Abschnitt 4.7): ein im selben Zyklus frisch eintreffender

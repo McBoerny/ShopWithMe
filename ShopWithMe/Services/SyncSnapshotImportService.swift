@@ -150,7 +150,7 @@ enum SyncSnapshotImportService {
                 SyncStammSnapshot.self, von: SyncSnapshotExportService.stammURL(fuerPeer: peerName, in: syncOrdner)
             ) ?? SyncStammSnapshot(
                 geschaeftsTypen: [], artikelKategorien: [], geschaefte: [], artikel: [],
-                einkaufslisten: [], artikelAliase: []
+                einkaufslisten: [], artikelAliase: [], produkte: [], produktnamen: []
             )
             // GitHub #85: aus `stamm.json` herausgelöst — `nil`/leer bedeutet
             // hier zusätzlich „Peer schreibt noch die alte, kombinierte
@@ -341,7 +341,7 @@ enum SyncSnapshotImportService {
             let neu = Einkaufsliste(name: kandidat.fremderName)
             neu.id = kandidat.fremdeID
             context.insert(neu)
-        case .artikelKategorie, .geschaeftTyp, .einkaufsvorgang, .kaufEintrag, .preispunkt, nil:
+        case .artikelKategorie, .geschaeftTyp, .einkaufsvorgang, .kaufEintrag, .preispunkt, .produkt, nil:
             // Nur die drei per Ambiguitäts-Rückstellung erzeugbaren
             // Kandidaten-Arten (siehe ``SyncAbgleichKandidat``) sind hier
             // strukturell erreichbar — die übrigen bleiben explizit
@@ -349,6 +349,8 @@ enum SyncSnapshotImportService {
             // bewusst entschieden werden muss statt lautlos in einem
             // `default:` zu verschwinden. `nil` (unbekannter Rohwert eines
             // neueren Peers) verhält sich wie bisher: kein Neuanlegen.
+            // `produkt` (GitHub #47, Schritt 2/5) erzeugt bewusst keinen
+            // ``SyncAbgleichKandidat``, siehe ``mergeProdukte(_:artikelZuordnung:aliase:context:)``.
             break
         }
         context.delete(kandidat)
@@ -370,13 +372,15 @@ enum SyncSnapshotImportService {
             var deskriptor = FetchDescriptor<Einkaufsliste>(predicate: #Predicate { $0.id == lokaleID })
             deskriptor.fetchLimit = 1
             (try? context.fetch(deskriptor))?.first?.name = name
-        case .artikelKategorie, .geschaeftTyp, .einkaufsvorgang, .kaufEintrag, .preispunkt:
+        case .artikelKategorie, .geschaeftTyp, .einkaufsvorgang, .kaufEintrag, .preispunkt, .produkt:
             // Nur die drei per Ambiguitäts-Rückstellung abgleichbaren
             // Bereich-B-Typen (siehe ``SyncAbgleichKandidat``) können hier
             // ankommen — die übrigen sind strukturell unerreichbar, bleiben
             // aber explizit aufgeführt (GitHub #108), damit ein künftig neu
             // ergänzter Fall bewusst entschieden werden muss statt lautlos in
-            // einem `default:` zu verschwinden.
+            // einem `default:` zu verschwinden. `produkt` (GitHub #47,
+            // Schritt 2/5) erzeugt bewusst keinen ``SyncAbgleichKandidat`` —
+            // siehe ``mergeProdukte(_:artikelZuordnung:aliase:context:)``.
             break
         }
     }
@@ -477,9 +481,11 @@ enum SyncSnapshotImportService {
             peerGeraeteID: peerGeraeteID, aliase: aliase, context: context
         )
         let artikelZuordnung = mergeArtikel(stamm.artikel, kategorieZuordnung: kategorieZuordnung, peerGeraeteID: peerGeraeteID, aliase: aliase, context: context)
+        let produktZuordnung = mergeProdukte(stamm.produkte, artikelZuordnung: artikelZuordnung, aliase: aliase, context: context)
         let listeZuordnung = mergeEinkaufslisten(stamm.einkaufslisten, peerGeraeteID: peerGeraeteID, aliase: aliase, context: context)
         mergeEinkaufslistenEintraege(
-            listen.einkaufslistenEintraege, listeZuordnung: listeZuordnung, artikelZuordnung: artikelZuordnung, context: context
+            listen.einkaufslistenEintraege, listeZuordnung: listeZuordnung, artikelZuordnung: artikelZuordnung,
+            produktZuordnung: produktZuordnung, context: context
         )
         let einkaufsvorgangZuordnung = mergeEinkaufsvorgaenge(
             vorgaenge.einkaufsvorgaenge, geschaeftZuordnung: geschaeftZuordnung, listeZuordnung: listeZuordnung, aliase: aliase, context: context
@@ -488,7 +494,11 @@ enum SyncSnapshotImportService {
             kaeufe, artikelZuordnung: artikelZuordnung, einkaufsvorgangZuordnung: einkaufsvorgangZuordnung,
             geschaeftZuordnung: geschaeftZuordnung, kategorieZuordnung: kategorieZuordnung, peerGeraeteID: peerGeraeteID, context: context
         )
-        mergePreispunkte(preise.preispunkte, artikelZuordnung: artikelZuordnung, geschaeftZuordnung: geschaeftZuordnung, context: context)
+        mergePreispunkte(
+            preise.preispunkte, artikelZuordnung: artikelZuordnung, produktZuordnung: produktZuordnung,
+            geschaeftZuordnung: geschaeftZuordnung, context: context
+        )
+        mergeProduktnamen(stamm.produktnamen, produktZuordnung: produktZuordnung, geschaeftZuordnung: geschaeftZuordnung, context: context)
         mergeArtikelAliase(stamm.artikelAliase, artikelZuordnung: artikelZuordnung, context: context)
         mergeWarengruppenDistanzen(
             lernen.warengruppenDistanzen, geschaeftZuordnung: geschaeftZuordnung, kategorieZuordnung: kategorieZuordnung,
@@ -528,9 +538,11 @@ enum SyncSnapshotImportService {
             peerGeraeteID: peerGeraeteID, aliase: aliase, context: context
         )
         let artikelZuordnung = mergeArtikel(snapshot.artikel, kategorieZuordnung: kategorieZuordnung, peerGeraeteID: peerGeraeteID, aliase: aliase, context: context)
+        let produktZuordnung = mergeProdukte(snapshot.produkte, artikelZuordnung: artikelZuordnung, aliase: aliase, context: context)
         let listeZuordnung = mergeEinkaufslisten(snapshot.einkaufslisten, peerGeraeteID: peerGeraeteID, aliase: aliase, context: context)
         mergeEinkaufslistenEintraege(
-            snapshot.einkaufslistenEintraege, listeZuordnung: listeZuordnung, artikelZuordnung: artikelZuordnung, context: context
+            snapshot.einkaufslistenEintraege, listeZuordnung: listeZuordnung, artikelZuordnung: artikelZuordnung,
+            produktZuordnung: produktZuordnung, context: context
         )
         let einkaufsvorgangZuordnung = mergeEinkaufsvorgaenge(
             snapshot.einkaufsvorgaenge, geschaeftZuordnung: geschaeftZuordnung, listeZuordnung: listeZuordnung, aliase: aliase, context: context
@@ -540,8 +552,10 @@ enum SyncSnapshotImportService {
             geschaeftZuordnung: geschaeftZuordnung, kategorieZuordnung: kategorieZuordnung, peerGeraeteID: peerGeraeteID, context: context
         )
         mergePreispunkte(
-            snapshot.preispunkte, artikelZuordnung: artikelZuordnung, geschaeftZuordnung: geschaeftZuordnung, context: context
+            snapshot.preispunkte, artikelZuordnung: artikelZuordnung, produktZuordnung: produktZuordnung,
+            geschaeftZuordnung: geschaeftZuordnung, context: context
         )
+        mergeProduktnamen(snapshot.produktnamen, produktZuordnung: produktZuordnung, geschaeftZuordnung: geschaeftZuordnung, context: context)
         mergeArtikelAliase(snapshot.artikelAliase, artikelZuordnung: artikelZuordnung, context: context)
         mergeWarengruppenDistanzen(
             snapshot.warengruppenDistanzen, geschaeftZuordnung: geschaeftZuordnung, kategorieZuordnung: kategorieZuordnung,
@@ -614,6 +628,10 @@ enum SyncSnapshotImportService {
             // lokal verursachten Löschens.
         case .preispunkt:
             var deskriptor = FetchDescriptor<Preispunkt>(predicate: #Predicate { $0.id == id })
+            deskriptor.fetchLimit = 1
+            if let objekt = try? context.fetch(deskriptor).first { context.delete(objekt) }
+        case .produkt:
+            var deskriptor = FetchDescriptor<Produkt>(predicate: #Predicate { $0.id == id })
             deskriptor.fetchLimit = 1
             if let objekt = try? context.fetch(deskriptor).first { context.delete(objekt) }
         case .einkaufsvorgang:
@@ -923,6 +941,91 @@ enum SyncSnapshotImportService {
         if lokal.notiz == nil { lokal.notiz = eintrag.notiz }
     }
 
+    // MARK: - Produkt (Bereich B, GitHub #47 Schritt 2/5)
+
+    /// Analog ``mergeArtikel(_:kategorieZuordnung:peerGeraeteID:aliase:context:)``
+    /// (ID/Alias → exakter Name → Neuanlage), aber der Namensabgleich läuft
+    /// **innerhalb desselben, bereits aufgelösten Artikels** statt global —
+    /// zwei Produkte mit gleichem Namen unter verschiedenen Artikeln sind
+    /// keine Dubletten. Ohne aufgelösten Artikel (``eintrag/artikelID`` zeigt
+    /// auf keinen bekannten Artikel) wird der Eintrag übersprungen — ein
+    /// Produkt ohne Artikel ist fachlich bedeutungslos (siehe ``Produkt``).
+    ///
+    /// **Bewusst OHNE die bei ``mergeArtikel``/``mergeGeschaefte`` vorhandene
+    /// Ambiguitäts-Rückstellung** (``SyncAbgleichKandidat``): Produkt hat in
+    /// diesem Schritt noch keine eigene Verwaltungs-UI (folgt in Schritt
+    /// 4/5), ein gelegentlich doppelt angelegtes, ähnlich (aber nicht exakt
+    /// gleich) benanntes Produkt ist ein deutlich geringeres Risiko als bei
+    /// Artikel/Geschäft — kann bei Bedarf in einem späteren Schritt ergänzt
+    /// werden.
+    ///
+    /// Zweiter Durchlauf für ``Produkt/elternProdukt`` (rekursiv, z.B.
+    /// Packungsgrößen): ein Remote-Eintrag kann in der Liste vor seinem
+    /// Eltern-Eintrag stehen, die vollständige `zuordnung` steht daher erst
+    /// nach dem ersten Durchlauf zur Verfügung.
+    @MainActor
+    private static func mergeProdukte(
+        _ remote: [ProduktSnapshot], artikelZuordnung: [UUID: Artikel], aliase: [String: [UUID: UUID]], context: ModelContext
+    ) -> [UUID: Produkt] {
+        var zuordnung: [UUID: Produkt] = [:]
+        var cache = LokalerBestandCache<Produkt>(context: context)
+        let geloeschteIDs = SyncTombstoneService.geloeschteIDs(art: SyncEntitaetsArt.produkt, context: context)
+        for eintrag in remote {
+            guard let artikel = eintrag.artikelID.flatMap({ artikelZuordnung[$0] }) else { continue }
+            let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(fuer: eintrag.id, art: SyncEntitaetsArt.produkt, in: aliase)
+            if let bekanntes = cache[aufgeloesteID] {
+                zuordnung[eintrag.id] = bekanntes
+                continue
+            }
+            if let namensTreffer = cache.alle.first(where: {
+                $0.artikel == artikel && $0.name.localizedCaseInsensitiveCompare(eintrag.name) == .orderedSame
+            }) {
+                SyncEntitaetsAliasService.registriere(
+                    entitaetsArt: SyncEntitaetsArt.produkt, fremdeID: eintrag.id, lokaleID: namensTreffer.id, context: context
+                )
+                zuordnung[eintrag.id] = namensTreffer
+                continue
+            }
+            guard !geloeschteIDs.contains(aufgeloesteID) else { continue }
+            let neues = Produkt(name: eintrag.name, artikel: artikel, istStandard: eintrag.istStandard)
+            neues.id = eintrag.id
+            context.insert(neues)
+            cache.nachfuehren(neues)
+            zuordnung[eintrag.id] = neues
+        }
+        for eintrag in remote {
+            guard let elternID = eintrag.elternProduktID, let lokal = zuordnung[eintrag.id], lokal.elternProdukt == nil else { continue }
+            lokal.elternProdukt = zuordnung[elternID]
+        }
+        return zuordnung
+    }
+
+    // MARK: - Produktname (Bereich B, GitHub #47 Schritt 2/5)
+
+    /// Analog ``mergeArtikelAliase(_:artikelZuordnung:context:)`` — nie
+    /// destruktiv, Union nach (``Produkt``, ``Geschaeft``, Name). Kein
+    /// ``SyncEntitaetsAlias``/Tombstone nötig (dieselbe Begründung wie bei
+    /// ``ArtikelAlias``, siehe ``SyncEntitaetsArt``): ein Produktname ohne
+    /// gültige Produkt-/Geschäfts-Auflösung wird übersprungen.
+    @MainActor
+    private static func mergeProduktnamen(
+        _ remote: [ProduktnameSnapshot], produktZuordnung: [UUID: Produkt], geschaeftZuordnung: [UUID: Geschaeft], context: ModelContext
+    ) {
+        var alleLokalen = (try? context.fetch(FetchDescriptor<Produktname>())) ?? []
+        for eintrag in remote {
+            guard let produkt = eintrag.produktID.flatMap({ produktZuordnung[$0] }) else { continue }
+            let geschaeft = eintrag.geschaeftID.flatMap { geschaeftZuordnung[$0] }
+            guard !alleLokalen.contains(where: {
+                $0.produkt == produkt && $0.geschaeft == geschaeft
+                    && $0.name.localizedCaseInsensitiveCompare(eintrag.name) == .orderedSame
+            }) else { continue }
+            let neuer = Produktname(name: eintrag.name, produkt: produkt, geschaeft: geschaeft)
+            neuer.id = eintrag.id
+            context.insert(neuer)
+            alleLokalen.append(neuer)
+        }
+    }
+
     // MARK: - Einkaufsliste
 
     /// Namensbasiert gematcht wie ``mergeGeschaefte``/``mergeArtikel`` (Alias
@@ -1007,7 +1110,7 @@ enum SyncSnapshotImportService {
     @MainActor
     private static func mergeEinkaufslistenEintraege(
         _ remote: [EinkaufslistenEintragSnapshot], listeZuordnung: [UUID: Einkaufsliste], artikelZuordnung: [UUID: Artikel],
-        context: ModelContext
+        produktZuordnung: [UUID: Produkt], context: ModelContext
     ) {
         guard !remote.isEmpty else { return }
         // Einmal vor der Schleife geladen statt pro Remote-Eintrag neu gefetcht
@@ -1035,7 +1138,10 @@ enum SyncSnapshotImportService {
                       jemalsAbgehakteSchluessel: jemalsAbgehakteSchluessel
                   )
             else { continue }
-            context.insert(EinkaufslistenEintrag(einkaufsliste: liste, artikel: artikel, menge: eintrag.menge, notiz: eintrag.notiz))
+            let produkt = eintrag.produktID.flatMap { produktZuordnung[$0] }
+            context.insert(EinkaufslistenEintrag(
+                einkaufsliste: liste, artikel: artikel, produkt: produkt, menge: eintrag.menge, notiz: eintrag.notiz
+            ))
         }
     }
 
@@ -1401,7 +1507,8 @@ enum SyncSnapshotImportService {
     /// wird nie verändert, ein fehlender einfach übernommen.
     @MainActor
     private static func mergePreispunkte(
-        _ remote: [PreispunktSnapshot], artikelZuordnung: [UUID: Artikel], geschaeftZuordnung: [UUID: Geschaeft], context: ModelContext
+        _ remote: [PreispunktSnapshot], artikelZuordnung: [UUID: Artikel], produktZuordnung: [UUID: Produkt],
+        geschaeftZuordnung: [UUID: Geschaeft], context: ModelContext
     ) {
         let geloeschteIDs = SyncTombstoneService.geloeschteIDs(art: SyncEntitaetsArt.preispunkt, context: context)
         // Vorab geladenes Set statt Existenz-Check pro Remote-Eintrag — siehe
@@ -1410,14 +1517,15 @@ enum SyncSnapshotImportService {
         for eintrag in remote {
             guard !bekannteIDs.contains(eintrag.id) else { continue }
             guard !geloeschteIDs.contains(eintrag.id) else { continue }
-            // Produkt-Auflösung hier bewusst nur lokal über den bereits
-            // aufgelösten Artikel (Platzhalter-Produkt) — echte
-            // geräteübergreifende Produkt-Synchronisation folgt in GitHub #47
-            // Schritt 2/5, siehe `docs/ARTIKEL_PRODUKT_MODELL.md`.
             let artikel = eintrag.artikelID.flatMap { artikelZuordnung[$0] }
+            // Bevorzugt das über ``mergeProdukte`` real synchronisierte
+            // Produkt; Fallback auf das Platzhalter-Produkt des Artikels
+            // (GitHub #47, Schritt 1/5), falls der sendende Peer noch keine
+            // Produkt-Synchronisation kennt oder `produktID` fehlt.
+            let produkt = eintrag.produktID.flatMap { produktZuordnung[$0] } ?? artikel.map { Produkt.standardProdukt(fuer: $0, context: context) }
             let neuer = Preispunkt(
                 artikel: artikel,
-                produkt: artikel.map { Produkt.standardProdukt(fuer: $0, context: context) },
+                produkt: produkt,
                 geschaeft: eintrag.geschaeftID.flatMap { geschaeftZuordnung[$0] },
                 preis: eintrag.preis,
                 datum: eintrag.datum,

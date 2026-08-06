@@ -121,6 +121,18 @@ enum SyncSnapshotExportService {
             )
         }
 
+        let alleProdukte = (try? context.fetch(FetchDescriptor<Produkt>())) ?? []
+        let gueltigeProduktIDs = Set(alleProdukte.map(\.persistentModelID))
+        let produkte = alleProdukte.map {
+            ProduktSnapshot(
+                id: $0.id,
+                name: $0.name,
+                artikelID: sichereID($0.artikel, gueltigeIDs: gueltigeArtikelIDs),
+                elternProduktID: sichereID($0.elternProdukt, gueltigeIDs: gueltigeProduktIDs),
+                istStandard: $0.istStandard
+            )
+        }
+
         let alleEinkaufslisten = (try? context.fetch(FetchDescriptor<Einkaufsliste>())) ?? []
         let gueltigeEinkaufslistenIDs = Set(alleEinkaufslisten.map(\.persistentModelID))
         let einkaufslisten = alleEinkaufslisten.map {
@@ -136,7 +148,8 @@ enum SyncSnapshotExportService {
                       let artikelID = sichereID(eintrag.artikel, gueltigeIDs: gueltigeArtikelIDs)
                 else { return nil }
                 return EinkaufslistenEintragSnapshot(
-                    einkaufslisteID: einkaufslisteID, artikelID: artikelID, menge: eintrag.menge, notiz: eintrag.notiz
+                    einkaufslisteID: einkaufslisteID, artikelID: artikelID, menge: eintrag.menge, notiz: eintrag.notiz,
+                    produktID: sichereID(eintrag.produkt, gueltigeIDs: gueltigeProduktIDs)
                 )
             }
 
@@ -179,7 +192,8 @@ enum SyncSnapshotExportService {
                 produktName: $0.produktName,
                 alternativerName: $0.alternativerName,
                 artikelNameSnapshot: $0.artikelNameSnapshot,
-                geschaeftNameSnapshot: $0.geschaeftNameSnapshot
+                geschaeftNameSnapshot: $0.geschaeftNameSnapshot,
+                produktID: sichereID($0.produkt, gueltigeIDs: gueltigeProduktIDs)
             )
         }
 
@@ -189,6 +203,15 @@ enum SyncSnapshotExportService {
                 erkannterName: $0.erkannterName,
                 alternativerName: $0.alternativerName,
                 artikelID: sichereID($0.artikel, gueltigeIDs: gueltigeArtikelIDs)
+            )
+        }
+
+        let produktnamen = ((try? context.fetch(FetchDescriptor<Produktname>())) ?? []).map {
+            ProduktnameSnapshot(
+                id: $0.id,
+                name: $0.name,
+                produktID: sichereID($0.produkt, gueltigeIDs: gueltigeProduktIDs),
+                geschaeftID: sichereID($0.geschaeft, gueltigeIDs: gueltigeGeschaeftIDs)
             )
         }
 
@@ -253,7 +276,9 @@ enum SyncSnapshotExportService {
             artikelGeschaeftVerfuegbarkeiten: artikelGeschaeftVerfuegbarkeiten,
             geschaeftBesuche: geschaeftBesuche,
             artikelListenKaeufe: artikelListenKaeufe,
-            tombstones: tombstones
+            tombstones: tombstones,
+            produkte: produkte,
+            produktnamen: produktnamen
         )
     }
 
@@ -542,6 +567,8 @@ enum SyncSnapshotExportService {
         stamm.artikel.sort { $0.id.uuidString < $1.id.uuidString }
         stamm.einkaufslisten.sort { $0.id.uuidString < $1.id.uuidString }
         stamm.artikelAliase.sort { $0.id.uuidString < $1.id.uuidString }
+        stamm.produkte.sort { $0.id.uuidString < $1.id.uuidString }
+        stamm.produktnamen.sort { $0.id.uuidString < $1.id.uuidString }
         return stamm
     }
 
@@ -608,7 +635,7 @@ enum SyncSnapshotExportService {
         let stamm = SyncStammSnapshot(
             geschaeftsTypen: snapshot.geschaeftsTypen, artikelKategorien: snapshot.artikelKategorien,
             geschaefte: snapshot.geschaefte, artikel: snapshot.artikel, einkaufslisten: snapshot.einkaufslisten,
-            artikelAliase: snapshot.artikelAliase
+            artikelAliase: snapshot.artikelAliase, produkte: snapshot.produkte, produktnamen: snapshot.produktnamen
         )
         let listen = SyncListenSnapshot(einkaufslistenEintraege: snapshot.einkaufslistenEintraege)
         let lernen = SyncLernenSnapshot(

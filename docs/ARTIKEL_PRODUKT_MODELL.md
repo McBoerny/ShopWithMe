@@ -1,9 +1,10 @@
 # Artikel/Produkt/Produktname-Modell (GitHub #47)
 
-**Status: Schritt 1/5 umgesetzt** ([#112](https://github.com/McBoerny/ShopWithMe/issues/112),
-Datenmodell + Migration) — Schritte 2–5 (Sync-Integration, Preis-Aggregation,
-UI, Scan-Zuordnung) noch offen, siehe Umsetzungsplan in #47. Präzisiert und
-ersetzt die ursprüngliche Formulierung in
+**Status: Schritte 1–2/5 umgesetzt** ([#112](https://github.com/McBoerny/ShopWithMe/issues/112)
+Datenmodell + Migration, [#113](https://github.com/McBoerny/ShopWithMe/issues/113)
+Sync-Integration) — Schritte 3–5 (Preis-Aggregation, UI, Scan-Zuordnung) noch
+offen, siehe Umsetzungsplan in #47. Präzisiert und ersetzt die ursprüngliche
+Formulierung in
 [#47](https://github.com/McBoerny/ShopWithMe/issues/47) (dort noch
 "Ausprägung" genannt) — siehe Diskussion vom 2026-08-06. Abgegrenzt von, aber
 verwandt mit den bereits umgesetzten Artikel-Alias-Namen
@@ -34,6 +35,29 @@ Unterschied).
 bleibt zusätzlich zu `produkt` gepflegt (alle bestehenden, Artikel-zentrierten
 Codestellen funktionieren unverändert weiter), UI/Scan-Zuordnung/Aggregation
 über die neue Produkt-Ebene folgen in Schritt 3–5.
+
+## Umsetzungsstand Schritt 2/5 (v0.14)
+
+`Produkt`/`Produktname` sind jetzt Teil der geräteübergreifenden
+Datensynchronisation (`docs/DATENSYNCHRONISATION.md`, `SyncSnapshot`-Version
+8): `mergeProdukte` matcht wie `mergeArtikel` per ID/Alias, sonst per exaktem
+Namen — bewusst **innerhalb desselben, bereits aufgelösten Artikels** statt
+global, damit gleichnamige Produkte unter verschiedenen Artikeln nicht
+fälschlich zusammenfallen. Rekursive `elternProdukt`-Zuordnung läuft in einem
+zweiten Durchlauf, da ein Kind-Eintrag in der Sync-Liste vor seinem
+Eltern-Eintrag stehen kann. `mergeProduktnamen` ist rein additiv (Union nach
+Produkt/Geschäft/Name), analog `ArtikelAlias`.
+
+Bewusst **ohne** die bei `mergeArtikel`/`mergeGeschaefte` vorhandene
+Ambiguitäts-Rückstellung (`SyncAbgleichKandidat`) — Produkt hat noch keine
+eigene Verwaltungs-UI (folgt in Schritt 4), ein gelegentlich doppelt
+angelegtes, ähnlich benanntes Produkt ist ein geringeres Risiko als bei
+Artikel/Geschäft. Kann bei Bedarf in einem späteren Schritt ergänzt werden.
+
+`Preispunkt`/`EinkaufslistenEintrag` lösen ihr `Produkt` jetzt bevorzugt über
+die echte, synchronisierte Zuordnung auf; nur wenn ein Peer noch keine
+Produkt-Synchronisation kennt (oder keine `produktID` mitschickt), greift
+weiterhin der Schritt-1-Fallback auf `Produkt.standardProdukt(fuer:context:)`.
 
 ## Die drei Ebenen
 
