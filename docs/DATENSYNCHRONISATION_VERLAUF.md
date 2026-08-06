@@ -2997,3 +2997,72 @@ begründet) nur kooperativ zum Abbruch aufgefordert, nicht abgewartet — es
 kann also noch genau EIN begonnener Zyklus zu Ende laufen. Anders als vorher
 skaliert das Zeitfenster damit nicht mehr mit der Wartezeit bis zum
 Neustart, sondern ist auf diesen einen, bereits laufenden Zyklus begrenzt.
+
+## 47. Live-Fund direkt nach Abschnitt 46: Neustart-Schleife durch Rückkehrer-Erkennung vor dem ersten eigenen Export
+
+**Gemeldet vom Nutzer** (Logs von zwei Geräten, „Backup" und „Bernhard"):
+Nach „Ersetzen" beim (Wieder-)Verknüpfen eines Sync-Ordners und dem
+angeforderten Neustart erkennt sich das Gerät fälschlich als „aus der
+Sync-Gruppe entfernt". Wählt der Nutzer „Wieder beitreten", öffnet sich
+wieder die Ordnerauswahl, führt wieder zu „Ersetzen" → „Neustart nötig" →
+wieder fälschliche Entfernung — eine Endlosschleife. Die Store-Debug-Logs
+zeigen sechs `store_open_start`-Einträge (= sechs echte Prozessneustarts)
+innerhalb von vier Minuten auf demselben Gerät.
+
+**Ursache:** Zwei unabhängige Mechanismen liefen in der falschen Reihenfolge
+gegeneinander:
+
+1. `SyncSnapshotExportService.exportierePaket(context:importErfolgreich:)`
+   legt den eigenen Peer-Unterordner (`peers/<eigenerName>/`) im Sync-Ordner
+   erst beim ERSTEN eigenen Export-Zyklus an (unbedingt, sobald der
+   Ordnerzugriff klappt) — vorher existiert er schlicht nicht.
+   `exportierePaket` wird ausschließlich aus `SyncPollingService.syncZyklus()`
+   aufgerufen, also nur als Teil eines echten Sync-Zyklus.
+2. `ShopWithMeApp.body.task` ruft nach einem Neustart erst
+   `SyncErsetzenService.fuehreAusstehendeAktionAus(context:)` auf (reiner
+   Import des Peer-Snapshots in den frischen, leeren Context — schreibt
+   nichts nach `peers/<eigenerName>/`), DANACH
+   `syncPollingService.starten(context:)`. Dessen allererster Schritt, VOR
+   der eigentlichen Sync-Schleife, ist die Rückkehrer-Erkennung
+   (`SyncOrdnerService.binIchNochMitglied(in:)`, Abschnitt zu GitHub #89):
+   listet `peers/` im Sync-Ordner und prüft, ob der eigene Unterordner
+   existiert. Direkt nach einem frischen Ersetzen-Neustart existiert er
+   noch nicht (Punkt 1) → die Prüfung liefert `false` statt des für
+   „unentscheidbar" vorgesehenen `nil` → das Gerät hält sich für
+   ausgeschlossen, sichert ein (bereits redundantes) Backup, entfernt lokal
+   den Sync-Ordner und zeigt „Aus der Sync-Gruppe entfernt" — noch bevor
+   auch nur ein einziger eigener Sync-Zyklus lief.
+
+**Verschärft (nicht verursacht) durch Abschnitt 46:** Vor dem Abschnitt-46-Fix
+lief der Hintergrund-Sync zwischen „Ersetzen"-Tap und tatsächlichem Neustart
+noch weiter und hatte damit oft schon (sofern mind. ein 5s/60s-Intervall
+verging) einen Export-Zyklus samt eigenem Peer-Unterordner ausgelöst — das
+maskierte diesen Ordnungsfehler bisher zufällig. Der Abschnitt-46-Fix stoppt
+den Hintergrund-Sync jetzt korrekt sofort, wodurch dieser vorbestehende,
+unabhängige Bug bei JEDEM „Ersetzen" deterministisch auftrat statt nur
+gelegentlich.
+
+**Wichtige Nebenwirkung der Schleife (Datenverlust-Risiko):** Jede
+Schleifen-Iteration ruft erneut `SyncErsetzenService.erstelleBackup`
+auf — sowohl explizit in `planeErsetzenDurchPeer` als auch implizit in der
+fälschlich ausgelösten Rückkehrer-Erkennung selbst. Da genau eine
+Backup-Datei geführt wird (ein erneuter Aufruf überschreibt die vorherige,
+siehe Abschnitt 13), überschreibt jede weitere Iteration das vorherige
+Backup mit dem Stand der jeweils letzten (fälschlichen) Runde. Ein
+ursprünglich VOR dem allerersten „Ersetzen" noch nicht synchronisierter
+lokaler Stand ist dadurch nach mehreren Schleifendurchläufen über das lokale
+Backup nicht mehr rekonstruierbar — betrifft nur lokal-exklusive, noch nicht
+zum Zeitpunkt des ersten „Ersetzen" synchronisierte Änderungen dieses einen
+Geräts, nicht den Gruppen-Datenbestand auf anderen Geräten.
+
+**Fix:** `SyncErsetzenService.fuehreAusstehendeAktionAus(context:)` gibt jetzt
+`Bool` zurück (`true`, falls tatsächlich eine Aktion ausgeführt wurde).
+`SyncPollingService.starten(context:ueberspringeRueckkehrerErkennung:)`
+bekommt einen neuen Parameter (Default `false`), der die Rückkehrer-Erkennung
+für genau diesen einen Aufruf auslässt. `ShopWithMeApp.body.task` reicht den
+Rückgabewert von `fuehreAusstehendeAktionAus` direkt als
+`ueberspringeRueckkehrerErkennung` durch. Bei jedem regulären
+Vordergrund-Wechsel (`onChange(of: scenePhase)`, kein frischer
+Wipe-und-Neuaufbau vorausgegangen) bleibt die Prüfung unverändert aktiv —
+eine echte Entfernung aus der Gruppe während App im Hintergrund war, wird
+weiterhin normal erkannt.

@@ -79,7 +79,18 @@ final class SyncPollingService: ObservableObject {
     /// Startet den Polling-Loop (wirkungslos, falls bereits gestartet) — führt
     /// sofort einen ersten Sync-Zyklus aus, bevor das erste Intervall
     /// abgewartet wird.
-    func starten(context: ModelContext) {
+    ///
+    /// - Parameter ueberspringeRueckkehrerErkennung: `true` genau dann, wenn
+    ///   dieser Aufruf unmittelbar auf einen frischen Wipe-und-Neuaufbau
+    ///   folgt (``SyncErsetzenService/fuehreAusstehendeAktionAus(context:)``
+    ///   hat gerade eine Aktion ausgeführt) — der eigene Peer-Unterordner im
+    ///   Sync-Ordner existiert in diesem Fall noch nicht (wird erst vom
+    ///   ersten `syncZyklus()` selbst angelegt, siehe
+    ///   ``SyncSnapshotExportService/exportierePaket(context:importErfolgreich:)``),
+    ///   die Rückkehrer-Erkennung unten würde das Gerät sonst fälschlich für
+    ///   aus der Gruppe entfernt halten und eine Neustart-Schleife auslösen
+    ///   (Live-Fund, `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 47).
+    func starten(context: ModelContext, ueberspringeRueckkehrerErkennung: Bool = false) {
         self.context = context
         icloudBeobachter.starten { [weak self] in
             Task { @MainActor [weak self] in
@@ -106,7 +117,12 @@ final class SyncPollingService: ObservableObject {
             // `syncZyklus()` in dieser Session — dadurch kann kein
             // veralteter Bestand mehr exportiert werden, bevor der Nutzer
             // überhaupt vom Ausschluss erfährt.
-            if let ordner = SyncOrdnerService.gewaehlterOrdner(),
+            //
+            // `ueberspringeRueckkehrerErkennung` lässt genau diesen einen
+            // Aufruf aus (siehe Parameter-Doku oben) — die Prüfung greift
+            // beim nächsten regulären Vordergrund-Wechsel wieder normal.
+            if !ueberspringeRueckkehrerErkennung,
+               let ordner = SyncOrdnerService.gewaehlterOrdner(),
                await SyncOrdnerService.binIchNochMitglied(in: ordner) == false {
                 _ = try? SyncErsetzenService.erstelleBackup(context: context)
                 SyncOrdnerService.ordnerEntfernen()

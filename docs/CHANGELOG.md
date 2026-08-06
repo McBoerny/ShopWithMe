@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.14 (Build 264) — Neustart-Schleife nach „Ersetzen“: Gerät hielt sich fälschlich für aus der Sync-Gruppe entfernt
+
+Bugfix (Nutzerbericht, Live-Test direkt nach dem vorherigen Fix): Nach
+„Ersetzen"/Wiederherstellen + Neustart lief die Rückkehrer-Erkennung
+(„bin ich noch Mitglied der Sync-Gruppe?") VOR dem ersten eigenen
+Export-Zyklus — der aber erst den eigenen Peer-Unterordner im Sync-Ordner
+anlegt. Das Gerät hielt sich dadurch direkt nach dem Neustart fälschlich für
+ausgeschlossen, trat automatisch aus, und der Nutzer landete beim erneuten
+Beitreten in einer Endlosschleife aus Ordner-Wahl/Neustart-Aufforderung.
+`SyncErsetzenService.fuehreAusstehendeAktionAus(context:)` meldet jetzt
+zurück, ob eine Aktion ausgeführt wurde; `SyncPollingService.starten(context:ueberspringeRueckkehrerErkennung:)`
+lässt die Rückkehrer-Erkennung in genau diesem einen Fall aus. Details:
+`docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 47 (inkl. Hinweis auf ein
+Datenverlust-Risiko für zum Zeitpunkt der Schleife noch nicht synchronisierte
+lokale Änderungen des betroffenen Geräts).
+
 ## v0.14 (Build 263) — Hintergrund-Sync lief nach „Ersetzen“/Wiederherstellen bis zum Neustart unbegrenzt mit dem alten Bestand weiter
 
 Bugfix (Nutzerbericht): Nach einem „Ersetzen durch Peer" oder einer
