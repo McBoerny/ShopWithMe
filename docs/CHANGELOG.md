@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.14 (Build 267) — Ignorierte Ladenvorschläge nach „Ersetzen durch Peer“ verloren
+
+Bugfix (Code-Review-Fund): `IgnorierterGeschaeftsVorschlag` ist rein
+gerätelokal, nie Teil des Peer-`SyncSnapshot`. Das Vorher-Backup vor einem
+„Ersetzen durch Peer"-Neuaufbau sicherte diese Liste zwar bereits mit
+(`SyncErsetzenBackup.ignorierteGeschaeftsVorschlaege`), aber
+`SyncErsetzenService.fuehreAusstehendeAktionAus(context:)` stellte sie im
+`.ersetzenDurchPeer`-Zweig nie wieder her — nur der separate
+„Backup wiederherstellen"-Zweig tat das. Nach jedem Sync-Beitritt mit
+„Ersetzen" bot der `GeschaeftVorschlagBanner` deshalb bereits ignorierte
+Vorschläge erneut an. Neuer Helper
+`stelleIgnorierteGeschaeftsVorschlaegeWiederHer(_:context:)`, analog zur
+bestehenden `stelleSyncEventsWiederHer`-Wiederherstellung (GitHub #80), jetzt
+in beiden Zweigen aufgerufen.
+
 ## v0.14 (Build 266) — Neustart-Schleife: vorheriger Fix wirkungslos durch Race Condition mit `.onChange(of: scenePhase)`
 
 Bugfix (Nutzerbericht: derselbe Fehler trat trotz des vorherigen Fixes

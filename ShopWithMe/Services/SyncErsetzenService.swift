@@ -314,6 +314,13 @@ enum SyncErsetzenService {
                 // Wipe bereits bestimmte Events, das bleibt so, egal welcher
                 // Datenbestand jetzt aktiv ist.
                 stelleSyncEventsWiederHer(vorherBackup.bekannteSyncEvents, context: context)
+                // Analog zu den SyncEvents oben: rein gerätelokal, nie Teil
+                // des Peer-``SyncSnapshot`` — ohne diese Wiederherstellung
+                // bot der ``GeschaeftVorschlagBanner`` bereits ignorierte
+                // Vorschläge nach jedem „Ersetzen" erneut an (Korrektur,
+                // vorher nur im ``.wiederherstellenAusBackup``-Zweig unten
+                // behandelt).
+                stelleIgnorierteGeschaeftsVorschlaegeWiederHer(vorherBackup.ignorierteGeschaeftsVorschlaege, context: context)
                 try? context.save()
             }
         case .wiederherstellenAusBackup:
@@ -324,13 +331,7 @@ enum SyncErsetzenService {
             // Phantom-``SyncPeerInfo``-Eintrag und Kollisionen mit echter
             // Peer-Zähler-Buchhaltung (``SyncPeerZaehlerStand``).
             SyncSnapshotImportService.importiereEinzelnenSnapshot(backup.snapshot, peerGeraeteID: "lokales-backup", context: context)
-            for vorschlag in backup.ignorierteGeschaeftsVorschlaege {
-                let neuer = IgnorierterGeschaeftsVorschlag(
-                    name: vorschlag.name, breitengrad: vorschlag.breitengrad, laengengrad: vorschlag.laengengrad
-                )
-                neuer.ignoriertAm = vorschlag.ignoriertAm
-                context.insert(neuer)
-            }
+            stelleIgnorierteGeschaeftsVorschlaegeWiederHer(backup.ignorierteGeschaeftsVorschlaege, context: context)
             stelleSyncEventsWiederHer(backup.bekannteSyncEvents, context: context)
             // Das eigene Backup kann einen zum Sicherungszeitpunkt noch
             // offenen Einkaufsvorgang enthalten — bei weiterhin verknüpftem
@@ -367,6 +368,23 @@ enum SyncErsetzenService {
         for eintrag in eintraege ?? [] {
             let event = SyncEventService.uebernehmen(eintrag.event, context: context)
             event.hochgeladen = eintrag.hochgeladen
+        }
+    }
+
+    /// Stellt die zum Zeitpunkt des Backups ignorierten Ladenvorschläge
+    /// (``IgnorierterGeschaeftsVorschlag``) wieder her — analog
+    /// ``stelleSyncEventsWiederHer(_:context:)`` rein gerätelokaler Zustand,
+    /// nie Teil des Peer-``SyncSnapshot`` (siehe Typ-Doku dort), der beim
+    /// Store-Wipe sonst kommentarlos verloren ginge.
+    private static func stelleIgnorierteGeschaeftsVorschlaegeWiederHer(
+        _ vorschlaege: [IgnorierterGeschaeftsVorschlagSnapshot], context: ModelContext
+    ) {
+        for vorschlag in vorschlaege {
+            let neuer = IgnorierterGeschaeftsVorschlag(
+                name: vorschlag.name, breitengrad: vorschlag.breitengrad, laengengrad: vorschlag.laengengrad
+            )
+            neuer.ignoriertAm = vorschlag.ignoriertAm
+            context.insert(neuer)
         }
     }
 

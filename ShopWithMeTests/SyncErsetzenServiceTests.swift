@@ -517,4 +517,41 @@ struct SyncErsetzenServiceTests {
         let restauriert = try #require(leererContext.fetch(FetchDescriptor<SyncEvent>()).first)
         #expect(restauriert.hochgeladen == false)
     }
+
+    /// Regressionstest: ``IgnorierterGeschaeftsVorschlag`` ist rein
+    /// gerätelokal (nie Teil des Peer-``SyncSnapshot``, siehe Typ-Doku dort)
+    /// und muss deshalb auch beim „Ersetzen durch Peer"-Neuaufbau aus dem
+    /// Vorher-Backup wiederhergestellt werden — vor dem Fix landete er nur im
+    /// `.wiederherstellenAusBackup`-Zweig zurück, beim regulären Sync-Beitritt
+    /// bot der ``GeschaeftVorschlagBanner`` bereits ignorierte Vorschläge
+    /// danach wieder an.
+    @Test
+    func fuehreAusstehendeAktionAusStelltIgnorierteGeschaeftsVorschlaegeWiederHerFuerErsetzenDurchPeer() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+        defer { raeumeAusstehendeAktionAuf() }
+        defer { SyncErsetzenService.loescheBackup() }
+        defer { SyncErsetzenService.zusammenfassungVerwerfen() }
+
+        context.insert(IgnorierterGeschaeftsVorschlag(name: "Aldi", breitengrad: 1.0, laengengrad: 2.0))
+        try context.save()
+        try SyncErsetzenService.erstelleBackup(context: context)
+
+        let (leererContainer, leererContext) = try machtLeerenContainer()
+        _ = leererContainer
+        var snapshot = leererSnapshot(geraeteID: "peer-a")
+        snapshot.geschaefte = [leerenGeschaeftSnapshot(name: "Rewe")]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "peer-a", in: syncOrdner)
+        setzeAusstehendeAktion(.ersetzenDurchPeer)
+
+        await SyncErsetzenService.fuehreAusstehendeAktionAus(context: leererContext)
+
+        let wiederhergestellt = try #require(leererContext.fetch(FetchDescriptor<IgnorierterGeschaeftsVorschlag>()).first)
+        #expect(wiederhergestellt.name == "Aldi")
+        #expect(wiederhergestellt.breitengrad == 1.0)
+        #expect(wiederhergestellt.laengengrad == 2.0)
+    }
 }
