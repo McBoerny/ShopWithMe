@@ -458,6 +458,20 @@ Zwei unabhängige Fixes:
    blieb dadurch fälschlich dauerhaft offen hängen, „Einkauf abschließen"
    kam dort nie an. Details: `docs/DATENSYNCHRONISATION_VERLAUF.md`
    Abschnitte 50 und 52.
+4. **Kanonisches `startZeit` wandert mit dem frühesten bekannten Beginn
+   (Nutzerbericht 2026-08-10, direkt im Anschluss an Punkt 3):** sobald ein
+   Vorgang aufgelöst ist (egal über welchen der drei Zweige), wird sein
+   `startZeit` auf `min(bisherigem, eintrag.startZeit)` angehoben — rein
+   additiv, nur nach früher korrigiert, nie zurück. Ohne das verglich die
+   Plausibilitätsprüfung aus Punkt 3 weiterhin gegen das EIGENE, zufällig zu
+   spät gesetzte `startZeit` eines Geräts, das eine Weile offline war (sein
+   frisch angelegter Platzhalter startet zwangsläufig NACH dem tatsächlichen,
+   auf der Gegenseite längst laufenden Einkauf) — obwohl der Vorgang über
+   `offenerTreffer` bereits korrekt als derselbe reale Einkauf erkannt war,
+   verwarf die Prüfung eine kurz danach eintreffende `endZeit` trotzdem, weil
+   sie gegen das zu späte lokale `startZeit` statt gegen den tatsächlich
+   früheren, über die Aliasierung bereits bekannten realen Beginn verglich.
+   Details: `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 53.
 
 **Neu anzulegender Vorgang braucht eine auflösbare Liste:** Referenziert ein
 empfangener Snapshot-Eintrag weder ein bekanntes Geschäft noch eine bekannte

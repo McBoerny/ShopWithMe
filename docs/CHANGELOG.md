@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.14 (Build 272) — Kanonisches Vorgangs-startZeit wandert mit dem frühesten bekannten Beginn
+
+Bugfix (Folgefund direkt nach Build 271, Nutzerbericht: Gerät war während
+der Änderungen des Peers komplett offline, danach blieben dessen bereits
+abgehakte Artikel trotzdem aktiv/„Einkauf abschließen" wartend). Ursache:
+ein Gerät, das eine Weile offline war, legt beim Wiedereinstieg zwangsläufig
+einen eigenen Platzhalter-Vorgang mit einem `startZeit` NACH dem
+tatsächlichen, auf der Gegenseite längst laufenden Einkauf an — die
+Plausibilitätsprüfung aus Build 271 verglich einen kurz danach eintreffenden
+Abschluss weiterhin gegen dieses zu späte eigene `startZeit`, obwohl der
+Vorgang über `offenerTreffer` bereits korrekt als derselbe reale Einkauf
+erkannt war. Fix: sobald ein Vorgang aufgelöst ist, wandert sein `startZeit`
+auf das Minimum aus bisherigem und neu bekanntem Wert (nur nach früher, nie
+zurück) — analog zum bereits bestehenden „ältester startZeit gewinnt"-
+Tiebreaker in `Einkaufsvorgang.kanonischer(unter:)`. Details:
+`docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 53.
+
 ## v0.14 (Build 271) — offenerTreffer-Zeitprüfung: eigener Vorfix blockierte Abschluss-Übernahme beim gemeinsamen Live-Einkaufen
 
 Bugfix (eigene Regression, Nutzerbericht: Bernhards „Einkauf abschließen"

@@ -1330,6 +1330,28 @@ enum SyncSnapshotImportService {
                 vorhandener = neuer
             }
 
+            // Kanonisches `startZeit` auf das früheste bekannte anheben
+            // (Nutzerbericht 2026-08-10, Folgefund zu Abschnitt 52): sobald
+            // zwei Geräte über `offenerTreffer`/eine bereits registrierte
+            // Alias auf denselben Vorgang zusammengeführt sind, spiegelt
+            // `vorhandener.startZeit` nur noch, WANN DAS EIGENE Gerät sein
+            // Objekt angelegt hat — bei einem Gerät, das erst später (z.B.
+            // nach Neustart/Sync-Beitritt) einen eigenen Platzhalter erzeugte,
+            // liegt das nach dem tatsächlichen, realen Beginn des gemeinsamen
+            // Einkaufs auf der Gegenseite. Die Plausibilitätsprüfung unten
+            // verglich bisher gegen dieses zu späte lokale `startZeit` und
+            // verwarf dadurch einen legitimen, gerade eben eingetroffenen
+            // Abschluss der Gegenseite (`remoteEndZeit` lag vor dem eigenen,
+            // erst NACH dem eigentlichen Abschluss angelegten Platzhalter) —
+            // „Einkauf abschließen“ kam beim anderen Gerät nie an. Ein
+            // `eintrag.startZeit` VOR dem bisherigen `vorhandener.startZeit`
+            // beweist, dass der reale gemeinsame Einkauf tatsächlich früher
+            // begann, als dieses Gerät wusste — nur nach vorne (früher)
+            // korrigiert, nie nach hinten, also ausschließlich permissiver.
+            if eintrag.startZeit < vorhandener.startZeit {
+                vorhandener.startZeit = eintrag.startZeit
+            }
+
             // `remoteEndZeit >= vorhandener.startZeit`: defensive Plausibilitätsprüfung
             // (Live-Test-Fund, siehe Typ-Doku) — verwirft eine `endZeit`, die vor dem
             // eigenen `startZeit` läge. Ohne den Fix an ``alleLokalen`` oben konnte ein

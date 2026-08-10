@@ -1401,6 +1401,63 @@ struct SyncSnapshotImportServiceTests {
         #expect(platzhalter.endZeit == abschlusszeit)
     }
 
+    /// Regressionstest für einen echten Zwei-Geräte-Nutzerbericht (2026-08-10,
+    /// Folgefund zu Abschnitt 52): der eigene Platzhalter wird per
+    /// `offenerTreffer` bereits im ERSTEN Zyklus (Peer-Vorgang dort noch
+    /// offen) mit einem echten, real deutlich FRÜHER gestarteten Peer-Vorgang
+    /// zusammengeführt — der Platzhalter selbst wurde aber ERST NACH diesem
+    /// realen Beginn angelegt (z.B. weil das Gerät erst nach einem
+    /// Neustart/Sync-Beitritt wieder online kam). Schließt der Peer im
+    /// ZWEITEN Zyklus ab, liegt seine `endZeit` plausibel NACH dem realen
+    /// Beginn, aber VOR dem (zu späten) `startZeit` des eigenen Platzhalters
+    /// — die Plausibilitätsprüfung darf das nicht mehr gegen dieses zu späte
+    /// `startZeit` verwerfen, sonst kommt "Einkauf abschließen" nie an.
+    @Test
+    func vorhandenerVorgangUebernimmtFruehereEintragStartzeitBeimAliasieren() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
+        // Eigener Platzhalter, deutlich SPÄTER angelegt als der reale Beginn
+        // des gemeinsamen Einkaufs auf der Gegenseite.
+        let platzhalter = Einkaufsvorgang(einkaufsliste: liste, startZeit: Date())
+        context.insert(platzhalter)
+        try context.save()
+
+        // Erster Zyklus: Peer-Vorgang noch offen, real deutlich früher
+        // gestartet — matcht per offenerTreffer (Regelfall für noch offene
+        // Einträge, unabhängig vom Zeitabstand).
+        let remoteVorgangID = UUID()
+        let realerBeginn = platzhalter.startZeit.addingTimeInterval(-600)
+        var ersterSnapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        ersterSnapshot.einkaufslisten = [EinkaufslisteSnapshot(id: liste.id, name: "Einkaufsliste", erstelltAm: liste.erstelltAm)]
+        ersterSnapshot.einkaufsvorgaenge = [
+            EinkaufsvorgangSnapshot(id: remoteVorgangID, geschaeftID: nil, einkaufslisteID: liste.id, startZeit: realerBeginn, endZeit: nil),
+        ]
+        try schreibeFremdenSnapshot(ersterSnapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        #expect(try context.fetch(FetchDescriptor<Einkaufsvorgang>()).count == 1)
+
+        // Zweiter Zyklus: Peer schließt ab — endZeit klar NACH dem realen
+        // Beginn, aber VOR dem ursprünglichen (zu späten) Platzhalter-startZeit.
+        let abschlusszeit = realerBeginn.addingTimeInterval(60)
+        var zweiterSnapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        zweiterSnapshot.einkaufslisten = [EinkaufslisteSnapshot(id: liste.id, name: "Einkaufsliste", erstelltAm: liste.erstelltAm)]
+        zweiterSnapshot.einkaufsvorgaenge = [
+            EinkaufsvorgangSnapshot(id: remoteVorgangID, geschaeftID: nil, einkaufslisteID: liste.id, startZeit: realerBeginn, endZeit: abschlusszeit),
+        ]
+        try schreibeFremdenSnapshot(zweiterSnapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        #expect(try context.fetch(FetchDescriptor<Einkaufsvorgang>()).count == 1)
+        #expect(platzhalter.endZeit == abschlusszeit)
+    }
+
     /// Seit der Entkopplung der Live-Ansicht von der Vorgangs-Identität
     /// (Session 2026-08-03, `docs/DATENSYNCHRONISATION.md` Abschnitt 4.3)
     /// gibt es keine Umleitung mehr: Ein Snapshot referenziert per ID exakt

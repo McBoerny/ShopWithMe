@@ -3401,3 +3401,60 @@ Zeit-Plausibilitätsprüfung war die eigentlich richtige Grundlage von Anfang
 an — hätte der erste Fix (Abschnitt 50) sie direkt wiederverwendet statt ein
 neues, gröberes Kriterium einzuführen, wäre diese Regression vermeidbar
 gewesen.
+
+## 53. Nutzerbericht-Folgefund (2026-08-10, direkt nach Abschnitt 52): eigener Platzhalter zu spät angelegt lässt Plausibilitätsprüfung erneut fälschlich verwerfen
+
+**Gemeldet vom Nutzer:** Testlauf mit umgekehrter Rollenverteilung: „Backup"
+zurückgesetzt und App komplett beendet, WÄHREND „Bernhard" allein
+weiterarbeitete (Artikel hinzugefügt, 3 abgehakt, Einkauf abgeschlossen —
+Bernhards Liste danach korrekt 0 von 4). Erst danach wurde „Backup" wieder
+aktiviert. Der erste Sync-Zyklus übernahm zwar alle aktuellen Artikel korrekt
+— zeigte aber weiterhin die 3 bereits von Bernhard abgehakten Artikel als
+aktiv an und wartete auf „Einkauf abschließen": „3 von 7" statt korrekt „0
+von 7".
+
+**Ursache: derselbe Mechanismus wie Abschnitt 52, aber eine zweite,
+unabhängige Lücke in der Plausibilitätsprüfung selbst.** Protokoll-Beleg:
+`vorgangID=501558A7… grund=endZeitVorStartZeit remoteEndZeit=2026-08-10
+04:43:03 startZeit=2026-08-10 04:43:08` — Bernhards Abschlusszeit
+(04:43:03) liegt nur 5 Sekunden VOR dem `startZeit` des lokalen Vorgangs auf
+„Backup" (04:43:08). Rekonstruiert: „Backup" war während Bernhards
+Änderungen vollständig offline; sein eigener, per `einkaufSicherstellen()`
+neu angelegter Platzhalter für dieselbe Liste bekam deshalb zwangsläufig ein
+`startZeit`, das ERST NACH Bernhards App-seitigem `endZeit` liegt (Backup kam
+ja gerade erst wieder online). Trotzdem war Bernhards Vorgang der
+tatsächlich REALE, gemeinsame Einkauf — sein `startZeit` (der reale Beginn)
+lag klar VOR Backups Platzhalter. Der Vorgang war bereits per
+`offenerTreffer` korrekt zusammengeführt (in einem früheren, hier noch
+offenen Zyklus), aber die Plausibilitätsprüfung
+(`remoteEndZeit >= vorhandener.startZeit`) verglich weiterhin gegen Backups
+EIGENES, zu spät gesetztes `startZeit` — nicht gegen den tatsächlich
+früheren, über die Aliasierung bereits bekannten realen Beginn.
+
+**Fix:** Sobald ein Vorgang aufgelöst ist (über `bekannter`, `offenerTreffer`
+oder Neuanlage), wird sein `startZeit` auf das Minimum aus bisherigem und
+`eintrag.startZeit` angehoben — genauer: nur nach VORNE (früher) korrigiert,
+nie zurück. Ein `eintrag.startZeit` vor dem bisherigen `vorhandener.startZeit`
+beweist, dass der reale gemeinsame Einkauf tatsächlich früher begann, als
+dieses Gerät wusste. Die bestehende Plausibilitätsprüfung greift danach auf
+das jetzt korrigierte, früheste bekannte `startZeit` zurück und lässt
+Bernhards `endZeit` korrekt durch. Rein additiv/permissiv, ändert nichts an
+der Abwehr aus Abschnitt 50/52 (die dortigen historischen Vorgänge matchen
+weiterhin gar nicht erst, ihre `startZeit`-Korrektur greift also nie).
+Regressionstest:
+``SyncSnapshotImportServiceTests/vorhandenerVorgangUebernimmtFruehereEintragStartzeitBeimAliasieren()``
+— Zwei-Zyklen-Aufbau analog dem bestehenden Alias-Testmuster (Abschnitt-„2026-08-02"-
+Diagnose): erster Zyklus matcht offen per `offenerTreffer`, zweiter Zyklus
+liefert die `endZeit` — schlägt ohne den Fix reproduzierbar fehl (per `git
+stash` gegen den Abschnitt-52-Stand verifiziert), mit Fix grün.
+
+**Lehre:** `Einkaufsvorgang.kanonischer(unter:)` nutzt bereits „ältester
+`startZeit` gewinnt" als Tiebreaker zwischen mehreren offenen Kandidaten —
+derselbe Grundsatz (das kanonische Objekt sollte den TATSÄCHLICH frühesten
+bekannten Beginn tragen, nicht den zufälligen Zeitpunkt der eigenen
+Objekterzeugung) fehlte bisher an der Stelle, wo zwei bereits als „derselbe
+reale Einkauf" erkannte Vorgänge über mehrere Zyklen hinweg weiter
+Informationen austauschen. Sobald zwei Objekte als identisch behandelt
+werden, müssen alle ihre Felder, die für spätere Plausibilitätsentscheidungen
+herangezogen werden, das jeweils aussagekräftigere (hier: frühere) Extrem
+übernehmen — nicht nur das des zufällig als „lokal" gewählten Objekts.
