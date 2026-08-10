@@ -1,5 +1,85 @@
 # Changelog
 
+## v0.14 (Build 277) — Sync-übernommener Einkaufsabschluss schließt jetzt auch andere offene Vorgänge derselben Liste mit
+
+Bugfix (Nutzerbericht 2026-08-10: Backup schließt einen Einkauf ab, das
+kommt auf Bernhard aber nie an — obwohl das Diagnose-Protokoll
+`sync_einkaufsvorgang_abschluss_uebernommen` die korrekt übernommene
+`endZeit` bestätigte, sogar über einen App-Neustart hinweg). Ursache: Bernhard
+hatte NEBEN dem per ID getroffenen Vorgang noch einen zweiten, unabhängig
+offenen Vorgang für dieselbe Liste (Diagnose-Zusatz bestätigte
+`andereOffeneVorgaengeDerListe=2`) — genau an dem hing
+`EinkaufenView/aktuellerEinkauf`. `mergeEinkaufsvorgaenge` übernahm bisher nur
+die `endZeit` des per ID getroffenen Vorgangs, ließ den zweiten aber offen:
+der Einkauf erschien auf dem Bildschirm trotz erfolgreich übernommener
+`endZeit` weiterhin als aktiv, mit denselben abgehakten Artikeln. Fix: analog
+zum lokalen „Einkauf abschließen"-Button
+(`EinkaufsvorgangAbschlussService.schliesseAbMitDuplikaten`) schließt der
+Sync-Merge jetzt alle plausibel gleichzeitigen (`startZeit <= remoteEndZeit`,
+dasselbe Zeit-Gate wie beim `offenerTreffer`-Matching) offenen Vorgänge
+derselben Liste mit — mit `zaehleAlsBesuch: false`, damit
+`Geschaeft.eigeneAnzahlEinkaufsvorgaenge` nicht doppelt zählt. Neuer
+Regressionstest `andererOffenerVorgangDerselbenListeWirdBeiSyncAbschlussMitgeschlossen`;
+das Zeit-Gate verhindert nachweislich (bestehender Test
+`mehrereBereitsAbgeschlosseneVorgaengeWerdenNichtAufFrischenLokalenPlatzhalterAliasiert`),
+dass ein historischer Catch-up-Import einen frisch danach angelegten
+Platzhalter fälschlich mitschließt.
+
+Zusätzlich Diagnose-Logging für einen zweiten, im selben Nutzerbericht
+beobachteten Befund (Backup: Einkauf schließt ab, aber abgehakte Artikel
+bleiben auf der offenen Liste stehen) —
+`sync_kaufeintrag_merge_listeneintrag_entfernt` protokolliert bei
+`mergeKaufEintraege`, ob der zugehörige `EinkaufslistenEintrag` beim
+Peer-Snapshot-Merge tatsächlich gefunden und gelöscht wurde.
+
+## v0.14 — `mergeKaufEintraege` löscht keine erneut hinzugefügten Listen-Einträge mehr
+
+Bugfix (Nutzerbericht 2026-08-10, Folgetest zu obigem Fix: „während des
+erneuten Syncs von Backup hat sich die Liste von Bernhard kurzfristig
+verändert, bevor sich alles wieder eingependelt hat"). Live per Log bestätigt:
+Bernhards `Einkaufsliste`-Zähler fiel binnen eines Zyklus von 5 auf 1 (Backups
+eigener sogar auf 0), bevor er sich Zyklen später von selbst wieder auf den
+korrekten Wert korrigierte. Ursache: `mergeKaufEintraege` (Bereich C) löschte
+den zu einem frisch aus einem Peer-Snapshot übernommenen `KaufEintrag`
+passenden offenen `EinkaufslistenEintrag` bisher bedingungslos — auch wenn
+dieser `KaufEintrag` ein längst historischer Nachzügler aus einem großen
+Nachhol-Merge war (z.B. beim Beitritt eines lange nicht synchronisierten
+Geräts) und der Artikel als wiederkehrender Artikel NACH diesem alten Kauf
+erneut auf die Liste gesetzt wurde. Ein Nachhol-Merge mehrerer solcher
+Alt-Einträge in einem Zyklus konnte dadurch mehrere frisch erneut
+hinzugefügte, eigentlich noch offene Listen-Einträge auf einen Schlag
+entfernen — der Fehler heilte sich erst über das separate `listen`-
+Sicherheitsnetz (`istBereitsAbgehakt`, siehe Build 274) in einem späteren
+Zyklus wieder aus, aber bis dahin war die Liste sichtbar (und mit zwei
+Geräten unterschiedlich) falsch. Fix: derselbe Zeit-Vergleich wie im
+`listen`-Sicherheitsnetz — nur löschen, wenn `EinkaufslistenEintrag.erstelltAm`
+NACHWEISLICH vor (oder zum selben Zeitpunkt wie) `KaufEintrag.datum` liegt,
+der Kauf den Listen-Eintrag als offene Anfrage also tatsächlich erklären
+kann. Neuer Regressionstest
+`mergeKaufEintragLoeschtNichtErneutHinzugefuegtenListenEintragEinesAelterenKaufs`.
+Das Diagnose-Ereignis `sync_kaufeintrag_merge_listeneintrag_entfernt` trägt
+jetzt zusätzlich `entfernt=true/false`, um beide Fälle im Log zu
+unterscheiden.
+
+## v0.14 — Entfernen bekannter Geräte übersteht jetzt einen Neustart
+
+Bugfix (Nutzerbericht: unter Debugging gelöschte bekannte Geräte waren nach
+einem Neustart der App wieder da). Ursache: `SyncOrdnerService.entfernePeer`
+löschte den lokalen `SyncPeerInfo`-Merkposten bisher nur im laufenden
+`ModelContext`, ohne je `context.save()` aufzurufen — bei
+`autosaveEnabled = false` (`docs/DATABASE_CONCURRENCY.md`) blieb das Löschen
+rein im Speicher und ging verloren, sobald die App beendet wurde, bevor ein
+unabhängiger späterer Save (z.B. der nächste Sync-Zyklus) es zufällig
+mitschrieb. Betraf sowohl die manuelle Liste in `DebuggingView` als auch den
+proaktiven „Gerät seit langem nicht gesehen"-Dialog (`RootView`), da beide
+über `entfernePeer` laufen. Fix: das Löschen läuft jetzt wie überall sonst im
+Projekt über `DatabaseLeaseService.performMicroLease`, das Mutation und Save
+gemeinsam Lease-geschützt durchführt. Neuer Regressionstest
+`entfernePeerUeberlebtNeustart` öffnet dazu einen zweiten `ModelContainer` auf
+demselben dateibasierten Store, um einen echten App-Neustart nachzubilden
+(die bisherige In-Memory-Prüfung im selben, weiterhin offenen Context hätte
+den Fehler nicht erkannt).
+
 ## v0.14 (Build 276) — `mergeKaufEintraege` entfernt den offenen Listen-Eintrag jetzt
 
 Bugfix (Nutzerbericht: nach einem Sync zeigte Backup „2 von 8" statt der

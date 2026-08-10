@@ -200,11 +200,15 @@ private struct BekannteSyncPeersSection: View {
     }
 
     private func peerEntfernen(at offsets: IndexSet) {
+        let entfernte = offsets.map { peers[$0] }
         guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else {
-            for index in offsets { modelContext.delete(peers[index]) }
+            Task {
+                await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                    for peer in entfernte { modelContext.delete(peer) }
+                }
+            }
             return
         }
-        let entfernte = offsets.map { peers[$0] }
         Task {
             for peer in entfernte {
                 await SyncOrdnerService.entfernePeer(peer, in: syncOrdner, context: modelContext)

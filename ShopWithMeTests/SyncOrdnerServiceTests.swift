@@ -143,6 +143,15 @@ struct SyncOrdnerServiceTests {
     /// ``SyncPeerInfo``-Merkposten.
     @Test
     func entfernePeerLoeschtOrdnerUndSyncPeerInfo() async throws {
+        // `entfernePeer` speichert seit dem Fix über
+        // ``DatabaseLeaseService/performMicroLease(context:mutate:)`` — ohne
+        // diesen Reset würde der Test (als gehosteter Test-Host, siehe
+        // ``ShopWithMeApp/init()``) versehentlich gegen die echte
+        // App-Store-URL leasen statt den `nil`-Kurzschluss zu nehmen.
+        let vorherigeStoreURL = DatabaseLeaseService.storeURL
+        DatabaseLeaseService.storeURL = nil
+        defer { DatabaseLeaseService.storeURL = vorherigeStoreURL }
+
         let (container, context) = try machtLeerenContainer()
         _ = container
         let syncOrdner = macheTempSyncOrdner()
@@ -160,5 +169,54 @@ struct SyncOrdnerServiceTests {
 
         #expect(!FileManager.default.fileExists(atPath: peerOrdner.path))
         #expect(try context.fetch(FetchDescriptor<SyncPeerInfo>()).isEmpty)
+    }
+
+    /// Regressionstest für einen Live-Fund: `entfernePeer` löschte den
+    /// ``SyncPeerInfo``-Merkposten bisher nur im In-Memory-``ModelContext``
+    /// (kein `context.save()`), sodass er bei `autosaveEnabled = false`
+    /// (siehe `docs/DATABASE_CONCURRENCY.md`) verloren ging, falls die App
+    /// vor dem nächsten zufälligen Save (z.B. durch einen Sync-Zyklus)
+    /// beendet wurde — das entfernte Gerät tauchte nach einem Neustart
+    /// wieder in „Bekannte Geräte" auf. Reproduziert den Neustart, indem
+    /// nach dem Entfernen ein ZWEITER ``ModelContainer`` auf demselben
+    /// dateibasierten Store geöffnet wird (analog ``ProduktMigrationTests``),
+    /// statt nur im selben, weiterhin offenen `context` nachzuschauen.
+    @Test
+    func entfernePeerUeberlebtNeustart() async throws {
+        // Siehe Kommentar in `entfernePeerLoeschtOrdnerUndSyncPeerInfo` — der
+        // hier bewusst geprüfte `context.save()` soll unabhängig vom
+        // Lease-Erwerb selbst laufen, daher der `nil`-Kurzschluss statt
+        // gegen die echte (im Test-Host bereits gesetzte) App-Store-URL zu
+        // leasen.
+        let vorherigeStoreURL = DatabaseLeaseService.storeURL
+        DatabaseLeaseService.storeURL = nil
+        defer { DatabaseLeaseService.storeURL = vorherigeStoreURL }
+
+        let storeURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sync-peer-entfernen-\(UUID().uuidString).sqlite")
+        defer {
+            try? FileManager.default.removeItem(at: storeURL)
+            try? FileManager.default.removeItem(at: URL(fileURLWithPath: storeURL.path + "-wal"))
+            try? FileManager.default.removeItem(at: URL(fileURLWithPath: storeURL.path + "-shm"))
+        }
+        let schema = Schema([SyncPeerInfo.self])
+        let syncOrdner = macheTempSyncOrdner()
+
+        do {
+            let konfiguration = ModelConfiguration(schema: schema, url: storeURL)
+            let container = try ModelContainer(for: schema, configurations: [konfiguration])
+            let context = container.mainContext
+            let peer = SyncPeerInfo(peerGeraeteID: "abcdef", geraeteName: "Anderes Gerät")
+            context.insert(peer)
+            try context.save()
+
+            await SyncOrdnerService.entfernePeer(peer, in: syncOrdner, context: context)
+        }
+
+        // Neuen Container auf demselben Store öffnen — simuliert den
+        // App-Neustart, nach dem der Peer bisher wieder auftauchte.
+        let neueKonfiguration = ModelConfiguration(schema: schema, url: storeURL)
+        let neuerContainer = try ModelContainer(for: schema, configurations: [neueKonfiguration])
+        #expect(try neuerContainer.mainContext.fetch(FetchDescriptor<SyncPeerInfo>()).isEmpty)
     }
 }

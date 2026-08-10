@@ -170,7 +170,13 @@ enum SyncOrdnerService {
                 }
             }
         }
-        context.delete(peer)
+        // Explizites, Lease-geschütztes save() (siehe `docs/DATABASE_CONCURRENCY.md`) —
+        // ohne dieses blieb das Löschen bei `autosaveEnabled = false` rein
+        // In-Memory und ging bei App-Neustart vor dem nächsten zufälligen Save
+        // verloren, sodass das entfernte Gerät wieder auftauchte.
+        await DatabaseLeaseService.performMicroLease(context: context) {
+            context.delete(peer)
+        }
     }
 
     /// Ordnername dieses Geräts unter `peers/` (GitHub #81) — Gerätename +
