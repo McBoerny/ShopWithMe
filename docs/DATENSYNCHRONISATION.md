@@ -435,6 +435,17 @@ Zwei unabhängige Fixes:
    stattfindet): der Besuch wird dann doppelt gezählt statt dedupliziert —
    betrifft nur Besuchszähler/-protokoll, nicht die Live-Ansicht (die ist
    ohnehin listenweit, nicht vorgangsbezogen).
+3. **Remote-Eintrag muss selbst noch offen sein (Nutzerbericht 2026-08-09):**
+   `offenerTreffer` matcht zusätzlich nur, wenn `eintrag.endZeit == nil` —
+   ohne dieses Gate konnte ein frisch (z.B. durch
+   `EinkaufenView.einkaufSicherstellen()`) angelegter eigener Platzhalter
+   mehrere bereits abgeschlossene Peer-Vorgänge gleichzeitig auf sich
+   aliasieren; jeder scheiterte danach an der
+   `remoteEndZeit >= vorhandener.startZeit`-Prüfung (der Platzhalter ist ja
+   „gerade eben" angelegt), blieb dauerhaft offen, und alle daran über
+   `mergeKaufEintraege` gehängten, längst abgehakten Artikel mehrerer
+   vergangener Einkäufe erschienen fälschlich als aktuell abgehakt. Details:
+   `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 50.
 
 **Neu anzulegender Vorgang braucht eine auflösbare Liste:** Referenziert ein
 empfangener Snapshot-Eintrag weder ein bekanntes Geschäft noch eine bekannte

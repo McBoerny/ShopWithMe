@@ -1280,6 +1280,73 @@ struct SyncSnapshotImportServiceTests {
         #expect(vorgaenge.first?.endZeit == nil)
     }
 
+    /// Regressionstest für einen echten Zwei-Geräte-Nutzerbericht (2026-08-09,
+    /// frischer Beitritt/„Ersetzen durch Peer"): ein frisch angelegter, noch
+    /// völlig leerer lokaler Platzhalter-Vorgang (z.B. durch
+    /// `EinkaufenView.einkaufSicherstellen()`, sobald die Einkaufsliste nach
+    /// dem Neuaufbau sichtbar wird) darf NICHT mit MEHREREN bereits
+    /// abgeschlossenen Vorgängen eines Peers für dieselbe Liste
+    /// zusammengeführt werden — jeder abgeschlossene Peer-Vorgang ist ein
+    /// eigenständiger, historischer Einkauf, kein Kandidat für das
+    /// `offenerTreffer`-Race (das nur zwei noch offene, unabhängig
+    /// angelegte Vorgänge meint). Vor dem Fix aliasierte der Zweig alle drei
+    /// fremden Vorgänge auf denselben lokalen Platzhalter; dessen `startZeit`
+    /// ("gerade eben" angelegt) lag danach nach jeder echten `endZeit`, die
+    /// defensive Plausibilitätsprüfung verwarf deshalb jeden Abschluss, der
+    /// Platzhalter blieb dauerhaft offen — und alle per `mergeKaufEintraege`
+    /// daran hängenden, längst abgehakten Artikel dreier vergangener Einkäufe
+    /// erschienen fälschlich als aktuell abgehakt.
+    @Test
+    func mehrereBereitsAbgeschlosseneVorgaengeWerdenNichtAufFrischenLokalenPlatzhalterAliasiert() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
+        // Frischer, leerer lokaler Platzhalter — wie ihn `einkaufSicherstellen()`
+        // anlegt, sobald die (gerade erst importierte) Liste sichtbar wird.
+        let platzhalter = Einkaufsvorgang(einkaufsliste: liste)
+        context.insert(platzhalter)
+        try context.save()
+
+        // Peer hat DREI unabhängige, jeweils bereits abgeschlossene Einkäufe
+        // ohne Geschäft für dieselbe Liste — alle vor dem lokalen Platzhalter.
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.einkaufslisten = [EinkaufslisteSnapshot(id: liste.id, name: "Einkaufsliste", erstelltAm: liste.erstelltAm)]
+        let jetzt = Date()
+        snapshot.einkaufsvorgaenge = [
+            EinkaufsvorgangSnapshot(
+                id: UUID(), geschaeftID: nil, einkaufslisteID: liste.id,
+                startZeit: jetzt.addingTimeInterval(-7200), endZeit: jetzt.addingTimeInterval(-7000)
+            ),
+            EinkaufsvorgangSnapshot(
+                id: UUID(), geschaeftID: nil, einkaufslisteID: liste.id,
+                startZeit: jetzt.addingTimeInterval(-3600), endZeit: jetzt.addingTimeInterval(-3500)
+            ),
+            EinkaufsvorgangSnapshot(
+                id: UUID(), geschaeftID: nil, einkaufslisteID: liste.id,
+                startZeit: jetzt.addingTimeInterval(-1800), endZeit: jetzt.addingTimeInterval(-1700)
+            ),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        // Vier lokale Vorgänge: der unberührte Platzhalter plus je ein
+        // eigenständiger, korrekt abgeschlossener Vorgang pro Peer-Einkauf —
+        // NICHT alle drei fälschlich auf den Platzhalter zusammengeführt.
+        let vorgaenge = try context.fetch(FetchDescriptor<Einkaufsvorgang>())
+        #expect(vorgaenge.count == 4)
+        #expect(platzhalter.endZeit == nil)
+        #expect(platzhalter.kaufEintraege.isEmpty)
+        let abgeschlossene = vorgaenge.filter { $0.persistentModelID != platzhalter.persistentModelID }
+        #expect(abgeschlossene.count == 3)
+        #expect(abgeschlossene.allSatisfy { $0.endZeit != nil })
+    }
+
     /// Seit der Entkopplung der Live-Ansicht von der Vorgangs-Identität
     /// (Session 2026-08-03, `docs/DATENSYNCHRONISATION.md` Abschnitt 4.3)
     /// gibt es keine Umleitung mehr: Ein Snapshot referenziert per ID exakt

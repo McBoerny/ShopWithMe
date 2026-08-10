@@ -1231,7 +1231,7 @@ enum SyncSnapshotImportService {
                     SyncDebugLogger.log(.einkaufsvorgangEintragUebersprungen, details: "vorgangID=\(eintrag.id) grund=unaufloesbareListe")
                 }
                 continue
-            } else if let offenerTreffer = Einkaufsvorgang.kanonischer(unter: alleLokalen.filter({
+            } else if eintrag.endZeit == nil, let offenerTreffer = Einkaufsvorgang.kanonischer(unter: alleLokalen.filter({
                 // `kaufEintraege.isEmpty` (Nachtrag): der Zweig soll
                 // ausschließlich den Fall abdecken, dass zwei Geräte VOR
                 // ihrem ersten Sync unabhängig je einen frischen, leeren
@@ -1247,6 +1247,25 @@ enum SyncSnapshotImportService {
                 // u.U. längst veralteten Käufe zusätzlich in die listenweite
                 // "abgehakt"-Ansicht des zusammengeführten Vorgangs
                 // einfließen.
+                //
+                // `eintrag.endZeit == nil` (Nutzerbericht 2026-08-09, frischer
+                // Beitritt/„Ersetzen durch Peer"): der Zweig darf nur einen
+                // REMOTE-Eintrag matchen, der selbst noch offen ist — genau
+                // das race-Szenario "zwei Geräte legen vor dem ersten Sync
+                // unabhängig je einen frischen Vorgang an", das er abdecken
+                // soll. Ein bereits abgeschlossener Remote-Eintrag ist per
+                // Definition kein Kandidat für dieses Race, sondern ein
+                // eigenständiger, historischer Einkauf. Ohne dieses Gate
+                // aliasierte ein frisch (z.B. von `EinkaufenView.einkaufSicherstellen()`)
+                // angelegter eigener Platzhalter-Vorgang mehrere fremde,
+                // bereits abgeschlossene Vorgänge gleichzeitig auf sich
+                // selbst — jeder davon scheiterte danach an der
+                // `remoteEndZeit >= vorhandener.startZeit`-Plausibilitätsprüfung
+                // unten (der Platzhalter ist ja "gerade eben" angelegt, jede
+                // echte historische `endZeit` liegt davor), blieb dadurch
+                // dauerhaft offen, und alle per `mergeKaufEintraege` daran
+                // gehängten, längst abgehakten Artikel mehrerer vergangener
+                // Einkäufe erschienen fälschlich als aktuell abgehakt.
                 $0.endZeit == nil && $0.kaufEintraege.isEmpty && $0.geschaeft == remoteGeschaeft && $0.einkaufsliste == remoteListe
             })) {
                 if offenerTreffer.id != eintrag.id {

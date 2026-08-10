@@ -3172,3 +3172,68 @@ Aufrufern weiterreicht, behebt die Race nicht — er verlagert sie nur
 dorthin, welcher Aufrufer zuerst drankommt. Statt jedem Aufrufer dieselbe
 Information einzeln beizubringen, muss die Information race-unabhängig
 VOR allen möglichen Aufrufern feststehen (hier: `init()`, vor `body`).
+
+## 50. Nutzerbericht (2026-08-09): frischer Beitritt zeigte auf einem Gerät Dutzende längst abgehakte Artikel als aktuell abgehakt
+
+**Gemeldet vom Nutzer:** Nachdem Gerät „Backup" frisch dem Sync-Ordner
+beigetreten war (Beitritt mit „Ersetzen" — lokaler Bestand verworfen, aus dem
+Peer-Bestand von „Bernhard" neu aufgebaut, Abschnitt 8), zeigte die Liste
+„Einkaufsliste" auf „Backup" 9 abgehakte Einträge, auf „Bernhard" dagegen
+korrekt 0 von 8. Diagnose per `SyncDebugLogger`-Protokoll beider Geräte
+(`docs/LOGGING.md`): direkt nach dem Neuaufbau protokollierte „Backup" für
+VIER unterschiedliche `vorgangID`s in Folge
+`sync_einkaufsvorgang_abschluss_nicht_uebernommen grund=endZeitVorStartZeit`
+— auffällig war, dass alle vier denselben lokalen `startZeit`-Wert nannten,
+exakt den Zeitpunkt des gerade laufenden Sync-Zyklus.
+
+**Ursache:** `SyncSnapshotImportService.mergeEinkaufsvorgaenge`s
+`offenerTreffer`-Zweig (Abschnitt 4.3 in `docs/DATENSYNCHRONISATION.md`, für
+das Race „zwei Geräte legen vor ihrem ersten Sync unabhängig je einen
+frischen Vorgang für dieselbe Kombination an") prüfte bislang nur
+Eigenschaften des LOKALEN Kandidaten (`endZeit == nil`,
+`kaufEintraege.isEmpty`, passendes Geschäft/Liste) — nicht, ob der REMOTE-
+Eintrag selbst überhaupt noch offen war. Sobald die frisch importierte Liste
+sichtbar wurde, legte `EinkaufenView.einkaufSicherstellen()` sofort einen
+eigenen, leeren lokalen Platzhalter-Vorgang an (`geschaeft=nil`,
+`endZeit=nil`, `startZeit=jetzt`) — und DIESER erfüllte die
+`offenerTreffer`-Kriterien für JEDEN der vier bereits abgeschlossenen
+Peer-Vorgänge gleichermaßen, da neu angelegte Kandidaten laut Abschnitt-20-
+Fix sofort in `alleLokalen` nachgetragen werden, aber `mergeKaufEintraege`
+(das den Platzhalter mit eigenen Käufen befüllt hätte) erst in einem
+SPÄTEREN Merge-Schritt läuft. Alle vier fremden, echten Einkäufe wurden
+dadurch fälschlich auf denselben einen Platzhalter aliasiert. Die defensive
+Plausibilitätsprüfung aus Abschnitt „Live-Test-Fund" (`remoteEndZeit >=
+vorhandener.startZeit`, siehe `docs/DATENSYNCHRONISATION.md` §4.3) griff
+danach bei JEDEM der vier — der Platzhalter war ja „gerade eben" angelegt,
+jede echte historische `endZeit` lag zwangsläufig davor —, verwarf also
+jeden Abschluss und ließ den zusammengeführten Vorgang dauerhaft offen.
+`mergeKaufEintraege` hängte im nächsten Schritt die `KaufEintrag`e ALLER
+VIER vergangenen Einkäufe an diesen einen, weiterhin offenen Vorgang — und
+`EinkaufenView.abgehakteKaufEintraegeFuerAktuelleListe` (liste-, nicht
+vorgangsbezogen, Abschnitt „Live-Ansicht: liste- und statusbasiert" oben)
+zeigte sie alle als aktuell abgehakt an, obwohl sie zu vier verschiedenen,
+längst abgeschlossenen Einkäufen von „Bernhard" gehörten. „Bernhard" selbst
+blieb unberührt, da sein eigener Datensatz nie Teil dieses Merges war —
+daher die Diskrepanz zwischen beiden Geräten.
+
+**Fix:** `offenerTreffer` matcht jetzt zusätzlich nur, wenn der REMOTE-
+Eintrag selbst noch offen ist (`eintrag.endZeit == nil`) —
+`SyncSnapshotImportService.swift`, `mergeEinkaufsvorgaenge`. Ein bereits
+abgeschlossener Peer-Vorgang ist per Definition kein Kandidat für das
+Vor-dem-ersten-Sync-Race, das der Zweig abdecken soll, sondern ein
+eigenständiger historischer Einkauf — er bekommt stattdessen (wie ein
+normaler neuer Vorgang) einen eigenen lokalen Datensatz mit
+`startZeit = eintrag.startZeit`, gegen den die Plausibilitätsprüfung
+korrekt besteht. Regressionstest:
+``SyncSnapshotImportServiceTests/mehrereBereitsAbgeschlosseneVorgaengeWerdenNichtAufFrischenLokalenPlatzhalterAliasiert()``.
+
+**Lehre:** Der `offenerTreffer`-Zweig wurde bereits zweimal nachträglich
+präzisiert (Abschnitt „Nutzerbericht 2026-08-06": Filter auf
+`kaufEintraege.isEmpty`; Abschnitt 25: Filter auf eine echte, nicht-`nil`
+`remoteListe`) — beide Male, weil die ursprüngliche Formulierung nur den
+lokalen Kandidaten einschränkte, nie die Eigenschaften des REMOTE-Eintrags
+selbst. Ein Matching-Zweig, der ein enges Race zwischen zwei gleichrangigen,
+noch offenen Zuständen behandeln soll, muss auf BEIDEN Seiten prüfen, dass
+der jeweils andere Zustand wirklich zum Race passt — eine Prüfung nur der
+lokalen Seite lässt sich von einer beliebigen, zufällig passenden Remote-
+Eigenschaft (hier: bereits abgeschlossen) unterlaufen.

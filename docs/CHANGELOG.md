@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.14 (Build 268) — Frischer Sync-Beitritt zeigte längst abgehakte Artikel als aktuell abgehakt
+
+Bugfix (Nutzerbericht: Gerät zeigte nach frischem Beitritt/„Ersetzen durch
+Peer" 9 abgehakte Artikel an, der Peer korrekt 0). Ursache:
+`SyncSnapshotImportService.mergeEinkaufsvorgaenge`s `offenerTreffer`-Zweig
+prüfte nur Eigenschaften des lokalen Kandidaten, nicht ob der REMOTE-Eintrag
+selbst noch offen war — ein frisch (durch `EinkaufenView.einkaufSicherstellen()`)
+angelegter eigener Platzhalter-Vorgang aliasierte dadurch mehrere bereits
+abgeschlossene Peer-Vorgänge gleichzeitig auf sich; die defensive
+`remoteEndZeit >= startZeit`-Plausibilitätsprüfung verwarf danach jeden
+Abschluss, der Vorgang blieb dauerhaft offen, alle daran gehängten,
+längst abgehakten Artikel mehrerer vergangener Einkäufe erschienen fälschlich
+als aktuell abgehakt. Fix: `offenerTreffer` matcht nur noch, wenn
+`eintrag.endZeit == nil`. Details: `docs/DATENSYNCHRONISATION_VERLAUF.md`
+Abschnitt 50.
+
 ## v0.14 (Build 267) — Ignorierte Ladenvorschläge nach „Ersetzen durch Peer“ verloren
 
 Bugfix (Code-Review-Fund): `IgnorierterGeschaeftsVorschlag` ist rein
