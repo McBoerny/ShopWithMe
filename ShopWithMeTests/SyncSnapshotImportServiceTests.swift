@@ -1347,6 +1347,60 @@ struct SyncSnapshotImportServiceTests {
         #expect(abgeschlossene.allSatisfy { $0.endZeit != nil })
     }
 
+    /// Regressionstest für einen echten Zwei-Geräte-Nutzerbericht (2026-08-10,
+    /// gemeinsames Live-Einkaufen): Gerät B hat einen eigenen, noch offenen
+    /// Platzhalter-Vorgang für dieselbe Liste (z.B. weil sein vorheriger
+    /// gerade erst abgeschlossen wurde und `einkaufSicherstellen()` sofort
+    /// einen neuen anlegte). Gerät A schließt SEINEN Einkauf für dieselbe
+    /// Liste ab, BEVOR Gerät B je einen Sync-Zyklus hatte, der beide noch
+    /// offen sah — der erste Snapshot, den Gerät B von Gerät A empfängt,
+    /// zeigt den Vorgang deshalb bereits als abgeschlossen. Das muss trotzdem
+    /// per `offenerTreffer` auf Gerät Bs Platzhalter matchen (plausibel
+    /// dieselbe, gerade noch laufende Sitzung — Gerät As `endZeit` liegt NACH
+    /// Gerät Bs `startZeit`), nicht wie ein längst vergangener,
+    /// eigenständiger historischer Einkauf behandelt werden (das deckt bereits
+    /// ``mehrereBereitsAbgeschlosseneVorgaengeWerdenNichtAufFrischenLokalenPlatzhalterAliasiert()``
+    /// ab, dort liegt die `endZeit` klar VOR dem `startZeit` des Platzhalters).
+    @Test
+    func bereitsAbgeschlossenerVorgangDerselbenSitzungMatchtNochOffenenLokalenPlatzhalter() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
+        // Gerät B: eigener, noch offener Platzhalter — bereits einige Zeit
+        // aktiv (nicht "gerade eben" angelegt), genau wie beim gemeinsamen
+        // Einkaufen üblich.
+        let platzhalter = Einkaufsvorgang(einkaufsliste: liste, startZeit: Date().addingTimeInterval(-300))
+        context.insert(platzhalter)
+        try context.save()
+
+        // Gerät A hat denselben Einkauf (dieselbe Liste, kein Geschäft)
+        // bereits abgeschlossen — NACH dem startZeit von Gerät Bs Platzhalter.
+        var snapshot = leererSnapshot(geraeteID: "geraet-a")
+        snapshot.einkaufslisten = [EinkaufslisteSnapshot(id: liste.id, name: "Einkaufsliste", erstelltAm: liste.erstelltAm)]
+        let abschlusszeit = Date()
+        snapshot.einkaufsvorgaenge = [
+            EinkaufsvorgangSnapshot(
+                id: UUID(), geschaeftID: nil, einkaufslisteID: liste.id,
+                startZeit: Date().addingTimeInterval(-250), endZeit: abschlusszeit
+            ),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "geraet-a", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        // Nur EIN lokaler Vorgang — Gerät As Abschluss wurde auf Gerät Bs
+        // Platzhalter übertragen, kein zweiter, eigenständig offen bleibender
+        // Vorgang für dieselbe Liste.
+        let vorgaenge = try context.fetch(FetchDescriptor<Einkaufsvorgang>())
+        #expect(vorgaenge.count == 1)
+        #expect(platzhalter.endZeit == abschlusszeit)
+    }
+
     /// Seit der Entkopplung der Live-Ansicht von der Vorgangs-Identität
     /// (Session 2026-08-03, `docs/DATENSYNCHRONISATION.md` Abschnitt 4.3)
     /// gibt es keine Umleitung mehr: Ein Snapshot referenziert per ID exakt

@@ -3305,3 +3305,99 @@ bekannt und bewusst dokumentiert (Abschnitt 4.5), aber die Lücke zwischen
 „der Export-Code behandelt diesen Fall defensiv" und „der Nutzer bekommt
 das im Diagnose-Bericht angezeigt" blieb unbemerkt, bis ein echter
 Zwei-Geräte-Vergleich sie aufdeckte.
+
+**Nachtrag (2026-08-10): tatsächliche Ursache war doch keine baumelnde
+Referenz.** Der Nutzer prüfte nach diesem Fix erneut — auf keinem der beiden
+Geräte meldete `DatenintegritaetsService` irgendetwas. Der wirkliche Grund
+für die 2 fehlenden Einträge: eine rein LOKAL auf Bernhards Gerät entstandene
+Artikel-Dublette (zwei unabhängig angelegte Artikel exakt gleichen Namens),
+die sich nie von selbst zusammenführte — der namensbasierte Merge (Abschnitt
+4.2 in `docs/DATENSYNCHRONISATION.md`) läuft nur beim Import eines fremden
+Snapshots, nie auf rein lokalen Daten. Backup deduplizierte die zwei
+Fremd-Artikel beim eigenen Import korrekt zu einem, wodurch auch nur einer
+seiner beiden Listen-Einträge übrig blieb — Backups (kleinere) Zahl war die
+tatsächlich korrekte. Fix: Warnung in `ArtikelEditView` beim Anlegen eines
+Artikels mit bereits vergebenem Namen (kein Speicher-Block), siehe
+`ShopWithMe/Models/Artikel.swift` → `dublette(name:alle:ausgenommen:)`. Die
+in diesem Abschnitt oben beschriebene `EinkaufslistenEintrag`-Prüfung bleibt
+trotzdem sinnvoll (eigenständige, unabhängig entdeckte Lücke) — war hier nur
+nicht die Ursache dieses konkreten Falls.
+
+## 52. Nutzerbericht (2026-08-10): eigener Fix aus Abschnitt 50 verursachte neue Regression beim gemeinsamen Live-Einkaufen
+
+**Gemeldet vom Nutzer:** Nach den Fixes aus Abschnitt 50/51 (neuer Testlauf,
+„Backup zurückgesetzt und neu aufgesetzt") stimmten die Einkaufslisten-Zahlen
+endlich überein — aber: Bernhard schloss seinen Einkauf ab (`Einkauf
+abschließen`), das kam bei Backup nie an. Backup zeigte weiterhin 3 abgehakte
+Einträge als aktuell offen, und „Einkauf abschließen" blieb dort aktiv
+anklickbar, obwohl der reale Einkauf laut Bernhard bereits fertig war.
+
+**Ursache: der Abschnitt-50-Fix selbst, zu grob gefasst.** Das dortige Gate
+(`offenerTreffer` matcht nur, wenn `eintrag.endZeit == nil`, also nur ein
+selbst noch offener Remote-Eintrag) verhinderte zwar zuverlässig das damals
+gemeldete Problem (mehrere längst abgeschlossene, historische Peer-Vorgänge
+aliasieren sich fälschlich auf einen frischen Platzhalter) — blockierte aber
+auch den eigentlich vorgesehenen Regelfall des Zweigs: Gerät A (Bernhard)
+schließt seinen Einkauf ab, Gerät B (Backup) hat für dieselbe Liste einen
+eigenen, noch offenen Platzhalter (entstanden z.B., weil Backups vorheriger
+Vorgang gerade erst selbst abgeschlossen wurde und `einkaufSicherstellen()`
+sofort einen neuen anlegte — Backups eigenes `einkauf_abschluss_durchgefuehrt`-
+Protokoll um 03:59:57 Uhr bestätigt genau das). Der erste Snapshot, den
+Backup von Bernhard danach empfängt, zeigt dessen Vorgang bereits als
+`endZeit != nil` — das pauschale Gate verwarf ihn deshalb komplett, Backups
+Platzhalter blieb dauerhaft unverändert offen hängen.
+
+Zusätzlicher Beleg aus dem Protokoll: die parallel beobachteten
+`dedupe_conflict_detected`-Einträge (`Einkaufsvorgang.artikelAbhakenOhneEventAufzeichnung`,
+GitHub-Bezug siehe `docs/DATABASE_CONCURRENCY.md`) zeigen, dass Backup
+dieselben drei Artikel (Breze, Bananen, Bertoli Olivenöl) zusätzlich über den
+schnellen Multipeer-Kanal empfing und korrekt als „bereits selbst abgehakt"
+erkannte, keine Duplikate anlegte — dieser Mechanismus arbeitete also
+korrekt. Er betrifft aber nur einzelne `KaufEintrag`e, nie die
+Vorgangs-Identität/den Abschluss-Status selbst — dafür ist ausschließlich
+`mergeEinkaufsvorgaenge` (Bereich C, langsamerer Datei-Kanal) zuständig, und
+genau dort griff das zu grobe Gate.
+
+**Fix:** Das pauschale „Remote muss selbst offen sein"-Gate weicht einer
+präziseren Zeit-Plausibilitätsprüfung, angewendet VOR statt NACH der
+Aliasierung — derselbe Vergleich, der weiter unten ohnehin schon über die
+Anwendung der `endZeit` entscheidet (`remoteEndZeit >= vorhandener.startZeit`),
+nur jetzt zusätzlich als Bedingung fürs Matching selbst:
+
+```swift
+guard let remoteEndZeit = eintrag.endZeit else { return true }  // noch offen → matcht wie bisher
+return remoteEndZeit >= kandidat.startZeit  // plausibel dieselbe Sitzung vs. eindeutig historisch
+```
+
+Ein Remote-Eintrag ohne `endZeit` matcht weiterhin uneingeschränkt (Regelfall
+„beide noch offen"). Ein bereits abgeschlossener Remote-Eintrag matcht nur,
+wenn seine `endZeit` NICHT vor dem `startZeit` des lokalen Kandidaten liegt —
+für Abschnitt 50s historische Vorgänge (Stunden vor dem frischen Platzhalter)
+weiterhin `false` (unverändert repariert), für den hier neu gemeldeten Fall
+(Bernhards Abschluss liegt NACH Backups Platzhalter-Start, plausibel dieselbe
+laufende Sitzung) jetzt korrekt `true`.
+
+Regressionstest:
+``SyncSnapshotImportServiceTests/bereitsAbgeschlossenerVorgangDerselbenSitzungMatchtNochOffenenLokalenPlatzhalter()``
+— per `git stash` gegen den Abschnitt-50-Stand verifiziert, dass er dort
+reproduzierbar fehlschlägt (zwei separate Vorgänge statt einer, Platzhalter
+bleibt offen), mit dem neuen Fix grün. Der bestehende Abschnitt-50-
+Regressionstest (``mehrereBereitsAbgeschlosseneVorgaengeWerdenNichtAufFrischenLokalenPlatzhalterAliasiert()``)
+bleibt unverändert grün — seine drei Remote-Einträge liegen mit ihrer
+`endZeit` weiterhin klar vor dem `startZeit` des dortigen Platzhalters.
+
+**Lehre:** Ein Fix, der ein zu weites Matching auf ein zu enges eingrenzt
+(hier: „egal ob offen oder geschlossen" → „nur noch offen"), sollte den
+tatsächlich zugrunde liegenden Unterscheidungsgrund abbilden (hier: „plausibel
+dieselbe Sitzung" vs. „eindeutig historisch, viel früher"), nicht das nächst-
+gröbere verfügbare Merkmal (hier: „offen/geschlossen" als grobe Näherung für
+„aktuell/historisch"). Ein binäres Merkmal, das nur zufällig mit der
+eigentlichen Unterscheidung korreliert, bricht in genau den Randfällen, in
+denen die Korrelation nicht mehr gilt — hier: ein Remote-Eintrag kann bereits
+geschlossen UND trotzdem Teil derselben laufenden Sitzung sein, wenn der
+Abschluss einfach schneller war als der nächste Sync-Zyklus des anderen
+Geräts. Die bereits vorhandene, unten ohnehin genutzte
+Zeit-Plausibilitätsprüfung war die eigentlich richtige Grundlage von Anfang
+an — hätte der erste Fix (Abschnitt 50) sie direkt wiederverwendet statt ein
+neues, gröberes Kriterium einzuführen, wäre diese Regression vermeidbar
+gewesen.

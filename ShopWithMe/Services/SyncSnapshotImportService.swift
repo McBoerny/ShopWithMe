@@ -1231,7 +1231,7 @@ enum SyncSnapshotImportService {
                     SyncDebugLogger.log(.einkaufsvorgangEintragUebersprungen, details: "vorgangID=\(eintrag.id) grund=unaufloesbareListe")
                 }
                 continue
-            } else if eintrag.endZeit == nil, let offenerTreffer = Einkaufsvorgang.kanonischer(unter: alleLokalen.filter({
+            } else if let offenerTreffer = Einkaufsvorgang.kanonischer(unter: alleLokalen.filter({ kandidat in
                 // `kaufEintraege.isEmpty` (Nachtrag): der Zweig soll
                 // ausschließlich den Fall abdecken, dass zwei Geräte VOR
                 // ihrem ersten Sync unabhängig je einen frischen, leeren
@@ -1247,26 +1247,46 @@ enum SyncSnapshotImportService {
                 // u.U. längst veralteten Käufe zusätzlich in die listenweite
                 // "abgehakt"-Ansicht des zusammengeführten Vorgangs
                 // einfließen.
+                guard kandidat.endZeit == nil, kandidat.kaufEintraege.isEmpty,
+                      kandidat.geschaeft == remoteGeschaeft, kandidat.einkaufsliste == remoteListe
+                else { return false }
+                // Timing-Plausibilität VOR der Aliasierung (Nutzerbericht
+                // 2026-08-09, dann 2026-08-10 — zwei gegensätzliche Live-Test-
+                // Funde am selben Zweig): ein bereits abgeschlossener
+                // Remote-Eintrag darf nur matchen, wenn seine `endZeit` NICHT
+                // vor dem `startZeit` DIESES Kandidaten liegt — dieselbe Regel
+                // wie die Plausibilitätsprüfung weiter unten
+                // (`remoteEndZeit >= vorhandener.startZeit`), hier aber VOR
+                // statt NACH der Aliasierung angewendet.
                 //
-                // `eintrag.endZeit == nil` (Nutzerbericht 2026-08-09, frischer
-                // Beitritt/„Ersetzen durch Peer"): der Zweig darf nur einen
-                // REMOTE-Eintrag matchen, der selbst noch offen ist — genau
-                // das race-Szenario "zwei Geräte legen vor dem ersten Sync
-                // unabhängig je einen frischen Vorgang an", das er abdecken
-                // soll. Ein bereits abgeschlossener Remote-Eintrag ist per
-                // Definition kein Kandidat für dieses Race, sondern ein
-                // eigenständiger, historischer Einkauf. Ohne dieses Gate
-                // aliasierte ein frisch (z.B. von `EinkaufenView.einkaufSicherstellen()`)
-                // angelegter eigener Platzhalter-Vorgang mehrere fremde,
-                // bereits abgeschlossene Vorgänge gleichzeitig auf sich
-                // selbst — jeder davon scheiterte danach an der
-                // `remoteEndZeit >= vorhandener.startZeit`-Plausibilitätsprüfung
-                // unten (der Platzhalter ist ja "gerade eben" angelegt, jede
-                // echte historische `endZeit` liegt davor), blieb dadurch
-                // dauerhaft offen, und alle per `mergeKaufEintraege` daran
-                // gehängten, längst abgehakten Artikel mehrerer vergangener
-                // Einkäufe erschienen fälschlich als aktuell abgehakt.
-                $0.endZeit == nil && $0.kaufEintraege.isEmpty && $0.geschaeft == remoteGeschaeft && $0.einkaufsliste == remoteListe
+                // Erster Fund (2026-08-09, frischer Beitritt/„Ersetzen durch
+                // Peer"): ein pauschales `eintrag.endZeit == nil`-Gate (nur
+                // noch offene Remote-Einträge dürfen matchen) verhinderte
+                // zwar zuverlässig, dass ein frisch angelegter eigener
+                // Platzhalter mehrere fremde, LÄNGST abgeschlossene Vorgänge
+                // gleichzeitig auf sich aliasierte (jeder scheiterte danach an
+                // der Prüfung unten, blieb dadurch dauerhaft offen, ihre
+                // KaufEintraege erschienen fälschlich als aktuell abgehakt) —
+                // war damit aber zu grob.
+                //
+                // Zweiter Fund (2026-08-10, gemeinsames Live-Einkaufen): das
+                // pauschale Gate blockierte auch den eigentlich vorgesehenen
+                // Fall — Gerät A schließt seinen Einkauf gerade ab, während
+                // Gerät B (noch offen, eigener frischer Vorgang derselben
+                // Liste) das erst im NÄCHSTEN Zyklus mitbekommt. Der
+                // Remote-Eintrag ist zu diesem Zeitpunkt technisch schon
+                // `endZeit != nil`, gehört aber klar zur selben, gerade noch
+                // laufenden Sitzung wie Gerät Bs Platzhalter (`startZeit`
+                // liegt VOR dieser `endZeit`) — das pauschale Gate verwarf
+                // auch das, Gerät Bs eigener Vorgang blieb fälschlich
+                // dauerhaft offen hängen, „Einkauf abschließen“ kam nie an.
+                //
+                // Fix: statt „offen oder nicht“ zählt jetzt derselbe
+                // Zeit-Vergleich wie unten — plausibel gleichzeitig (matcht)
+                // vs. eindeutig historisch, lange vor Existenz dieses
+                // Kandidaten (matcht nicht).
+                guard let remoteEndZeit = eintrag.endZeit else { return true }
+                return remoteEndZeit >= kandidat.startZeit
             })) {
                 if offenerTreffer.id != eintrag.id {
                     SyncEntitaetsAliasService.registriere(

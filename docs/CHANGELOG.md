@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.14 (Build 271) — offenerTreffer-Zeitprüfung: eigener Vorfix blockierte Abschluss-Übernahme beim gemeinsamen Live-Einkaufen
+
+Bugfix (eigene Regression, Nutzerbericht: Bernhards „Einkauf abschließen"
+kam bei Backup nie an, 3 Artikel blieben dort fälschlich aktuell abgehakt).
+Der vorherige Fix (offenerTreffer matcht nur noch bei `eintrag.endZeit ==
+nil`) verhinderte zwar zuverlässig, dass ein frischer Platzhalter mehrere
+längst abgeschlossene historische Peer-Vorgänge auf sich aliasiert — war
+damit aber zu grob und blockierte auch den eigentlich vorgesehenen
+Regelfall: Gerät A schließt ab, Gerät B (eigener offener Platzhalter
+derselben Liste) sieht den Vorgang beim ersten Sync-Kontakt bereits als
+abgeschlossen. Ersetzt durch eine Zeit-Plausibilitätsprüfung VOR der
+Aliasierung (`remoteEndZeit >= kandidat.startZeit`, dieselbe Regel, die
+weiter unten ohnehin schon über die Übernahme der `endZeit` entscheidet) —
+unterscheidet "plausibel dieselbe laufende Sitzung" von "eindeutig
+historisch". Details: `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 52.
+
 ## v0.14 (Build 270) — Warnung beim Anlegen eines Artikels mit bereits vorhandenem Namen
 
 Feature (Nutzerbericht-Folgefund): tatsächliche Ursache der vorherigen

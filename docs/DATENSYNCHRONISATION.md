@@ -435,17 +435,29 @@ Zwei unabhängige Fixes:
    stattfindet): der Besuch wird dann doppelt gezählt statt dedupliziert —
    betrifft nur Besuchszähler/-protokoll, nicht die Live-Ansicht (die ist
    ohnehin listenweit, nicht vorgangsbezogen).
-3. **Remote-Eintrag muss selbst noch offen sein (Nutzerbericht 2026-08-09):**
-   `offenerTreffer` matcht zusätzlich nur, wenn `eintrag.endZeit == nil` —
-   ohne dieses Gate konnte ein frisch (z.B. durch
+3. **Zeit-Plausibilität VOR der Aliasierung, nicht nur danach (Nutzerbericht
+   2026-08-09, präzisiert 2026-08-10):** `offenerTreffer` matcht einen
+   bereits abgeschlossenen Remote-Eintrag (`eintrag.endZeit != nil`) nur,
+   wenn dessen `endZeit` NICHT vor dem `startZeit` des lokalen Kandidaten
+   liegt — derselbe Vergleich, der weiter unten ohnehin über die Übernahme
+   der `endZeit` entscheidet (`remoteEndZeit >= vorhandener.startZeit`), hier
+   zusätzlich als Matching-Bedingung selbst angewendet. Ein noch offener
+   Remote-Eintrag (`endZeit == nil`) matcht weiterhin uneingeschränkt.
+   Zwei gegensätzliche Live-Test-Funde am selben Zweig: ohne jede
+   Einschränkung konnte ein frisch (z.B. durch
    `EinkaufenView.einkaufSicherstellen()`) angelegter eigener Platzhalter
-   mehrere bereits abgeschlossene Peer-Vorgänge gleichzeitig auf sich
-   aliasieren; jeder scheiterte danach an der
-   `remoteEndZeit >= vorhandener.startZeit`-Prüfung (der Platzhalter ist ja
-   „gerade eben" angelegt), blieb dauerhaft offen, und alle daran über
-   `mergeKaufEintraege` gehängten, längst abgehakten Artikel mehrerer
-   vergangener Einkäufe erschienen fälschlich als aktuell abgehakt. Details:
-   `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 50.
+   mehrere bereits abgeschlossene, LÄNGST vergangene Peer-Vorgänge
+   gleichzeitig auf sich aliasieren (blieb danach dauerhaft offen, ihre
+   `KaufEintrag`e erschienen fälschlich als aktuell abgehakt) — ein erster,
+   zu grober Fix („Remote muss selbst noch offen sein") verhinderte das zwar,
+   blockierte aber auch den eigentlich vorgesehenen Regelfall: Gerät A
+   schließt seinen Einkauf ab, während Gerät B (noch offener eigener
+   Platzhalter derselben Liste) das erst im nächsten Sync-Zyklus erfährt —
+   der erste Snapshot zeigt den Vorgang dann bereits als abgeschlossen, ohne
+   dass beide je „gleichzeitig offen" gesehen wurden; Gerät Bs Platzhalter
+   blieb dadurch fälschlich dauerhaft offen hängen, „Einkauf abschließen"
+   kam dort nie an. Details: `docs/DATENSYNCHRONISATION_VERLAUF.md`
+   Abschnitte 50 und 52.
 
 **Neu anzulegender Vorgang braucht eine auflösbare Liste:** Referenziert ein
 empfangener Snapshot-Eintrag weder ein bekanntes Geschäft noch eine bekannte
