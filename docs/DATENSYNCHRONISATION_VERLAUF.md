@@ -3702,3 +3702,58 @@ unveränderter Peer-Wert bleibt blockiert" erneut und schlug beim
 Red-Check (Fix per `git stash` entfernt) fälschlich NICHT fehl. Erst der
 Umbau auf zwei echte `ModelContext`s mit Rücklesen des real entstandenen
 lokalen Werts deckte die Lücke sauber ab.
+
+## 57. Nutzerbericht (2026-08-10, Folgefund zu Abschnitt 56): `mergeKaufEintraege` entfernt den offenen Listen-Eintrag nie
+
+**Ausgangslage:** Backup zurückgesetzt, auf Bernhard neue Artikel angelegt,
+einige abgehakt, Einkauf abgeschlossen (Endzustand auf Bernhard: 0 von 6,
+alles erledigt). Nach dem nächsten Sync zeigte Backup „2 von 8" statt der
+erwarteten „2 von 6" — zwei Artikel, die Bernhard bereits abgehakt hatte,
+standen auf Backup gleichzeitig noch offen auf der Liste.
+
+**Ursache:** Das lokale Abhaken
+(``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:kategorie:geschaeft:)``)
+löscht explizit den zugehörigen `EinkaufslistenEintrag`, sobald ein
+`KaufEintrag` entsteht. `mergeKaufEintraege` (Bereich C, legt `KaufEintrag`e
+direkt aus einem Peer-Snapshot an, ohne über jene Funktion zu laufen) tat das
+nie — ein Artikel, der auf EINEM Gerät noch als offener Listen-Eintrag
+geführt wurde (z.B. weil dessen Bereich-B-„listen"-Snapshot vom selben Peer
+zu diesem Zeitpunkt noch den älteren, offenen Stand zeigte), blieb nach dem
+Merge dauerhaft GLEICHZEITIG „offen" UND „abgehakt". Exakt der Zustand, den
+``EinkaufenView/offeneArtikel`` bereits seit GitHub #52 aus der Anzeige
+herausfiltert (dortiger Kommentar: „auch wenn … noch ein
+`EinkaufslistenEintrag` für sie existiert") — der Filter verhinderte zwar die
+doppelte Anzeige des Artikels selbst, aber die verwaiste Zeile blieb in
+``Einkaufsliste/eintraege`` bestehen und zählte im „X von Y"-Gesamtwert
+(`offeneArtikel.count + abgehakteArtikel.count`) weiter mit.
+
+**Fix:** `mergeKaufEintraege` löscht jetzt, analog zum lokalen Abhaken-Pfad,
+den passenden `EinkaufslistenEintrag` (falls vorhanden), bevor es den neuen
+`KaufEintrag` einträgt. Siehe
+`ShopWithMe/Services/SyncSnapshotImportService.swift`.
+
+**Verifiziert:** neuer Regressionstest
+``mergeKaufEintragEntferntEntsprechendenOffenenListenEintrag()`` — ein Gerät
+mit noch offenem Listen-Eintrag empfängt per Snapshot einen abgeschlossenen
+Peer-Einkaufsvorgang samt `KaufEintrag` für denselben Artikel; ohne den Fix
+bleibt der Artikel fälschlich weiter auf der Liste, mit Fix verschwindet er
+korrekt — per `git stash` gegengeprüft.
+
+**Offen, separat untersucht (derselbe Testlauf):** Bernhards Sync-Ordner-
+Zugriff schlug für mehrere Minuten durchgehend fehl
+(`sync_ordner_zugriff_fehlgeschlagen` für JEDEN Teilschritt) — dasselbe
+Symptombild wie Abschnitt 30 (verschachtelte/überlappende
+Security-Scope-Zugriffe destabilisieren den Bookmark dauerhaft für den Rest
+der App-Sitzung). Die dort behobene konkrete Ursache (ungebündeltes
+`kaeufe/`-Datei-Aufräumen) ist nachweislich nicht regressiert — der einzige
+verbleibende Aufrufer ist weiterhin `KaufEintragBereinigungService.bereinigen`
+mit gebündeltem Einzelzugriff. `SyncOrdnerZugriffsDiagnose` (`gleichzeitigOffen`)
+zeigte für jeden Fehlschlag in diesem Fenster „keine" — kein AKTUELL
+überlappender Zugriff aus dieser App-Sitzung zum Fehlschlagzeitpunkt, was zu
+Abschnitt 30s Befund passt, dass die Destabilisierung EINMALIG (irgendwann
+früher in derselben, seit Stunden durchgehend laufenden App-Sitzung von
+Bernhard) ausgelöst wird und danach bis zum nächsten vollständigen
+Neustart bestehen bleibt. Nicht weiter code-seitig untersucht, da kein neuer
+Aufrufer identifiziert werden konnte — nächster Schritt ist ein sauberer
+Test nach vollständigem Neustart von Bernhard (nicht nur Hintergrund/
+Vordergrund).

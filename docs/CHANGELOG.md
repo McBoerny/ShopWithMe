@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.14 (Build 276) — `mergeKaufEintraege` entfernt den offenen Listen-Eintrag jetzt
+
+Bugfix (Nutzerbericht: nach einem Sync zeigte Backup „2 von 8" statt der
+erwarteten „2 von 6" — zwei bereits auf Bernhard abgehakte Artikel standen
+auf Backup weiterhin offen auf der Liste). Ursache: anders als das lokale
+Abhaken löschte `mergeKaufEintraege` (Bereich C) den zugehörigen
+`EinkaufslistenEintrag` nie, wenn es einen `KaufEintrag` direkt aus einem
+Peer-Snapshot anlegte — ein Artikel blieb dadurch dauerhaft gleichzeitig
+„offen" und „abgehakt". `EinkaufenView` filtert diesen Zustand seit GitHub
+#52 zwar aus der Anzeige, aber die verwaiste Zeile blähte weiterhin den
+Gesamtwert im Listentitel auf. Fix: der passende Listen-Eintrag wird jetzt
+beim Merge mitgelöscht. Details: `docs/DATENSYNCHRONISATION_VERLAUF.md`
+Abschnitt 57.
+
 ## v0.14 (Build 275) — `erstelltAm` wird beim Sicherheitsnetz-Import jetzt weitergegeben
 
 Bugfix (eigener Code-Review-Fund direkt nach Build 274, noch vor dem

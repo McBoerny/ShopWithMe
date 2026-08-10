@@ -1823,6 +1823,65 @@ struct SyncSnapshotImportServiceTests {
         #expect(alleEintraege.first?.artikel?.id == apfel.id)
     }
 
+    /// Regressionstest für einen Nutzerbericht (2026-08-10): `mergeKaufEintraege`
+    /// legte den vom Peer gemeldeten Kauf zwar korrekt als `KaufEintrag` an,
+    /// entfernte aber NIE den entsprechenden noch offenen `EinkaufslistenEintrag`
+    /// — anders als das lokale Abhaken
+    /// (``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:kategorie:geschaeft:)``,
+    /// das genau das tut). Der Artikel blieb dadurch dauerhaft gleichzeitig
+    /// „offen" UND „abgehakt" — der schon vor GitHub #52 bekannte Zustand
+    /// (siehe ``EinkaufenView/offeneArtikel``), der dort zwar aus der Anzeige
+    /// herausgefiltert wird, aber den „X von Y"-Gesamtwert im Titel künstlich
+    /// aufblähte (live bestätigt: „2 von 8" statt der tatsächlichen „2 von 6").
+    @Test
+    func mergeKaufEintragEntferntEntsprechendenOffenenListenEintrag() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
+        let artikel = Artikel(name: "Milch", symbolName: "drop.fill", farbeHex: "#34C759")
+        context.insert(artikel)
+        // Artikel steht noch offen auf der Liste — z.B. weil dieses Gerät den
+        // vom Peer bereits abgeschlossenen Einkaufsvorgang über einen älteren
+        // Bereich-B-Snapshot desselben Peers noch nicht kannte.
+        let eintrag = EinkaufslistenEintrag(einkaufsliste: liste, artikel: artikel, menge: 1)
+        context.insert(eintrag)
+        try context.save()
+        #expect(liste.enthaelt(artikel))
+
+        let remoteVorgangID = UUID()
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.artikel = [
+            ArtikelSnapshot(
+                id: artikel.id, name: "Milch", symbolName: "drop.fill", farbeHex: "#34C759",
+                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+            ),
+        ]
+        snapshot.einkaufslisten = [EinkaufslisteSnapshot(id: liste.id, name: "Einkaufsliste", erstelltAm: liste.erstelltAm)]
+        snapshot.einkaufsvorgaenge = [
+            EinkaufsvorgangSnapshot(id: remoteVorgangID, geschaeftID: nil, einkaufslisteID: liste.id, startZeit: Date(), endZeit: Date()),
+        ]
+        snapshot.kaufEintraege = [
+            KaufEintragSnapshot(
+                id: UUID(), artikelID: artikel.id, einkaufsvorgangID: remoteVorgangID, geschaeftID: nil, kategorieID: nil,
+                artikelNameSnapshot: "Milch", geschaeftNameSnapshot: "",
+                datum: Date(), menge: 1, kategorieBesuchsIndex: nil
+            ),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        // Der Artikel ist jetzt als gekauft bekannt — darf nicht mehr
+        // gleichzeitig als offener Listen-Eintrag geführt werden.
+        #expect(!liste.enthaelt(artikel))
+        #expect(try context.fetch(FetchDescriptor<KaufEintrag>()).count == 1)
+    }
+
     /// Wie ``kaufEintragWirdAlsUnveraenderlicheHistorieUebernommenOhneDuplikat``,
     /// für ``Preispunkt`` (GitHub #76) — derselbe Union-nach-`id`-Merge.
     @Test

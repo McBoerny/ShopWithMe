@@ -689,6 +689,20 @@ Durchlauf. Bewusst nicht behoben (würde eine Umstellung der seit mehreren
 Live-Tests bestätigten Abhängigkeitsreihenfolge erfordern) — der Randfall
 löst sich beim nächsten Zyklus von selbst auf.
 
+**Nachtrag (Nutzerbericht 2026-08-10, Abschnitt 57): `mergeKaufEintraege`
+ließ den offenen Listen-Eintrag stehen.** Anders als das lokale Abhaken
+löschte der Bereich-C-Merge den zugehörigen `EinkaufslistenEintrag` nie,
+wenn er einen `KaufEintrag` direkt aus einem Peer-Snapshot anlegte — ein
+Artikel, der auf einem Gerät noch als offener Listen-Eintrag geführt wurde
+(z.B. wegen eines zeitlich noch nicht aktualisierten „listen"-Snapshots
+desselben Peers), blieb dort dauerhaft gleichzeitig „offen" UND „abgehakt".
+`EinkaufenView/offeneArtikel` filtert diesen Zustand seit GitHub #52 zwar aus
+der Anzeige heraus, die verwaiste Zeile blähte aber weiterhin den „X von
+Y"-Gesamtwert im Titel auf. Fix: `mergeKaufEintraege` löscht jetzt, analog
+zum lokalen Abhaken-Pfad, den passenden `EinkaufslistenEintrag`, bevor es den
+neuen `KaufEintrag` einträgt. Details:
+`docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 57.
+
 ## 5. Sync-Zyklus und adaptives Polling
 
 `SyncPollingService` führt einen vollständigen Zyklus (Import Bereich A →

@@ -1554,6 +1554,22 @@ enum SyncSnapshotImportService {
             context.insert(neuer)
 
             if let artikel = neuer.artikel, let einkaufsliste = neuer.einkaufsvorgang?.einkaufsliste {
+                // Nutzerbericht (2026-08-10): anders als das lokale Abhaken
+                // (``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:kategorie:geschaeft:)``,
+                // löscht dort explizit den offenen `EinkaufslistenEintrag``)
+                // entfernte dieser Zweig den entsprechenden offenen Listen-
+                // Eintrag bisher NIE — ein Gerät, das den Artikel noch offen
+                // führt (z.B. aus einem älteren, noch nicht aktualisierten
+                // Bereich-B-Snapshot desselben Peers), behält ihn dauerhaft
+                // gleichzeitig als „offen" UND „abgehakt": genau der Zustand,
+                // den ``EinkaufenView/offeneArtikel`` seit GitHub #52 zwar in
+                // der Anzeige herausfiltert, aber die verwaiste
+                // `EinkaufslistenEintrag`-Zeile blieb bestehen und blähte den
+                // „X von Y"-Gesamtwert künstlich auf (live bestätigt: Gerät
+                // zeigte „2 von 8" statt der tatsächlichen „2 von 6").
+                if let listenEintrag = einkaufsliste.eintrag(fuer: artikel) {
+                    context.delete(listenEintrag)
+                }
                 ArtikelListenKaufService.vermerkeAbgehaktFallsNoetig(
                     artikel: artikel, einkaufsliste: einkaufsliste, am: eintrag.datum,
                     bekannt: &bekannteArtikelListenEintraege, context: context
