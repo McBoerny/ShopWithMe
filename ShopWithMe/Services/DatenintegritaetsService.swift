@@ -118,6 +118,41 @@ enum DatenintegritaetsService {
             ))
         }
 
+        // Nutzerbericht (2026-08-10): eine baumelnde Referenz auf dieser
+        // Beziehung blieb bisher komplett unsichtbar für den Nutzer — trotz
+        // `@Relationship(deleteRule: .cascade, inverse:)` auf beiden Seiten
+        // (`Einkaufsliste.eintraege`/`Artikel.einkaufslistenEintraege`, seit
+        // deren Einführung über eine normale App-Operation nicht mehr neu
+        // entstehbar, siehe Typ-Doku von ``DatenintegritaetsServiceTests``)
+        // reproduzierte sich auf einem länger genutzten Testgerät weiterhin
+        // ein Alt-Fall (vor Einführung dieser Deklarationen entstanden), live
+        // bestätigt über wiederholte `sync_baumelnde_referenz_gefunden`-
+        // Protokolleinträge. Konsequenz ohne diese Prüfung: unbemerkt, da
+        // ``SyncSnapshotExportService/erstelleSnapshot(context:)`` einen
+        // solchen Eintrag beim Export über ``SyncSnapshotExportService/sichereID(_:gueltigeIDs:)``
+        // stillschweigend komplett überspringt (`guard let einkaufslisteID =
+        // sichereID(...), let artikelID = sichereID(...) else { return nil
+        // }`) — ein Peer, der seinen kompletten Bestand aus so einem Export
+        // neu aufbaut (``SyncErsetzenService``), erhält dadurch dauerhaft
+        // weniger Einkaufslisten-Einträge als tatsächlich vorhanden, ohne
+        // dass irgendein Fehler sichtbar wird.
+        for eintrag in (try? context.fetch(FetchDescriptor<EinkaufslistenEintrag>())) ?? [] {
+            let artikelBaumelnd = istBaumelnd(eintrag.artikel, gueltigeIDs: gueltigeArtikelIDs)
+            let listeBaumelnd = istBaumelnd(eintrag.einkaufsliste, gueltigeIDs: gueltigeEinkaufslistenIDs)
+            guard artikelBaumelnd || listeBaumelnd else { continue }
+            var betroffeneFelder: [String] = []
+            if artikelBaumelnd { betroffeneFelder.append("Artikel") }
+            if listeBaumelnd { betroffeneFelder.append("Einkaufsliste") }
+            // Nur die jeweils NICHT selbst baumelnde Seite ist sicher lesbar
+            // (analog dem Snapshot-Muster bei `KaufEintrag`/`Preispunkt` oben).
+            let listenName = listeBaumelnd ? nil : eintrag.einkaufsliste?.name
+            let ortszusatz = listenName.map { " auf Liste „\($0)“" } ?? ""
+            let datum = eintrag.erstelltAm.formatted(date: .abbreviated, time: .omitted)
+            befunde.append(Befund(
+                beschreibung: "Einkaufslisten-Eintrag vom \(datum)\(ortszusatz): Bezug zu \(betroffeneFelder.joined(separator: ", ")) zeigt auf nicht mehr Existierendes — wird beim Sync-Export stillschweigend übersprungen"
+            ))
+        }
+
         for vorgang in (try? context.fetch(FetchDescriptor<Einkaufsvorgang>())) ?? [] {
             let datum = vorgang.startZeit.formatted(date: .abbreviated, time: .omitted)
             if istBaumelnd(vorgang.geschaeft, gueltigeIDs: gueltigeGeschaeftIDs) {

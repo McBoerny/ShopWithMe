@@ -3237,3 +3237,71 @@ noch offenen Zuständen behandeln soll, muss auf BEIDEN Seiten prüfen, dass
 der jeweils andere Zustand wirklich zum Race passt — eine Prüfung nur der
 lokalen Seite lässt sich von einer beliebigen, zufällig passenden Remote-
 Eigenschaft (hier: bereits abgeschlossen) unterlaufen.
+
+## 51. Nutzerbericht-Folgefund (2026-08-10): Backup nach Abschnitt-50-Fix korrekt 0 abgehakt, aber dauerhaft 2 Einträge weniger als Bernhard
+
+**Gemeldet vom Nutzer:** Nach dem Abschnitt-50-Fix zeigte „Backup" nach einem
+erneuten Neuaufbau korrekt 0 abgehakte Artikel (bestätigt per Protokoll: alle
+vier `sync_einkaufsvorgang_abschluss_uebernommen` mit je eigener, korrekter
+`lokaleID` statt eines gemeinsamen Platzhalters) — aber die Liste
+„Einkaufsliste" blieb bei 6 Einträgen, während „Bernhard" weiterhin 8 zeigte.
+Wiederholte Sync-Zyklen änderten daran nichts, auch nicht über mehrere
+Stunden hinweg (Protokoll-Zeitstempel bis 2026-08-10T02:58 Uhr).
+
+**Ursache:** Bernhards eigenes Debug-Protokoll aus der vorherigen Sitzung
+zeigte bereits wiederholt `sync_baumelnde_referenz_gefunden typ=Artikel
+referenz=…/Artikel/p29` — eine auf seinem Gerät seit längerem bestehende
+baumelnde Referenz, vermutlich ein Altbestand von vor Einführung der
+`@Relationship(deleteRule: .cascade, inverse:)`-Deklarationen auf
+`Einkaufsliste.eintraege`/`Artikel.einkaufslistenEintraege` (seitdem über
+normale App-Operationen strukturell nicht mehr neu entstehbar, siehe
+Typ-Doku von `DatenintegritaetsServiceTests`). `SyncSnapshotExportService`s
+Aufbau von `einkaufslistenEintraege` verwirft einen `EinkaufslistenEintrag`
+beim Export komplett, sobald `sichereID` für `artikel` ODER `einkaufsliste`
+`nil` liefert (Zeile „`guard let einkaufslisteID = …, let artikelID = … else
+{ return nil }`" in `SyncSnapshotExportService.erstelleSnapshot`) — anders
+als bei den meisten übrigen Bereich-B-Feldern wird hier nicht nur das
+einzelne Feld genullt, sondern der GANZE Eintrag ausgelassen, weil ein
+`EinkaufslistenEintrag` ohne Artikel oder Liste fachlich sinnlos wäre. Zwei
+von Bernhards Einträgen auf „Einkaufsliste" referenzierten (vermutlich) den
+baumelnden Artikel — sie fehlten dadurch in JEDEM Export, den Bernhards
+Gerät je erzeugte, unabhängig davon, wie oft „Backup" neu synchronisierte
+oder sich komplett neu aufbaute. Zusätzlicher Befund: `DatenintegritaetsService.pruefe(context:)`
+prüfte `EinkaufslistenEintrag.artikel`/`.einkaufsliste` bisher gar nicht —
+der Zustand war auf Bernhards eigenem Gerät dadurch komplett unsichtbar, nur
+über das Sync-Debug-Protokoll (nicht die reguläre Datenintegritäts-Anzeige)
+indirekt erkennbar.
+
+**Fix:** `DatenintegritaetsService.pruefe(context:)` erkennt und meldet
+jetzt zusätzlich `EinkaufslistenEintrag`e mit baumelndem `artikel`- oder
+`einkaufsliste`-Bezug (inkl. Hinweis, dass der Eintrag beim Sync-Export
+stillschweigend übersprungen wird) — sichtbar in
+`DebuggingView` → „Datenintegrität" auf dem betroffenen Gerät (hier:
+Bernhard, nicht Backup). Der bestehende Reparaturweg
+(`SyncErsetzenService.planeBereinigungBaumelnderReferenzen`, „Baumelnde
+Referenzen bereinigen" in `DebuggingView`) heilt die Referenz bereits
+korrekt (ein frischer Export löst sie beiläufig zu `nil` auf, siehe
+Abschnitt 8/§4.5 in `docs/DATENSYNCHRONISATION.md`) — das Problem war nicht
+fehlende Reparatur-Funktionalität, sondern fehlende Sichtbarkeit, die den
+Nutzer nie zu dieser Funktion geführt hätte. Kein Regressionstest mit einer
+echten baumelnden Referenz (siehe Typ-Doku von
+`DatenintegritaetsServiceTests`, warum das mit den aktuellen `inverse:`-
+Deklarationen nicht mehr sicher konstruierbar ist) — die bestehende
+„vollständig intakte Daten melden nichts"-Testabdeckung wurde um einen
+`EinkaufslistenEintrag` erweitert.
+
+**Empfohlene Abhilfe für den konkreten Fall:** Auf Bernhards Gerät
+Einstellungen → Debugging → „Baumelnde Referenzen bereinigen" ausführen
+(kein Sync-Gerät nötig, siehe Abschnitt 8) — danach exportiert sein Gerät
+wieder den vollständigen Bestand, und der nächste reguläre Sync-Zyklus
+bringt „Backup" (und jeden anderen Peer) auf den korrekten Stand, ohne dass
+dafür ein erneuter Neuaufbau auf „Backup" selbst nötig ist.
+
+**Lehre:** Ein Diagnose-Werkzeug, das gezielt für „Nutzer meldet Datenverlust,
+Ursache unklar" gebaut wurde (`DatenintegritaetsService`), muss mit jeder
+neuen sync-relevanten Beziehung mitwachsen — `EinkaufslistenEintrag` bestand
+bereits seit Langem, `sichereID`s Alles-oder-nichts-Verhalten dafür war
+bekannt und bewusst dokumentiert (Abschnitt 4.5), aber die Lücke zwischen
+„der Export-Code behandelt diesen Fall defensiv" und „der Nutzer bekommt
+das im Diagnose-Bericht angezeigt" blieb unbemerkt, bis ein echter
+Zwei-Geräte-Vergleich sie aufdeckte.

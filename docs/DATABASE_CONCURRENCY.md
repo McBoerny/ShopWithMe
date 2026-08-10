@@ -468,7 +468,14 @@ Debug-Menü öffnet):
    `SyncSnapshotExportService` für jeden betroffenen Modelltyp ein
    `Set<PersistentIdentifier>` gültiger Objekte und **erkennt** jede baumelnde
    Referenz: `KaufEintrag.artikel`/`.geschaeft`/`.kategorie`/`.einkaufsvorgang`,
-   `Einkaufsvorgang.geschaeft`/`.einkaufsliste`, `Artikel.kategorie`
+   `Preispunkt.artikel`/`.geschaeft`, `Einkaufsvorgang.geschaeft`/`.einkaufsliste`,
+   `EinkaufslistenEintrag.artikel`/`.einkaufsliste` (Nutzerbericht 2026-08-10 —
+   trotz `@Relationship(deleteRule: .cascade, inverse:)` auf beiden Seiten über
+   normale App-Operationen nicht mehr neu entstehbar, aber auf einem Altbestand
+   von vor dieser Deklaration weiterhin live beobachtet; unentdeckt ließ
+   `SyncSnapshotExportService/sichereID(_:gueltigeIDs:)` den betroffenen
+   Eintrag beim Export stillschweigend komplett weg, siehe
+   `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 51), `Artikel.kategorie`
    (veraltetes Einzelwert-Feld), `WarengruppenDistanz`.
 2. **`DebuggingView` → Sektion „Datenintegrität"** — zeigt den beim letzten
    Start erzeugten Bericht (persistiert über `DatenintegritaetsService.letzterBericht`),

@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.14 (Build 269) — Datenintegritätsprüfung erkennt baumelnde `EinkaufslistenEintrag`-Referenzen
+
+Bugfix-Folgefund (Nutzerbericht: nach dem vorherigen Fix korrekt 0 abgehakte
+Artikel, aber „Backup" dauerhaft 2 Einkaufslisten-Einträge weniger als
+„Bernhard"). Ursache: eine seit Längerem bestehende baumelnde
+`Artikel`-Referenz auf Bernhards Gerät (Altbestand, über die aktuellen
+`@Relationship(deleteRule: .cascade, inverse:)`-Deklarationen nicht mehr neu
+entstehbar) ließ `SyncSnapshotExportService` die betroffenen
+`EinkaufslistenEintrag`e bei JEDEM Export stillschweigend komplett auslassen
+— unabhängig davon, wie oft ein Peer neu synchronisierte.
+`DatenintegritaetsService.pruefe(context:)` prüfte diese Beziehung bisher gar
+nicht, der Zustand war auf dem betroffenen Gerät selbst unsichtbar. Prüft
+jetzt zusätzlich `EinkaufslistenEintrag.artikel`/`.einkaufsliste` und meldet
+sie in Einstellungen → Debugging → „Datenintegrität" — der bestehende
+Reparaturweg „Baumelnde Referenzen bereinigen" behebt den Zustand direkt.
+Details: `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 51.
+
 ## v0.14 (Build 268) — Frischer Sync-Beitritt zeigte längst abgehakte Artikel als aktuell abgehakt
 
 Bugfix (Nutzerbericht: Gerät zeigte nach frischem Beitritt/„Ersetzen durch

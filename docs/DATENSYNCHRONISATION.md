@@ -508,6 +508,22 @@ jede andere Eigenschaft würde abstürzen (siehe
 strukturell **niemals** Träger einer baumelnden Referenz — der Export-Pfad
 „heilt" eine solche Referenz sogar beiläufig, siehe Abschnitt 8.
 
+**`EinkaufslistenEintrag` — baumelnde Referenz verwirft den ganzen Eintrag,
+nicht nur das Feld (Nutzerbericht 2026-08-10):** Anders als bei den meisten
+übrigen Bereich-B-Typen (dort wird nur das einzelne baumelnde Feld zu `nil`)
+lässt der Export einen `EinkaufslistenEintrag` beim Merge komplett aus, falls
+`artikel` ODER `einkaufsliste` baumelt (`guard let einkaufslisteID = …,
+let artikelID = … else { return nil }`) — ein `EinkaufslistenEintrag` ohne
+Artikel oder Liste ist fachlich sinnlos. Auf einem Gerät mit einer alten,
+bereits baumelnden Referenz (heute über `@Relationship(deleteRule: .cascade,
+inverse:)` auf beiden Seiten nicht mehr neu entstehbar, siehe
+`docs/DATABASE_CONCURRENCY.md`) fehlte der betroffene Eintrag dadurch bei
+JEDEM Export dieses Geräts — ein frisch aus diesem Bestand aufgebauter Peer
+bekam dauerhaft weniger Einträge als tatsächlich vorhanden, ohne dass ein
+Fehler sichtbar wurde. `DatenintegritaetsService.pruefe(context:)` prüft
+diese Beziehung seitdem mit (Details:
+`docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 51).
+
 ### 4.6 Fingerabdruck-basiertes Überspringen
 
 `exportiereSnapshot(context:)` schreibt `export.json` nur, wenn sich der

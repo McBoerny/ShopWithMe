@@ -51,6 +51,9 @@ struct DatenintegritaetsServiceTests {
         context.insert(artikel)
         let kaufEintrag = KaufEintrag(artikel: artikel, geschaeft: geschaeft)
         context.insert(kaufEintrag)
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
+        let eintrag = liste.artikelHinzufuegenOhneEventAufzeichnung(artikel, context: context)
         try context.save()
 
         let befunde = DatenintegritaetsService.pruefe(context: context)
@@ -58,6 +61,8 @@ struct DatenintegritaetsServiceTests {
         #expect(befunde.isEmpty)
         #expect(kaufEintrag.artikel === artikel)
         #expect(kaufEintrag.geschaeft === geschaeft)
+        #expect(eintrag.artikel === artikel)
+        #expect(eintrag.einkaufsliste === liste)
         #expect(DatenintegritaetsService.letzterBericht.isEmpty)
     }
 
