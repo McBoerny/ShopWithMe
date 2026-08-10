@@ -39,6 +39,11 @@ Apple Intelligence (sofern auf deinem Gerät verfügbar) automatisch eine passen
 Abteilung vor, sobald du einen Namen eingibst — eine bereits von dir gewählte
 Abteilung wird dabei nie überschrieben. Ist Apple
 Intelligence nicht verfügbar, bleibt die manuelle Auswahl jederzeit möglich.
+Gibt es bereits einen Artikel mit exakt demselben Namen, erscheint beim
+Anlegen ein orangener Warnhinweis darunter — das Anlegen wird dadurch nicht
+blockiert, verhindert aber versehentliche Dubletten (z.B. „Milch“ zweimal
+unabhängig voneinander angelegt), die sich sonst nicht von selbst
+zusammenführen.
 In der Artikel-Bearbeitung zeigt die Abteilungs-Sektion nur die bereits
 zugeordneten Abteilungen (zum Entfernen nach links wischen); über „Abteilung
 hinzufügen“ öffnet sich eine durchsuchbare Liste aller übrigen Abteilungen zur

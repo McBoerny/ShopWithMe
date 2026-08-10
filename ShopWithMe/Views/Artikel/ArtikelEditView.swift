@@ -18,6 +18,7 @@ struct ArtikelEditView: View {
     @Query private var aliase: [ArtikelAlias]
     @Query private var alleAliase: [ArtikelAlias]
     @Query private var produkte: [Produkt]
+    @Query private var alleArtikel: [Artikel]
 
     @State private var kiVorschlagLaeuft = false
     @State private var kiFehlermeldung: String?
@@ -63,6 +64,11 @@ struct ArtikelEditView: View {
                 Section {
                     TextField("Name", text: $artikel.name)
                         .font(.title3)
+                    if let moeglicheDublette {
+                        Label("Es gibt bereits einen Artikel „\(moeglicheDublette.name)“", systemImage: "exclamationmark.triangle.fill")
+                            .font(.footnote)
+                            .foregroundStyle(.orange)
+                    }
                 }
 
                 Section {
@@ -224,6 +230,11 @@ struct ArtikelEditView: View {
                 ProduktEditView(produkt: produkt, istNeu: false)
             }
         }
+    }
+
+    /// Siehe ``Artikel/dublette(name:alle:ausgenommen:)`` für die Begründung.
+    private var moeglicheDublette: Artikel? {
+        Artikel.dublette(name: artikel.name, alle: alleArtikel, ausgenommen: artikel)
     }
 
     /// Legt einen neuen Alias-Namen für ``artikel`` an (GitHub #111) — blockiert

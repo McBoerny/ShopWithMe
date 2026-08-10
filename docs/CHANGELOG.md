@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.14 (Build 270) — Warnung beim Anlegen eines Artikels mit bereits vorhandenem Namen
+
+Feature (Nutzerbericht-Folgefund): tatsächliche Ursache der vorherigen
+Listen-Diskrepanz war keine Sync-Ursache, sondern eine rein lokal
+entstandene Artikel-Dublette (zwei unabhängig angelegte Artikel gleichen
+Namens) — der namensbasierte Sync-Merge führt solche Dubletten nur beim
+Import eines fremden Snapshots zusammen, nie auf rein lokalen Daten.
+`ArtikelEditView` zeigt jetzt eine Warnung (kein Speicher-Block), sobald der
+eingegebene Name bereits einem anderen Artikel gehört (case-insensitiv,
+wie beim Sync-Merge). Neue, testbare Logik: `Artikel.dublette(name:alle:ausgenommen:)`.
+
 ## v0.14 (Build 269) — Datenintegritätsprüfung erkennt baumelnde `EinkaufslistenEintrag`-Referenzen
 
 Bugfix-Folgefund (Nutzerbericht: nach dem vorherigen Fix korrekt 0 abgehakte

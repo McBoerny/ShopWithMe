@@ -214,4 +214,25 @@ extension Artikel {
         }
         return kandidaten[0]
     }
+
+    /// Ein anderer Artikel unter `alle` mit demselben Namen (case-insensitiv,
+    /// nach Trimmen — dieselbe Vergleichsregel wie beim Sync-Merge, siehe
+    /// `docs/DATENSYNCHRONISATION.md` §4.2), `ausgenommen` selbst — `nil`,
+    /// falls keiner. Reine Warnhilfe für ``ArtikelEditView`` (Nutzerbericht
+    /// 2026-08-10): zwei unabhängig angelegte, rein lokal nie
+    /// zusammengeführte Artikel gleichen Namens erschienen als zwei separate
+    /// Einträge auf derselben Einkaufsliste — der namensbasierte Merge greift
+    /// nur beim Import eines fremden Sync-Snapshots, nie auf rein lokal
+    /// entstandenen Dubletten. Deshalb bewusst kein technisch erzwungenes
+    /// Verbot (kein `throw`, kein Speicher-Block wie bei
+    /// ``ArtikelAlias/manuellHinzufuegen(name:zu:alle:context:)``) — anders
+    /// als bei Alias-Namen ist der Artikel-Name außerhalb des Sync-Kontexts
+    /// kein technisch eindeutiges Merkmal, nur meist ungewollt doppelt.
+    static func dublette(name: String, alle: [Artikel], ausgenommen: Artikel?) -> Artikel? {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return nil }
+        return alle.first {
+            $0.persistentModelID != ausgenommen?.persistentModelID && $0.name.localizedCaseInsensitiveCompare(name) == .orderedSame
+        }
+    }
 }
