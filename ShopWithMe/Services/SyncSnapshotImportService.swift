@@ -1071,9 +1071,29 @@ enum SyncSnapshotImportService {
                 continue
             }
             let produkt = eintrag.produktID.flatMap { produktZuordnung[$0] }
-            context.insert(EinkaufslistenEintrag(
+            let neu = EinkaufslistenEintrag(
                 einkaufsliste: liste, artikel: artikel, produkt: produkt, menge: eintrag.menge, notiz: eintrag.notiz
-            ))
+            )
+            // Nutzerbericht (2026-08-10, Folgefund zu Abschnitt 55): OHNE diese
+            // Zeile bekommt jede über dieses Sicherheitsnetz neu angelegte Zeile
+            // per `EinkaufslistenEintrag.init`-Default `erstelltAm = Date()`
+            // („jetzt", der lokale Import-Zeitpunkt) — nicht den tatsächlichen,
+            // ursprünglichen Hinzufügungs-Zeitpunkt des sendenden Geräts. Bei
+            // JEDEM weiteren Neuaufbau (`SyncErsetzenService`) „altert" ein
+            // Artikel dadurch künstlich zurück auf „gerade eben hinzugefügt" —
+            // exportiert dieses Gerät seinen Bestand später an ein DRITTES
+            // Gerät weiter, sieht ein tatsächlich längst vor einem echten,
+            // späteren Kauf hinzugefügter Artikel für die Abschnitt-55-Prüfung
+            // fälschlich „neuer" aus als der Kauf, und das Sicherheitsnetz holt
+            // ihn dort fälschlich zurück auf die offene Liste — beobachtet als
+            // von Backup wiederbelebte, auf Bernhard bereits abgehakte und
+            // abgeschlossene Artikel. Fehlt `eintrag.erstelltAm` (Peer auf
+            // älterer App-Version), bleibt der Default „jetzt" bewusst stehen
+            // — keine Verschlechterung gegenüber dem Vorzustand.
+            if let eintragErstelltAm = eintrag.erstelltAm {
+                neu.erstelltAm = eintragErstelltAm
+            }
+            context.insert(neu)
         }
     }
 

@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.14 (Build 275) — `erstelltAm` wird beim Sicherheitsnetz-Import jetzt weitergegeben
+
+Bugfix (eigener Code-Review-Fund direkt nach Build 274, noch vor dem
+nächsten Nutzertest). `mergeEinkaufslistenEintraege` legte neue, über das
+Sicherheitsnetz nachgeholte `EinkaufslistenEintrag`-Zeilen bisher immer mit
+`erstelltAm = Date()` (lokaler Import-Zeitpunkt) an, statt den vom Peer
+gemeldeten, tatsächlichen Zeitpunkt zu übernehmen — obwohl Build 274 genau
+diesen Wert dafür extra exportierte. Bei jedem Geräte-Neuaufbau „alterte"
+ein so nachgeholter Artikel künstlich auf „gerade eben hinzugefügt" zurück;
+gab dieses Gerät seinen Bestand später an ein drittes Gerät weiter, das den
+Artikel zwischenzeitlich selbst gekauft hatte, täuschte das eine Frische
+vor und das Sicherheitsnetz holte ihn fälschlich zurück auf die offene
+Liste — beobachtet als von „Backup" wiederbelebte, auf „Bernhard" bereits
+abgehakte und abgeschlossene Artikel. Fix: der Peer-Zeitpunkt wird jetzt
+explizit auf die neu angelegte Zeile übertragen. Details:
+`docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 56.
+
 ## v0.14 (Build 274) — Sicherheitsnetz lässt erneutes Hinzufügen wiederkehrender Artikel wieder durch
 
 Bugfix (Bestätigung des Verdachts aus Build 273 durch das neue

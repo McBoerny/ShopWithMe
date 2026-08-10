@@ -3625,3 +3625,80 @@ Frage („hat dieses Gerät jemals eine belastbare Historie mit diesem Peer für
 DIESES Artikel/Liste-Paar aufgebaut"). Der naheliegende Name eines
 bestehenden Flags ist kein Ersatz dafür, genau zu prüfen, was es tatsächlich
 misst.
+
+## 56. Fund beim eigenen Code-Review direkt nach Abschnitt 55: `erstelltAm` wurde nie weitergegeben
+
+**Ausgangslage:** Nutzertest nach Build 274 (zunächst fälschlich als „Build
+269" gemeldet — tatsächliche Ursache: die generierte `.xcodeproj` war seit
+Build 269 nicht mehr neu erzeugt worden, `CURRENT_PROJECT_VERSION` in der
+Anzeige war dadurch veraltet, obwohl Xcode bereits aus den aktuellen
+Quelldateien kompilierte — behoben durch erneutes `xcodegen generate`).
+Positiv: nach einem frischen Beitritt von „Backup" stimmten die Listen
+überein. Negativ, bei wiederholten Tests: „Backup" holte auf „Bernhard"
+Artikel zurück auf die offene Liste, die dort bereits VOR dem Sync abgehakt
+UND abgeschlossen waren — ein Rückschritt gegenüber dem in Abschnitt 55
+gerade erst reparierten Zustand.
+
+**Ursache, beim eigenen Review von `mergeEinkaufslistenEintraege` gefunden
+(noch bevor der Nutzer das Ergebnis eines erneuten Tests mit korrekt
+anzeigtem Build melden konnte):** Abschnitt 55 fügte `erstelltAm` zu
+`EinkaufslistenEintragSnapshot` hinzu und EXPORTIERT es korrekt
+(`eintrag.erstelltAm`) — aber beim IMPORT, wenn das Sicherheitsnetz einen
+neuen lokalen `EinkaufslistenEintrag` anlegt, blieb `neu.erstelltAm` beim
+`EinkaufslistenEintrag.init`-Default `Date()` („jetzt", der lokale
+Import-Zeitpunkt) stehen, statt den vom Peer gemeldeten, tatsächlichen
+Zeitpunkt zu übernehmen. Konsequenz: Bei JEDEM Neuaufbau „altert" ein
+Artikel künstlich auf „gerade eben hinzugefügt" zurück. Exportiert dieses
+Gerät seinen Bestand später an ein DRITTES Gerät weiter (oder empfängt ein
+Gerät, das den Artikel zwischenzeitlich selbst gekauft hat, diesen jetzt
+künstlich verjüngten Eintrag), sieht der in Wahrheit längst vor dem Kauf
+hinzugefügte Artikel für die Abschnitt-55-Prüfung
+(`eintrag.erstelltAm > zuletztAbgehaktAm`) fälschlich JÜNGER aus als der
+Kauf — das Sicherheitsnetz holt ihn dadurch fälschlich zurück auf die
+offene Liste. Exakt das vom Nutzer beobachtete Muster: „Backup" (das
+„Blume"/vergleichbare Artikel bei einem früheren Neuaufbau geerbt und dabei
+unbeabsichtigt verjüngt hatte) holte sie auf „Bernhard" zurück, obwohl
+Bernhard sie in der Zwischenzeit bereits gekauft hatte.
+
+**Fix:** `mergeEinkaufslistenEintraege` setzt `neu.erstelltAm =
+eintrag.erstelltAm`, sobald der Peer einen Zeitpunkt mitliefert (`EinkaufslistenEintrag.erstelltAm`
+ist ein normaler, nicht `private(set)` deklarierter `var`, direktes Setzen
+nach der Konstruktion ist deshalb sicher). Fehlt der Zeitpunkt (Peer auf
+älterer App-Version ohne dieses Feld), bleibt der Default „jetzt" bewusst
+stehen — keine Verschlechterung gegenüber dem Vorzustand, nur kein
+zusätzlicher Schutz.
+
+**Verifiziert:** neuer Regressionstest
+``vonSicherheitsnetzGeerbterEintragTaeuschtBeiWeitergabeKeineFrischeVor()``
+simuliert das Szenario über ZWEI ECHTE `ModelContext`s (Gerät A/Gerät B,
+analog ``zaehlerWaechstNichtDurchWiederholtesHinUndHerSynchronisieren()``,
+nicht über einen einzelnen Context mit im Test hartcodierten Werten): Gerät
+A kauft den Artikel; getrennt davon erbt Gerät B denselben Artikel über das
+Sicherheitsnetz von einem alten Fremd-Snapshot (Gerät C); Gerät B liest
+anschließend sein TATSÄCHLICH lokal entstandenes `erstelltAm` zurück und
+meldet genau diesen Wert an Gerät A weiter. Schlägt ohne den Fix
+reproduzierbar fehl (der Artikel kommt fälschlich zurück auf Gerät As
+Liste), mit Fix grün — per `git stash` gegengeprüft. Der bestehende Test
+für den einfachen Fall (einmaliges Wiederhinzufügen) wurde um eine Prüfung
+auf das korrekt übernommene `erstelltAm` erweitert.
+
+**Lehre:** Ein additiv-optionales Feld, das eine bestehende Momentaufnahme
+(hier: „wann wurde dieser Eintrag ursprünglich angelegt") über mehrere
+Hops hinweg TRANSPORTIEREN soll, muss an JEDER Stelle, die eine neue lokale
+Kopie dieser Momentaufnahme erzeugt, explizit weitergegeben werden — nicht
+nur beim Export. Der Modell-Konstruktor selbst bietet dafür keinen
+Parameter (`erstelltAm` wird intern immer auf `Date()` gesetzt), was die
+Lücke beim ersten Schreiben dieses Fixes unauffällig gemacht hat: der Code
+kompilierte anstandslos und die vorherigen Tests (die jeweils nur EINEN Hop
+prüften) deckten die Weitergabe über einen ZWEITEN Hop nicht ab.
+
+**Zweite Lehre (eigener Red-Check direkt bei der Testerstellung):** Die
+erste Fassung dieses Regressionstests simulierte den Zwei-Geräte-Hop
+innerhalb EINES `ModelContext` und trug in Schritt 3 denselben, im Test
+hartcodierten `erstelltAm`-Wert wie in Schritt 1 ein, statt den tatsächlich
+importierten lokalen Wert zurückzulesen — dadurch prüfte der Test in
+Wahrheit nur den bereits anderweitig abgedeckten Fall „explizit alter,
+unveränderter Peer-Wert bleibt blockiert" erneut und schlug beim
+Red-Check (Fix per `git stash` entfernt) fälschlich NICHT fehl. Erst der
+Umbau auf zwei echte `ModelContext`s mit Rücklesen des real entstandenen
+lokalen Werts deckte die Lücke sauber ab.

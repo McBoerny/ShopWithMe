@@ -669,6 +669,17 @@ neu aufgebautes Gerät nur seine eigenen, lokal miterlebten Käufe als
 Vergleichsbasis. Details: `docs/DATENSYNCHRONISATION_VERLAUF.md`
 Abschnitt 55.
 
+**Nachtrag (direkter Folgefund, Abschnitt 56):** `erstelltAm` muss beim
+Import an JEDER Stelle, die eine neue lokale `EinkaufslistenEintrag`-Kopie
+über dieses Sicherheitsnetz anlegt, explizit vom Peer-Wert gesetzt werden —
+der Modell-Konstruktor selbst setzt ihn sonst immer auf den lokalen
+Import-Zeitpunkt („jetzt"). Ohne diese Weitergabe „altert" ein Artikel bei
+jedem Neuaufbau künstlich auf „gerade eben hinzugefügt" zurück und täuscht
+einem dritten Gerät (oder einem Gerät, das den Artikel in der Zwischenzeit
+selbst gekauft hat) fälschlich Frische vor — das Sicherheitsnetz holt ihn
+dann trotz eines zwischenzeitlichen echten Kaufs zurück auf die offene
+Liste. Details: `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 56.
+
 **Bewusst in Kauf genommener Randfall:** `mergeKaufEintraege`/die neue
 `mergeArtikelListenKaeufe` laufen in der Aufrufreihenfolge (Abschnitt 4.2)
 NACH `mergeEinkaufslistenEintraege` — ein im selben Sync-Zyklus frisch

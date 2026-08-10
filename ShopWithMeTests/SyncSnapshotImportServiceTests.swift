@@ -873,10 +873,11 @@ struct SyncSnapshotImportServiceTests {
                 kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
             ),
         ]
+        let peerErstelltAm = letzterKauf.addingTimeInterval(3600)
         snapshot.einkaufslistenEintraege = [
             EinkaufslistenEintragSnapshot(
                 einkaufslisteID: liste.id, artikelID: artikel.id, menge: 1, notiz: nil,
-                erstelltAm: letzterKauf.addingTimeInterval(3600)
+                erstelltAm: peerErstelltAm
             ),
         ]
         try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
@@ -884,6 +885,123 @@ struct SyncSnapshotImportServiceTests {
         await SyncSnapshotImportService.importiereSnapshots(context: context)
 
         #expect(liste.enthaelt(artikel))
+        // Nutzerbericht 2026-08-10 (Folgefund): der neu angelegte Eintrag muss
+        // den ECHTEN, vom Peer gemeldeten `erstelltAm` übernehmen, nicht den
+        // lokalen Import-Zeitpunkt („jetzt") — sonst „altert" der Artikel bei
+        // jedem weiteren Neuaufbau künstlich zurück auf „gerade eben
+        // hinzugefügt" und täuscht bei einem DRITTEN Gerät eine Frische vor,
+        // die er nicht hat (siehe Test unten).
+        #expect(liste.eintrag(fuer: artikel)?.erstelltAm == peerErstelltAm)
+    }
+
+    /// Regressionstest für den eigentlichen, vom Nutzer beobachteten Bug
+    /// (2026-08-10, Folgefund zu Abschnitt 55): „Backup" holte auf „Bernhard"
+    /// bereits abgehakte und abgeschlossene Artikel zurück auf die offene
+    /// Liste. Ursache: der Test oben deckte nur auf, DASS ein neu angelegter
+    /// Sicherheitsnetz-Eintrag `erstelltAm` verliert — dieser Test zeigt die
+    /// KONKRETE Konsequenz über zwei ECHTE Geräte (zwei separate
+    /// `ModelContext`s, analog ``zaehlerWaechstNichtDurchWiederholtesHinUndHerSynchronisieren``):
+    /// Gerät B erbt „Blume" über das Sicherheitsnetz von einem alten
+    /// Fremd-Snapshot (Gerät C). Gerät A kauft „Blume" währenddessen selbst.
+    /// Meldet Gerät B seinen — WIRKLICH lokal entstandenen, nicht im Test
+    /// vorgetäuschten — Eintrag anschließend an Gerät A weiter, darf das
+    /// NICHT als „neuer Listen-Eintrag NACH dem Kauf" fehlinterpretiert
+    /// werden, nur weil Gerät B ihn just in diesem Moment (spät) synchronisiert.
+    /// Ohne den Fix trüge Gerät Bs lokaler Eintrag `erstelltAm = Zeitpunkt
+    /// von Gerät Bs eigenem Import` statt des ursprünglichen, alten Werts —
+    /// genau diese Verfälschung entsteht real erst beim Weitergeben über ein
+    /// zweites Gerät, weshalb ein hartcodierter `erstelltAm`-Wert (wie in
+    /// einer früheren Fassung dieses Tests) die Lücke nicht aufgedeckt hätte.
+    @Test
+    func vonSicherheitsnetzGeerbterEintragTaeuschtBeiWeitergabeKeineFrischeVor() async throws {
+        // Gerät A ("Bernhard"): kauft „Blume" selbst.
+        let (containerA, contextA) = try machtLeerenContainer()
+        _ = containerA
+        let syncOrdnerVonA = macheTempSyncOrdner()
+
+        // Gerät B ("Backup"): erbt „Blume" über das Sicherheitsnetz von
+        // einem alten Fremd-Snapshot (Gerät C).
+        let (containerB, contextB) = try machtLeerenContainer()
+        _ = containerB
+        let syncOrdnerVonB = macheTempSyncOrdner()
+
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        // Liste und Artikel müssen auf beiden Geräten dieselbe ID tragen,
+        // damit der Merge sie als denselben Gegenstand erkennt.
+        let listeA = Einkaufsliste(name: "Einkaufsliste")
+        contextA.insert(listeA)
+        let artikelA = Artikel(name: "Blume", symbolName: "leaf.fill", farbeHex: "#34C759")
+        contextA.insert(artikelA)
+        try contextA.save()
+
+        let listeB = Einkaufsliste(name: "Einkaufsliste")
+        listeB.id = listeA.id
+        contextB.insert(listeB)
+        let artikelB = Artikel(name: "Blume", symbolName: "leaf.fill", farbeHex: "#34C759")
+        artikelB.id = artikelA.id
+        contextB.insert(artikelB)
+        try contextB.save()
+
+        // Schritt 1: Gerät A kauft „Blume" — ArtikelListenKauf merkt sich
+        // den Kaufzeitpunkt.
+        let vorgang = Einkaufsvorgang(einkaufsliste: listeA)
+        contextA.insert(vorgang)
+        _ = vorgang.artikelAbhakenOhneEventAufzeichnung(artikelA, context: contextA)
+        try contextA.save()
+        let kaufzeitpunkt: Date? = ArtikelListenKaufService.alleZeitstempel(context: contextA)[
+            ArtikelListenKaufService.Schluessel(artikelID: artikelA.id, einkaufslisteID: listeA.id)
+        ] ?? nil
+        _ = try #require(kaufzeitpunkt)
+
+        // Zeitliche Trennung, damit „jetzt" beim gleich folgenden Import auf
+        // Gerät B unzweideutig NACH dem Kaufzeitpunkt liegt (relevant für den
+        // Fehlerfall ohne Fix, der `erstelltAm = Date()` setzen würde).
+        try await Task.sleep(for: .milliseconds(20))
+
+        // Schritt 2: Gerät B erbt „Blume" über das Sicherheitsnetz von einem
+        // alten Fremd-Snapshot (Gerät C), der WEIT VOR Gerät As Kauf datiert.
+        let ursprünglichesHinzufuegen = Date().addingTimeInterval(-7200)
+        var alterSnapshot = leererSnapshot(geraeteID: "geraet-c")
+        alterSnapshot.einkaufslisten = [EinkaufslisteSnapshot(id: listeB.id, name: "Einkaufsliste", erstelltAm: listeB.erstelltAm)]
+        alterSnapshot.artikel = [
+            ArtikelSnapshot(
+                id: artikelB.id, name: "Blume", symbolName: "leaf.fill", farbeHex: "#34C759",
+                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+            ),
+        ]
+        alterSnapshot.einkaufslistenEintraege = [
+            EinkaufslistenEintragSnapshot(
+                einkaufslisteID: listeB.id, artikelID: artikelB.id, menge: 1, notiz: nil,
+                erstelltAm: ursprünglichesHinzufuegen
+            ),
+        ]
+        try SyncOrdnerService.ordnerFestlegen(syncOrdnerVonB)
+        try schreibeFremdenSnapshot(alterSnapshot, fremdeGeraeteID: "geraet-c", in: syncOrdnerVonB)
+        await SyncSnapshotImportService.importiereSnapshots(context: contextB)
+        #expect(listeB.enthaelt(artikelB))
+
+        // Schritt 3: Gerät B meldet seinen — WIRKLICH lokal entstandenen —
+        // Eintrag an Gerät A weiter. Entscheidend: `erstelltAm` wird hier aus
+        // dem TATSÄCHLICHEN lokalen Datensatz auf Gerät B ausgelesen, nicht
+        // im Test hartcodiert. Ohne den Fix ist dieser Wert „jetzt" (Zeitpunkt
+        // von Gerät Bs eigenem Import in Schritt 2, also NACH Gerät As Kauf).
+        let geerbterEintragAufB = try #require(listeB.eintrag(fuer: artikelB))
+        var spaeterSnapshot = leererSnapshot(geraeteID: "geraet-b")
+        spaeterSnapshot.einkaufslisten = [EinkaufslisteSnapshot(id: listeB.id, name: "Einkaufsliste", erstelltAm: listeB.erstelltAm)]
+        spaeterSnapshot.artikel = alterSnapshot.artikel
+        spaeterSnapshot.einkaufslistenEintraege = [
+            EinkaufslistenEintragSnapshot(
+                einkaufslisteID: listeB.id, artikelID: artikelB.id, menge: 1, notiz: nil,
+                erstelltAm: geerbterEintragAufB.erstelltAm
+            ),
+        ]
+        try SyncOrdnerService.ordnerFestlegen(syncOrdnerVonA)
+        try schreibeFremdenSnapshot(spaeterSnapshot, fremdeGeraeteID: "geraet-b", in: syncOrdnerVonA)
+        await SyncSnapshotImportService.importiereSnapshots(context: contextA)
+
+        // Der auf Gerät A bereits gekaufte Artikel darf NICHT zurückgeholt werden.
+        #expect(!listeA.enthaelt(artikelA))
     }
 
     /// Gegenstück zum Test oben — die eigentliche GitHub-#99-Absicherung
