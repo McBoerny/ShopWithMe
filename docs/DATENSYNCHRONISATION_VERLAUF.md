@@ -3528,3 +3528,100 @@ der wahrscheinlichste Verdacht sitzt, nicht komplett stumm sein — bevor eine
 scharfe, dokumentiert-bewusste Schutzregel angetastet wird, muss ihr
 tatsächliches Zuschlagen im konkreten Fall erst belegt werden, nicht nur aus
 dem Quellcode plausibel hergeleitet.
+
+**Update (noch selbe Sitzung): Verdacht durch das neue Protokollereignis
+vollständig bestätigt.** Der nächste Testlauf (Backup erneut zurückgesetzt,
+auf Bernhard mehrere Artikel abgehakt/neu hinzugefügt) zeigte
+`sync_listeneintrag_sicherheitsnetz_uebersprungen` wiederholt für genau die
+vom Nutzer als fehlend gemeldeten Artikel („Breze", „Äpfel", „Bananen",
+„Blume", „Berner Würstl", „Bertoli Olivenöl - Braten", „Backmischung
+Muffins", „Brille", „Butter"), durchgehend mit `istAusDerZeitGefallen=false`
+— der Verdacht aus diesem Abschnitt war exakt zutreffend. Der eigentliche Fix
+folgt in Abschnitt 55.
+
+## 55. Fix zu Abschnitt 54: `ArtikelListenKauf.zuletztAbgehaktAm` statt pauschalem Veto
+
+**Ausgangslage:** `istAusDerZeitGefallen` (die in Abschnitt 54 vermutete
+naheliegende Korrektur) misst „wie lange her ist mein letzter erfolgreicher
+Sync-Zyklus" — ein Gerät, das gerade erst per `SyncErsetzenService` neu
+aufgebaut wurde UND jetzt aktiv, erfolgreich synchronisiert, ist damit per
+Definition NICHT „aus der Zeit gefallen", egal wie leer sein Bestand
+Sekunden zuvor war. Dieses Signal allein hätte den Bug also NICHT behoben —
+die Live-Bestätigung in Abschnitt 54 zeigte `istAusDerZeitGefallen=false` bei
+jedem einzelnen blockierten Artikel.
+
+**Tatsächlicher Fix: Zeitstempel statt Zeit-seit-Sync.** `ArtikelListenKauf`
+bekommt ein neues, additiv-optionales Feld `zuletztAbgehaktAm: Date?` —
+bewusst KEIN Tombstone-artiger Aufräum-Zeitstempel (die Zeile bleibt
+weiterhin für immer bestehen, unabhängig davon, ob dieses Feld gesetzt ist),
+sondern reine Vergleichsbasis. `EinkaufslistenEintragSnapshot` bekommt
+symmetrisch ein neues Feld `erstelltAm: Date?` (spiegelt
+`EinkaufslistenEintrag.erstelltAm`, das lokale Modell hatte dieses Feld
+bereits, es wurde bisher nur nie exportiert). `istBereitsAbgehakt` lässt
+einen vom Peer gemeldeten Listen-Eintrag jetzt durch, wenn dessen
+`erstelltAm` NACH dem bekannten `zuletztAbgehaktAm` liegt — nachweislich ein
+JÜNGERES, legitimes erneutes Hinzufügen, keine stale Resurrektion einer
+veralteten Momentaufnahme (dem eigentlichen GitHub-#99-Fall). Fehlt einer der
+beiden Zeitpunkte (Altbestand vor diesem Feld, oder ein Peer auf einer
+älteren App-Version ohne `erstelltAm` im Snapshot — beide Felder sind
+`Codable`-optional, Swifts synthetisierter Decoder liest einen fehlenden
+Schlüssel für ein optionales Feld automatisch als `nil` statt abzubrechen),
+bleibt es beim alten, strengeren Verhalten.
+
+**Warum nicht einfach gegen noch existierende `KaufEintrag.datum` vergleichen
+(vermeintlich einfacher, keine neuen Felder nötig):** Genau das war die
+ürsprüngliche, durch GitHub #99 ersetzte Prüfung — `KaufEintragBereinigungService`
+löscht `KaufEintrag`e 48h nach Abschluss ihres Vorgangs. Ein Vergleich gegen
+diese Daten wäre nur innerhalb dieses 48h-Fensters verlässlich und würde
+danach exakt denselben Datenverlust reproduzieren, den `ArtikelListenKauf`
+ursprünglich beheben sollte (oszillierende Mitgliederzahl der Liste
+„Urlaub", siehe Abschnitt zu GitHub #99 oben). `zuletztAbgehaktAm` lebt
+deshalb dauerhaft auf `ArtikelListenKauf` selbst, unabhängig von dessen
+48h-Zyklus.
+
+**Cross-Device-Sync des Zeitstempels:** `ArtikelListenKaufSnapshot` bekommt
+ebenfalls `zuletztAbgehaktAm: Date?`; `mergeArtikelListenKaeufe` mergt ihn
+additiv als Maximum (G-Counter-artig, wie an anderen Stellen dieses
+Dokuments — ein älterer Peer-Wert verdrängt nie einen bereits bekannten
+neueren). Ohne diesen Cross-Device-Merge hätte jedes Gerät nur seine EIGENEN,
+lokal miterlebten Käufe als Vergleichsbasis — ein frisch per
+`SyncErsetzenService` neu aufgebautes Gerät hätte dadurch (genau wie beim
+GitHub-#99-Ausgangsproblem) einen systematisch dünneren Kenntnisstand als
+ein durchgehend aktives Gerät.
+
+**API-Umbau:** `ArtikelListenKaufService.vermerkeAbgehakt`/`vermerkeAbgehaktFallsNoetig`
+akzeptieren jetzt einen `am:`-Zeitpunkt und aktualisieren `zuletztAbgehaktAm`
+eines bestehenden Eintrags (nur nach vorne, nie zurück) statt bei bereits
+bekanntem Paar ein reines No-op zu sein. `vermerkeAbgehaktFallsNoetig`s
+`bekannt`-Cache wechselt von `Set<Schluessel>` auf
+`[Schluessel: ArtikelListenKauf]` (Objektreferenz statt nur Existenz), damit
+ein zweiter Treffer desselben Paares im selben Merge-Batch dessen Zeitstempel
+ebenfalls aktualisieren kann. Alle drei Aufrufstellen (lokales Abhaken,
+Bereich-C-`KaufEintrag`-Merge, Bestandsmigration) übergeben jetzt den
+tatsächlichen Kaufzeitpunkt (`eintrag.datum`) statt implizit „jetzt".
+
+**Verifiziert:** vier neue Regressionstests in `SyncSnapshotImportServiceTests.swift`
+(legitimes späteres Wiederhinzufügen wird übernommen; ein früherer/stale
+Eintrag bleibt weiterhin blockiert — direktes Gegenstück, belegt dass der
+ursprüngliche GitHub-#99-Schutz erhalten bleibt; Zeitstempel-Merge als
+Maximum über drei aufeinanderfolgende Sync-Zyklen) plus drei neue Tests in
+`ArtikelListenKaufServiceTests.swift` (Zeitstempel wird gesetzt, nur nach
+vorne aktualisiert, `alleZeitstempel` unterscheidet „bekannt ohne
+Zeitstempel" klar von „komplett unbekannt"). Alle bestehenden Tests
+(inklusive der ursprünglichen GitHub-#99-Regressionstests) bleiben
+unverändert grün — die neuen Felder sind additiv-optional, bestehende
+Konstruktionsaufrufe ohne die neuen Parameter kompilieren unverändert (Swifts
+synthetisierter Memberwise-Initialisierer gibt optionalen Properties
+automatisch `nil` als Default).
+
+**Lehre:** Die in Abschnitt 54 naheliegend erscheinende Korrektur
+(„`istAusDerZeitGefallen` auch hier prüfen") wäre die FALSCHE gewesen — sie
+hätte den konkret gemeldeten Fall gar nicht behoben, da das betroffene Gerät
+per Definition nicht „aus der Zeit gefallen" war. Ein Signal, das für eine
+ANDERE Frage gebaut wurde („kann ich mich noch auf mein eigenes
+Event-Lesen verlassen", Peer-Lebenszyklus Baustein C), beantwortet nicht
+automatisch eine oberflächlich ähnlich klingende, aber inhaltlich andere
+Frage („hat dieses Gerät jemals eine belastbare Historie mit diesem Peer für
+DIESES Artikel/Liste-Paar aufgebaut"). Der naheliegende Name eines
+bestehenden Flags ist kein Ersatz dafür, genau zu prüfen, was es tatsächlich
+misst.

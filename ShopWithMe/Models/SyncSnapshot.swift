@@ -82,7 +82,7 @@ struct SyncSnapshot: Codable {
     /// ``artikelListenKaeufe`` neu hinzugekommen, siehe ``ArtikelListenKauf``.
     /// Ersetzt die vorherige, ausschließlich auf noch existierenden
     /// ``KaufEintrag``en basierende Prüfung in
-    /// ``SyncSnapshotImportService/istBereitsAbgehakt(_:aufListe:alleVorgaenge:istAusDerZeitGefallen:jemalsAbgehakteSchluessel:)``,
+    /// ``SyncSnapshotImportService/istBereitsAbgehakt(_:aufListe:alleVorgaenge:istAusDerZeitGefallen:eintragErstelltAm:jemalsAbgehakteZeitstempel:)``,
     /// die durch `KaufEintragBereinigungService`s 48h-Löschung ihre Evidenz
     /// verlor. Wieder keine Rückwärtskompatibilität nötig, siehe Version 3.
     ///
@@ -227,6 +227,18 @@ struct EinkaufslistenEintragSnapshot: Codable {
     var notiz: String?
     /// Seit Version 8 (GitHub #47), siehe ``EinkaufslistenEintrag/produkt``.
     var produktID: UUID?
+    /// Nutzerbericht 2026-08-10, Folgefund zu GitHub #99 — siehe
+    /// ``EinkaufslistenEintrag/erstelltAm``. Additiv-optional statt eines
+    /// `formatVersion`-Sprungs (dieser wird nicht gegen den Import geprüft,
+    /// siehe `docs/DECISIONS.md`), Optional wie `produktID`
+    /// oben — ein Peer auf einer älteren App-Version schreibt dieses Feld
+    /// noch nicht, Swifts synthetisierter Decoder liest einen fehlenden
+    /// Schlüssel für ein optionales Feld automatisch als `nil` statt
+    /// abzubrechen. `nil` bedeutet für
+    /// ``SyncSnapshotImportService/istBereitsAbgehakt(_:aufListe:alleVorgaenge:istAusDerZeitGefallen:jemalsAbgehakteZeitstempel:)``
+    /// „kein Vergleichswert bekannt" — bleibt beim alten, strengeren
+    /// Verhalten (permanentes Veto), keine Lockerung ohne echten Zeitstempel.
+    var erstelltAm: Date?
 }
 
 struct SyncTombstoneSnapshot: Codable {
@@ -293,13 +305,19 @@ struct GeschaeftBesuchSnapshot: Codable {
     var anzahlProdukte: Int
 }
 
-/// Seit Version 7, siehe ``ArtikelListenKauf``. Reine Existenz-Tatsache —
-/// analog ``ArtikelGeschaeftVerfuegbarkeitSnapshot``, kein Zähler, da nichts
-/// gemittelt werden muss (Union nach (``artikelID``, ``einkaufslisteID``),
-/// siehe ``SyncSnapshotImportService``).
+/// Seit Version 7, siehe ``ArtikelListenKauf``. Existenz-Tatsache (Union
+/// nach (``artikelID``, ``einkaufslisteID``), siehe
+/// ``SyncSnapshotImportService``) plus (seit dem Nutzerbericht 2026-08-10,
+/// Folgefund zu GitHub #99) ein additiv gemergter Zeitstempel —
+/// ``zuletztAbgehaktAm`` verhält sich wie ein G-Counter-artiges Maximum
+/// (jüngerer Wert gewinnt, siehe ``ArtikelListenKauf``-Typ-Doku), kein reiner
+/// Zähler wie ``ArtikelGeschaeftVerfuegbarkeitSnapshot``. `nil` (Peer auf
+/// älterer App-Version, kennt dieses Feld noch nicht) verwässert einen
+/// bereits lokal bekannten Zeitstempel nie.
 struct ArtikelListenKaufSnapshot: Codable {
     var artikelID: UUID
     var einkaufslisteID: UUID
+    var zuletztAbgehaktAm: Date?
 }
 
 struct PreispunktSnapshot: Codable {

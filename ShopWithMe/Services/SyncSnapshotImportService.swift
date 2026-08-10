@@ -1038,7 +1038,7 @@ enum SyncSnapshotImportService {
         // Bestand ist während dieses gesamten Durchlaufs also bereits vollständig.
         let alleVorgaenge = (try? context.fetch(FetchDescriptor<Einkaufsvorgang>())) ?? []
         // Einmal pro Merge-Durchlauf berechnet statt pro Artikel — siehe
-        // Begründung in ``istBereitsAbgehakt(_:aufListe:alleVorgaenge:istAusDerZeitGefallen:jemalsAbgehakteSchluessel:)``.
+        // Begründung in ``istBereitsAbgehakt(_:aufListe:alleVorgaenge:istAusDerZeitGefallen:eintragErstelltAm:jemalsAbgehakteZeitstempel:)``.
         let istAusDerZeitGefallen = SyncAktualitaetsService.istAusDerZeitGefallen(context: context)
         // GitHub #99: dauerhaftes Faktum, siehe ``ArtikelListenKauf``. Spiegelt
         // den Bestand zu Beginn DIESES Durchlaufs — ein im selben Zyklus per
@@ -1047,7 +1047,7 @@ enum SyncSnapshotImportService {
         // (beide bewusst SPÄTER in der Aufrufreihenfolge, siehe dortige
         // Typ-Doku) neu eintreffender Beleg wirkt sich erst im nächsten Zyklus
         // aus — ein sich selbst auflösender Randfall, kein dauerhafter Fehler.
-        let jemalsAbgehakteSchluessel = ArtikelListenKaufService.alleSchluessel(context: context)
+        let jemalsAbgehakteZeitstempel = ArtikelListenKaufService.alleZeitstempel(context: context)
         for eintrag in remote {
             guard let liste = listeZuordnung[eintrag.einkaufslisteID], let artikel = artikelZuordnung[eintrag.artikelID]
             else { continue }
@@ -1060,7 +1060,7 @@ enum SyncSnapshotImportService {
             // Neuaufbau) den entscheidenden Hinweis geliefert hätte.
             guard !istBereitsAbgehakt(
                 artikel, aufListe: liste, alleVorgaenge: alleVorgaenge, istAusDerZeitGefallen: istAusDerZeitGefallen,
-                jemalsAbgehakteSchluessel: jemalsAbgehakteSchluessel
+                eintragErstelltAm: eintrag.erstelltAm, jemalsAbgehakteZeitstempel: jemalsAbgehakteZeitstempel
             ) else {
                 if SyncDebugLogger.istAktiv {
                     SyncDebugLogger.log(
@@ -1126,18 +1126,53 @@ enum SyncSnapshotImportService {
     /// ein Peer mit veraltetem `listen.json` konnte den Artikel klaglos
     /// zurückholen (Live-Test-Beleg: oszillierende Mitgliederzahl der Liste
     /// „Urlaub" über mehrere Stunden). ``ArtikelListenKauf``
-    /// (`jemalsAbgehakteSchluessel`) behebt das als dauerhaftes, von der
+    /// (`jemalsAbgehakteZeitstempel`) behebt das als dauerhaftes, von der
     /// 48h-Karenzzeit unabhängiges Faktum und wird deshalb VOR dem
     /// `vorgaengeFuerListe`-Scan geprüft; Letzterer bleibt als Fallback für
     /// Altbestand, den die einmalige Bestandsmigration
     /// (``DatenintegritaetsService/migriereArtikelListenKaeufeFallsNoetig(context:)``)
     /// nicht mehr rekonstruieren konnte (bereits vor dieser Migration
     /// bereinigte Käufe).
+    ///
+    /// **Nachtrag (Nutzerbericht 2026-08-10): das permanente Veto blockte
+    /// auch ein legitimes ERNEUTES Hinzufügen.** „Ich habe irgendwann einen
+    /// `KaufEintrag` dafür" wurde oben als für ein normal synchronisierendes
+    /// Gerät „dauerhaft belastbares Faktum" begründet — mit der impliziten
+    /// Annahme, ein solches Gerät habe ein Neu-Hinzufügen längst über den
+    /// direkten Event-Pfad erfahren, bevor dieses Sicherheitsnetz überhaupt
+    /// zum Zug kommt. Diese Annahme gilt nicht für ein Gerät, das gerade erst
+    /// per ``SyncErsetzenService`` komplett neu aufgebaut wurde — es hat in
+    /// diesem Moment noch keine eigene Bereich-A-Ereignis-Historie mit dem
+    /// betroffenen Peer, UND ``SyncAktualitaetsService/istAusDerZeitGefallen(context:)``
+    /// erkennt das nicht (misst nur „wie lange her ist mein letzter
+    /// ERFOLGREICHER Zyklus" — ein frisch aktives, gerade erfolgreich
+    /// synchronisierendes Gerät ist per Definition NICHT „aus der Zeit
+    /// gefallen"). Live bestätigt über das Diagnose-Ereignis
+    /// `sync_listeneintrag_sicherheitsnetz_uebersprungen`
+    /// (`docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 54), das genau
+    /// diesen Zweig für mehrere real wiederkehrende Artikel feuern ließ.
+    ///
+    /// **Fix:** `jemalsAbgehakteZeitstempel` trägt jetzt (additiv-optional,
+    /// siehe ``ArtikelListenKauf/zuletztAbgehaktAm``) den Zeitpunkt des
+    /// zuletzt bekannten Kaufs statt nur der reinen Existenz. Liegt
+    /// `eintragErstelltAm` (wann der Peer den Artikel laut seinem aktuellen
+    /// Snapshot auf die Liste gesetzt hat) NACH diesem Zeitpunkt, ist der
+    /// Listen-Eintrag nachweislich JÜNGER als der letzte bekannte Kauf — ein
+    /// legitimes erneutes Hinzufügen, keine stale Resurrektion einer
+    /// veralteten Momentaufnahme, also NICHT blockieren. Fehlt einer der
+    /// beiden Zeitpunkte (Altbestand vor diesem Feld, oder ein Peer auf einer
+    /// älteren App-Version ohne `erstelltAm` im Snapshot), bleibt es beim
+    /// alten, strengeren Verhalten — permanentes Veto, keine Lockerung ohne
+    /// echten Vergleichswert auf beiden Seiten.
     private static func istBereitsAbgehakt(
         _ artikel: Artikel, aufListe liste: Einkaufsliste, alleVorgaenge: [Einkaufsvorgang], istAusDerZeitGefallen: Bool,
-        jemalsAbgehakteSchluessel: Set<ArtikelListenKaufService.Schluessel>
+        eintragErstelltAm: Date?, jemalsAbgehakteZeitstempel: [ArtikelListenKaufService.Schluessel: Date?]
     ) -> Bool {
-        if jemalsAbgehakteSchluessel.contains(ArtikelListenKaufService.Schluessel(artikelID: artikel.id, einkaufslisteID: liste.id)) {
+        let schluessel = ArtikelListenKaufService.Schluessel(artikelID: artikel.id, einkaufslisteID: liste.id)
+        if let bekannterZeitstempel = jemalsAbgehakteZeitstempel[schluessel] {
+            if let bekannterZeitstempel, let eintragErstelltAm, eintragErstelltAm > bekannterZeitstempel {
+                return false
+            }
             return true
         }
         let vorgaengeFuerListe = alleVorgaenge.filter { $0.einkaufsliste == liste }
@@ -1460,7 +1495,7 @@ enum SyncSnapshotImportService {
         // direkt per Bereich-C-Snapshot-Merge neu entstehen — dieser Zweig
         // legt `KaufEintrag`-Objekte direkt an, ohne über jene Funktion zu
         // laufen, bräuchte also sonst eine eigene Lücke im Sicherheitsnetz.
-        var bekannteArtikelListenSchluessel = ArtikelListenKaufService.alleSchluessel(context: context)
+        var bekannteArtikelListenEintraege = ArtikelListenKaufService.alleEintraege(context: context)
         for eintrag in remote {
             guard !bekannteIDs.contains(eintrag.id) else { continue }
             // Retention- oder manuell gelöschter Eintrag eines Peers, der ihn
@@ -1500,7 +1535,8 @@ enum SyncSnapshotImportService {
 
             if let artikel = neuer.artikel, let einkaufsliste = neuer.einkaufsvorgang?.einkaufsliste {
                 ArtikelListenKaufService.vermerkeAbgehaktFallsNoetig(
-                    artikel: artikel, einkaufsliste: einkaufsliste, bekannt: &bekannteArtikelListenSchluessel, context: context
+                    artikel: artikel, einkaufsliste: einkaufsliste, am: eintrag.datum,
+                    bekannt: &bekannteArtikelListenEintraege, context: context
                 )
             }
         }
@@ -1699,10 +1735,12 @@ enum SyncSnapshotImportService {
         _ remote: [ArtikelListenKaufSnapshot], artikelZuordnung: [UUID: Artikel], listeZuordnung: [UUID: Einkaufsliste],
         context: ModelContext
     ) {
-        var bekannt = ArtikelListenKaufService.alleSchluessel(context: context)
+        var bekannt = ArtikelListenKaufService.alleEintraege(context: context)
         for eintrag in remote {
             guard let artikel = artikelZuordnung[eintrag.artikelID], let einkaufsliste = listeZuordnung[eintrag.einkaufslisteID] else { continue }
-            ArtikelListenKaufService.vermerkeAbgehaktFallsNoetig(artikel: artikel, einkaufsliste: einkaufsliste, bekannt: &bekannt, context: context)
+            ArtikelListenKaufService.vermerkeAbgehaktFallsNoetig(
+                artikel: artikel, einkaufsliste: einkaufsliste, am: eintrag.zuletztAbgehaktAm, bekannt: &bekannt, context: context
+            )
         }
     }
 

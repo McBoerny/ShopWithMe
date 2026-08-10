@@ -289,16 +289,18 @@ enum DatenintegritaetsService {
     /// ``migriereGeschaeftsAggregateFallsNoetig(context:)`` ist deshalb
     /// unkritisch.
     ///
-    /// Idempotent (``ArtikelListenKaufService/vermerkeAbgehaktFallsNoetig(artikel:einkaufsliste:bekannt:context:)``
+    /// Idempotent (``ArtikelListenKaufService/vermerkeAbgehaktFallsNoetig(artikel:einkaufsliste:am:bekannt:context:)``
     /// prüft selbst vor dem Schreiben): ein wiederholter Aufruf legt keine
     /// Dubletten an. Läuft beim App-Start, siehe ``ShopWithMeApp``.
     @MainActor
     static func migriereArtikelListenKaeufeFallsNoetig(context: ModelContext) {
-        var bekannt = ArtikelListenKaufService.alleSchluessel(context: context)
+        var bekannt = ArtikelListenKaufService.alleEintraege(context: context)
         let vorherAnzahl = bekannt.count
         for eintrag in (try? context.fetch(FetchDescriptor<KaufEintrag>())) ?? [] {
             guard let artikel = eintrag.artikel, let einkaufsliste = eintrag.einkaufsvorgang?.einkaufsliste else { continue }
-            ArtikelListenKaufService.vermerkeAbgehaktFallsNoetig(artikel: artikel, einkaufsliste: einkaufsliste, bekannt: &bekannt, context: context)
+            ArtikelListenKaufService.vermerkeAbgehaktFallsNoetig(
+                artikel: artikel, einkaufsliste: einkaufsliste, am: eintrag.datum, bekannt: &bekannt, context: context
+            )
         }
         let neuVermerkt = bekannt.count - vorherAnzahl
         guard neuVermerkt > 0 else { return }

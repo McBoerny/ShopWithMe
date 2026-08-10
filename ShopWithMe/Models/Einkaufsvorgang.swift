@@ -175,7 +175,7 @@ final class Einkaufsvorgang {
             // GitHub #99: dauerhaftes Faktum fürs Sicherheitsnetz gegen
             // wiederbelebte Käufe, unabhängig davon, ob dieser KaufEintrag
             // später per KaufEintragBereinigungService gelöscht wird.
-            ArtikelListenKaufService.vermerkeAbgehakt(artikel: artikel, einkaufsliste: einkaufsliste, context: context)
+            ArtikelListenKaufService.vermerkeAbgehakt(artikel: artikel, einkaufsliste: einkaufsliste, am: eintrag.datum, context: context)
         }
         return .abgehakt
     }

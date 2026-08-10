@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.14 (Build 274) — Sicherheitsnetz lässt erneutes Hinzufügen wiederkehrender Artikel wieder durch
+
+Bugfix (Bestätigung des Verdachts aus Build 273 durch das neue
+Diagnose-Protokoll — live bestätigt für mehrere real wiederkehrende Artikel
+nach einem frischen Geräte-Neuaufbau). `ArtikelListenKauf` bekommt ein neues
+additiv-optionales Feld `zuletztAbgehaktAm`, `EinkaufslistenEintragSnapshot`
+symmetrisch `erstelltAm` (spiegelt das bereits lokal vorhandene, bisher nie
+exportierte Feld). `istBereitsAbgehakt` lässt einen vom Peer gemeldeten
+Listen-Eintrag jetzt durch, wenn dessen `erstelltAm` nachweislich NACH dem
+letzten bekannten Kauf liegt — ein legitimes erneutes Hinzufügen statt einer
+stale Resurrektion (der ursprüngliche GitHub-#99-Fall bleibt dabei
+unverändert abgesichert, mit Regressionstest belegt). `zuletztAbgehaktAm`
+wird geräteübergreifend additiv als Maximum gemergt. Details:
+`docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 55.
+
 ## v0.14 (Build 273) — Diagnose-Protokoll für stumm übersprungene Listen-Einträge im Sicherheitsnetz
 
 Diagnose (Nutzerbericht: Vorgangs-Abschluss synchronisiert jetzt sauber,

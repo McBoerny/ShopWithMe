@@ -149,7 +149,8 @@ enum SyncSnapshotExportService {
                 else { return nil }
                 return EinkaufslistenEintragSnapshot(
                     einkaufslisteID: einkaufslisteID, artikelID: artikelID, menge: eintrag.menge, notiz: eintrag.notiz,
-                    produktID: sichereID(eintrag.produkt, gueltigeIDs: gueltigeProduktIDs)
+                    produktID: sichereID(eintrag.produkt, gueltigeIDs: gueltigeProduktIDs),
+                    erstelltAm: eintrag.erstelltAm
                 )
             }
 
@@ -250,7 +251,9 @@ enum SyncSnapshotExportService {
                 guard let artikelID = sichereID(eintrag.artikel, gueltigeIDs: gueltigeArtikelIDs),
                       let einkaufslisteID = sichereID(eintrag.einkaufsliste, gueltigeIDs: gueltigeEinkaufslistenIDs)
                 else { return nil }
-                return ArtikelListenKaufSnapshot(artikelID: artikelID, einkaufslisteID: einkaufslisteID)
+                return ArtikelListenKaufSnapshot(
+                    artikelID: artikelID, einkaufslisteID: einkaufslisteID, zuletztAbgehaktAm: eintrag.zuletztAbgehaktAm
+                )
             }
 
         let tombstones = SyncTombstoneService.alle(context: context).map {

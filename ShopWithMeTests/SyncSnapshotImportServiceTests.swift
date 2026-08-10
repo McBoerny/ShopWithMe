@@ -833,6 +833,100 @@ struct SyncSnapshotImportServiceTests {
         #expect(!liste.enthaelt(artikel))
     }
 
+    /// Regressionstest für einen echten Zwei-Geräte-Nutzerbericht (2026-08-10,
+    /// Folgefund zu GitHub #99): ein Artikel, der auf dieser Liste bereits
+    /// einmal gekauft wurde, darf trotzdem erneut hinzugefügt werden dürfen —
+    /// solange der vom Peer gemeldete Listen-Eintrag NACHWEISLICH JÜNGER als
+    /// der letzte bekannte Kauf ist (``EinkaufslistenEintragSnapshot/erstelltAm``
+    /// nach ``ArtikelListenKauf/zuletztAbgehaktAm``). Vor diesem Fix blockte
+    /// das permanente Veto das genauso wie eine echte stale Resurrektion —
+    /// live bestätigt über mehrere real wiederkehrende Artikel, die nach
+    /// einem frischen Geräte-Neuaufbau dauerhaft fehlten (`sync_listeneintrag_sicherheitsnetz_uebersprungen`,
+    /// `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 54).
+    @Test
+    func erneutHinzugefuegterArtikelNeuerAlsLetzterKaufWirdDurchsSicherheitsnetzWiederAufgenommen() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
+        let artikel = Artikel(name: "Milch", symbolName: "drop.fill", farbeHex: "#34C759")
+        context.insert(artikel)
+        // Milch wurde vor einem Tag zuletzt gekauft — Sicherheitsnetz kennt
+        // das Faktum bereits, unabhängig von noch existierenden KaufEintraegen.
+        let letzterKauf = Date().addingTimeInterval(-86400)
+        context.insert(ArtikelListenKauf(artikel: artikel, einkaufsliste: liste, zuletztAbgehaktAm: letzterKauf))
+        try context.save()
+        #expect(!liste.enthaelt(artikel))
+
+        // Peer hat Milch NACH diesem Kauf erneut zur Liste hinzugefügt — ein
+        // legitimes Wiederhinzufügen ("brauche ich nochmal"), kein stale
+        // Schnappschuss aus der Zeit vor dem Kauf.
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.einkaufslisten = [EinkaufslisteSnapshot(id: liste.id, name: "Einkaufsliste", erstelltAm: liste.erstelltAm)]
+        snapshot.artikel = [
+            ArtikelSnapshot(
+                id: artikel.id, name: "Milch", symbolName: "drop.fill", farbeHex: "#34C759",
+                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+            ),
+        ]
+        snapshot.einkaufslistenEintraege = [
+            EinkaufslistenEintragSnapshot(
+                einkaufslisteID: liste.id, artikelID: artikel.id, menge: 1, notiz: nil,
+                erstelltAm: letzterKauf.addingTimeInterval(3600)
+            ),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        #expect(liste.enthaelt(artikel))
+    }
+
+    /// Gegenstück zum Test oben — die eigentliche GitHub-#99-Absicherung
+    /// bleibt bestehen: ein vom Peer gemeldeter Listen-Eintrag, dessen
+    /// `erstelltAm` VOR dem letzten bekannten Kauf liegt, ist eine stale
+    /// Momentaufnahme aus der Zeit vor diesem Kauf — bleibt blockiert.
+    @Test
+    func erneutGemeldeterArtikelAelterAlsLetzterKaufBleibtBlockiert() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
+        let artikel = Artikel(name: "Milch", symbolName: "drop.fill", farbeHex: "#34C759")
+        context.insert(artikel)
+        let letzterKauf = Date()
+        context.insert(ArtikelListenKauf(artikel: artikel, einkaufsliste: liste, zuletztAbgehaktAm: letzterKauf))
+        try context.save()
+
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.einkaufslisten = [EinkaufslisteSnapshot(id: liste.id, name: "Einkaufsliste", erstelltAm: liste.erstelltAm)]
+        snapshot.artikel = [
+            ArtikelSnapshot(
+                id: artikel.id, name: "Milch", symbolName: "drop.fill", farbeHex: "#34C759",
+                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+            ),
+        ]
+        snapshot.einkaufslistenEintraege = [
+            EinkaufslistenEintragSnapshot(
+                einkaufslisteID: liste.id, artikelID: artikel.id, menge: 1, notiz: nil,
+                erstelltAm: letzterKauf.addingTimeInterval(-3600)
+            ),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        #expect(!liste.enthaelt(artikel))
+    }
+
     /// Regressionstest: derselbe Bug wie oben, aber für den Fall, dass der
     /// Vorgang mit dem `KaufEintrag` zwischenzeitlich per „Einkauf
     /// abschließen" geschlossen und sofort ein neuer, offener Nachfolger für
@@ -1729,6 +1823,67 @@ struct SyncSnapshotImportServiceTests {
 
         #expect(try context.fetchCount(FetchDescriptor<ArtikelListenKauf>()) == 1)
         #expect(ArtikelListenKaufService.istJemalsAbgehakt(artikel: apfel, einkaufsliste: liste, context: context))
+    }
+
+    /// `ArtikelListenKaufSnapshot.zuletztAbgehaktAm` wird additiv als Maximum
+    /// gemergt (G-Counter-artig, siehe Typ-Doku) — ein älterer, nachträglich
+    /// eintreffender Peer-Wert darf einen bereits bekannten neueren Zeitpunkt
+    /// nicht verwässern, ein neuerer Peer-Wert muss aber übernommen werden.
+    @Test
+    func artikelListenKaufZeitstempelWirdAlsMaximumGemergt() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759")
+        context.insert(apfel)
+        let liste = Einkaufsliste(name: "Urlaub")
+        context.insert(liste)
+        try context.save()
+        let schluessel = ArtikelListenKaufService.Schluessel(artikelID: apfel.id, einkaufslisteID: liste.id)
+
+        let mittlererZeitpunkt = Date()
+        var ersterSnapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        ersterSnapshot.artikel = [
+            ArtikelSnapshot(
+                id: apfel.id, name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759",
+                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+            ),
+        ]
+        ersterSnapshot.einkaufslisten = [EinkaufslisteSnapshot(id: liste.id, name: "Urlaub", erstelltAm: liste.erstelltAm)]
+        ersterSnapshot.artikelListenKaeufe = [
+            ArtikelListenKaufSnapshot(artikelID: apfel.id, einkaufslisteID: liste.id, zuletztAbgehaktAm: mittlererZeitpunkt),
+        ]
+        try schreibeFremdenSnapshot(ersterSnapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+        #expect(ArtikelListenKaufService.alleZeitstempel(context: context)[schluessel] == mittlererZeitpunkt)
+
+        // Älterer Peer-Wert (z.B. ein noch nicht aktualisierter dritter
+        // Peer) darf den bekannten mittleren Zeitpunkt nicht verdrängen.
+        var aeltererSnapshot = ersterSnapshot
+        aeltererSnapshot.artikelListenKaeufe = [
+            ArtikelListenKaufSnapshot(
+                artikelID: apfel.id, einkaufslisteID: liste.id,
+                zuletztAbgehaktAm: mittlererZeitpunkt.addingTimeInterval(-3600)
+            ),
+        ]
+        try schreibeFremdenSnapshot(aeltererSnapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+        #expect(ArtikelListenKaufService.alleZeitstempel(context: context)[schluessel] == mittlererZeitpunkt)
+
+        // Neuerer Peer-Wert muss übernommen werden.
+        let neuererZeitpunkt = mittlererZeitpunkt.addingTimeInterval(3600)
+        var neuererSnapshot = ersterSnapshot
+        neuererSnapshot.artikelListenKaeufe = [
+            ArtikelListenKaufSnapshot(artikelID: apfel.id, einkaufslisteID: liste.id, zuletztAbgehaktAm: neuererZeitpunkt),
+        ]
+        try schreibeFremdenSnapshot(neuererSnapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+        #expect(ArtikelListenKaufService.alleZeitstempel(context: context)[schluessel] == neuererZeitpunkt)
+
+        #expect(try context.fetchCount(FetchDescriptor<ArtikelListenKauf>()) == 1)
     }
 
     /// **Regressionstest für GitHub #99** — die ursprünglich gemeldete

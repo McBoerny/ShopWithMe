@@ -638,6 +638,37 @@ existiert, bereits zuvor bereinigte Käufe bleiben für die Übergangszeit
 unerfasst (kein neuer Schaden, derselbe Zustand wie vor diesem Fix, bis der
 Artikel das nächste Mal auf derselben Liste abgehakt wird).
 
+**Nachtrag (Nutzerbericht 2026-08-10): das permanente Veto blockte auch ein
+legitimes erneutes Hinzufügen.** „Ich habe irgendwann einen `KaufEintrag`
+dafür" wurde oben als für ein normal synchronisierendes Gerät „dauerhaft
+belastbares Faktum" begründet — mit der impliziten Annahme, ein solches
+Gerät hätte ein Neu-Hinzufügen längst über den direkten Event-Pfad erfahren.
+Diese Annahme gilt nicht für ein frisch per `SyncErsetzenService` neu
+aufgebautes Gerät: es hat in diesem Moment noch keine eigene
+Bereich-A-Ereignis-Historie mit dem betroffenen Peer, UND
+`SyncAktualitaetsService/istAusDerZeitGefallen(context:)` erkennt das nicht
+(ein frisch aktives, gerade erfolgreich synchronisierendes Gerät ist per
+Definition nicht „aus der Zeit gefallen"). Live bestätigt über mehrere real
+wiederkehrende Artikel, die nach einem frischen Geräte-Neuaufbau dauerhaft
+fehlten (`docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitte 54/55).
+
+**Fix:** `ArtikelListenKauf` trägt jetzt zusätzlich `zuletztAbgehaktAm:
+Date?` (additiv-optional, kein Tombstone-artiger Aufräum-Zeitstempel — dient
+einzig als Vergleichsbasis), `EinkaufslistenEintragSnapshot` symmetrisch
+`erstelltAm: Date?` (spiegelt das bereits lokal vorhandene
+`EinkaufslistenEintrag.erstelltAm`, bisher nie exportiert). `istBereitsAbgehakt`
+lässt einen vom Peer gemeldeten Listen-Eintrag durch, wenn dessen
+`erstelltAm` NACH dem bekannten `zuletztAbgehaktAm` liegt — nachweislich
+jünger als der letzte bekannte Kauf, also ein legitimes erneutes
+Hinzufügen statt einer stale Resurrektion. Fehlt einer der beiden
+Zeitpunkte (Altbestand, oder Peer auf älterer App-Version ohne dieses Feld),
+bleibt es beim alten, strengeren Verhalten. `zuletztAbgehaktAm` wird über
+`ArtikelListenKaufSnapshot` additiv als Maximum gemergt (G-Counter-artig,
+Abschnitt 4.4) — ohne diesen Cross-Device-Merge hätte ein frisch
+neu aufgebautes Gerät nur seine eigenen, lokal miterlebten Käufe als
+Vergleichsbasis. Details: `docs/DATENSYNCHRONISATION_VERLAUF.md`
+Abschnitt 55.
+
 **Bewusst in Kauf genommener Randfall:** `mergeKaufEintraege`/die neue
 `mergeArtikelListenKaeufe` laufen in der Aufrufreihenfolge (Abschnitt 4.2)
 NACH `mergeEinkaufslistenEintraege` — ein im selben Sync-Zyklus frisch

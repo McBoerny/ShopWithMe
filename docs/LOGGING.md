@@ -334,10 +334,14 @@ liste=… istAusDerZeitGefallen=…`) — `SyncSnapshotImportService.mergeEinkau
 hat einen vom Peer aktuell gemeldeten Eintrag verworfen, weil
 `istBereitsAbgehakt` (`ArtikelListenKauf`, oder der ältere
 `vorgaengeFuerListe`-Fallback) diesen Artikel auf dieser Liste bereits als
-„jemals gekauft" führt. Vorher komplett stumm; erlaubt jetzt, einen echten
-Altfund von einem legitimen erneuten Hinzufügen zu unterscheiden, dessen
-direktes `artikelHinzugefuegt`-Ereignis dieses Gerät nie erreicht hat (siehe
-`docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 54).
+„jemals gekauft" führt UND kein Zeitstempel-Vergleich (`ArtikelListenKauf/zuletztAbgehaktAm`
+vs. `EinkaufslistenEintragSnapshot/erstelltAm`, siehe
+`docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 55) beweisen konnte, dass es
+sich um ein NEUERES, legitimes erneutes Hinzufügen handelt. Vorher komplett
+stumm; erlaubte die Live-Bestätigung des ursprünglichen Verdachts
+(Abschnitt 54) und bleibt seit dem Fix in Abschnitt 55 als Beleg für die
+verbleibenden, tatsächlich unentscheidbaren Fälle (Altbestand ohne
+Zeitstempel, oder Peer auf älterer App-Version).
 
 **`sync_scope_zugriff`** (2026-08-02, Diagnose für einen Live-Test-Fund —
 permanenter `sync_ordner_zugriff_fehlgeschlagen` auf dem „Backup"-Gerät ohne
