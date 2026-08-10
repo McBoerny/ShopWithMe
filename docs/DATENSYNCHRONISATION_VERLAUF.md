@@ -3458,3 +3458,73 @@ Informationen austauschen. Sobald zwei Objekte als identisch behandelt
 werden, müssen alle ihre Felder, die für spätere Plausibilitätsentscheidungen
 herangezogen werden, das jeweils aussagekräftigere (hier: frühere) Extrem
 übernehmen — nicht nur das des zufällig als „lokal" gewählten Objekts.
+
+## 54. Nutzerbericht (2026-08-10, nächster Testlauf nach Abschnitt 53): Vorgangs-Abschluss synchronisiert jetzt sauber, aber ein Artikel fehlt nach frischem Neuaufbau
+
+**Gemeldet vom Nutzer:** Gleicher Testaufbau wie zuvor (Backup zurückgesetzt,
+Bernhard fügt einen Artikel hinzu und schließt seinen Einkauf ab, Backup
+synchronisiert danach). Diesmal blieb **kein** Kaufvorgang mehr hängen (die
+Fixes aus Abschnitt 50/52/53 halten) — aber auf „Einkaufsliste" fehlte bei
+Backup der Artikel „Backmischung Muffins", den Bernhard hinzugefügt hatte.
+Ob es sich um einen echten Neuzugang oder ein erneutes Hinzufügen eines
+früher schon einmal gekauften Artikels handelte, ließ sich vom Nutzer aus
+nicht sicher sagen. Der Sync-Kanal selbst wurde gezielt gegengeprüft (Artikel
+auf einer anderen Liste, „Urlaub", auf Backup hinzugefügt — kam bei Bernhard
+korrekt an), das Problem betrifft also nicht die Übertragung allgemein,
+sondern etwas listen-/artikelspezifisches.
+
+**Verdacht (noch nicht abschließend bestätigt):** `SyncSnapshotImportService.mergeEinkaufslistenEintraege`
+(Bereich-A-Sicherheitsnetz, §4.7) verwirft einen vom Peer aktuell gemeldeten
+Listen-Eintrag bedingungslos, sobald `ArtikelListenKauf`
+(`jemalsAbgehakteSchluessel`, GitHub #99) diesen Artikel auf dieser Liste
+bereits als „jemals gekauft" führt (`istBereitsAbgehakt`,
+`SyncSnapshotImportService.swift` Zeile ~1127) — ANDERS als der ältere
+`vorgaengeFuerListe`-Fallback direkt darunter prüft dieser neuere,
+GitHub-#99-Zweig `istAusDerZeitGefallen` gar nicht erst. Der Typ-Doku-Absatz
+direkt über dieser Funktion begründet das explizit mit „für ein NORMAL
+SYNCHRONISIERENDES Gerät ein dauerhaft belastbares Faktum" — implizit
+vorausgesetzt, ein solches Gerät hätte ein legitimes Neu-Hinzufügen längst
+über den direkten `artikelHinzugefuegt`-Event-Pfad erfahren, bevor es
+überhaupt am Sicherheitsnetz vorbeikommt. Ein Gerät, das gerade erst per
+`SyncErsetzenService` komplett neu aufgebaut wurde, ist aber das genaue
+Gegenteil eines „normal synchronisierenden" Geräts: es hat in diesem Moment
+noch KEINE eigene Bereich-A-Ereignis-Historie mit diesem Peer — weder aktuell
+(`SyncAktualitaetsService.istAusDerZeitGefallen` misst nur „wie lange her ist
+mein letzter ERFOLGREICHER Zyklus", und ein frisch aktives, gerade
+erfolgreich synchronisierendes Gerät ist per Definition NICHT „aus der Zeit
+gefallen", selbst wenn es Sekunden zuvor komplett leer war) noch
+grundsätzlich (ein direktes Ereignis für einen länger zurückliegenden Zugang
+kann längst aus dem `events/`-Ordner des Peers bereinigt sein, Peer-
+Lebenszyklus Baustein C). Trifft „Backmischung Muffins" beide Bedingungen
+(schon einmal auf „Einkaufsliste" gekauft, UND das ursprüngliche
+`artikelHinzugefuegt`-Ereignis für den erneuten Zugang bereits verfallen),
+würde genau dieser Zweig ihn dauerhaft blockieren — unabhängig davon, wie oft
+„Backup" danach noch synchronisiert.
+
+**Noch offen:** ob das tatsächlich zutrifft, ließ sich aus den vorhandenen
+Protokollen nicht abschließend belegen — `mergeEinkaufslistenEintraege` war
+bisher komplett stumm, weder ein Überspringen mangels Auflösbarkeit noch eins
+wegen `istBereitsAbgehakt` hinterließ irgendeine Spur.
+
+**Fix (bisher nur Diagnose, keine Verhaltensänderung):** neues
+Protokollereignis `sync_listeneintrag_sicherheitsnetz_uebersprungen`
+(Details: `artikel=… liste=… istAusDerZeitGefallen=…`), siehe
+`docs/LOGGING.md`. Bewusst noch KEINE Verhaltensänderung an
+`istBereitsAbgehakt`/dem `jemalsAbgehakteSchluessel`-Zweig selbst — dieser
+Zweig ist eine mehrfach live-getestete, bewusst scharf gezogene Schutzregel
+gegen einen anderen, bereits bestätigten Bug (GitHub #99, oszillierende
+Mitgliederzahl der Liste „Urlaub"); eine Lockerung ohne Bestätigung, DASS das
+hier tatsächlich die Ursache ist, riskiert, genau diesen alten Bug
+wiederzubeleben. Nächster Schritt: denselben Testaufbau wiederholen und das
+neue Protokollereignis auswerten — bestätigt es sich, ist die naheliegende
+Korrektur, `istAusDerZeitGefallen` (oder ein neues, treffenderes Signal wie
+„gerade erst per `SyncErsetzenService` neu aufgebaut") auch vor dem
+`jemalsAbgehakteSchluessel`-Zweig zu prüfen, nicht nur vor dem älteren
+Fallback.
+
+**Lehre:** Ein Diagnose-Werkzeug, das für genau diese Klasse Bug gebaut wurde
+(„Nutzer meldet fehlenden Artikel, Ursache unklar"), darf an der Stelle, wo
+der wahrscheinlichste Verdacht sitzt, nicht komplett stumm sein — bevor eine
+scharfe, dokumentiert-bewusste Schutzregel angetastet wird, muss ihr
+tatsächliches Zuschlagen im konkreten Fall erst belegt werden, nicht nur aus
+dem Quellcode plausibel hergeleitet.

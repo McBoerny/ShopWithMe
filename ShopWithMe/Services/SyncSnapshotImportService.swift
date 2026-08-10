@@ -1049,14 +1049,27 @@ enum SyncSnapshotImportService {
         // aus — ein sich selbst auflösender Randfall, kein dauerhafter Fehler.
         let jemalsAbgehakteSchluessel = ArtikelListenKaufService.alleSchluessel(context: context)
         for eintrag in remote {
-            guard let liste = listeZuordnung[eintrag.einkaufslisteID],
-                  let artikel = artikelZuordnung[eintrag.artikelID],
-                  !liste.enthaelt(artikel),
-                  !istBereitsAbgehakt(
-                      artikel, aufListe: liste, alleVorgaenge: alleVorgaenge, istAusDerZeitGefallen: istAusDerZeitGefallen,
-                      jemalsAbgehakteSchluessel: jemalsAbgehakteSchluessel
-                  )
+            guard let liste = listeZuordnung[eintrag.einkaufslisteID], let artikel = artikelZuordnung[eintrag.artikelID]
             else { continue }
+            guard !liste.enthaelt(artikel) else { continue }
+            // Diagnose (Nutzerbericht 2026-08-10, Folgefund zu Abschnitt 53):
+            // dieser Zweig war bisher komplett stumm — weder „übersprungen,
+            // weil bereits abgehakt" noch „übersprungen, weil unauflösbar"
+            // hinterließ irgendeine Spur, obwohl genau diese Unterscheidung
+            // beim vorherigen Nutzerbericht (fehlender Artikel nach frischem
+            // Neuaufbau) den entscheidenden Hinweis geliefert hätte.
+            guard !istBereitsAbgehakt(
+                artikel, aufListe: liste, alleVorgaenge: alleVorgaenge, istAusDerZeitGefallen: istAusDerZeitGefallen,
+                jemalsAbgehakteSchluessel: jemalsAbgehakteSchluessel
+            ) else {
+                if SyncDebugLogger.istAktiv {
+                    SyncDebugLogger.log(
+                        .einkaufslistenEintragSicherheitsnetzUebersprungen,
+                        details: "artikel=\(artikel.name) liste=\(liste.name) istAusDerZeitGefallen=\(istAusDerZeitGefallen)"
+                    )
+                }
+                continue
+            }
             let produkt = eintrag.produktID.flatMap { produktZuordnung[$0] }
             context.insert(EinkaufslistenEintrag(
                 einkaufsliste: liste, artikel: artikel, produkt: produkt, menge: eintrag.menge, notiz: eintrag.notiz

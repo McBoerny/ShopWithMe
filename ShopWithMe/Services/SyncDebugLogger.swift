@@ -53,6 +53,16 @@ enum SyncDebugLogger {
         /// übersprungen (unauflösbare Liste ohne bekannten ID-/Alias-Treffer,
         /// oder per Tombstone als gelöscht markiert).
         case einkaufsvorgangEintragUebersprungen = "sync_einkaufsvorgang_eintrag_uebersprungen"
+        /// Diagnose für einen Nutzerbericht (2026-08-10, fehlender Artikel
+        /// nach frischem Neuaufbau): ``SyncSnapshotImportService.mergeEinkaufslistenEintraege``
+        /// (Bereich-A-Sicherheitsnetz) hat einen vom Peer aktuell gemeldeten
+        /// Listen-Eintrag übersprungen, weil ``ArtikelListenKauf`` (oder der
+        /// ältere `vorgaengeFuerListe`-Fallback) diesen Artikel auf dieser
+        /// Liste bereits als „jemals gekauft" führt — unabhängig davon, ob
+        /// das ein echter, längst erledigter Altfund ist oder ein legitimes
+        /// erneutes Hinzufügen (z.B. wiederkehrender Artikel), dessen direktes
+        /// `artikelHinzugefuegt`-Ereignis dieses Gerät nie erreicht hat.
+        case einkaufslistenEintragSicherheitsnetzUebersprungen = "sync_listeneintrag_sicherheitsnetz_uebersprungen"
         /// GitHub #89: ``SyncExportService/raeumeAlteEigeneEventDateienAufFallsFaellig()``
         /// hat eigene Event-Dateien gelöscht, die älter als der aktuelle
         /// dynamische Aufbewahrungs-Wasserstand waren (Peer-Lebenszyklus
@@ -132,7 +142,8 @@ enum SyncDebugLogger {
             case .ordnerZugriffFehlgeschlagen, .baumelndeReferenzGefunden, .eventNichtAnwendbar,
                  .peerVerworfenAltersgrenze, .eventAufgegeben, .debugModeEnabled, .debugModeDisabled,
                  .einkaufsvorgangAbschlussNichtUebernommen, .einkaufsvorgangAbschlussUebernommen,
-                 .einkaufsvorgangEintragUebersprungen, .eventDateienBereinigt, .tombstonesBereinigt,
+                 .einkaufsvorgangEintragUebersprungen, .einkaufslistenEintragSicherheitsnetzUebersprungen,
+                 .eventDateienBereinigt, .tombstonesBereinigt,
                  .ausDerZeitGefallenErkannt, .vollAbgleichEingeleitet, .multipeerGruppenIDNichtAufloesbar:
                 return .fehler
             case .zyklusStart, .zyklusEnde, .eventEmpfangen, .snapshotEmpfangen, .einkaufslistenStand,

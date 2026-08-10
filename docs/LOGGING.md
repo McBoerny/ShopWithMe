@@ -326,6 +326,19 @@ selben Protokoll heranziehen.
 der Eintrag wurde ohne jeden Matching-Versuch verworfen, bevor die
 Abschluss-Prüfung überhaupt erreicht wurde).
 
+**Diagnose für das `EinkaufslistenEintrag`-Sicherheitsnetz** (2026-08-10,
+Nutzerbericht: Artikel fehlte nach frischem Neuaufbau/„Ersetzen durch Peer"
+auf dem betroffenen Gerät, obwohl der Peer ihn aktuell noch führte):
+`sync_listeneintrag_sicherheitsnetz_uebersprungen` (Details: `artikel=…
+liste=… istAusDerZeitGefallen=…`) — `SyncSnapshotImportService.mergeEinkaufslistenEintraege`
+hat einen vom Peer aktuell gemeldeten Eintrag verworfen, weil
+`istBereitsAbgehakt` (`ArtikelListenKauf`, oder der ältere
+`vorgaengeFuerListe`-Fallback) diesen Artikel auf dieser Liste bereits als
+„jemals gekauft" führt. Vorher komplett stumm; erlaubt jetzt, einen echten
+Altfund von einem legitimen erneuten Hinzufügen zu unterscheiden, dessen
+direktes `artikelHinzugefuegt`-Ereignis dieses Gerät nie erreicht hat (siehe
+`docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 54).
+
 **`sync_scope_zugriff`** (2026-08-02, Diagnose für einen Live-Test-Fund —
 permanenter `sync_ordner_zugriff_fehlgeschlagen` auf dem „Backup"-Gerät ohne
 erkennbaren Auslöser, siehe `docs/DATENSYNCHRONISATION_VERLAUF.md` §30/§32):

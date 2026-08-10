@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.14 (Build 273) — Diagnose-Protokoll für stumm übersprungene Listen-Einträge im Sicherheitsnetz
+
+Diagnose (Nutzerbericht: Vorgangs-Abschluss synchronisiert jetzt sauber,
+aber ein Artikel fehlte nach frischem Neuaufbau — Sync-Kanal selbst gezielt
+gegengeprüft und für in Ordnung befunden). Verdacht: das
+`EinkaufslistenEintrag`-Sicherheitsnetz (`mergeEinkaufslistenEintraege`)
+verwirft einen vom Peer aktuell gemeldeten Eintrag bedingungslos, sobald
+`ArtikelListenKauf` diesen Artikel auf dieser Liste bereits als „jemals
+gekauft" führt — anders als der ältere Fallback direkt darunter prüft dieser
+neuere Zweig `istAusDerZeitGefallen` nicht, obwohl die Typ-Doku genau das
+voraussetzt. Bisher komplett stumm, daher noch keine Verhaltensänderung:
+neues Protokollereignis `sync_listeneintrag_sicherheitsnetz_uebersprungen`
+macht sichtbar, ob dieser Zweig im konkreten Fall tatsächlich zuschlägt,
+bevor die bewusst scharf gezogene Schutzregel (GitHub #99) angetastet wird.
+Details: `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 54.
+
 ## v0.14 (Build 272) — Kanonisches Vorgangs-startZeit wandert mit dem frühesten bekannten Beginn
 
 Bugfix (Folgefund direkt nach Build 271, Nutzerbericht: Gerät war während
