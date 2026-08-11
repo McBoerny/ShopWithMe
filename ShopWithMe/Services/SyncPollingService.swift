@@ -164,9 +164,32 @@ final class SyncPollingService: ObservableObject {
     /// nächsten Intervall einfach erneut); ``SyncOrdnerSettingsView`` nutzt
     /// ihn dagegen für ehrliches Erfolgs-/Fehler-Feedback beim manuellen
     /// „Jetzt synchronisieren".
+    ///
+    /// **Re-Entranz-Schutz (Nutzerbericht 2026-08-11):** diese Funktion hat
+    /// VIER voneinander unabhängige, unkoordinierte Auslöser — den eigenen
+    /// Polling-Loop (``starten(context:)``), den ``SyncICloudAenderungsBeobachter``-
+    /// Callback (spawnt bei JEDER Fremdänderungs-Benachrichtigung einen
+    /// frischen, unabhängigen `Task`), ``RootView/vollAbgleichAusloesen()``
+    /// und ``SyncOrdnerSettingsView/jetztSynchronisieren()``. `@MainActor`
+    /// verhindert dabei nur, dass zwei Stücke Code im exakt selben Instant
+    /// laufen — nicht, dass ein zweiter Aufruf startet, während der erste an
+    /// einem seiner vielen `await`-Punkte (Datei-I/O) unterbrochen ist. Live
+    /// bestätigt: zwei nebenläufige, unkoordinierte Durchläufe von
+    /// ``SyncSnapshotImportService/importiereSnapshots(context:)`` gegen
+    /// denselben `ModelContext` korrumpierten den sichtbaren Listenstand
+    /// (`sync_einkaufslisten_stand` sprang binnen derselben Sekunde von 0 auf
+    /// 6, ein späterer Zyklus „pendelte" bei 3 ein — drei tatsächlich noch
+    /// offene Artikel verschwanden spurlos). ``SyncImportService/versucheVollstaendigenZyklusZuStarten()``
+    /// (siehe dort für die vollständige Begründung inkl. Log-Beleg) lässt
+    /// einen zweiten, überlappenden Aufruf jetzt seinen gesamten Durchlauf
+    /// überspringen, statt einen konkurrierenden Merge-Pass zu starten —
+    /// `true` (kein Fehler) statt `false`, da „ein anderer Zyklus deckt das
+    /// bereits ab" kein Ordnerzugriffs-Fehlschlag ist.
     @discardableResult
     func syncZyklus() async -> Bool {
         guard let context else { return true }
+        guard SyncImportService.versucheVollstaendigenZyklusZuStarten() else { return true }
+        defer { SyncImportService.beendeVollstaendigenZyklus() }
         SyncDebugLogger.log(.zyklusStart, details: einkaufAktiv ? "einkaufAktiv" : "ruhend")
         let start = ContinuousClock.now
 

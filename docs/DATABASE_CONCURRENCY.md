@@ -600,6 +600,74 @@ auflöst, und baut die Datenbank ausschließlich daraus neu auf.
 `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 13a verschoben — er betraf
 konkret `SyncErsetzenService`, nicht das hier beschriebene Lease-Verfahren.
 
+## Nachtrag: `SyncPollingService.syncZyklus()` konnte sich selbst überlappen
+
+**Derselbe Grundmechanismus wie „Nachtrag: nebenläufige Löschung während eines
+Micro-Lease-Erwerbs" oben — diesmal ohne Absturz, aber mit stiller
+Datenkorruption.** Jener Nachtrag hatte bereits festgehalten, dass
+`SyncPollingService`s Hintergrund-Timer als eigener, unkoordinierter `Task`
+läuft. Was dort nicht betrachtet wurde: `syncZyklus()` selbst hat nicht nur
+diesen einen Timer als Auslöser, sondern **vier voneinander unabhängige**:
+den Polling-Loop, den `SyncICloudAenderungsBeobachter`-Callback (spawnt bei
+JEDER Fremdänderungs-Benachrichtigung einen frischen, unabhängigen `Task`),
+`RootView.vollAbgleichAusloesen()` und
+`SyncOrdnerSettingsView.jetztSynchronisieren()`. Keiner dieser vier wusste
+etwas vom Zustand der anderen drei.
+
+**Live bestätigt (Nutzerbericht 2026-08-11):** ein frischer Geräte-Neuaufbau
+mit großem Nachhol-Volumen erzeugt viele schnell aufeinanderfolgende
+Datei-Schreibvorgänge — jeder löst potenziell eine eigene
+iCloud-Änderungsbenachrichtigung aus, jede davon einen eigenen
+`syncZyklus()`-Aufruf. `SyncOrdnerZugriffsDiagnose` (rein diagnostisch, siehe
+deren Typ-Doku) protokollierte den Überlapp explizit:
+`sync_scope_zugriff importiereSnapshots … gleichzeitigOffen=importiereSnapshots`.
+Direkt danach sprang der Diagnose-Zähler `sync_einkaufslisten_stand` binnen
+derselben Sekunde von 0 auf 6, ein späterer Zyklus „pendelte" bei 3 ein — drei
+zu diesem Zeitpunkt nachweislich noch offene Artikel verschwanden spurlos,
+ohne dass ein einzelner Merge-Zweig sie (per `entfernt=…`-Diagnose,
+siehe `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitte 58–60) gelöscht
+hätte. Zwei nebenläufige, unkoordinierte Durchläufe von
+`SyncSnapshotImportService.importiereSnapshots(context:)` gegen denselben
+`ModelContext` erklären dieses Verhalten strukturell — `@MainActor` verhindert
+nur, dass zwei Code-Stücke im exakt selben Instant laufen, nicht aber, dass
+ein zweiter Aufruf startet, während der erste an einem seiner vielen
+`await`-Punkte (Datei-I/O, teils mehrere Sekunden) unterbrochen ist.
+
+**Fix, analog zum bereits bestehenden `SyncImportService.batchZyklusLaeuft`**
+(schützt seit GitHub #49 den schmaleren Bereich-A-Batch vor genau diesem
+Muster, siehe dessen Typ-Doku): neues `SyncImportService.vollstaendigerZyklusLaeuft`
+deckt den GESAMTEN Zyklus ab (Bereich A UND B/C/D), nicht nur den
+Bereich-A-Batch. `SyncPollingService.syncZyklus()` versucht ihn als
+allererste Anweisung zu erwerben (`versucheVollstaendigenZyklusZuStarten()`,
+vor jedem `await`, damit Prüfen+Setzen für gleichzeitige
+`@MainActor`-Aufrufer atomar wirkt) — ein zweiter, überlappender Aufruf
+überspringt seinen gesamten Durchlauf und liefert `true` (kein
+Ordnerzugriffs-Fehlschlag), statt einen konkurrierenden Merge-Pass zu
+starten. `MultipeerSyncService`s Einzel-Event-Pfad
+(`SyncImportService.wendeEinzelnesEmpfangenesEventAn`) prüft jetzt beide
+Sperren (`batchZyklusLaeuft` UND `vollstaendigerZyklusLaeuft`), da er
+denselben `ModelContext` auch während eines vollständigen Zyklus berühren
+könnte.
+
+**Bewusst nicht (weiter) verfolgt:** `SyncImportService.raeumeNichtAnwendbareEventsAuf`
+(Debug-Werkzeug in `DebuggingView`, ruft `importiereNeueEvents` direkt auf,
+außerhalb eines `syncZyklus()`) bleibt nur durch `batchZyklusLaeuft` selbst
+geschützt, nicht zusätzlich durch `vollstaendigerZyklusLaeuft` — ein
+Überlapp genau dieses manuell und selten ausgelösten Debug-Pfads mit einem
+automatischen Zyklus ist ein sehr schmales, kaum erreichbares Fenster;
+Zusatzaufwand steht in keinem Verhältnis zum Risiko (dieselbe Abwägung wie
+bei `SeedData.seedeStandarddatenFallsLeer` oben).
+
+**Warum `SyncErsetzenService` (Store-Ersetzen/Wiederherstellen) NICHT
+betroffen ist:** dessen eigentliche, destruktive Operation läuft
+strukturell erst nach einem Neustart, bevor überhaupt ein `ModelContainer`
+existiert (siehe dessen Typ-Doku, „Neustart-Aufforderung statt nahtlosem
+Austausch") — genau um diese Klasse Wettlaufsituation von vornherein
+auszuschließen, statt sie einzeln zu jagen. Die live laufende „Plane…"-Phase
+(`erstelleBackup`) liest den `ModelContext` nur, schreibt in eine separate
+Backup-Datei — unkritisch, siehe „Lesen (Standardfall, keine Sperre nötig)"
+oben.
+
 ## Diagnose-Logging (DB-Debug-Modus)
 
 Für den geplanten Live-Test mit mehreren Geräten ist ein optionaler,

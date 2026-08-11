@@ -68,6 +68,60 @@ enum SyncImportService {
     /// regulären Zyklus ganz normal übernommen wird.
     @MainActor private(set) static var batchZyklusLaeuft = false
 
+    /// Läuft gerade ein VOLLSTÄNDIGER Sync-Zyklus (``SyncPollingService/syncZyklus()``
+    /// — Bereich A UND B/C/D zusammen, nicht nur der Bereich-A-Batch wie
+    /// ``batchZyklusLaeuft`` oben)? Nutzerbericht 2026-08-11 (Architektur-
+    /// Review, direkter Folgefund zur ``ArtikelListenKauf/zuletztHinzugefuegtAm``-
+    /// Härtung): `SyncPollingService.syncZyklus()` hat VIER voneinander
+    /// unabhängige, unkoordinierte Auslöser (eigener Polling-Loop,
+    /// `SyncICloudAenderungsBeobachter`-Callback — spawnt bei JEDER
+    /// Fremdänderungs-Benachrichtigung einen frischen, unabhängigen `Task`,
+    /// `RootView.vollAbgleichAusloesen()`, `SyncOrdnerSettingsView.jetztSynchronisieren()`)
+    /// — `@MainActor` verhindert dabei NUR, dass zwei Stücke Code im exakt
+    /// selben Instant laufen, nicht aber, dass ein zweiter `syncZyklus()`-Aufruf
+    /// startet, während der erste an einem seiner vielen `await`-Punkte
+    /// (Datei-I/O) unterbrochen ist — genau das passiert bei einem frischen
+    /// Geräte-Neuaufbau mit großem Nachhol-Volumen regelmäßig (viele schnell
+    /// aufeinanderfolgende Datei-Schreibvorgänge lösen viele
+    /// iCloud-Änderungsbenachrichtigungen aus). Live per Log bestätigt:
+    /// `sync_scope_zugriff importiereSnapshots … gleichzeitigOffen=importiereSnapshots`,
+    /// gefolgt von einem `sync_einkaufslisten_stand`, der binnen derselben
+    /// Sekunde von 0 auf 6 sprang, bevor ein späterer Zyklus bei 3 „einpendelte"
+    /// — drei zu diesem Zeitpunkt tatsächlich noch offene Artikel verschwanden
+    /// spurlos, ohne dass irgendein Merge-Zweig sie (nachweislich per
+    /// `entfernt=…`-Diagnose) gelöscht hätte. Zwei nebenläufige, unkoordinierte
+    /// Durchläufe von ``SyncSnapshotImportService/importiereSnapshots(context:)``
+    /// gegen denselben `ModelContext` erklären dieses Verhalten strukturell,
+    /// ohne dass ein einzelner Merge-Zweig „falsch" entscheiden müsste.
+    ///
+    /// Analog zu ``batchZyklusLaeuft`` bewusst hier (statt in
+    /// `SyncPollingService`) platziert — hält alle „läuft gerade eine
+    /// Mutationsphase"-Merkposten an einer Stelle, `SyncPollingService`
+    /// bleibt reiner Aufrufer über ``versucheVollstaendigenZyklusZuStarten()``/
+    /// ``beendeVollstaendigenZyklus()`` unten.
+    @MainActor private(set) static var vollstaendigerZyklusLaeuft = false
+
+    /// Von ``SyncPollingService/syncZyklus()`` als erste Anweisung aufgerufen
+    /// (vor jedem `await`, damit Prüfen+Setzen für gleichzeitige
+    /// `@MainActor`-Aufrufer atomar wirkt). Liefert `false`, falls bereits ein
+    /// anderer vollständiger Zyklus läuft — der Aufrufer überspringt seinen
+    /// Durchlauf dann vollständig (kein zweiter, konkurrierender Merge-Pass),
+    /// siehe Typ-Doku ``vollstaendigerZyklusLaeuft`` oben.
+    @MainActor
+    static func versucheVollstaendigenZyklusZuStarten() -> Bool {
+        guard !vollstaendigerZyklusLaeuft else { return false }
+        vollstaendigerZyklusLaeuft = true
+        return true
+    }
+
+    /// Gegenstück zu ``versucheVollstaendigenZyklusZuStarten()`` — von
+    /// `SyncPollingService.syncZyklus()` in einem `defer` aufgerufen, NUR
+    /// wenn der vorangegangene Start-Versuch `true` lieferte.
+    @MainActor
+    static func beendeVollstaendigenZyklus() {
+        vollstaendigerZyklusLaeuft = false
+    }
+
     /// Debug-Werkzeug für manuelle Statuskonsolidierung
     /// (``SyncOrdnerSettingsView``): gibt alle aktuell nicht anwendbaren
     /// empfangenen Events sofort auf, statt auf ``maximalesEventAlterFuerRetry``
@@ -199,9 +253,17 @@ enum SyncImportService {
     /// zwischenzeitlich materialisierten, dem Snapshot unbekannten Ergebnis
     /// zu unterlaufen. Kein Datenverlust: der Datei-Kanal liefert dasselbe
     /// Event ohnehin zusätzlich, spätestens beim nächsten Zyklus.
+    ///
+    /// **Ebenso zurückhalten, während ein vollständiger Sync-Zyklus läuft**
+    /// (``vollstaendigerZyklusLaeuft``, Nutzerbericht 2026-08-11): dieser
+    /// deckt zusätzlich `importiereSnapshots` (Bereich B/C/D) ab — genau dort
+    /// entstand die live bestätigte Korruption, nicht nur im schmaleren
+    /// Bereich-A-Batch-Fenster von ``batchZyklusLaeuft``. Dieselbe
+    /// Selbstheilungs-Begründung wie dort: das Multipeer-Event liegt dem
+    /// Absender ohnehin zusätzlich als Datei vor.
     @MainActor
     static func wendeEinzelnesEmpfangenesEventAn(_ empfangen: SyncEventExportDarstellung, context: ModelContext) {
-        guard !batchZyklusLaeuft else { return }
+        guard !batchZyklusLaeuft, !vollstaendigerZyklusLaeuft else { return }
         guard !SyncEventService.istBereitsBekannt(empfangen.id, context: context) else { return }
 
         var gewinner: [SyncEventService.PaarSchluessel: SyncEvent] = [:]

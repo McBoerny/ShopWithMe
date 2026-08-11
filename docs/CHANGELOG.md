@@ -1,5 +1,46 @@
 # Changelog
 
+## v0.14 (Build 279) — `syncZyklus()` gegen sich selbst abgesichert (Re-Entranz-Schutz)
+
+Direkter Folgefund zum Architektur-Review unten (Nutzerbericht 2026-08-11):
+derselbe Live-Test, der `zuletztHinzugefuegtAm` bestätigte, zeigte danach
+einen neuen Effekt — auf Bernhard verschwanden nach einer erneuten
+Synchronisation mit Backup drei tatsächlich noch offene Artikel spurlos aus
+der Liste (4 von 10 → 4 von 7 auf beiden Geräten). Diesmal keine
+Merge-Logik-Ursache: `SyncOrdnerZugriffsDiagnose` protokollierte
+`gleichzeitigOffen=importiereSnapshots` — zwei nebenläufige, unkoordinierte
+Durchläufe von `SyncSnapshotImportService.importiereSnapshots(context:)`
+gegen denselben `ModelContext`. Ursache: `SyncPollingService.syncZyklus()`
+hat vier voneinander unabhängige Auslöser (Polling-Loop,
+`SyncICloudAenderungsBeobachter`-Callback — spawnt bei jeder
+Fremdänderungs-Benachrichtigung einen frischen `Task`,
+`RootView.vollAbgleichAusloesen()`, `SyncOrdnerSettingsView.jetztSynchronisieren()`)
+ohne jede gegenseitige Koordination; `@MainActor` verhindert nur echte
+Parallelität, nicht das Überlappen zweier async-Aufrufe an deren
+`await`-Punkten. Ein frischer Geräte-Neuaufbau mit großem Nachhol-Volumen
+(viele schnelle Datei-Schreibvorgänge, viele iCloud-Benachrichtigungen)
+macht diesen Überlapp praktisch wahrscheinlich.
+
+Fix: neues `SyncImportService.vollstaendigerZyklusLaeuft` (analog zum
+bestehenden `batchZyklusLaeuft`, das denselben Schutz bereits enger für den
+Bereich-A-Batch bot) — `syncZyklus()` erwirbt es als erste Anweisung, ein
+überlappender zweiter Aufruf überspringt seinen gesamten Durchlauf statt
+einen konkurrierenden Merge-Pass zu starten. `MultipeerSyncService`s
+Einzel-Event-Pfad prüft jetzt beide Sperren.
+
+**Architektur-Audit auf Systemik geprüft** (dieselbe Frage wie beim
+Review unten): drei weitere unabhängige Auslöser von `syncZyklus()`
+identifiziert und mitabgesichert (nicht nur der eine beobachtete). Bereits
+vorhandene Präzedenzfälle für dieselbe Grundursache
+(`SyncPollingService`s unkoordinierter Hintergrund-Timer) bestätigt:
+`ModelReference<T>` (Absturz durch nebenläufige Löschung einer erfassten
+Referenz) und `SyncErsetzenService`s Verschiebung der eigentlichen
+Store-Ersetzung auf den Kaltstart (schließt diese Klasse Wettlaufsituation
+strukturell aus, statt sie zu jagen) — beide bereits gelöst, nur die
+`syncZyklus()`-Selbstüberlappung war der verbleibende, noch offene Fall.
+Details: `docs/DATABASE_CONCURRENCY.md` → „Nachtrag: `syncZyklus()` konnte
+sich selbst überlappen".
+
 ## v0.14 (Build 278) — Architektur-Review: robustes, additiv gemergtes Gegenstück zu `zuletztAbgehaktAm`
 
 Nach drei aufeinanderfolgenden Live-Test-Funden am selben Symptom-Cluster
