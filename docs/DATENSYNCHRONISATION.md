@@ -703,6 +703,28 @@ zum lokalen Abhaken-Pfad, den passenden `EinkaufslistenEintrag`, bevor es den
 neuen `KaufEintrag` einträgt. Details:
 `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 57.
 
+**Architektur-Review (2026-08-10, Abschnitte 58–60): robustes Gegenstück
+`zuletztHinzugefuegtAm`.** Drei aufeinanderfolgende Live-Test-Funde am
+selben Symptom-Cluster (Abschnitte 57/59) waren strukturell dieselbe
+Asymmetrie: `zuletztAbgehaktAm` (oben) ist ein additiv gemergtes, monoton nur
+vorwärts laufendes Faktum — robust unabhängig von Reihenfolge/Anzahl
+zwischengeschalteter Geräte. Für die Gegenseite („zuletzt hinzugefügt") gab
+es kein Äquivalent; `EinkaufslistenEintrag.erstelltAm` sieht wie eine
+Vergleichsbasis aus, ist aber keine (wird beim Abhaken gelöscht, beim
+erneuten Hinzufügen per Sicherheitsnetz mit dem — beliebig oft
+weitergereichten, ungeschützten — Original-Zeitpunkt eines Peers neu
+angelegt, siehe Nachtrag Abschnitt 56 oben). **Fix:** neues additiv-optionales
+`ArtikelListenKauf.zuletztHinzugefuegtAm`, exakt dieselbe
+Monotonie-Zusicherung, gepflegt an beiden Hinzufügen-Stellen
+(`Einkaufsliste.artikelHinzufuegenOhneEventAufzeichnung`,
+`mergeEinkaufslistenEintraege`) und über den eigenen
+`ArtikelListenKauf`-Sync-Kanal repliziert. `istBereitsAbgehakt` und
+`mergeKaufEintraege`s Lösch-Entscheidung nutzen jetzt dieselbe einheitliche
+Regel `ArtikelListenKaufService.istOffen(hinzugefuegtAm:abgehaktAm:)` statt
+zweier unabhängiger Ad-hoc-Vergleiche. Architektur-Audit aller 19
+`mergeX`-Funktionen: dieselbe Asymmetrie kommt sonst nirgends vor. Details:
+`docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitte 58–60.
+
 ## 5. Sync-Zyklus und adaptives Polling
 
 `SyncPollingService` führt einen vollständigen Zyklus (Import Bereich A →

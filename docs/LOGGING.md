@@ -326,6 +326,41 @@ selben Protokoll heranziehen.
 der Eintrag wurde ohne jeden Matching-Versuch verworfen, bevor die
 Abschluss-Prüfung überhaupt erreicht wurde).
 
+**Nachtrag (2026-08-10, Nutzerbericht „Backup schließt ab, das kommt nie auf
+Bernhard an"):** `sync_einkaufsvorgang_abschluss_uebernommen` trägt zusätzlich
+`andereOffeneVorgaengeDerListeMitgeschlossen=N` — die Anzahl weiterer, plausibel
+derselben Sitzung angehörender (`startZeit <= remoteEndZeit`) offener Vorgänge
+derselben Liste, die `mergeEinkaufsvorgaenge` beim Übernehmen der `endZeit`
+gleich mitgeschlossen hat (analog zum lokalen Abschluss-Button, siehe
+``EinkaufsvorgangAbschlussService/schliesseAbMitDuplikaten(anker:duplikate:context:)``).
+Ohne dieses Mitschließen blieb genau der Vorgang offen, an dem die UI
+(``EinkaufenView/aktuellerEinkauf``) tatsächlich hing — der Einkauf erschien
+trotz erfolgreich übernommener `endZeit` weiterhin als aktiv.
+
+**Diagnose für `KaufEintrag`-Merge/Listen-Eintrag-Entfernung** (2026-08-10,
+Nutzerbericht „Backup schließt ab, Artikel bleiben trotzdem auf der Liste"):
+`sync_kaufeintrag_merge_listeneintrag_entfernt` (Details: `artikel=… liste=…
+listenEintragGefunden=true/false entfernt=true/false
+listenEintragErstelltAm=… kaufDatum=…`) —
+`SyncSnapshotImportService.mergeKaufEintraege` protokolliert bei jedem frisch
+aus einem Peer-Snapshot angelegten `KaufEintrag`, ob dabei ein offener
+`EinkaufslistenEintrag` gefunden wurde (`listenEintragGefunden`) und ob er
+tatsächlich gelöscht wurde (`entfernt`) — `entfernt=false` bei
+`listenEintragGefunden=true` bedeutet: gefunden, aber NICHT gelöscht, weil
+`erstelltAm` nach `KaufEintrag.datum` liegt (siehe Nachtrag unten — ein
+danach erneut hinzugefügter Artikel darf durch einen älteren Kauf nicht
+verschwinden).
+
+**Nachtrag (2026-08-10, Nutzerbericht „kurzzeitiges Flackern der Liste
+während eines Mehrgeräte-Syncs"):** die ursprüngliche, bedingungslose
+Löschung oben ging zu weit — ein historischer Nachzügler-`KaufEintrag`
+(Nachhol-Merge nach langer Sync-Pause) konnte einen NACH diesem Kauf erneut
+hinzugefügten Listen-Eintrag desselben (wiederkehrenden) Artikels fälschlich
+löschen. `mergeKaufEintraege` vergleicht jetzt `EinkaufslistenEintrag.erstelltAm`
+gegen `KaufEintrag.datum` (dasselbe Prinzip wie beim `listen`-Sicherheitsnetz
+oben) und löscht nur noch, wenn der Listen-Eintrag nachweislich vor dem Kauf
+existierte.
+
 **Diagnose für das `EinkaufslistenEintrag`-Sicherheitsnetz** (2026-08-10,
 Nutzerbericht: Artikel fehlte nach frischem Neuaufbau/„Ersetzen durch Peer"
 auf dem betroffenen Gerät, obwohl der Peer ihn aktuell noch führte):

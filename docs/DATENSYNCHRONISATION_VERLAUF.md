@@ -3757,3 +3757,102 @@ Neustart bestehen bleibt. Nicht weiter code-seitig untersucht, da kein neuer
 Aufrufer identifiziert werden konnte — nächster Schritt ist ein sauberer
 Test nach vollständigem Neustart von Bernhard (nicht nur Hintergrund/
 Vordergrund).
+
+## 58. Nutzerbericht (2026-08-10, Folgefund zu Abschnitt 57): sync-übernommener Abschluss schließt andere offene Vorgänge derselben Liste nicht mit
+
+**Ausgangslage:** Backup schließt einen Einkauf ab; `sync_einkaufsvorgang_abschluss_uebernommen`
+bestätigt auf Bernhard die korrekt übernommene `endZeit` — sogar über einen
+App-Neustart hinweg (Store-Ebene also nachweislich korrekt) — trotzdem
+erscheint der Einkauf auf Bernhards Bildschirm weiterhin aktiv, mit denselben
+abgehakten Artikeln.
+
+**Diagnose zuerst, dann Fix** (analog Abschnitt 53): das bereits vorhandene
+`andereOffeneVorgaengeDerListe`-Logging (aus Abschnitt 57 für einen anderen
+Zweig übernommen) bestätigte `andereOffeneVorgaengeDerListe=2` auf Bernhard
+genau im Moment der Abschluss-Übernahme — ein zweiter, unabhängig offener
+Vorgang für dieselbe Liste, an dem tatsächlich ``EinkaufenView/aktuellerEinkauf``
+hing.
+
+**Ursache:** `mergeEinkaufsvorgaenge` übernahm bisher nur die `endZeit` des
+per ID getroffenen Vorgangs — anders als der lokale „Einkauf
+abschließen"-Button (`EinkaufsvorgangAbschlussService.schliesseAbMitDuplikaten`),
+der bewusst ALLE offenen Vorgänge derselben Liste mitschließt.
+
+**Fix:** der Sync-Merge schließt jetzt ebenfalls alle plausibel gleichzeitigen
+(`startZeit <= remoteEndZeit`, dasselbe Zeit-Gate wie beim
+`offenerTreffer`-Matching) offenen Vorgänge derselben Liste mit,
+`zaehleAlsBesuch: false`. Das Zeit-Gate ist notwendig, nicht kosmetisch:
+ohne es schloss ein historischer Catch-up-Import (viele längst
+abgeschlossene Alt-Vorgänge eines frisch beigetretenen Geräts) einen danach
+frisch angelegten, unabhängigen Platzhalter fälschlich mit — bestätigt durch
+den bereits bestehenden Regressionstest
+`mehrereBereitsAbgeschlosseneVorgaengeWerdenNichtAufFrischenLokalenPlatzhalterAliasiert()`.
+Neuer Test: `andererOffenerVorgangDerselbenListeWirdBeiSyncAbschlussMitgeschlossen()`.
+
+## 59. Direkter Folgefund (derselbe Testlauf): `mergeKaufEintraege`s Zeit-Gate reichte nicht — Architektur-Review statt vierter Einzelpatch
+
+Ein weiterer Testlauf zeigte dieselbe Symptom-Familie noch zweimal, jeweils
+mit anderer Geräte-/Zyklus-Verkettung:
+
+1. **„Kurzzeitiges Flackern"**: Bernhards `Einkaufsliste`-Zähler fiel binnen
+   eines Zyklus von 5 auf 1 (Backups eigener sogar auf 0), bevor er sich
+   selbst korrigierte. Ursache: `mergeKaufEintraege` (Abschnitt 57) löschte
+   den passenden `EinkaufslistenEintrag` bedingungslos — auch wenn der
+   `KaufEintrag` ein längst historischer Nachzügler aus einem großen
+   Nachhol-Merge war und der Artikel (wiederkehrend) danach erneut auf die
+   Liste gesetzt wurde. Erster Fix: nur löschen, wenn
+   `EinkaufslistenEintrag.erstelltAm <= KaufEintrag.datum`.
+2. **Derselbe Fehler erneut, andere Verkettung**: trotz bestandener
+   `erstelltAm <= datum`-Prüfung verschwand „Backmischung Muffins" noch
+   einmal. Backups eigenes Log zeigte die Ursache direkt: ein Listen-Eintrag
+   wurde binnen 15 Sekunden über das Sicherheitsnetz neu materialisiert
+   UND von einem nachfolgenden Merge-Zyklus bereits wieder gelöscht.
+
+Der Nutzer stellte an dieser Stelle explizit die richtige Frage: „Prüfe den
+Algorithmus an sich, statt weiter herumzuprobieren." Analyse ergab: siehe
+Abschnitt 60 — `EinkaufslistenEintrag.erstelltAm` ist keine verlässliche
+Vergleichsbasis für „wurde seither erneut hinzugefügt", weil der
+Sicherheitsnetz-Merge bewusst den ORIGINAL-Zeitpunkt eines (beliebig oft
+weitergereichten) Peers übernimmt, ohne jede monotone Absicherung. Jeder
+Fix gegen diesen Rohwert war dadurch strukturell zum Scheitern verurteilt.
+
+## 60. Architektur-Review (2026-08-10): `ArtikelListenKauf.zuletztHinzugefuegtAm` — robustes Gegenstück zu `zuletztAbgehaktAm`
+
+**Befund:** die „schon gekauft"-Seite hatte mit `zuletztAbgehaktAm` (Abschnitt
+55) bereits ein additiv gemergtes, monoton nur vorwärts laufendes Faktum —
+robust unabhängig davon, in welcher Reihenfolge/über wie viele Zwischenstationen
+Geräte synchronisieren. Die „hinzugefügt"-Seite hatte KEIN Äquivalent. Jeder
+der drei vorangegangenen Funde (Abschnitte 57, 59) war strukturell dieselbe
+Asymmetrie mit anderer konkreter Geräte-Verkettung.
+
+**Fix:** neues additiv-optionales Feld `ArtikelListenKauf.zuletztHinzugefuegtAm`,
+exakt dieselbe Monotonie-Garantie, gepflegt an beiden Stellen, an denen ein
+Artikel auf eine Liste kommt. Beide Vergleichsstellen (`istBereitsAbgehakt`,
+`mergeKaufEintraege`) nutzen jetzt dieselbe einheitliche Regel
+`ArtikelListenKaufService.istOffen(hinzugefuegtAm:abgehaktAm:)`. Zusätzlich
+über den eigenen `ArtikelListenKauf`-Sync-Kanal repliziert und rückwirkend für
+Bestandsdaten befüllt.
+
+**Regressionsfund während der Umsetzung selbst** (Verifizierung deckte ihn
+auf, bevor er live beobachtet wurde): die erste Fassung des Gates in
+`istBereitsAbgehakt` prüfte nur `bekannterEintrag != nil` — da der Aufrufer
+das `hinzugefügt`-Faktum bereits VOR diesem Aufruf vermerkt, existiert für
+JEDES gemeldete Hinzufügen ab sofort eine `ArtikelListenKauf`-Zeile, auch auf
+einem Gerät ganz ohne Kauf-Historie. Das Gate behandelte diese Zeile
+fälschlich wie einen bekannten Kauf und blockierte über den konservativen
+Nil-Fallback von `istOffen` ein legitimes Erst-Hinzufügen. Aufgedeckt durch
+`vonSicherheitsnetzGeerbterEintragTaeuschtBeiWeitergabeKeineFrischeVor()`
+(zwei ECHTE, getrennte `ModelContext`s statt hartcodierter Zeitstempel, damit
+der reale Wert — nicht ein im Test vorgetäuschter — die Lücke zeigt). Fix:
+Gate prüft gezielt `bekannterEintrag?.zuletztAbgehaktAm != nil`.
+
+**Architektur-Audit:** alle 19 `mergeX`-Funktionen in
+`SyncSnapshotImportService` durchgesehen — dieselbe Asymmetrie kommt sonst
+nirgends vor. Sichere, bereits etablierte Muster: Union-nach-ID für
+unveränderliche Historie, „nur fehlende Werte ergänzen, nie überschreiben"
+für optionale Skalare, Mengen-Vereinigung für Relationships, G-Counter für
+Zähler, gewichteter Zuwachs-seit-zuletzt-gesehen für
+`WarengruppenDistanz.distanz`, Tombstones für Löschungen.
+
+**Verifiziert:** volle Suite (390 Tests, 46 Suiten) grün, inkl. drei neuer/
+angepasster Regressionstests für diesen Abschnitt.

@@ -1,5 +1,64 @@
 # Changelog
 
+## v0.14 (Build 278) — Architektur-Review: robustes, additiv gemergtes Gegenstück zu `zuletztAbgehaktAm`
+
+Nach drei aufeinanderfolgenden Live-Test-Funden am selben Symptom-Cluster
+(„kurzzeitiges Flackern der Liste", dann „ein Artikel verschwindet trotzdem
+noch einmal") ein Schritt zurück statt einer vierten Einzelpatch: die
+eigentliche Root Cause war eine strukturelle Asymmetrie, kein weiterer
+Randfall.
+
+**Befund:** Die „schon gekauft"-Seite hatte mit `ArtikelListenKauf.zuletztAbgehaktAm`
+bereits ein robustes, additiv gemergtes, monoton nur vorwärts laufendes
+Faktum (G-Counter-artig, geräteübergreifend sicher). Die „hinzugefügt"-Seite
+hatte KEIN Äquivalent — `EinkaufslistenEintrag.erstelltAm` sieht wie eine
+Vergleichsbasis aus, ist aber keine: die Zeile wird beim Abhaken gelöscht und
+beim erneuten Hinzufügen neu angelegt, und der Sicherheitsnetz-Merge übernimmt
+dabei bewusst den ORIGINAL-Zeitpunkt des sendenden Geräts (verhindert
+künstlich „frisch" aussehende Artikel nach einem Neuaufbau) — der kann
+seinerseits von einem dritten Gerät geerbt, beliebig oft weitergereicht sein,
+ohne jede monotone Absicherung. Jeder Vergleich gegen diesen unprotected
+Rohwert blieb dadurch strukturell fragil.
+
+**Fix:** neues, additiv-optionales Feld `ArtikelListenKauf.zuletztHinzugefuegtAm`
+— exakt dieselbe Monotonie-Zusicherung wie `zuletztAbgehaktAm`, gepflegt an
+beiden Stellen, an denen ein Artikel auf eine Liste kommt
+(`Einkaufsliste.artikelHinzufuegenOhneEventAufzeichnung`, inkl. Durchreichen
+des ursprünglichen `SyncEvent.wallClock` für den Bereich-A-Ereignis-Pfad statt
+des lokalen Verarbeitungszeitpunkts; `mergeEinkaufslistenEintraege`). Beide
+bisherigen Vergleichsstellen (`istBereitsAbgehakt`, `mergeKaufEintraege`s
+Lösch-Entscheidung) nutzen jetzt dieselbe einheitliche Regel
+`ArtikelListenKaufService.istOffen(hinzugefuegtAm:abgehaktAm:)` statt zweier
+unabhängiger, teils fragiler Ad-hoc-Vergleiche. Zusätzlich direkt über den
+eigenen `ArtikelListenKauf`-Sync-Kanal repliziert (`ArtikelListenKaufSnapshot`),
+rückwirkend für Bestandsdaten befüllt
+(`DatenintegritaetsService.migriereArtikelListenKaeufeFallsNoetig`).
+
+**Regressionsfund während der Umsetzung:** die naive erste Fassung des Gates
+in `istBereitsAbgehakt` (`if let bekannterEintrag`) behandelte eine Zeile, die
+NUR wegen des eigenen `vermerkeHinzugefuegtFallsNoetig`-Aufrufs für DIESEN
+Merge-Durchlauf frisch entstand (kein Kauf jemals bekannt), fälschlich wie
+einen bekannten Kauf und blockierte dadurch ein legitimes Erst-Hinzufügen auf
+einem Gerät ohne jede Kauf-Historie. Aufgedeckt durch
+`vonSicherheitsnetzGeerbterEintragTaeuschtBeiWeitergabeKeineFrischeVor()`
+(bewusst über zwei ECHTE, getrennte `ModelContext`s statt hartcodierter
+Zeitstempel, siehe Test-Doku) — Fix: das Gate prüft jetzt gezielt
+`bekannterEintrag?.zuletztAbgehaktAm != nil`, nicht die bloße Existenz der
+Zeile.
+
+**Architektur-Audit:** alle 19 `mergeX`-Funktionen in
+`SyncSnapshotImportService` durchgesehen — dieselbe Asymmetrie (robustes
+additiv gemergtes Faktum auf einer Seite, unprotected Rohwert auf der
+anderen) kommt sonst nirgends vor. Die übrigen Merges folgen bereits
+durchgängig sicheren Mustern: Union-nach-ID für unveränderliche Historie
+(`KaufEintrag`, `Preispunkt`, `GeschaeftBesuch`), „nur fehlende Werte
+ergänzen, nie überschreiben" für optionale Skalare, Mengen-Vereinigung für
+Relationships, G-Counter (eigener-Beitrag-pro-Peer) für Zähler, gewichteter
+Zuwachs-seit-zuletzt-gesehen für `WarengruppenDistanz.distanz`, Tombstones für
+Löschungen.
+
+Details: `docs/DATENSYNCHRONISATION_VERLAUF.md`.
+
 ## v0.14 (Build 277) — Sync-übernommener Einkaufsabschluss schließt jetzt auch andere offene Vorgänge derselben Liste mit
 
 Bugfix (Nutzerbericht 2026-08-10: Backup schließt einen Einkauf ab, das

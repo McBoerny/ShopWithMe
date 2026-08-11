@@ -292,6 +292,17 @@ enum DatenintegritaetsService {
     /// Idempotent (``ArtikelListenKaufService/vermerkeAbgehaktFallsNoetig(artikel:einkaufsliste:am:bekannt:context:)``
     /// prüft selbst vor dem Schreiben): ein wiederholter Aufruf legt keine
     /// Dubletten an. Läuft beim App-Start, siehe ``ShopWithMeApp``.
+    ///
+    /// **Erweiterung (Architektur-Review 2026-08-10):** befüllt zusätzlich das
+    /// symmetrische Gegenstück ``ArtikelListenKauf/zuletztHinzugefuegtAm``
+    /// rückwirkend aus jedem noch existierenden, offenen
+    /// ``EinkaufslistenEintrag`` (dessen ``EinkaufslistenEintrag/erstelltAm``
+    /// ist zu diesem Zeitpunkt der einzig verfügbare Anhaltspunkt) — ohne
+    /// diesen Backfill hätte ein Bestandsgerät für JEDEN zum
+    /// Update-Zeitpunkt bereits offenen Artikel zunächst kein Faktum, bis er
+    /// das nächste Mal lokal oder per Sync bewegt wird (siehe
+    /// ``SyncSnapshotImportService/mergeKaufEintraege(_:artikelZuordnung:einkaufsvorgangZuordnung:geschaeftZuordnung:kategorieZuordnung:peerGeraeteID:context:)``s
+    /// konservativen `nil`-Fallback dafür).
     @MainActor
     static func migriereArtikelListenKaeufeFallsNoetig(context: ModelContext) {
         var bekannt = ArtikelListenKaufService.alleEintraege(context: context)
@@ -302,10 +313,18 @@ enum DatenintegritaetsService {
                 artikel: artikel, einkaufsliste: einkaufsliste, am: eintrag.datum, bekannt: &bekannt, context: context
             )
         }
+        for eintrag in (try? context.fetch(FetchDescriptor<EinkaufslistenEintrag>())) ?? [] {
+            guard let artikel = eintrag.artikel, let einkaufsliste = eintrag.einkaufsliste else { continue }
+            ArtikelListenKaufService.vermerkeHinzugefuegtFallsNoetig(
+                artikel: artikel, einkaufsliste: einkaufsliste, am: eintrag.erstelltAm, bekannt: &bekannt, context: context
+            )
+        }
         let neuVermerkt = bekannt.count - vorherAnzahl
         guard neuVermerkt > 0 else { return }
         try? context.save()
-        DatenintegritaetsLogger.log("\(neuVermerkt) Artikel-Listen-Kauf-Fakten rückwirkend aus bestehenden Kaufeinträgen ergänzt (GitHub #99)")
+        DatenintegritaetsLogger.log(
+            "\(neuVermerkt) Artikel-Listen-Kauf-Fakten rückwirkend aus bestehenden Kaufeinträgen/offenen Listen-Einträgen ergänzt (GitHub #99, Architektur-Review 2026-08-10)"
+        )
     }
 
     /// `nil` gilt nie als baumelnd (ein leerer Bezug ist ein gültiger

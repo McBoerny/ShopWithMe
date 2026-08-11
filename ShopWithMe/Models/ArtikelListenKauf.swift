@@ -4,7 +4,7 @@ import SwiftData
 /// Dauerhafte, von ``KaufEintrag``/``Einkaufsvorgang`` unabhängige Tatsache:
 /// „``artikel`` wurde mindestens einmal von ``einkaufsliste`` abgehakt" —
 /// Grundlage für das Sicherheitsnetz gegen wiederbelebte Käufe in
-/// ``SyncSnapshotImportService/istBereitsAbgehakt(_:aufListe:alleVorgaenge:istAusDerZeitGefallen:jemalsAbgehakteZeitstempel:)``
+/// ``SyncSnapshotImportService/istBereitsAbgehakt(_:aufListe:alleVorgaenge:istAusDerZeitGefallen:bekannterEintrag:)``
 /// (GitHub #99).
 ///
 /// **Root Cause, die dieser Typ behebt:** Die vorherige Prüfung stützte sich
@@ -42,6 +42,35 @@ import SwiftData
 /// diesem Feld, oder ein Peer, dessen Snapshot noch kein Zeitstempel-Feld
 /// kennt) bleibt bewusst beim alten, strengeren Verhalten — permanentes Veto,
 /// keine Lockerung ohne echten Vergleichswert.
+///
+/// **``zuletztHinzugefuegtAm`` (Nutzerbericht 2026-08-10, Architektur-Review
+/// nach drei aufeinanderfolgenden Live-Test-Funden am selben Symptom-Cluster
+/// — „kurzzeitiges Flackern", dann „ein Artikel verschwindet trotzdem noch
+/// einmal").** Symmetrisches Gegenstück zu ``zuletztAbgehaktAm``: dieselbe
+/// additiv-monotone G-Counter-artige Zusicherung („bewegt sich nur nach
+/// vorne, nie zurück", siehe ``ArtikelListenKaufService/vermerkeHinzugefuegt(artikel:einkaufsliste:am:context:)``),
+/// nur für die Gegenseite — „wann wurde dieser Artikel zuletzt (nachweislich,
+/// geräteübergreifend) auf diese Liste gesetzt". **Root Cause, die dieses
+/// Feld behebt:** vor seiner Einführung gab es für die "hinzugefügt"-Seite
+/// KEIN robustes Äquivalent — ``EinkaufslistenEintrag/erstelltAm`` sieht wie
+/// eine Vergleichsbasis aus, ist aber keine: die Zeile wird beim Abhaken
+/// gelöscht und beim erneuten Hinzufügen neu angelegt, und
+/// ``SyncSnapshotImportService/mergeEinkaufslistenEintraege(_:listeZuordnung:artikelZuordnung:produktZuordnung:context:)``
+/// übernimmt dabei bewusst den ORIGINAL-Zeitstempel des sendenden Geräts
+/// (verhindert, dass ein Artikel nach einem Neuaufbau künstlich frisch
+/// aussieht, siehe Nachtrag dort) — der kann seinerseits von einem DRITTEN
+/// Gerät geerbt sein, beliebig oft weitergereicht, ohne jede monotone
+/// Absicherung. Jeder Vergleich gegen diesen unprotected Rohwert (sowohl in
+/// `istBereitsAbgehakt` als auch in einem Zwischenfund in
+/// `mergeKaufEintraege`) blieb dadurch strukturell fragil — jeder Fix machte
+/// nur die eine gerade beobachtete Reihenfolge korrekt, eine andere
+/// Verkettung von Geräten/Zyklen produzierte dasselbe Symptom erneut. Mit
+/// diesem Feld werden BEIDE Seiten der Entscheidung „ist der Artikel aktuell
+/// offen" additiv gemergte, monotone Fakten — siehe
+/// ``ArtikelListenKaufService/istOffen(hinzugefuegtAm:abgehaktAm:)`` für die
+/// daraus resultierende, an beiden bisherigen Vergleichsstellen
+/// EINHEITLICHE Entscheidungsregel. Rückwirkend für Bestandsdaten befüllt
+/// über ``DatenintegritaetsService/migriereArtikelListenKaeufeFallsNoetig(context:)``.
 @Model
 final class ArtikelListenKauf {
     /// Eindeutige Kennung.
@@ -50,12 +79,15 @@ final class ArtikelListenKauf {
     var einkaufsliste: Einkaufsliste?
     /// Siehe Typ-Doku „``zuletztAbgehaktAm``" oben.
     var zuletztAbgehaktAm: Date?
+    /// Siehe Typ-Doku „``zuletztHinzugefuegtAm``" oben.
+    var zuletztHinzugefuegtAm: Date?
 
-    init(artikel: Artikel?, einkaufsliste: Einkaufsliste?, zuletztAbgehaktAm: Date? = nil) {
+    init(artikel: Artikel?, einkaufsliste: Einkaufsliste?, zuletztAbgehaktAm: Date? = nil, zuletztHinzugefuegtAm: Date? = nil) {
         self.id = UUID()
         self.artikel = artikel
         self.einkaufsliste = einkaufsliste
         self.zuletztAbgehaktAm = zuletztAbgehaktAm
+        self.zuletztHinzugefuegtAm = zuletztHinzugefuegtAm
     }
 }
 
@@ -135,6 +167,64 @@ enum ArtikelListenKaufService {
         bekannt[schluessel] = neu
     }
 
+    /// Symmetrisches Gegenstück zu ``vermerkeAbgehakt(artikel:einkaufsliste:am:context:)``
+    /// — siehe Typ-Doku „``ArtikelListenKauf/zuletztHinzugefuegtAm``" für die
+    /// Begründung. Vermerkt dauerhaft, dass `artikel` auf `einkaufsliste`
+    /// (neu oder erneut) gesetzt wurde; bewegt `zuletztHinzugefuegtAm` wie dort
+    /// nur nach VORNE, nie zurück.
+    static func vermerkeHinzugefuegt(artikel: Artikel, einkaufsliste: Einkaufsliste, am zeitpunkt: Date = Date(), context: ModelContext) {
+        if let bestehender = bestehenderEintrag(artikel: artikel, einkaufsliste: einkaufsliste, context: context) {
+            if bestehender.zuletztHinzugefuegtAm == nil || zeitpunkt > bestehender.zuletztHinzugefuegtAm! {
+                bestehender.zuletztHinzugefuegtAm = zeitpunkt
+            }
+            return
+        }
+        context.insert(ArtikelListenKauf(artikel: artikel, einkaufsliste: einkaufsliste, zuletztHinzugefuegtAm: zeitpunkt))
+    }
+
+    /// Batch-Variante von ``vermerkeHinzugefuegt(artikel:einkaufsliste:am:context:)``,
+    /// analog ``vermerkeAbgehaktFallsNoetig(artikel:einkaufsliste:am:bekannt:context:)``
+    /// — nutzt denselben `bekannt`-Cache (eine Zeile pro (Artikel,Einkaufsliste)-Paar
+    /// trägt beide Zeitstempel, siehe ``alleEintraege(context:)``).
+    /// `zeitpunkt == nil` lässt einen bestehenden Eintrag unverändert und legt
+    /// keinen neuen an (nichts Neues zu vermerken) — verwässert einen bereits
+    /// bekannten Zeitstempel nie.
+    static func vermerkeHinzugefuegtFallsNoetig(
+        artikel: Artikel, einkaufsliste: Einkaufsliste, am zeitpunkt: Date?,
+        bekannt: inout [Schluessel: ArtikelListenKauf], context: ModelContext
+    ) {
+        guard let zeitpunkt else { return }
+        let schluessel = Schluessel(artikelID: artikel.id, einkaufslisteID: einkaufsliste.id)
+        if let bestehender = bekannt[schluessel] {
+            if bestehender.zuletztHinzugefuegtAm == nil || zeitpunkt > bestehender.zuletztHinzugefuegtAm! {
+                bestehender.zuletztHinzugefuegtAm = zeitpunkt
+            }
+            return
+        }
+        let neu = ArtikelListenKauf(artikel: artikel, einkaufsliste: einkaufsliste, zuletztHinzugefuegtAm: zeitpunkt)
+        context.insert(neu)
+        bekannt[schluessel] = neu
+    }
+
+    /// Die zentrale, robuste Entscheidung „gilt der Artikel aktuell als
+    /// offen" — rein auf Basis der beiden additiv gemergten, monotonen
+    /// Zeitstempel (siehe Typ-Doku „``ArtikelListenKauf/zuletztHinzugefuegtAm``"),
+    /// EINHEITLICH verwendet an beiden Stellen, die vorher je einen eigenen,
+    /// teils fragilen Vergleich anstellten
+    /// (``SyncSnapshotImportService/istBereitsAbgehakt(_:aufListe:alleVorgaenge:istAusDerZeitGefallen:bekannterEintrag:)``,
+    /// ``SyncSnapshotImportService/mergeKaufEintraege(_:artikelZuordnung:einkaufsvorgangZuordnung:geschaeftZuordnung:kategorieZuordnung:peerGeraeteID:context:)``).
+    ///
+    /// Bewusst BEIDE Werte erforderlich (kein Default-„offen" bei fehlendem
+    /// `abgehaktAm`): eine bestehende ``ArtikelListenKauf``-Zeile OHNE
+    /// `zuletztAbgehaktAm` (Altbestand vor dessen Einführung, GitHub #99)
+    /// bedeutet weiterhin „schon mal gekauft, nur kein Vergleichswert" — also
+    /// NICHT offen, dasselbe permanente Veto wie zuvor, keine Lockerung ohne
+    /// echten Vergleichswert auf beiden Seiten.
+    static func istOffen(hinzugefuegtAm: Date?, abgehaktAm: Date?) -> Bool {
+        guard let hinzugefuegtAm, let abgehaktAm else { return false }
+        return hinzugefuegtAm > abgehaktAm
+    }
+
     /// Alle lokal bekannten (Artikel, Einkaufsliste)-Schlüssel — für
     /// wiederholte Existenz-Prüfungen innerhalb eines Merge-Durchlaufs
     /// effizienter als einzelne Existenz-Checks (Muster wie
@@ -177,7 +267,7 @@ enum ArtikelListenKaufService {
 
     /// Wie ``alleSchluessel(context:)``, aber mit `zuletztAbgehaktAm` statt
     /// nur der reinen Existenz — Grundlage für
-    /// ``SyncSnapshotImportService/istBereitsAbgehakt(_:aufListe:alleVorgaenge:istAusDerZeitGefallen:jemalsAbgehakteZeitstempel:)``s
+    /// ``SyncSnapshotImportService/istBereitsAbgehakt(_:aufListe:alleVorgaenge:istAusDerZeitGefallen:bekannterEintrag:)``s
     /// Vergleich „ist der vom Peer gemeldete Listen-Eintrag NEUER als der
     /// letzte bekannte Kauf". **Bewusst `Date?` als WERT, nicht als
     /// herausgefilterte Abwesenheit** — ein bekanntes Paar OHNE Zeitstempel

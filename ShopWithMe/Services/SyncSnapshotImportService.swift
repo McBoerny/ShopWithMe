@@ -1038,7 +1038,7 @@ enum SyncSnapshotImportService {
         // Bestand ist während dieses gesamten Durchlaufs also bereits vollständig.
         let alleVorgaenge = (try? context.fetch(FetchDescriptor<Einkaufsvorgang>())) ?? []
         // Einmal pro Merge-Durchlauf berechnet statt pro Artikel — siehe
-        // Begründung in ``istBereitsAbgehakt(_:aufListe:alleVorgaenge:istAusDerZeitGefallen:eintragErstelltAm:jemalsAbgehakteZeitstempel:)``.
+        // Begründung in ``istBereitsAbgehakt(_:aufListe:alleVorgaenge:istAusDerZeitGefallen:bekannterEintrag:)``.
         let istAusDerZeitGefallen = SyncAktualitaetsService.istAusDerZeitGefallen(context: context)
         // GitHub #99: dauerhaftes Faktum, siehe ``ArtikelListenKauf``. Spiegelt
         // den Bestand zu Beginn DIESES Durchlaufs — ein im selben Zyklus per
@@ -1047,11 +1047,24 @@ enum SyncSnapshotImportService {
         // (beide bewusst SPÄTER in der Aufrufreihenfolge, siehe dortige
         // Typ-Doku) neu eintreffender Beleg wirkt sich erst im nächsten Zyklus
         // aus — ein sich selbst auflösender Randfall, kein dauerhafter Fehler.
-        let jemalsAbgehakteZeitstempel = ArtikelListenKaufService.alleZeitstempel(context: context)
+        // `alleEintraege` statt (vormals) `alleZeitstempel`, da dieser Zweig
+        // jetzt BEIDE Zeitstempel-Seiten braucht, siehe unten.
+        var bekannt = ArtikelListenKaufService.alleEintraege(context: context)
         for eintrag in remote {
             guard let liste = listeZuordnung[eintrag.einkaufslisteID], let artikel = artikelZuordnung[eintrag.artikelID]
             else { continue }
             guard !liste.enthaelt(artikel) else { continue }
+            // Architektur-Review (2026-08-10, siehe ArtikelListenKauf-Typ-Doku
+            // „zuletztHinzugefuegtAm"): die Meldung dieses Peers zuerst
+            // DAUERHAFT als robustes, additiv gemergtes Faktum vermerken —
+            // sicher/idempotent unabhängig vom Ausgang der Prüfung direkt
+            // danach (bewegt sich nur nach vorne), und Grundlage für EINE
+            // symmetrische Entscheidung statt eines Vergleichs gegen den
+            // unprotected Rohwert nur dieses einen Peers.
+            ArtikelListenKaufService.vermerkeHinzugefuegtFallsNoetig(
+                artikel: artikel, einkaufsliste: liste, am: eintrag.erstelltAm, bekannt: &bekannt, context: context
+            )
+            let schluessel = ArtikelListenKaufService.Schluessel(artikelID: artikel.id, einkaufslisteID: liste.id)
             // Diagnose (Nutzerbericht 2026-08-10, Folgefund zu Abschnitt 53):
             // dieser Zweig war bisher komplett stumm — weder „übersprungen,
             // weil bereits abgehakt" noch „übersprungen, weil unauflösbar"
@@ -1060,7 +1073,7 @@ enum SyncSnapshotImportService {
             // Neuaufbau) den entscheidenden Hinweis geliefert hätte.
             guard !istBereitsAbgehakt(
                 artikel, aufListe: liste, alleVorgaenge: alleVorgaenge, istAusDerZeitGefallen: istAusDerZeitGefallen,
-                eintragErstelltAm: eintrag.erstelltAm, jemalsAbgehakteZeitstempel: jemalsAbgehakteZeitstempel
+                bekannterEintrag: bekannt[schluessel]
             ) else {
                 if SyncDebugLogger.istAktiv {
                     SyncDebugLogger.log(
@@ -1089,7 +1102,11 @@ enum SyncSnapshotImportService {
             // von Backup wiederbelebte, auf Bernhard bereits abgehakte und
             // abgeschlossene Artikel. Fehlt `eintrag.erstelltAm` (Peer auf
             // älterer App-Version), bleibt der Default „jetzt" bewusst stehen
-            // — keine Verschlechterung gegenüber dem Vorzustand.
+            // — keine Verschlechterung gegenüber dem Vorzustand. Beeinflusst
+            // NUR noch die Anzeige/dieses Feld selbst — die Offen/Abgehakt-
+            // Entscheidung stützt sich seit obigem Fix auf das robustere
+            // ``ArtikelListenKauf/zuletztHinzugefuegtAm``, nicht mehr auf
+            // dieses Feld.
             if let eintragErstelltAm = eintrag.erstelltAm {
                 neu.erstelltAm = eintragErstelltAm
             }
@@ -1184,16 +1201,39 @@ enum SyncSnapshotImportService {
     /// älteren App-Version ohne `erstelltAm` im Snapshot), bleibt es beim
     /// alten, strengeren Verhalten — permanentes Veto, keine Lockerung ohne
     /// echten Vergleichswert auf beiden Seiten.
+    ///
+    /// **Architektur-Review (2026-08-10), Ablösung des direkten
+    /// `eintragErstelltAm`-Vergleichs:** der Vergleich oben stützte sich auf
+    /// den ROHEN, ungeschützten Zeitstempel NUR dieses einen Peer-Snapshots —
+    /// verpasste ein anderer Peer (oder ein früherer Zyklus desselben Peers)
+    /// bereits ein NOCH neueres Hinzufügen, blieb das hier unberücksichtigt.
+    /// Jetzt: der Aufrufer vermerkt jede Peer-Meldung zuerst dauerhaft additiv
+    /// (``ArtikelListenKaufService/vermerkeHinzugefuegtFallsNoetig(artikel:einkaufsliste:am:bekannt:context:)``)
+    /// und übergibt hier die resultierende, GERÄTEÜBERGREIFEND robusteste
+    /// bekannte Zeile — der eigentliche Vergleich läuft über die einheitliche
+    /// ``ArtikelListenKaufService/istOffen(hinzugefuegtAm:abgehaktAm:)``-Regel,
+    /// siehe deren Doku für die unveränderten Nil-Fallback-Regeln (permanentes
+    /// Veto ohne Vergleichswert auf beiden Seiten, wie im Absatz oben
+    /// beschrieben).
     private static func istBereitsAbgehakt(
         _ artikel: Artikel, aufListe liste: Einkaufsliste, alleVorgaenge: [Einkaufsvorgang], istAusDerZeitGefallen: Bool,
-        eintragErstelltAm: Date?, jemalsAbgehakteZeitstempel: [ArtikelListenKaufService.Schluessel: Date?]
+        bekannterEintrag: ArtikelListenKauf?
     ) -> Bool {
-        let schluessel = ArtikelListenKaufService.Schluessel(artikelID: artikel.id, einkaufslisteID: liste.id)
-        if let bekannterZeitstempel = jemalsAbgehakteZeitstempel[schluessel] {
-            if let bekannterZeitstempel, let eintragErstelltAm, eintragErstelltAm > bekannterZeitstempel {
-                return false
-            }
-            return true
+        // Gate bewusst auf `zuletztAbgehaktAm`, NICHT auf `bekannterEintrag`
+        // selbst (Regressionsfund: ``vonSicherheitsnetzGeerbterEintragTaeuschtBeiWeitergabeKeineFrischeVor()``,
+        // siehe auch Kommentar am Aufrufer) — der Aufrufer vermerkt VOR diesem
+        // Aufruf bereits das `hinzugefügt`-Faktum dieses `eintrag`s (siehe
+        // ``ArtikelListenKaufService/vermerkeHinzugefuegtFallsNoetig(artikel:einkaufsliste:am:bekannt:context:)``),
+        // wodurch für ein Gerät OHNE jedes bekannte Kauf-Faktum trotzdem eine
+        // frisch angelegte ``ArtikelListenKauf``-Zeile existiert (nur mit
+        // `zuletztHinzugefuegtAm` gefüllt). Ein `if let bekannterEintrag`
+        // würde diese Zeile fälschlich wie einen bekannten Kauf behandeln und
+        // — mangels `zuletztAbgehaktAm` — über ``ArtikelListenKaufService/istOffen(hinzugefuegtAm:abgehaktAm:)``s
+        // konservativen Nil-Fallback blockieren, obwohl NIE ein Kauf bekannt
+        // war. Nur ein tatsächlich vorhandenes `zuletztAbgehaktAm` rechtfertigt
+        // den robusten Vergleich; sonst (wie zuvor) der ältere Fallback unten.
+        if let zuletztAbgehaktAm = bekannterEintrag?.zuletztAbgehaktAm {
+            return !ArtikelListenKaufService.istOffen(hinzugefuegtAm: bekannterEintrag?.zuletztHinzugefuegtAm, abgehaktAm: zuletztAbgehaktAm)
         }
         let vorgaengeFuerListe = alleVorgaenge.filter { $0.einkaufsliste == liste }
         guard vorgaengeFuerListe.contains(where: { $0.kaufEintraege.contains { $0.artikel == artikel } }) else { return false }
@@ -1452,10 +1492,43 @@ enum SyncSnapshotImportService {
                     }
                 } else {
                     vorhandener.endZeit = remoteEndZeit
+                    // Nutzerbericht 2026-08-10 („Backup schließt ab, das kommt
+                    // nie auf Bernhard an" — trotz per Log bestätigtem
+                    // `endZeit`-Merge): per Diagnose-Logging bestätigt —
+                    // `andereOffeneVorgaengeDerListe` bestand aus mehreren
+                    // weiterhin offenen Vorgängen derselben Liste. Anders als
+                    // der lokale Abschluss-Button
+                    // (``EinkaufsvorgangAbschlussService/schliesseAbMitDuplikaten(anker:duplikate:context:)``,
+                    // der bewusst ALLE offenen Vorgänge derselben Liste
+                    // mitschließt, siehe dessen Typ-Doku) schloss dieser
+                    // Merge-Zweig bisher NUR den per ID getroffenen
+                    // `vorhandener` — ein zweiter, hier nicht mitgeschlossener
+                    // offener Vorgang blieb offen, und genau AN DEM hing i.d.R.
+                    // die UI (``EinkaufenView/aktuellerEinkauf``), sodass der
+                    // Einkauf dort trotz erfolgreich übernommener `endZeit`
+                    // weiterhin als offen mit denselben abgehakten Artikeln
+                    // erschien. Mitgeschlossen `mit zaehleAlsBesuch: false`
+                    // (analog zu den lokalen Duplikaten) — sie repräsentieren
+                    // denselben Ladenbesuch wie `vorhandener`, sollen also nicht
+                    // zusätzlich ``Geschaeft/eigeneAnzahlEinkaufsvorgaenge``
+                    // erhöhen.
+                    //
+                    // NUR plausibel gleichzeitige Kandidaten (`startZeit <=
+                    // remoteEndZeit`, dieselbe Regel wie beim `offenerTreffer`-
+                    // Matching oben) — ohne dieses Gate schloss ein historischer
+                    // Catch-up-Import (viele längst abgeschlossene Alt-Vorgänge
+                    // eines frisch beigetretenen Geräts) fälschlich einen
+                    // brandneuen, danach angelegten lokalen Platzhalter mit
+                    // (Regressionsfund: ``mehrereBereitsAbgeschlosseneVorgaengeWerdenNichtAufFrischenLokalenPlatzhalterAliasiert()``).
+                    let andereOffene = andereOffeneVorgaengeDerListe(vorhandener, bisZeitpunkt: remoteEndZeit, context: context)
+                    for andererVorgang in andereOffene {
+                        andererVorgang.abschliessen(am: remoteEndZeit, zaehleAlsBesuch: false)
+                    }
                     if SyncDebugLogger.istAktiv {
                         SyncDebugLogger.log(
                             .einkaufsvorgangAbschlussUebernommen,
-                            details: "vorgangID=\(eintrag.id) lokaleID=\(vorhandener.id) endZeit=\(remoteEndZeit)"
+                            details: "vorgangID=\(eintrag.id) lokaleID=\(vorhandener.id) endZeit=\(remoteEndZeit) "
+                                + "andereOffeneVorgaengeDerListeMitgeschlossen=\(andereOffene.count)"
                         )
                     }
                 }
@@ -1463,6 +1536,26 @@ enum SyncSnapshotImportService {
             zuordnung[eintrag.id] = vorhandener
         }
         return zuordnung
+    }
+
+    /// Findet alle ANDEREN Einkaufsvorgänge für dieselbe Liste wie `vorgang`,
+    /// die im Moment des Aufrufs noch offen sind UND plausibel derselben
+    /// Sitzung angehören (`startZeit <= bisZeitpunkt` — bereits gestartet,
+    /// bevor `vorgang` per `bisZeitpunkt` endete) — siehe Aufrufstelle in
+    /// ``mergeEinkaufsvorgaenge(_:geschaeftZuordnung:listeZuordnung:aliase:context:)``
+    /// für den Nutzerbericht, der diese Ergänzung ausgelöst hat, und deren
+    /// Kommentar dort für die Begründung des Zeit-Gates.
+    private static func andereOffeneVorgaengeDerListe(
+        _ vorgang: Einkaufsvorgang, bisZeitpunkt: Date, context: ModelContext
+    ) -> [Einkaufsvorgang] {
+        guard let listeID = vorgang.einkaufsliste?.persistentModelID else { return [] }
+        let vorgangID = vorgang.persistentModelID
+        let deskriptor = FetchDescriptor<Einkaufsvorgang>(
+            predicate: #Predicate<Einkaufsvorgang> { $0.einkaufsliste?.persistentModelID == listeID && $0.endZeit == nil }
+        )
+        return ((try? context.fetch(deskriptor)) ?? []).filter {
+            $0.persistentModelID != vorgangID && $0.startZeit <= bisZeitpunkt
+        }
     }
 
     // MARK: - KaufEintrag (Bereich C)
@@ -1558,17 +1651,68 @@ enum SyncSnapshotImportService {
                 // (``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:kategorie:geschaeft:)``,
                 // löscht dort explizit den offenen `EinkaufslistenEintrag``)
                 // entfernte dieser Zweig den entsprechenden offenen Listen-
-                // Eintrag bisher NIE — ein Gerät, das den Artikel noch offen
-                // führt (z.B. aus einem älteren, noch nicht aktualisierten
-                // Bereich-B-Snapshot desselben Peers), behält ihn dauerhaft
-                // gleichzeitig als „offen" UND „abgehakt": genau der Zustand,
-                // den ``EinkaufenView/offeneArtikel`` seit GitHub #52 zwar in
-                // der Anzeige herausfiltert, aber die verwaiste
+                // Eintrag ursprünglich NIE — ein Gerät, das den Artikel noch
+                // offen führt (z.B. aus einem älteren, noch nicht
+                // aktualisierten Bereich-B-Snapshot desselben Peers), behielt
+                // ihn dauerhaft gleichzeitig als „offen" UND „abgehakt": genau
+                // der Zustand, den ``EinkaufenView/offeneArtikel`` seit GitHub
+                // #52 zwar in der Anzeige herausfiltert, aber die verwaiste
                 // `EinkaufslistenEintrag`-Zeile blieb bestehen und blähte den
                 // „X von Y"-Gesamtwert künstlich auf (live bestätigt: Gerät
                 // zeigte „2 von 8" statt der tatsächlichen „2 von 6").
-                if let listenEintrag = einkaufsliste.eintrag(fuer: artikel) {
+                //
+                // Folgefund (2026-08-10, „kurzzeitiges Flackern der Liste
+                // während eines Mehrgeräte-Syncs"): die daraufhin eingeführte
+                // bedingungslose Löschung ging zu weit — sie griff auch, wenn
+                // der Artikel NACH diesem (oft längst historischen, gerade
+                // erst im Zuge eines großen Nachhol-Merges eintreffenden)
+                // Nachzügler-Kauf ERNEUT auf die Liste gesetzt wurde
+                // (typischer Fall: wiederkehrender Artikel). Ein direkter
+                // Vergleich gegen `listenEintrag.erstelltAm` half nur
+                // teilweise: dieses Feld übernimmt beim erneuten Hinzufügen
+                // über einen Peer bewusst dessen ORIGINAL-Zeitpunkt (siehe
+                // ``mergeEinkaufslistenEintraege(_:listeZuordnung:artikelZuordnung:produktZuordnung:context:)``)
+                // und kann seinerseits von einem DRITTEN Gerät geerbt,
+                // beliebig oft weitergereicht sein — ohne jede monotone
+                // Absicherung. Derselbe Nachhol-Merge-Fall schlug dadurch mit
+                // anderer Geräte-Verkettung erneut zu (live bestätigt: ein
+                // Artikel verschwand trotz bestandener `erstelltAm <=
+                // datum`-Prüfung noch einmal).
+                //
+                // Architektur-Review (2026-08-10): behoben durch das robuste,
+                // additiv gemergte Gegenstück ``ArtikelListenKauf/zuletztHinzugefuegtAm``
+                // (siehe dessen Typ-Doku für die Begründung) statt des rohen,
+                // ungeschützten `erstelltAm`-Feldes dieser einen Zeile — nur
+                // löschen, wenn NACHWEISLICH (über alle bekannten Geräte
+                // hinweg additiv gemergt) kein NEUERES Hinzufügen als dieser
+                // Kauf bekannt ist. Dieselbe Regel wie in
+                // ``istBereitsAbgehakt(_:aufListe:alleVorgaenge:istAusDerZeitGefallen:bekannterEintrag:)``,
+                // hier nur umgekehrt aufgerufen (kein Materialisieren, sondern
+                // ein Löschen, wenn NICHT mehr offen).
+                let listenEintrag = einkaufsliste.eintrag(fuer: artikel)
+                let schluessel = ArtikelListenKaufService.Schluessel(artikelID: artikel.id, einkaufslisteID: einkaufsliste.id)
+                let zuletztHinzugefuegtAm = bekannteArtikelListenEintraege[schluessel]?.zuletztHinzugefuegtAm
+                let listenEintragPasstZeitlich = !ArtikelListenKaufService.istOffen(
+                    hinzugefuegtAm: zuletztHinzugefuegtAm, abgehaktAm: eintrag.datum
+                )
+                if let listenEintrag, listenEintragPasstZeitlich {
                     context.delete(listenEintrag)
+                }
+                if SyncDebugLogger.istAktiv {
+                    // Diagnose (Nutzerbericht 2026-08-10, „Backup schließt ab,
+                    // Artikel bleiben trotzdem auf der Liste", dann Folgefund
+                    // „kurzzeitiges Flackern"): zeigt die tatsächlich
+                    // verglichenen (robusten) Zeitstempel statt nur des
+                    // Ergebnis-Bools — bleibt der Artikel trotzdem sichtbar
+                    // offen, obwohl hier `entfernt=true` steht, liegt die
+                    // Ursache NICHT in diesem Merge-Zweig, sondern z.B. in
+                    // einem danach erneut angelegten Eintrag.
+                    SyncDebugLogger.log(
+                        .kaufEintragMergeListenEintragEntfernt,
+                        details: "artikel=\(artikel.name) liste=\(einkaufsliste.name) listenEintragGefunden=\(listenEintrag != nil) "
+                            + "entfernt=\(listenEintrag != nil && listenEintragPasstZeitlich) "
+                            + "zuletztHinzugefuegtAm=\(zuletztHinzugefuegtAm.map { "\($0)" } ?? "-") kaufDatum=\(eintrag.datum)"
+                    )
                 }
                 ArtikelListenKaufService.vermerkeAbgehaktFallsNoetig(
                     artikel: artikel, einkaufsliste: einkaufsliste, am: eintrag.datum,
@@ -1776,6 +1920,15 @@ enum SyncSnapshotImportService {
             guard let artikel = artikelZuordnung[eintrag.artikelID], let einkaufsliste = listeZuordnung[eintrag.einkaufslisteID] else { continue }
             ArtikelListenKaufService.vermerkeAbgehaktFallsNoetig(
                 artikel: artikel, einkaufsliste: einkaufsliste, am: eintrag.zuletztAbgehaktAm, bekannt: &bekannt, context: context
+            )
+            // Symmetrisch zur obigen Zeile (Architektur-Review 2026-08-10,
+            // siehe ``ArtikelListenKauf/zuletztHinzugefuegtAm``-Typ-Doku) —
+            // ohne diese Zeile würde das robuste "hinzugefügt"-Faktum nur
+            // indirekt über ``mergeEinkaufslistenEintraege`` propagieren
+            // (nur wenn der Artikel beim Peer GERADE aktuell offen ist),
+            // nicht direkt über diesen eigenen, dauerhaften Sync-Kanal.
+            ArtikelListenKaufService.vermerkeHinzugefuegtFallsNoetig(
+                artikel: artikel, einkaufsliste: einkaufsliste, am: eintrag.zuletztHinzugefuegtAm, bekannt: &bekannt, context: context
             )
         }
     }

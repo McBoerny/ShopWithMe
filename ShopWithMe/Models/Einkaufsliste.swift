@@ -86,14 +86,28 @@ extension Einkaufsliste {
     /// ``SyncEventArt/artikelHinzugefuegt``-Event zu materialisieren, ohne es
     /// dabei fälschlich diesem Gerät als Urheber zuzuschreiben (siehe
     /// `docs/DATENSYNCHRONISATION_VERLAUF.md`, Phase 2).
+    ///
+    /// `zeitpunkt` (Architektur-Review 2026-08-10, siehe
+    /// ``ArtikelListenKauf/zuletztHinzugefuegtAm``-Typ-Doku): Standard `Date()`
+    /// („jetzt") passt für jeden lokal ausgelösten Aufrufer (Nutzer-Tap,
+    /// ``Einkaufsvorgang/artikelAbwaehlenOhneEventAufzeichnung(_:context:)``).
+    /// Der EINE Aufrufer, der einen ANDEREN Wert braucht, ist der
+    /// Bereich-A-Ereignis-Pfad in ``SyncImportService`` — dort muss der
+    /// ursprüngliche `SyncEvent.wallClock`-Zeitpunkt durchgereicht werden,
+    /// nicht der lokale Verarbeitungszeitpunkt, sonst ließe ein verspätet
+    /// nachgeholtes, längst überholtes Event ``ArtikelListenKauf/zuletztHinzugefuegtAm``
+    /// künstlich auf „gerade eben" springen (dieselbe Klasse Fehler wie bei
+    /// ``KaufEintrag/datum`` in ``SyncSnapshotImportService/mergeKaufEintraege(_:artikelZuordnung:einkaufsvorgangZuordnung:geschaeftZuordnung:kategorieZuordnung:peerGeraeteID:context:)``).
     @discardableResult
-    func artikelHinzufuegenOhneEventAufzeichnung(_ artikel: Artikel, context: ModelContext) -> EinkaufslistenEintrag {
+    func artikelHinzufuegenOhneEventAufzeichnung(_ artikel: Artikel, am zeitpunkt: Date = Date(), context: ModelContext) -> EinkaufslistenEintrag {
+        ArtikelListenKaufService.vermerkeHinzugefuegt(artikel: artikel, einkaufsliste: self, am: zeitpunkt, context: context)
         if let bestehender = eintrag(fuer: artikel) {
             bestehender.menge = artikel.mengenSchritt
             bestehender.notiz = nil
             return bestehender
         }
         let neuer = EinkaufslistenEintrag(einkaufsliste: self, artikel: artikel, menge: artikel.mengenSchritt)
+        neuer.erstelltAm = zeitpunkt
         context.insert(neuer)
         return neuer
     }

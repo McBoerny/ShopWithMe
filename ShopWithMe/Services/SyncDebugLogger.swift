@@ -97,6 +97,15 @@ enum SyncDebugLogger {
         /// Aufrufstelle bei jedem Zyklus).
         case scopeZugriff = "sync_scope_zugriff"
 
+        /// Diagnose (Nutzerbericht 2026-08-10, „Backup schließt ab, Artikel
+        /// bleiben trotzdem auf der Liste"): protokolliert bei jedem per
+        /// ``SyncSnapshotImportService/mergeKaufEintraege(_:artikelZuordnung:einkaufsvorgangZuordnung:geschaeftZuordnung:kategorieZuordnung:peerGeraeteID:context:)``
+        /// frisch aus einem Peer-Snapshot angelegten ``KaufEintrag``, ob dabei
+        /// tatsächlich ein offener ``EinkaufslistenEintrag`` für denselben
+        /// Artikel/dieselbe Liste gefunden (und gelöscht) wurde. Details:
+        /// `artikel=… liste=… listenEintragGefunden=true/false`.
+        case kaufEintragMergeListenEintragEntfernt = "sync_kaufeintrag_merge_listeneintrag_entfernt"
+
         /// GitHub #91 (dritter Anlauf): ``SyncICloudAenderungsBeobachter``
         /// hat eine `NSMetadataQueryDidUpdateNotification` erhalten und
         /// einen zusätzlichen Sync-Zyklus angestoßen — Beleg dafür, dass die
@@ -143,7 +152,7 @@ enum SyncDebugLogger {
                  .peerVerworfenAltersgrenze, .eventAufgegeben, .debugModeEnabled, .debugModeDisabled,
                  .einkaufsvorgangAbschlussNichtUebernommen, .einkaufsvorgangAbschlussUebernommen,
                  .einkaufsvorgangEintragUebersprungen, .einkaufslistenEintragSicherheitsnetzUebersprungen,
-                 .eventDateienBereinigt, .tombstonesBereinigt,
+                 .eventDateienBereinigt, .tombstonesBereinigt, .kaufEintragMergeListenEintragEntfernt,
                  .ausDerZeitGefallenErkannt, .vollAbgleichEingeleitet, .multipeerGruppenIDNichtAufloesbar:
                 return .fehler
             case .zyklusStart, .zyklusEnde, .eventEmpfangen, .snapshotEmpfangen, .einkaufslistenStand,

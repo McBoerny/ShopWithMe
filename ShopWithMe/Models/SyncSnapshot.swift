@@ -82,7 +82,7 @@ struct SyncSnapshot: Codable {
     /// ``artikelListenKaeufe`` neu hinzugekommen, siehe ``ArtikelListenKauf``.
     /// Ersetzt die vorherige, ausschließlich auf noch existierenden
     /// ``KaufEintrag``en basierende Prüfung in
-    /// ``SyncSnapshotImportService/istBereitsAbgehakt(_:aufListe:alleVorgaenge:istAusDerZeitGefallen:eintragErstelltAm:jemalsAbgehakteZeitstempel:)``,
+    /// ``SyncSnapshotImportService/istBereitsAbgehakt(_:aufListe:alleVorgaenge:istAusDerZeitGefallen:bekannterEintrag:)``,
     /// die durch `KaufEintragBereinigungService`s 48h-Löschung ihre Evidenz
     /// verlor. Wieder keine Rückwärtskompatibilität nötig, siehe Version 3.
     ///
@@ -235,7 +235,7 @@ struct EinkaufslistenEintragSnapshot: Codable {
     /// noch nicht, Swifts synthetisierter Decoder liest einen fehlenden
     /// Schlüssel für ein optionales Feld automatisch als `nil` statt
     /// abzubrechen. `nil` bedeutet für
-    /// ``SyncSnapshotImportService/istBereitsAbgehakt(_:aufListe:alleVorgaenge:istAusDerZeitGefallen:jemalsAbgehakteZeitstempel:)``
+    /// ``SyncSnapshotImportService/istBereitsAbgehakt(_:aufListe:alleVorgaenge:istAusDerZeitGefallen:bekannterEintrag:)``
     /// „kein Vergleichswert bekannt" — bleibt beim alten, strengeren
     /// Verhalten (permanentes Veto), keine Lockerung ohne echten Zeitstempel.
     var erstelltAm: Date?
@@ -318,6 +318,10 @@ struct ArtikelListenKaufSnapshot: Codable {
     var artikelID: UUID
     var einkaufslisteID: UUID
     var zuletztAbgehaktAm: Date?
+    /// Symmetrisches Gegenstück, additiv-optional (Architektur-Review
+    /// 2026-08-10, siehe ``ArtikelListenKauf/zuletztHinzugefuegtAm``-Typ-Doku)
+    /// — `nil` bei einem Peer auf einer älteren App-Version ohne dieses Feld.
+    var zuletztHinzugefuegtAm: Date?
 }
 
 struct PreispunktSnapshot: Codable {

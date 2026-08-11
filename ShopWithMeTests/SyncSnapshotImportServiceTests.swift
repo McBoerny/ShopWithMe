@@ -1614,6 +1614,62 @@ struct SyncSnapshotImportServiceTests {
     }
 
     /// Regressionstest für einen echten Zwei-Geräte-Nutzerbericht (2026-08-10,
+    /// „Backup schließt ab, das kommt nie auf Bernhard an" — obwohl das
+    /// per-ID getroffene `endZeit` nachweislich ankam): das lokale Gerät hatte
+    /// NEBEN dem per ID getroffenen Vorgang noch einen ZWEITEN, unabhängig
+    /// offenen Vorgang für dieselbe Liste (z.B. einen Duplikat-Platzhalter aus
+    /// einer früheren Sitzung) — genau der, an dem ``EinkaufenView`` über
+    /// ``EinkaufenView/aktuellerEinkauf`` hängt. Der Merge-Zweig übernahm
+    /// bisher nur `vorhandener.endZeit`, ließ diesen zweiten Vorgang aber
+    /// unangetastet offen: der Einkauf erschien auf dem UI-Bildschirm trotz
+    /// erfolgreich übernommener `endZeit` weiterhin als aktiv. Analog zum
+    /// lokalen Abschluss-Button
+    /// (``EinkaufsvorgangAbschlussService/schliesseAbMitDuplikaten(anker:duplikate:context:)``)
+    /// muss auch der Sync-Merge alle plausibel gleichzeitigen offenen
+    /// Duplikate derselben Liste mitschließen.
+    @Test
+    func andererOffenerVorgangDerselbenListeWirdBeiSyncAbschlussMitgeschlossen() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
+        // Der per ID getroffene Vorgang — bereits lokal bekannt, wird gleich
+        // per Remote-`endZeit` abgeschlossen.
+        let vorhandener = Einkaufsvorgang(einkaufsliste: liste, startZeit: Date().addingTimeInterval(-600))
+        context.insert(vorhandener)
+        // Ein ZWEITER, unabhängig offener Vorgang für dieselbe Liste — z.B.
+        // ein liegen gebliebener Duplikat-Platzhalter, bereits vor dem
+        // Remote-Abschluss gestartet (plausibel dieselbe Sitzung).
+        let duplikat = Einkaufsvorgang(einkaufsliste: liste, startZeit: Date().addingTimeInterval(-500))
+        context.insert(duplikat)
+        try context.save()
+
+        var snapshot = leererSnapshot(geraeteID: "backup")
+        snapshot.einkaufslisten = [EinkaufslisteSnapshot(id: liste.id, name: "Einkaufsliste", erstelltAm: liste.erstelltAm)]
+        let abschlusszeit = Date()
+        snapshot.einkaufsvorgaenge = [
+            EinkaufsvorgangSnapshot(
+                id: vorhandener.id, geschaeftID: nil, einkaufslisteID: liste.id,
+                startZeit: vorhandener.startZeit, endZeit: abschlusszeit
+            ),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "backup", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        // Kein dritter, neu angelegter Vorgang — nur die beiden bereits
+        // vorhandenen, jetzt BEIDE abgeschlossen.
+        let vorgaenge = try context.fetch(FetchDescriptor<Einkaufsvorgang>())
+        #expect(vorgaenge.count == 2)
+        #expect(vorhandener.endZeit == abschlusszeit)
+        #expect(duplikat.endZeit == abschlusszeit)
+    }
+
+    /// Regressionstest für einen echten Zwei-Geräte-Nutzerbericht (2026-08-10,
     /// Folgefund zu Abschnitt 52): der eigene Platzhalter wird per
     /// `offenerTreffer` bereits im ERSTEN Zyklus (Peer-Vorgang dort noch
     /// offen) mit einem echten, real deutlich FRÜHER gestarteten Peer-Vorgang
@@ -1880,6 +1936,74 @@ struct SyncSnapshotImportServiceTests {
         // gleichzeitig als offener Listen-Eintrag geführt werden.
         #expect(!liste.enthaelt(artikel))
         #expect(try context.fetch(FetchDescriptor<KaufEintrag>()).count == 1)
+    }
+
+    /// Regressionstest für einen echten Nutzerbericht (2026-08-10,
+    /// „kurzzeitiges Flackern der Liste während eines Mehrgeräte-Syncs"):
+    /// ein Nachhol-Merge liefert einen LÄNGST historischen `KaufEintrag`
+    /// (`datum` weit in der Vergangenheit) für einen wiederkehrenden Artikel
+    /// — der lokale, offene `EinkaufslistenEintrag` wurde aber NACHWEISLICH
+    /// SPÄTER (`erstelltAm` nach `datum`) erneut angelegt, gehört also zu
+    /// einem neuen, noch unerfüllten Bedarf und darf durch diesen alten Kauf
+    /// nicht gelöscht werden — anders als
+    /// ``mergeKaufEintragEntferntEntsprechendenOffenenListenEintrag()``, wo
+    /// der Listen-Eintrag NACHWEISLICH VOR dem Kauf existierte.
+    @Test
+    func mergeKaufEintragLoeschtNichtErneutHinzugefuegtenListenEintragEinesAelterenKaufs() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
+        let artikel = Artikel(name: "Bananen", symbolName: "drop.fill", farbeHex: "#34C759")
+        context.insert(artikel)
+        // Erneut zur Liste hinzugefügt (wiederkehrender Artikel) — deutlich
+        // NACH dem historischen Kauf unten, den der Nachhol-Merge gleich
+        // liefert. Über die reguläre Funktion (statt direkter
+        // `EinkaufslistenEintrag`-Konstruktion), damit sie wie im echten Code
+        // auch das robuste ``ArtikelListenKauf/zuletztHinzugefuegtAm``-Faktum
+        // vermerkt, auf das sich der Merge-Vergleich jetzt stützt (siehe
+        // Architektur-Review, Typ-Doku dort) — der reine
+        // `EinkaufslistenEintrag.erstelltAm`-Zeitstempel allein reicht seither
+        // nicht mehr aus.
+        liste.artikelHinzufuegenOhneEventAufzeichnung(artikel, am: Date().addingTimeInterval(-300), context: context)
+        try context.save()
+
+        let remoteVorgangID = UUID()
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.artikel = [
+            ArtikelSnapshot(
+                id: artikel.id, name: "Bananen", symbolName: "drop.fill", farbeHex: "#34C759",
+                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date().addingTimeInterval(-864000)
+            ),
+        ]
+        snapshot.einkaufslisten = [EinkaufslisteSnapshot(id: liste.id, name: "Einkaufsliste", erstelltAm: liste.erstelltAm)]
+        let historischeKaufzeit = Date().addingTimeInterval(-604800)
+        snapshot.einkaufsvorgaenge = [
+            EinkaufsvorgangSnapshot(
+                id: remoteVorgangID, geschaeftID: nil, einkaufslisteID: liste.id,
+                startZeit: historischeKaufzeit.addingTimeInterval(-60), endZeit: historischeKaufzeit
+            ),
+        ]
+        snapshot.kaufEintraege = [
+            KaufEintragSnapshot(
+                id: UUID(), artikelID: artikel.id, einkaufsvorgangID: remoteVorgangID, geschaeftID: nil, kategorieID: nil,
+                artikelNameSnapshot: "Bananen", geschaeftNameSnapshot: "",
+                datum: historischeKaufzeit, menge: 1, kategorieBesuchsIndex: nil
+            ),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        // Der historische Kauf wird trotzdem als Historie übernommen …
+        #expect(try context.fetch(FetchDescriptor<KaufEintrag>()).count == 1)
+        // … aber der erneut hinzugefügte, jüngere Listen-Eintrag bleibt
+        // erhalten — der Artikel steht weiterhin offen auf der Liste.
+        #expect(liste.enthaelt(artikel))
     }
 
     /// Wie ``kaufEintragWirdAlsUnveraenderlicheHistorieUebernommenOhneDuplikat``,

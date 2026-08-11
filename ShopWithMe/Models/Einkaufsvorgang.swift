@@ -143,7 +143,18 @@ final class Einkaufsvorgang {
                 && $0.einkaufsvorgang?.endZeit == nil
         }
         if let bereitsVorhanden {
-            DatabaseDebugLogger.log(.dedupeConflictDetected, details: "artikelAbhaken: \(artikel.name)")
+            // `listenEintragVorhanden`-Zusatz (Nutzerbericht 2026-08-10,
+            // „Backup schließt ab, Artikel bleiben trotzdem auf der Liste"):
+            // unterscheidet im Log, ob hier tatsächlich noch ein
+            // ``EinkaufslistenEintrag`` zum Löschen gefunden wurde, oder ob er
+            // zu diesem Zeitpunkt bereits fehlte (z.B. durch einen früher in
+            // diesem Zyklus gelaufenen Bereich-C-Merge) — ohne diesen Zusatz
+            // ist aus dem Log allein nicht ablesbar, ob DIESER Zweig für den
+            // gemeldeten Befund überhaupt ursächlich sein kann.
+            DatabaseDebugLogger.log(
+                .dedupeConflictDetected,
+                details: "artikelAbhaken: \(artikel.name) listenEintragVorhanden=\(listenEintrag != nil)"
+            )
             if let listenEintrag {
                 context.delete(listenEintrag)
             }

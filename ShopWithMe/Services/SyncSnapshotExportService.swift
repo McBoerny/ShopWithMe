@@ -252,7 +252,8 @@ enum SyncSnapshotExportService {
                       let einkaufslisteID = sichereID(eintrag.einkaufsliste, gueltigeIDs: gueltigeEinkaufslistenIDs)
                 else { return nil }
                 return ArtikelListenKaufSnapshot(
-                    artikelID: artikelID, einkaufslisteID: einkaufslisteID, zuletztAbgehaktAm: eintrag.zuletztAbgehaktAm
+                    artikelID: artikelID, einkaufslisteID: einkaufslisteID, zuletztAbgehaktAm: eintrag.zuletztAbgehaktAm,
+                    zuletztHinzugefuegtAm: eintrag.zuletztHinzugefuegtAm
                 )
             }
 

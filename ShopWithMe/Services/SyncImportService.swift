@@ -271,7 +271,9 @@ enum SyncImportService {
             return
         }
 
-        let materialisierungsErgebnis = materialisiere(art, nutzlast: nutzlast, autorGeraeteID: empfangen.autorGeraeteID, context: context)
+        let materialisierungsErgebnis = materialisiere(
+            art, nutzlast: nutzlast, autorGeraeteID: empfangen.autorGeraeteID, wallClock: empfangen.wallClock, context: context
+        )
         guard materialisierungsErgebnis == .erfolgreich else {
             guard !referenzDauerhaftGeloescht(art: art, bezugsID: nutzlast.bezugsID, artikelID: nutzlast.artikelID, context: context) else {
                 // Liste/Einkauf/Artikel wurde absichtlich gelöscht (Tombstone) und
@@ -370,16 +372,21 @@ enum SyncImportService {
     /// an. Liefert ungleich ``MaterialisierungsErgebnis/erfolgreich``, falls die
     /// referenzierte Liste/der Einkauf oder der Artikel lokal (noch) nicht
     /// existiert — siehe Typ-Dokumentation zur Retry-Semantik.
+    ///
+    /// `wallClock`: der ursprüngliche ``SyncEvent/wallClock``-Zeitpunkt des
+    /// Absenders — ausschließlich für den `.artikelHinzugefuegt`-Zweig
+    /// gebraucht (siehe ``Einkaufsliste/artikelHinzufuegenOhneEventAufzeichnung(_:am:context:)``-Doku),
+    /// alle anderen Zweige ignorieren ihn.
     @MainActor
     private static func materialisiere(
-        _ art: SyncEventArt, nutzlast: SyncEventNutzlast, autorGeraeteID: String, context: ModelContext
+        _ art: SyncEventArt, nutzlast: SyncEventNutzlast, autorGeraeteID: String, wallClock: Date, context: ModelContext
     ) -> MaterialisierungsErgebnis {
         switch art {
         case .artikelHinzugefuegt:
             let liste = einkaufsliste(mitID: nutzlast.bezugsID, context: context)
             let artikel = artikel(mitID: nutzlast.artikelID, context: context)
             guard let liste, let artikel else { return fehlendeReferenz(bezug: liste, artikel: artikel) }
-            liste.artikelHinzufuegenOhneEventAufzeichnung(artikel, context: context)
+            liste.artikelHinzufuegenOhneEventAufzeichnung(artikel, am: wallClock, context: context)
             return .erfolgreich
         case .artikelEntfernt:
             let liste = einkaufsliste(mitID: nutzlast.bezugsID, context: context)
@@ -426,7 +433,7 @@ enum SyncImportService {
         }
     }
 
-    /// Unterscheidet die beiden nicht-erfolgreichen Fälle von ``materialisiere(_:nutzlast:autorGeraeteID:context:)``:
+    /// Unterscheidet die beiden nicht-erfolgreichen Fälle von ``materialisiere(_:nutzlast:autorGeraeteID:wallClock:context:)``:
     /// Referenz nur *noch nicht* lokal bekannt (retrywürdig) vs. Referenz
     /// *bewusst gelöscht* (Tombstone, siehe ``SyncTombstoneService``) und damit
     /// dauerhaft unauflösbar — ein Retry würde hier bei jedem Sync-Zyklus
