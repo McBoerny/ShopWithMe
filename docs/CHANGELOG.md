@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.15 (Build 280) — SyncConnector-Abstraktionsschicht eingeführt
+
+`SyncConnector`-Protokoll + `FileShareSyncConnector` als erste Implementierung
+trennen den Dateitransport von der Merge-Logik. Mehrere Connectors können
+gleichzeitig registriert sein; der Anwender wählt per Einstellung, welcher aktiv
+ist (SwiftData bleibt in jedem Fall die interne Persistenz). Neue
+Mehrgeräte-Szenariensimulator-Tests. Design-Varianten für EinkaufenView
+und Einkaufsliste als Xcode-Previews hinzugefügt.
+
 ## v0.14 (Build 279) — `syncZyklus()` gegen sich selbst abgesichert (Re-Entranz-Schutz)
 
 Direkter Folgefund zum Architektur-Review unten (Nutzerbericht 2026-08-11):

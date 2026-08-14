@@ -155,7 +155,24 @@ vollständig umgesetzt; weitere Ideen siehe „Zukünftig“ unten.
   `SyncableModel`-Protokoll + generischer Merge-Engine würde sowohl künftige
   Erweiterungen innerhalb ShopWithMes vereinfachen als auch Wiederverwendung in
   anderen Apps ermöglichen — größerer, eigenständiger Umbau, nicht Teil des
-  laufenden Betriebs.
+  laufenden Betriebs. Andere Achse als der `SyncConnector`-Punkt unten (dort:
+  *wohin* Daten transportiert werden; hier: *wie generisch* die Merge-Logik
+  selbst ist) — Details zur Abgrenzung in `docs/SYNC_CONNECTOR_ARCHITEKTUR.md`
+  Abschnitt 10. Vollständige Klassifizierung aller 19 Merge-Funktionen als
+  Vorarbeit für diesen Punkt: `docs/SYNC_MERGE_STRATEGIEN.md`.
+- **`SyncConnector`-Architektur** (Review + Vorbereitung 2026-08-11, präzisiert
+  2026-08-11): heute läuft die Synchronisation ausschließlich gegen einen
+  cloud-gestützten Dateiordner. Ziel ist eine Connector-Registry — SwiftData
+  bleibt in jedem Fall die interne Persistenz, mehrere austauschbare
+  Transport-Connectors (Dateiordner weiterhin als Referenz, dazu eine
+  datenbankgestützte Variante, perspektivisch CloudKit) existieren gleichzeitig
+  nebeneinander, der Anwender wählt zur Laufzeit den aktiven — ohne die
+  Merge-Logik anzufassen. Enthält eine Machbarkeitsbewertung für cr-sqlite
+  (kein Ersatz für SwiftData, sondern nur als privater Sidecar-Connector
+  möglich, da SwiftData/Core Data die rohe `sqlite3`-Verbindung nicht
+  exponiert) sowie eine Neubewertung von CloudKit im Licht der inzwischen
+  gehärteten Merge-Semantik. Noch offen: Bau-Reihenfolge der Connectors, siehe
+  `docs/SYNC_CONNECTOR_ARCHITEKTUR.md` Abschnitt 11.
 - ~~**`export.json` als Paket statt Monolith**~~ ([#82](https://github.com/McBoerny/ShopWithMe/issues/82))
   — umgesetzt, siehe `docs/EXPORT_PAKET_UMBAU.md`.
 - **`ArtikelKategorie` → `Abteilung`, vollständige Modell-Umbenennung**

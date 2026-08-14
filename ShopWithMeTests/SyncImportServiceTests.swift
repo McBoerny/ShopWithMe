@@ -11,6 +11,7 @@ import Testing
 /// (`geraeteID` wird für „das andere Gerät" nicht über den echten
 /// `DatabaseLeaseService.geraeteID` simuliert, sondern per direktem
 /// Dateisystem-Layout, siehe ``schreibeFremdesEvent``).
+@Suite(.serialized)
 @MainActor
 struct SyncImportServiceTests {
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {

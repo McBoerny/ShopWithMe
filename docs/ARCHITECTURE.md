@@ -344,6 +344,19 @@ zwischenzeitlich abgeschlossenen `Einkaufsvorgang`, die
 das Bereich-A-Sicherheitsnetz für bereits abgehakte Artikel) in
 `docs/DATENSYNCHRONISATION_VERLAUF.md`.
 
+**Geplante Auskopplung des Transports hinter einen `SyncConnector`:** die
+Merge-/Konfliktauflösungslogik oben ist bereits transport-unabhängig
+implementiert, nur nicht formal hinter einem Protokoll gekapselt. Ziel ist
+keine Migration, sondern eine Connector-Registry: SwiftData bleibt in jedem
+Fall die interne Persistenz, mehrere Transport-Connectors (Dateiordner
+weiterhin als Referenz, dazu künftig datenbankgestützt bzw. CloudKit)
+existieren nebeneinander, der Anwender wählt zur Laufzeit den aktiven. Review,
+Schnitt-Vorschlag und eine Machbarkeitsbewertung (inkl. cr-sqlite, das dafür
+nur als privater Sidecar-Connector infrage kommt, da SwiftData/Core Data die
+rohe `sqlite3`-Verbindung nicht exponiert) in `docs/SYNC_CONNECTOR_ARCHITEKTUR.md`.
+Klassifizierung aller 19 Merge-Funktionen nach CRDT-Strategie (Vorarbeit für #75):
+`docs/SYNC_MERGE_STRATEGIEN.md`.
+
 ## Builds, Versionierung & Migrationen
 
 Checkliste für Checkpoints (Changelog, DocC, wann zusätzlich Doku aktualisiert wird),

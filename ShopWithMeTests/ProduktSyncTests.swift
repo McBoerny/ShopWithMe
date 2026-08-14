@@ -9,6 +9,7 @@ import Testing
 /// Helfer bewusst dupliziert statt geteilt (die Originale dort sind
 /// `private`), Umfang hier reduziert auf das für Produkt/Produktname
 /// tatsächlich Nötige.
+@Suite(.serialized)
 @MainActor
 struct ProduktSyncTests {
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {

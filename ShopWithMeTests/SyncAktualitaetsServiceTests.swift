@@ -6,6 +6,7 @@ import Testing
 /// Tests für ``SyncAktualitaetsService`` und die dazugehörige Event-
 /// Alters-Löschung ``SyncExportService/raeumeAlteEigeneEventDateienAufFallsFaellig()``
 /// (GitHub #89).
+@Suite(.serialized)
 @MainActor
 struct SyncAktualitaetsServiceTests {
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {

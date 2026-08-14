@@ -75,6 +75,7 @@ final class SyncPollingService: ObservableObject {
     private var context: ModelContext?
     private var schleife: Task<Void, Never>?
     private let icloudBeobachter = SyncICloudAenderungsBeobachter()
+    private let connector: any SyncConnector = FileShareSyncConnector()
 
     /// Race-frei synchron in `ShopWithMeApp.init()` gesetzt — BEVOR `body`
     /// (und damit `.task`/`.onChange(of: scenePhase)`, die beiden
@@ -133,8 +134,8 @@ final class SyncPollingService: ObservableObject {
             // lässt genau diesen einen Aufruf aus — die Prüfung greift beim
             // nächsten regulären Vordergrund-Wechsel wieder normal.
             if !ueberspringeRueckkehrerErkennung,
-               let ordner = SyncOrdnerService.gewaehlterOrdner(),
-               await SyncOrdnerService.binIchNochMitglied(in: ordner) == false {
+               let selbst = self,
+               await selbst.connector.binIchNochMitglied() == false {
                 _ = try? SyncErsetzenService.erstelleBackup(context: context)
                 SyncOrdnerService.ordnerEntfernen()
                 self?.wurdeAusGruppeEntfernt = true
@@ -190,6 +191,13 @@ final class SyncPollingService: ObservableObject {
         guard let context else { return true }
         guard SyncImportService.versucheVollstaendigenZyklusZuStarten() else { return true }
         defer { SyncImportService.beendeVollstaendigenZyklus() }
+        // Kein Sync-Ordner konfiguriert: nichts zu tun, kein Fehler.
+        guard SyncOrdnerService.gewaehlterOrdner() != nil else { return true }
+        // Scope einmalig für den gesamten Zyklus öffnen — die fünf Teil-Services
+        // öffnen ihn darunter nochmals (Ref-Count ≥ 1 bleibt garantiert); verhindert
+        // das bisherige Auf-0-Fallen zwischen den Service-Aufrufen.
+        guard await connector.beginneZugriff() else { return false }
+        defer { connector.beendeZugriff() }
         SyncDebugLogger.log(.zyklusStart, details: einkaufAktiv ? "einkaufAktiv" : "ruhend")
         let start = ContinuousClock.now
 

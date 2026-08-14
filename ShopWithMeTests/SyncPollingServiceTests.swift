@@ -3,6 +3,7 @@ import SwiftData
 import Testing
 @testable import ShopWithMe
 
+@Suite(.serialized)
 @MainActor
 struct SyncPollingServiceTests {
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {
