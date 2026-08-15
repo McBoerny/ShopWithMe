@@ -563,13 +563,19 @@ der Test still übersprungen — nicht als Fehler gewertet.
     "datum": "2026-03-24",
     "positionen": [
       { "artikelName": "Vollmilch 3,5%", "einzelpreis": "1.29" },
-      { "artikelName": "Butter mild", "einzelpreis": "1.99" }
+      { "artikelName": "Butter mild", "einzelpreis": "1.99" },
+      { "artikelName": "Milch", "einzelpreis": "1.50", "menge": 3 }
     ]
   },
   "mindestPositionenTrefferQuote": 0.75
 }
 ```
 
-`einzelpreis` verwendet `.` als Dezimaltrennzeichen (POSIX-Format). `geschaeftName`
-und `datum` können leer bleiben (`""`) — sie werden dann nicht geprüft. Ausführliche
-Hinweise zum Datenschutz: `ShopWithMeTests/Belege/README.md`.
+Alle Felder: `geschaeftName`, `geschaeftAdresse`, `datum` können leer bleiben (`""`)
+— sie werden dann nicht geprüft. `menge` kann weggelassen oder `null` sein — ebenfalls
+nicht geprüft. `menge` ist besonders relevant bei Gesamtpreiszeilen auf dem Bon
+(z.B. „3 x Milch 4.50"), wo die KI die Menge für die Einzelpreisberechnung benötigt:
+ein Fehler dort führt zu einem falschen `einzelpreis`, der den Preis-Test dann
+indirekt aufdeckt — `menge` macht den Fehler explizit sichtbar. `einzelpreis`
+verwendet `.` als Dezimaltrennzeichen (POSIX-Format). Ausführliche Hinweise zum
+Datenschutz: `ShopWithMeTests/Belege/README.md`.

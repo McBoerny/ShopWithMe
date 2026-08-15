@@ -21,7 +21,8 @@ Pro Testfall zwei Dateien mit identischem Basisnamen:
     "datum": "2026-03-24",
     "positionen": [
       { "artikelName": "Vollmilch 3,5%", "einzelpreis": "1.29" },
-      { "artikelName": "Butter mild", "einzelpreis": "1.99" }
+      { "artikelName": "Butter mild", "einzelpreis": "1.99" },
+      { "artikelName": "Milch", "einzelpreis": "1.50", "menge": 3 }
     ]
   },
   "mindestPositionenTrefferQuote": 0.75
@@ -38,6 +39,7 @@ Pro Testfall zwei Dateien mit identischem Basisnamen:
 | `sollErgebnis.datum` | Erwartetes Datum `JJJJ-MM-TT`, leer = nicht geprüft |
 | `sollErgebnis.positionen[].artikelName` | Erwarteter Artikelname (Teilstring-Abgleich) |
 | `sollErgebnis.positionen[].einzelpreis` | Erwarteter Einzelpreis, Dezimalpunkt `.` (exakter Cent-Abgleich) |
+| `sollErgebnis.positionen[].menge` | Erwartete Menge/Stückzahl (weggelassen oder `null` = nicht geprüft). Relevant bei Gesamtpreiszeilen, z.B. `"3 x Milch 4.50"` → `"menge": 3, "einzelpreis": "1.50"` |
 | `mindestPositionenTrefferQuote` | Anteil der Positionen, der erkannt werden muss (0.0–1.0, z.B. 0.75 = 75 %) |
 
 ## Datenschutz

@@ -34,6 +34,10 @@ struct BelegFixture: Codable, Sendable {
         let artikelName: String
         /// Einzelpreis mit '.' als Dezimaltrennzeichen, z.B. "1.29".
         let einzelpreis: String
+        /// Erwartete Menge/Stueckzahl. nil oder weggelassen -> wird nicht geprueft.
+        /// Relevant fuer Belege mit Gesamtpreiszeilen (z.B. "3 x Milch 4.50"),
+        /// wo die KI die Menge benoetigt um den Einzelpreis zu berechnen.
+        let menge: Double?
     }
 }
 
@@ -169,9 +173,11 @@ struct BelegScanIntegrationTests {
         }
 
         // Positionen: Preis-exakt (Cent) ODER Namens-Teilstring
-        let erkannt = soll.positionen.filter { sollPos in
+        // Pro gefundener Position wird zusaetzlich die Menge geprueft (falls im Fixture angegeben).
+        var erkannt = 0
+        for sollPos in soll.positionen {
             let sollPreis = Decimal(string: sollPos.einzelpreis)?.aufCentGerundet
-            return ist.positionen.contains { istPos in
+            let treffer = ist.positionen.first { istPos in
                 let preisPasst = sollPreis != nil &&
                     istPos.einzelpreis.aufCentGerundet == sollPreis
                 let namePasst =
@@ -179,16 +185,25 @@ struct BelegScanIntegrationTests {
                     sollPos.artikelName.localizedCaseInsensitiveContains(istPos.artikelName)
                 return preisPasst || namePasst
             }
+            if treffer != nil { erkannt += 1 }
+
+            // Menge nur pruefen wenn Position gefunden und Soll-Menge angegeben
+            if let istPos = treffer, let sollMenge = sollPos.menge {
+                #expect(
+                    abs(istPos.menge - sollMenge) < 0.001,
+                    "Menge \(istPos.menge) != Soll \(sollMenge) fuer '\(sollPos.artikelName)' [Testfall: \(testfall.name)]"
+                )
+            }
         }
 
         let quote = soll.positionen.isEmpty
             ? 1.0
-            : Double(erkannt.count) / Double(soll.positionen.count)
+            : Double(erkannt) / Double(soll.positionen.count)
         let mindest = testfall.fixture.mindestPositionenTrefferQuote
 
         #expect(
             quote >= mindest,
-            "Trefferquote \(Int(quote * 100))% < Mindest-\(Int(mindest * 100))% (\(erkannt.count)/\(soll.positionen.count) Positionen erkannt) [Testfall: \(testfall.name)]"
+            "Trefferquote \(Int(quote * 100))% < Mindest-\(Int(mindest * 100))% (\(erkannt)/\(soll.positionen.count) Positionen erkannt) [Testfall: \(testfall.name)]"
         )
     }
 }
