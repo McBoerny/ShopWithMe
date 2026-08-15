@@ -13,24 +13,26 @@ import Testing
 /// - `<name>.json` — diese Struktur
 ///
 /// Ausführliche Dokumentation: `ShopWithMeTests/Belege/README.md` sowie
-/// `docs/BELEGSCAN.md` → „Test-Infrastruktur".
+/// `docs/BELEGSCAN.md` -> "Test-Infrastruktur".
 struct BelegFixture: Codable, Sendable {
     let beschreibung: String
     let sollErgebnis: SollErgebnis
-    /// Mindest-Anteil erkannter Positionen (0.0–1.0). Default 0.75.
+    /// Mindest-Anteil erkannter Positionen (0.0-1.0). Default 0.75.
     let mindestPositionenTrefferQuote: Double
 
     struct SollErgebnis: Codable, Sendable {
-        /// Erwarteter Geschäftsname. Leer → wird nicht geprüft.
+        /// Erwarteter Geschaeftsname. Leer -> wird nicht geprueft.
         let geschaeftName: String
-        /// Erwartetes Datum im Format `JJJJ-MM-TT`. Leer → wird nicht geprüft.
+        /// Erwartete Adresse aus Kopf-/Fusszeile (Teilstring-Abgleich). Leer -> wird nicht geprueft.
+        let geschaeftAdresse: String
+        /// Erwartetes Datum im Format JJJJ-MM-TT. Leer -> wird nicht geprueft.
         let datum: String
         let positionen: [SollPosition]
     }
 
     struct SollPosition: Codable, Sendable {
         let artikelName: String
-        /// Einzelpreis mit `.` als Dezimaltrennzeichen, z.B. `"1.29"`.
+        /// Einzelpreis mit '.' als Dezimaltrennzeichen, z.B. "1.29".
         let einzelpreis: String
     }
 }
@@ -45,15 +47,15 @@ struct BelegTestfall: Sendable, CustomTestStringConvertible {
     let bildURL: URL
     let fixture: BelegFixture
 
-    var testDescription: String { "\(name) – \(fixture.beschreibung)" }
+    var testDescription: String { "\(name) - \(fixture.beschreibung)" }
 
     var bild: UIImage {
         UIImage(contentsOfFile: bildURL.path) ?? UIImage()
     }
 
-    /// Lädt alle gültigen Testfälle aus `Belege/` im Test-Bundle.
-    /// Gibt eine leere Liste zurück, wenn der Ordner fehlt oder keine passenden
-    /// Bild+JSON-Paare enthält — Tests laufen dann 0-mal ohne Fehler.
+    /// Laedt alle gueltigen Testfaelle aus `Belege/` im Test-Bundle.
+    /// Gibt eine leere Liste zurueck, wenn der Ordner fehlt oder keine passenden
+    /// Bild+JSON-Paare enthaelt -- Tests laufen dann 0-mal ohne Fehler.
     static func ladeAlle() -> [BelegTestfall] {
         let bundle = Bundle(for: _BundleLocator.self)
         guard let belegeURL = bundle.url(forResource: "Belege", withExtension: nil) else {
@@ -85,22 +87,22 @@ struct BelegTestfall: Sendable, CustomTestStringConvertible {
 
 struct BelegScanIntegrationTests {
 
-    // MARK: OCR-Stufe (deterministisch, läuft auf Simulator + Gerät)
+    // MARK: OCR-Stufe (deterministisch, laeuft auf Simulator + Geraet)
 
-    /// Prüft, ob Vision-OCR für jeden Soll-Artikel mindestens seinen Namen **oder**
+    /// Prueft, ob Vision-OCR fuer jeden Soll-Artikel mindestens seinen Namen ODER
     /// seinen Preis irgendwo im erkannten Text findet.
     ///
-    /// Dieser Test läuft ohne Apple Intelligence und ist deterministisch — er sichert,
-    /// dass der Kassenbon grundsätzlich lesbar ist und die Schlüsseldaten nicht durch
+    /// Dieser Test laeuft ohne Apple Intelligence und ist deterministisch -- er sichert,
+    /// dass der Kassenbon grundsaetzlich lesbar ist und die Schluessel-Daten nicht durch
     /// OCR verloren gehen, bevor sie die KI-Extraktion erreichen.
     @Test("OCR erkennt Namen/Preise aller Soll-Positionen", arguments: BelegTestfall.ladeAlle())
     func ocrErkenntPositionen(testfall: BelegTestfall) throws {
         let scanner = VisionFoundationModelsReceiptScanner()
         let zeilen = try scanner.erkenneText(in: testfall.bild)
-        #expect(!zeilen.isEmpty, "OCR lieferte keine Zeilen für Testfall „\(testfall.name)"")
+        #expect(!zeilen.isEmpty, "OCR lieferte keine Zeilen fuer Testfall '\(testfall.name)'")
 
         for sollPos in testfall.fixture.sollErgebnis.positionen {
-            // Preis: sowohl "1.29" als auch "1,29" prüfen
+            // Preis: sowohl "1.29" als auch "1,29" pruefen
             let preisUS = sollPos.einzelpreis
             let preisDE = sollPos.einzelpreis.replacingOccurrences(of: ".", with: ",")
 
@@ -113,22 +115,21 @@ struct BelegScanIntegrationTests {
             }
             #expect(
                 namenTreffer || preisTreffer,
-                "OCR-Text enthält weder Name „\(sollPos.artikelName)" " +
-                "noch Preis „\(sollPos.einzelpreis)" für Testfall „\(testfall.name)""
+                "OCR-Text enthaelt weder Name '\(sollPos.artikelName)' noch Preis '\(sollPos.einzelpreis)' [Testfall: \(testfall.name)]"
             )
         }
     }
 
-    // MARK: Vollständige Pipeline (Apple Intelligence erforderlich)
+    // MARK: Vollstaendige Pipeline (Apple Intelligence erforderlich)
 
-    /// Prüft die vollständige Scan-Pipeline (OCR + KI-Extraktion) gegen den
+    /// Prueft die vollstaendige Scan-Pipeline (OCR + KI-Extraktion) gegen den
     /// Soll-Zustand mit konfigurierbarer Mindest-Trefferquote.
     ///
-    /// Läuft nur auf einem Gerät mit Apple Intelligence — ohne KI wird der Test still
-    /// übersprungen. Nicht deterministisch: das Sprachmodell kann bei identischem
+    /// Laeuft nur auf einem Geraet mit Apple Intelligence -- ohne KI wird der Test still
+    /// uebersprungen. Nicht deterministisch: das Sprachmodell kann bei identischem
     /// Eingabe-Text leicht unterschiedliche Ergebnisse liefern. Die Trefferquote
     /// aus der Fixture-Datei puffert diese Varianz ab.
-    @Test("Vollständiger Scan erreicht Mindest-Trefferquote", arguments: BelegTestfall.ladeAlle())
+    @Test("Vollstaendiger Scan erreicht Mindest-Trefferquote", arguments: BelegTestfall.ladeAlle())
     func vollstaendigerScanErreichtMindestTrefferquote(testfall: BelegTestfall) async throws {
         guard AISuggestionService.istVerfuegbar else { return }
 
@@ -141,19 +142,29 @@ struct BelegScanIntegrationTests {
         if !soll.datum.isEmpty {
             #expect(
                 ist.datum == soll.datum,
-                "Erkanntes Datum „\(ist.datum)" ≠ Soll „\(soll.datum)" für „\(testfall.name)""
+                "Erkanntes Datum '\(ist.datum)' != Soll '\(soll.datum)' [Testfall: \(testfall.name)]"
             )
         }
 
-        // Geschäftsname (Teilstring-Abgleich in beide Richtungen, falls angegeben)
+        // Geschaeftsname (Teilstring-Abgleich in beide Richtungen, falls angegeben)
         if !soll.geschaeftName.isEmpty {
             let namePasst =
                 ist.geschaeftName.localizedCaseInsensitiveContains(soll.geschaeftName) ||
                 soll.geschaeftName.localizedCaseInsensitiveContains(ist.geschaeftName)
             #expect(
                 namePasst,
-                "Erkannter Geschäftsname „\(ist.geschaeftName)" ≠ Soll „\(soll.geschaeftName)" " +
-                "für „\(testfall.name)""
+                "Erkannter Geschaeftsname '\(ist.geschaeftName)' != Soll '\(soll.geschaeftName)' [Testfall: \(testfall.name)]"
+            )
+        }
+
+        // Adresse (Teilstring-Abgleich in beide Richtungen, falls angegeben)
+        if !soll.geschaeftAdresse.isEmpty {
+            let adressePasst =
+                ist.geschaeftAdresse.localizedCaseInsensitiveContains(soll.geschaeftAdresse) ||
+                soll.geschaeftAdresse.localizedCaseInsensitiveContains(ist.geschaeftAdresse)
+            #expect(
+                adressePasst,
+                "Erkannte Adresse '\(ist.geschaeftAdresse)' != Soll '\(soll.geschaeftAdresse)' [Testfall: \(testfall.name)]"
             )
         }
 
@@ -177,8 +188,7 @@ struct BelegScanIntegrationTests {
 
         #expect(
             quote >= mindest,
-            "Trefferquote \(Int(quote * 100)) % < Mindest-\(Int(mindest * 100)) % " +
-            "(\(erkannt.count)/\(soll.positionen.count) Positionen erkannt) für „\(testfall.name)""
+            "Trefferquote \(Int(quote * 100))% < Mindest-\(Int(mindest * 100))% (\(erkannt.count)/\(soll.positionen.count) Positionen erkannt) [Testfall: \(testfall.name)]"
         )
     }
 }

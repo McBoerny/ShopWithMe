@@ -17,6 +17,7 @@ Pro Testfall zwei Dateien mit identischem Basisnamen:
   "beschreibung": "REWE Markt, 2026-03-24 — 12 Positionen",
   "sollErgebnis": {
     "geschaeftName": "REWE",
+    "geschaeftAdresse": "Marktstrasse 1, Musterstadt",
     "datum": "2026-03-24",
     "positionen": [
       { "artikelName": "Vollmilch 3,5%", "einzelpreis": "1.29" },
@@ -33,6 +34,7 @@ Pro Testfall zwei Dateien mit identischem Basisnamen:
 | --- | --- |
 | `beschreibung` | Freitext-Beschreibung für den Test-Report |
 | `sollErgebnis.geschaeftName` | Erwarteter Geschäftsname (Teilstring-Abgleich, leer = nicht geprüft) |
+| `sollErgebnis.geschaeftAdresse` | Erwartete Adresse aus Kopf-/Fußzeile (Teilstring-Abgleich, leer = nicht geprüft) |
 | `sollErgebnis.datum` | Erwartetes Datum `JJJJ-MM-TT`, leer = nicht geprüft |
 | `sollErgebnis.positionen[].artikelName` | Erwarteter Artikelname (Teilstring-Abgleich) |
 | `sollErgebnis.positionen[].einzelpreis` | Erwarteter Einzelpreis, Dezimalpunkt `.` (exakter Cent-Abgleich) |

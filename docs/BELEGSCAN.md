@@ -559,6 +559,7 @@ der Test still übersprungen — nicht als Fehler gewertet.
   "beschreibung": "REWE Markt, 2026-03-24 — 12 Positionen",
   "sollErgebnis": {
     "geschaeftName": "REWE",
+    "geschaeftAdresse": "Marktstrasse 1, Musterstadt",
     "datum": "2026-03-24",
     "positionen": [
       { "artikelName": "Vollmilch 3,5%", "einzelpreis": "1.29" },
