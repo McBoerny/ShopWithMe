@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.16 (Build 283) — Fixture-basierte Belegscan-Integrationstests
+
+`BelegScanIntegrationTests` + `ShopWithMeTests/Belege/`-Ordner: echte Kassenbon-Fotos
+mit JSON-Soll-Zustand als Testfälle. Zwei Teststufen: OCR (deterministisch,
+Simulator + Gerät) prüft ob Namen/Preise im Vision-Text auftauchen;
+vollständige Pipeline (Apple Intelligence erforderlich) prüft Datum, Geschäftsname
+und Positions-Trefferquote gegen den Soll-Zustand. Neue Testfälle: Bild + JSON in
+`Belege/` ablegen, kein Code-Änderung nötig. `VisionFoundationModelsReceiptScanner
+.erkenneText(in:)` von `private` auf `internal` für `@testable`-Zugriff. Dokumentation:
+`docs/BELEGSCAN.md` → „Test-Infrastruktur", `ShopWithMeTests/Belege/README.md`.
+
 ## v0.16 (Build 282) — Minor-Versionssprung: konfigurierbare Listendarstellung
 
 Enthält alle Änderungen aus v0.15 (SyncConnector-Abstraktionsschicht,

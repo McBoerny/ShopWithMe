@@ -156,7 +156,7 @@ struct VisionFoundationModelsReceiptScanner: ReceiptScanService {
         return BelegScanErgebnis(ergebnis: ergebnis, ocrZeilen: zeilen)
     }
 
-    private func erkenneText(in bild: UIImage) throws -> [ErkannteZeile] {
+    func erkenneText(in bild: UIImage) throws -> [ErkannteZeile] {
         guard let cgImage = bild.cgImage else {
             throw ReceiptScanError.ungueltigesBild
         }

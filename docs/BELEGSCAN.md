@@ -55,6 +55,9 @@ Belegscans hinweg.
   (`UIImagePickerController`), da dessen Kantenerkennung auf seitenartige
   Dokumente ausgelegt ist, nicht auf ein einzelnes Regal-Preisschild.
 - `ShopWithMeTests/ReceiptScanServiceTests.swift`, `ShopWithMeTests/ModelTests.swift`.
+- `ShopWithMeTests/BelegScanIntegrationTests.swift` — Fixture-basierte Integrationstests
+  (OCR-Stufe + vollständige Pipeline); Testdaten in `ShopWithMeTests/Belege/`
+  (siehe „Test-Infrastruktur" unten).
 
 ## Ablauf
 
@@ -512,3 +515,60 @@ automatisch vorgeschlagen und verknüpft, ohne dass der Nutzer erneut zuordnen m
   „Originalbeleg anzeigen“ oben).
 - **Keine Übertragung auf `PreisschildScanView`** — die Originalfoto-Anzeige ist
   bislang nur für den Belegscan umgesetzt (GitHub #2 nannte nur diesen Fall).
+
+## Test-Infrastruktur
+
+**Status: Umgesetzt (2026-08-14).** Echte Kassenbons als Testfälle statt Mock-Objekte.
+
+### Aufbau
+
+`ShopWithMeTests/Belege/` (Ordner-Referenz im Test-Bundle) enthält pro Testfall:
+
+- `<name>.jpg` (oder `.jpeg`/`.png`) — Foto eines echten Kassenbons
+- `<name>.json` — Soll-Zustand (`BelegFixture`)
+
+`BelegTestfall.ladeAlle()` findet alle gültigen Bild+JSON-Paare automatisch —
+neue Testfälle einfach in den Ordner legen, kein Code ändern. Fehlt der Ordner
+oder sind keine Paare vorhanden, laufen die Tests 0-mal ohne Fehler.
+
+### Zwei Teststufen
+
+**1. OCR-Test** (`ocrErkenntPositionen`) — deterministisch, läuft auf Simulator + Gerät:
+
+Prüft pro Soll-Position, ob ihr Artikelname **oder** ihr Preis irgendwo in den
+Vision-OCR-Zeilen auftaucht (Teilstring-Abgleich, `de-DE`/`en-US`). Sichert,
+dass der Bon grundsätzlich lesbar ist, bevor die KI-Extraktion greift.
+`VisionFoundationModelsReceiptScanner.erkenneText(in:)` ist dafür `internal`
+statt `private` (testbar via `@testable import`).
+
+**2. Vollständiger Scan** (`vollstaendigerScanErreichtMindestTrefferquote`) — Apple Intelligence erforderlich:
+
+Läuft die komplette Pipeline (`auswerten(bild:)`) und vergleicht:
+- **Datum**: exakter String-Abgleich (falls im Soll angegeben)
+- **Geschäftsname**: Teilstring-Abgleich in beide Richtungen (falls angegeben)
+- **Positionen**: Preis-exakt (Cent) **oder** Namens-Teilstring;
+  erkannte Positionen ÷ Soll-Positionen ≥ `mindestPositionenTrefferQuote`
+
+Ohne Apple Intelligence (`AISuggestionService.istVerfuegbar == false`) wird
+der Test still übersprungen — nicht als Fehler gewertet.
+
+### JSON-Format
+
+```json
+{
+  "beschreibung": "REWE Markt, 2026-03-24 — 12 Positionen",
+  "sollErgebnis": {
+    "geschaeftName": "REWE",
+    "datum": "2026-03-24",
+    "positionen": [
+      { "artikelName": "Vollmilch 3,5%", "einzelpreis": "1.29" },
+      { "artikelName": "Butter mild", "einzelpreis": "1.99" }
+    ]
+  },
+  "mindestPositionenTrefferQuote": 0.75
+}
+```
+
+`einzelpreis` verwendet `.` als Dezimaltrennzeichen (POSIX-Format). `geschaeftName`
+und `datum` können leer bleiben (`""`) — sie werden dann nicht geprüft. Ausführliche
+Hinweise zum Datenschutz: `ShopWithMeTests/Belege/README.md`.
