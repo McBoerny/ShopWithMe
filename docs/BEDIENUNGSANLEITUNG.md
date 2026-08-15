@@ -6,7 +6,7 @@ UI-Element. Für die technische Spezifikation siehe [PRODUCT_SPEC.md](PRODUCT_SP
 für die Versionshistorie [CHANGELOG.md](CHANGELOG.md).
 
 Diese Anleitung ist die maßgebliche, vollständige Quelle — die kuratierte In-App-Hilfe
-(„Hilfe & Anleitungen“ in den Einstellungen) deckt bewusst nur eine Auswahl der
+(„Hilfe & Anleitungen" in den Einstellungen) deckt bewusst nur eine Auswahl der
 komplexeren Funktionen ab und darf dieser Anleitung inhaltlich nicht widersprechen.
 
 ## Die drei Bereiche der App
@@ -15,7 +15,7 @@ Die App startet immer direkt mit der Einkaufsliste.
 
 - **Einkaufen** — die eigentliche Einkaufsliste, Standort-Erkennung, Abhaken.
 - **Scannen** — direkter Belegscan ohne vorherige Geschäftswahl, jederzeit über den
-  mittleren Tab erreichbar (siehe „Belegscan & Preisschild-Scan“ unten). Ergänzt,
+  mittleren Tab erreichbar (siehe „Belegscan & Preisschild-Scan" unten). Ergänzt,
   ersetzt aber nicht die weiteren Belegscan-Wege aus dem Einkaufen-Tab bzw. aus der
   Geschäfts-Detailansicht.
 - **Einstellungen** — Hilfe, Artikel- und Geschäfte-Verwaltung (inkl. Abteilungen
@@ -33,7 +33,7 @@ gleichzeitig in allen zugehörigen Abschnitten — abgehakt wird er dabei übera
 auf einmal. Aus welchem Abschnitt du ihn tatsächlich abhakst, merkt sich die App
 pro Geschäft: so lernt sie z.B., dass Sojasauce bei Edeka unter „Soßen", bei
 Aldi aber unter „Asia" steht. Neue Artikel legst du meist direkt beim Einkaufen an (landen dann
-automatisch auf der Liste); in der Artikel-Verwaltung (Einstellungen) per „+“
+automatisch auf der Liste); in der Artikel-Verwaltung (Einstellungen) per „+"
 angelegte Artikel landen nicht automatisch auf der Liste. Beim Anlegen schlägt
 Apple Intelligence (sofern auf deinem Gerät verfügbar) automatisch eine passende
 Abteilung vor, sobald du einen Namen eingibst — eine bereits von dir gewählte
@@ -41,12 +41,12 @@ Abteilung wird dabei nie überschrieben. Ist Apple
 Intelligence nicht verfügbar, bleibt die manuelle Auswahl jederzeit möglich.
 Gibt es bereits einen Artikel mit exakt demselben Namen, erscheint beim
 Anlegen ein orangener Warnhinweis darunter — das Anlegen wird dadurch nicht
-blockiert, verhindert aber versehentliche Dubletten (z.B. „Milch“ zweimal
+blockiert, verhindert aber versehentliche Dubletten (z.B. „Milch" zweimal
 unabhängig voneinander angelegt), die sich sonst nicht von selbst
 zusammenführen.
 In der Artikel-Bearbeitung zeigt die Abteilungs-Sektion nur die bereits
 zugeordneten Abteilungen (zum Entfernen nach links wischen); über „Abteilung
-hinzufügen“ öffnet sich eine durchsuchbare Liste aller übrigen Abteilungen zur
+hinzufügen" öffnet sich eine durchsuchbare Liste aller übrigen Abteilungen zur
 Auswahl, mit der Möglichkeit, dort direkt eine neue Abteilung anzulegen.
 
 Einem bereits angelegten Artikel kannst du in der Artikel-Bearbeitung beliebig
@@ -79,26 +79,26 @@ Apotheke, …, z.B. Drogerie + Lebensmittel bei einem dm — Mehrfachauswahl bei
 Bearbeiten der Stammdaten) und optional eine Adresse. Abteilungen sind der primäre Weg, Artikel für ein Geschäft
 verfügbar zu machen — direkt im Geschäft zuordenbar. Zusätzlich
 macht jeder Geschäftstyp automatisch seine in den Einstellungen hinterlegten
-Standard-Abteilungen verfügbar (siehe „Geschäftstypen“ unten) — ganz ohne sie dem
+Standard-Abteilungen verfügbar (siehe „Geschäftstypen" unten) — ganz ohne sie dem
 einzelnen Geschäft manuell zuzuordnen; wählst du später dort noch weitere
 Abteilungen manuell aus, betrifft das nur dieses eine Geschäft, nicht generell den
 Geschäftstyp. Die Reihenfolge, in der die Abteilungen beim Einkaufen erscheinen,
 legst du nicht manuell fest — die App lernt sie automatisch aus deinem
-Abhakverhalten (siehe „Einkaufen“ unten).
+Abhakverhalten (siehe „Einkaufen" unten).
 
 In der Detailansicht eines Geschäfts siehst du alle verfügbaren Abteilungen
 gemeinsam, alphabetisch — automatisch über den Geschäftstyp verfügbare sind mit
-„Automatisch über Geschäftstyp“ gekennzeichnet. Per Wischgeste lässt sich eine
+„Automatisch über Geschäftstyp" gekennzeichnet. Per Wischgeste lässt sich eine
 solche automatische Abteilung für dieses eine Geschäft ausschließen, ohne sie
 generell vom Geschäftstyp zu entfernen — sie taucht danach wieder unter
-„Abteilung hinzufügen“ auf, falls du sie doch wieder brauchst. Manuell
+„Abteilung hinzufügen" auf, falls du sie doch wieder brauchst. Manuell
 zugeordnete Abteilungen entfernst du wie gewohnt per Wischgeste.
 
 **Standort beim Anlegen/Bearbeiten:** Sobald ein Geschäft Koordinaten hat, zeigt
 das Bearbeiten-Formular eine kleine Karte mit einem Pin — durch Antippen der
 Karte lässt sich der Standort exakt setzen (die Adresse wird dabei automatisch
 nachgetragen, falls noch keine hinterlegt ist). Alternativ füllt „Aktuellen
-Standort verwenden“ Adresse und Koordinaten direkt aus deinem GPS-Standort, oder
+Standort verwenden" Adresse und Koordinaten direkt aus deinem GPS-Standort, oder
 du tippst eine Adresse ein und bestätigst mit der Eingabetaste — die Koordinaten
 werden dann automatisch ermittelt, solange noch kein Standort gesetzt ist.
 
@@ -113,11 +113,11 @@ um Verwechslungen zu vermeiden.
 
 **Favoriten:** Sowohl in der Geschäfte-Übersicht (Einstellungen) als auch in der
 Geschäftsauswahl beim Einkaufen erscheinen deine meistgenutzten Geschäfte vorab in
-einer eigenen „Favoriten“-Sektion — ermittelt aus abgeschlossenen Einkäufen
+einer eigenen „Favoriten"-Sektion — ermittelt aus abgeschlossenen Einkäufen
 innerhalb eines Zeitfensters (Standard: 30 Tage). Anzahl und Zeitfenster stellst du
 über den Stern-Button in der Geschäfte-Übersicht ein. Jedes Geschäft zeigt
 außerdem in seiner Detailansicht (Bearbeiten) einen Zähler abgeschlossener
-Einkäufe, den du dort separat zurücksetzen kannst, sowie ein „Besuchsprotokoll“
+Einkäufe, den du dort separat zurücksetzen kannst, sowie ein „Besuchsprotokoll"
 mit Zeitpunkt, Dauer und Produktanzahl jedes Einkaufs — bleibt auch erhalten,
 wenn du später die Einkaufsliste löschst, aus der heraus damals eingekauft
 wurde.
@@ -126,8 +126,8 @@ wurde.
 Standortabfrage, ob du dich in der Nähe eines bekannten oder von Apple Maps
 erkannten Ladens befindest, und schlägt ihn in einem Banner vor — direkt zur
 Auswahl (bekannt) oder zum Anlegen mit vorausgefüllten Daten (unbekannt). Über das
-„…“-Menü des Banners lässt sich ein Vorschlag dauerhaft ignorieren oder „Alle
-Geschäfte in der Nähe“ öffnen (zeigt auch ignorierte, mit Möglichkeit zum
+„…"-Menü des Banners lässt sich ein Vorschlag dauerhaft ignorieren oder „Alle
+Geschäfte in der Nähe" öffnen (zeigt auch ignorierte, mit Möglichkeit zum
 Wiederaufnehmen). Ein neues Geschäft lässt sich davon unabhängig jederzeit rein
 manuell anlegen — die Standort-Erkennung ist nur eine Ergänzung. Fehlen einem
 Geschäft noch Koordinaten, fragt dich die App beim nächsten Auswählen, ob sie den
@@ -143,7 +143,7 @@ ein Geschäft, wird sie nach Abteilung gruppiert. Ein Einkauf startet
 automatisch beim Öffnen des Tabs, kein manueller Start nötig.
 
 Der Bildschirmtitel zeigt neben dem Listennamen deinen Fortschritt für diesen
-Einkauf, Format „<Name> (<abgehakt>/<gesamt>)“, z.B. „Wocheneinkauf (3/8)“.
+Einkauf, Format „<Name> (<abgehakt>/<gesamt>)", z.B. „Wocheneinkauf (3/8)".
 
 Ein Artikel, der mehreren Kategorien zugeordnet ist, erscheint zunächst in
 jedem passenden Abschnitt der Liste — erkennbar am kleinen Symbol neben dem
@@ -173,7 +173,7 @@ dem Abschließen ein kurzer Hinweis, dass sich die App automatisch anpasst.
   eine temporäre Notiz.
 - **Abhaken** geschieht über die eigenständige Checkbox am Zeilenende.
 - Standardmäßig zeigt die App nur im gewählten Geschäft verfügbare Artikel. Die
-  Schnellauswahl (Symbol neben „Artikel hinzufügen“) bündelt zwei Anzeigeoptionen:
+  Schnellauswahl (Symbol neben „Artikel hinzufügen") bündelt zwei Anzeigeoptionen:
   kurzer Tap blendet zusätzlich bereits abgehakte Artikel ein (durchgestrichen,
   antippen macht das Abhaken rückgängig); langer Tap öffnet den Lernmodus, der alle
   Artikel der Liste einblendet, auch bislang nicht als verfügbar geltende — dadurch
@@ -181,34 +181,39 @@ dem Abschließen ein kurzer Hinweis, dass sich die App automatisch anpasst.
 - Per Wischgeste lässt sich ein bereits abgehakter Artikel dauerhaft aus dieser
   Ansicht entfernen (landet dann nicht wieder auf der offenen Liste).
 - Ein Einkauf lässt sich jederzeit abschließen, auch mit offenen Artikeln — die
-  bleiben einfach auf der globalen Liste. Der „Einkauf abschließen“-Button zeigt
+  bleiben einfach auf der globalen Liste. Der „Einkauf abschließen"-Button zeigt
   dabei die Anzahl bereits abgehakter Artikel und färbt sich in der Akzentfarbe,
   sobald mindestens einer abgehakt wurde.
-- Die Geschäftsauswahl wird automatisch auf „Kein Geschäft“ zurückgesetzt —
+- Die Geschäftsauswahl wird automatisch auf „Kein Geschäft" zurückgesetzt —
   sowohl nach dem Abschließen eines Einkaufs als auch nach 3 Stunden ohne
   Interaktion mit der Einkaufsliste, damit ein neuer Einkauf nicht versehentlich
   am zuletzt genutzten Geschäft weiterläuft. Der Einkauf selbst wird dabei
   automatisch mit abgeschlossen (kein manuelles Antippen von
-  „Einkauf abschließen“ nötig), damit er später von der Preishistorie-Bereinigung
-  erreicht werden kann (siehe Einstellungen → „Preishistorie“ unten). Ohne
+  „Einkauf abschließen" nötig), damit er später von der Preishistorie-Bereinigung
+  erreicht werden kann (siehe Einstellungen → „Preishistorie" unten). Ohne
   gewähltes Geschäft — etwa wenn du über mehrere Tage verteilt nach Bedarf
   abhakst, ohne je aktiv abzuschließen — gilt eine deutlich großzügigere Frist
   von 24 Stunden, damit dieser Anwendungsfall nicht unterbrochen wird.
 - **Gemeinsam einkaufen (Datensynchronisation aktiv, siehe unten):** Hakt ein
   anderes Gerät einen Artikel ab, bevor du selbst dazu kommst, zeigt ein kurzer,
   sich von selbst wieder ausblendender Hinweis („Bereits von {Gerätename}
-  abgehakt“), dass es sich erledigt hat — kein Dialog zum Wegklicken nötig.
-- **„Artikel hinzufügen“** zeigt unter dem Titel zusätzlich den Namen der
+  abgehakt"), dass es sich erledigt hat — kein Dialog zum Wegklicken nötig.
+- **„Artikel hinzufügen"** zeigt unter dem Titel zusätzlich den Namen der
   Einkaufsliste. Die Suche erkennt Singular und Plural gleichermaßen (z.B.
-  findet „Äpfel“ auch den Artikel „Apfel“). Bereits auf der Liste stehende
+  findet „Äpfel" auch den Artikel „Apfel"). Bereits auf der Liste stehende
   Artikel sind mit dem Abhak-Symbol markiert — erneutes Antippen nimmt sie
   wieder von der Liste.
+- **Darstellung anpassen:** Einstellungen → „Listendarstellung" — wählt zwischen
+  klassischer Gruppenliste, Chips (groß oder klein) und Kacheln (2 oder 3 Spalten).
+  Je Modus konfigurierbar: Akkordeon-Kategorien, Fortschrittsbalken und
+  Kategorie-Farbstreifen (nur klassisch) lassen sich einzeln ein- oder ausschalten;
+  Kacheln können farbig nach Kategorie hinterlegt werden.
 
 ## Belegscan & Preisschild-Scan
 
 Vier gleichwertige Wege zum Belegscan: nach dem Abschließen eines Einkaufs (Angebot,
 den Kassenbon direkt zu scannen), über den **Scannen-Tab** (jederzeit, ohne
-vorherige Geschäftswahl — nach dem Übernehmen bzw. „Verwerfen“ direkt wieder bereit
+vorherige Geschäftswahl — nach dem Übernehmen bzw. „Verwerfen" direkt wieder bereit
 für den nächsten Scan), über das Scannen-Menü beim Einkaufen für das gerade
 gewählte Geschäft, oder direkt in der Geschäfts-Detailansicht — z.B. für ältere,
 nachträglich gefundene Bons.
@@ -217,23 +222,23 @@ Lokale KI erkennt Geschäft, Datum, Artikel und Preise (Foto oder aus der
 Mediathek) und trägt sie in die passenden Positionen ein. Für jede Position
 versucht die App automatisch, den auf dem Bon erkannten (oft abgekürzten) Namen
 einem deiner vorhandenen Artikel zuzuordnen — gelingt das, zeigt das Feld den
-generischen Namen (z.B. „Zahnpasta“) mit dem Original-Beleg-Text „COL-ZAH“ klein
-darunter; gelingt es nicht, ist die Position als „Neu erkannt“ markiert. Tippst du
+generischen Namen (z.B. „Zahnpasta") mit dem Original-Beleg-Text „COL-ZAH" klein
+darunter; gelingt es nicht, ist die Position als „Neu erkannt" markiert. Tippst du
 ins Namensfeld, schlägt dir die App passende vorhandene Artikel zum Antippen vor,
-oder du legst über „„…“ neu anlegen“ direkt einen neuen Artikel an. Hast du für
+oder du legst über „„…" neu anlegen" direkt einen neuen Artikel an. Hast du für
 einen Artikel bereits Produkte mit Produktnamen für das gerade erkannte Geschäft
-hinterlegt (siehe Abschnitt „Artikel“), erkennt die App darüber hinaus auch das
+hinterlegt (siehe Abschnitt „Artikel"), erkennt die App darüber hinaus auch das
 konkrete Produkt — die Position zeigt dann zusätzlich klein „Erkanntes Produkt:
-…“ an, und der erfasste Preis landet direkt bei diesem Produkt statt nur beim
+…" an, und der erfasste Preis landet direkt bei diesem Produkt statt nur beim
 generischen Artikel. Ist noch kein Produktname für dieses Geschäft hinterlegt, die
 Position aber (per Textabgleich oder KI) trotzdem einem Artikel zugeordnet, legt
 die App automatisch ein neues, eigenständiges Produkt an, statt den Preis im
 gemeinsamen Basis-Eintrag des Artikels zu vermischen — verschiedene Marken
 desselben Artikels behalten dadurch von Anfang an getrennte Preishistorien, auch
-ohne dass du sie vorher manuell unter „Artikel“ anlegst. Lässt du das Namensfeld
+ohne dass du sie vorher manuell unter „Artikel" anlegst. Lässt du das Namensfeld
 dabei unverändert, dient der kleine Original-Beleg-Text als Name des neuen
-Produkts; benennst du das Feld bewusst um (z.B. auf „Paradontol Zahncreme“ statt
-„Zahnpasta“), wird dein bestätigter Name verwendet — tippst du denselben Namen
+Produkts; benennst du das Feld bewusst um (z.B. auf „Paradontol Zahncreme" statt
+„Zahnpasta"), wird dein bestätigter Name verwendet — tippst du denselben Namen
 später in einem anderen Geschäft erneut ein, erkennt die App das bereits
 bestehende Produkt wieder, statt ein weiteres anzulegen. Nicht
 benötigte Positionen kannst du vor der Übernahme entfernen: Wischen nach links
@@ -254,7 +259,7 @@ zweite Filiale mit der erkannten Adresse anlegen.
 Das Original-Foto wird in der Prüf-Ansicht direkt oben angezeigt (zoom-/schwenkbar
 per Pinch-/Zieh-Geste) — praktisch, um die KI-Erkennung visuell zu verifizieren.
 Das Lupen-Symbol neben einer Position (falls vorhanden) scrollt dorthin und hebt
-die erkannte Stelle im Beleg farblich hervor. „Abbrechen“ schließt die Prüf-Ansicht
+die erkannte Stelle im Beleg farblich hervor. „Abbrechen" schließt die Prüf-Ansicht
 immer sofort, ohne Rückfrage.
 
 Der **Preisschild-Scan** (Geschäfts-Detailansicht oder während des Einkaufens)
@@ -267,12 +272,12 @@ Geschäfts-Detailansicht.
 ## MilkForUs-Textimport
 
 In der Einkaufslisten-Verwaltung (Einstellungen) importierst du über „MilkForUs
-importieren“ eine aus der Shopping-App „MilkForUs“ exportierte Textdatei — entweder
+importieren" eine aus der Shopping-App „MilkForUs" exportierte Textdatei — entweder
 per Datei-Auswahl, oder direkt über die Teilen-Funktion eines anderen Apps (z.B.
-eine per Chat empfangene Datei per „Teilen“ → „ShopWithMe“). In der Vorschau siehst
+eine per Chat empfangene Datei per „Teilen" → „ShopWithMe"). In der Vorschau siehst
 du je MilkForUs-Kategorie, ob eine bestehende Abteilung automatisch erkannt wurde
 (exakter Name oder KI-Vorschlag), oder ob eine neue angelegt würde — per Antippen
-lässt sich das auf eine andere bestehende Abteilung oder „Sonstiges“ umstellen.
+lässt sich das auf eine andere bestehende Abteilung oder „Sonstiges" umstellen.
 Bereits vorhandene Artikel werden nur auf die gewählte Liste gesetzt, nie
 dupliziert; einzelne Artikel lassen sich vor dem Übernehmen per Wischgeste aus dem
 Import ausschließen.
@@ -282,24 +287,24 @@ Import ausschließen.
 Über einen geteilten Ordner (z.B. iCloud Drive oder Synology Drive) gleichen
 sich mehrere Geräte gegenseitig ab — Einkaufslisten-Änderungen, Abhaken,
 Geschäfte, Artikel, Kaufhistorie und die gelernte Abteilungs-Reihenfolge.
-Anders als bei „Datenbank & Speicherort“ (siehe unten) bleibt dabei die
+Anders als bei „Datenbank & Speicherort" (siehe unten) bleibt dabei die
 eigentliche Datenbank jedes Geräts unverändert an ihrem Ort — nur Änderungen
 werden ausgetauscht.
 
-- **Einrichten:** Einstellungen → „Datensynchronisation“ → „Ordner wählen…“.
+- **Einrichten:** Einstellungen → „Datensynchronisation" → „Ordner wählen…".
   Ist der gewählte Ordner noch leer (niemand sonst hat ihn bisher verwendet),
   startet direkt der erste Abgleich. Enthält er bereits Daten anderer Geräte
   (z.B. weil ein Mitnutzer schon eingerichtet hat), fragt die App vor dem
-  Verknüpfen nach Bestätigung für „Ersetzen“: dein bisheriger lokaler Bestand
+  Verknüpfen nach Bestätigung für „Ersetzen": dein bisheriger lokaler Bestand
   wird zuerst lokal gesichert (wiederherstellbar über „Backup
-  wiederherstellen“, solange die Synchronisierung aktiv bleibt) und danach
+  wiederherstellen", solange die Synchronisierung aktiv bleibt) und danach
   vollständig durch den Stand der anderen Geräte ersetzt — dafür muss die App
-  einmal neu gestartet werden. „Abbrechen“ verwirft die Ordnerauswahl wieder,
+  einmal neu gestartet werden. „Abbrechen" verwirft die Ordnerauswahl wieder,
   ohne etwas zu ändern.
 - **Läuft automatisch,** solange die App im Vordergrund ist — kein manueller
   Sync-Tap nötig. Für den seltenen Fall, dass du sofort statt in ein paar
   Sekunden abgleichen möchtest, gibt es zwei gleichwertige manuelle Auslöser:
-  den „Jetzt synchronisieren“-Button in den Sync-Einstellungen, sowie —
+  den „Jetzt synchronisieren"-Button in den Sync-Einstellungen, sowie —
   direkt beim Einkaufen, ohne Umweg über die Einstellungen — ein Ziehen nach
   unten (Pull-to-Refresh) ganz oben in der Einkaufsliste. Beide lösen
   denselben Abgleich aus; dabei blitzt kurz ein Dateiauswahl-Fenster auf den
@@ -307,12 +312,12 @@ werden ausgetauscht.
   Versuch, den Systemabgleich zusätzlich anzustoßen, keine Fehlfunktion.
 - **Nur im Vordergrund:** Bei gesperrtem Gerät oder geschlossener App pausiert
   der automatische Abgleich — er läuft beim nächsten Öffnen sofort weiter.
-- **„Neustart steht noch aus“:** Nach Aktionen, die einen kompletten
-  Neuaufbau des Datenbestands vormerken (z.B. „Ersetzen“ beim Verknüpfen
+- **„Neustart steht noch aus":** Nach Aktionen, die einen kompletten
+  Neuaufbau des Datenbestands vormerken (z.B. „Ersetzen" beim Verknüpfen
   eines bereits von anderen Geräten genutzten Ordners, Wiederherstellen aus
   einem Backup), pausiert die Synchronisierung automatisch bis zum
-  angeforderten Neustart — „Ordner wählen…“, „Synchronisierung
-  deaktivieren“ und „Jetzt synchronisieren“ sind währenddessen ausgeblendet
+  angeforderten Neustart — „Ordner wählen…", „Synchronisierung
+  deaktivieren" und „Jetzt synchronisieren" sind währenddessen ausgeblendet
   bzw. deaktiviert, ein Hinweis-Banner erinnert an den ausstehenden
   Neustart.
 - **Schnellerer Abgleich in der Nähe:** Öffnest du gemeinsam mit einer anderen
@@ -321,52 +326,52 @@ werden ausgetauscht.
   zwischen den Geräten aus (WLAN/Bluetooth in der Nähe) — spürbar schneller
   als der reguläre Abgleich über den geteilten Ordner. Dafür fragt iOS beim
   ersten gemeinsamen Einkaufen nach dieser Funktion einmalig nach der
-  Berechtigung „Im lokalen Netzwerk suchen“ — ohne diese Berechtigung
+  Berechtigung „Im lokalen Netzwerk suchen" — ohne diese Berechtigung
   funktioniert weiterhin alles, nur eben etwas langsamer über den geteilten
   Ordner.
-- **Sichtbarer Sync-Status:** Einstellungen → „Datensynchronisation“ zeigt
+- **Sichtbarer Sync-Status:** Einstellungen → „Datensynchronisation" zeigt
   jederzeit, wann der Ordner-Abgleich zuletzt erfolgreich lief und ob gerade
   zusätzlich eine schnellere Nahbereich-Verbindung zu anderen Geräten besteht
   (und mit welchen). Während des gemeinsamen Einkaufens erscheint bei
   bestehender Nahbereich-Verbindung außerdem eine kleine Statuszeile
-  („N Geräte verbunden“) linksbündig unter dem Listennamen im
+  („N Geräte verbunden") linksbündig unter dem Listennamen im
   Einkaufen-Bildschirm.
-- **„N mögliche Duplikate prüfen“:** Erkennt der laufende Abgleich ein
+- **„N mögliche Duplikate prüfen":** Erkennt der laufende Abgleich ein
   Geschäft, einen Artikel oder eine Einkaufsliste, die einem bereits
   vorhandenen Eintrag ähneln, aber nicht eindeutig zugeordnet werden können,
   wird nichts automatisch zusammengeführt oder verworfen — stattdessen
   erscheint dieses Badge in den Sync-Einstellungen. Antippen zeigt eine
-  „Gleich“/„Unterschiedlich“-Wahl; unentschiedene Einträge bleiben einfach in
+  „Gleich"/„Unterschiedlich"-Wahl; unentschiedene Einträge bleiben einfach in
   der Liste stehen, bis du reagierst.
-- **„Synchronisierung deaktivieren“** trennt die Verbindung zum Ordner wieder,
+- **„Synchronisierung deaktivieren"** trennt die Verbindung zum Ordner wieder,
   ohne bereits ausgetauschte Daten zu löschen.
-- **„Sync-Abgleich nötig“:** War ein Gerät länger als 30 Tage nicht in
+- **„Sync-Abgleich nötig":** War ein Gerät länger als 30 Tage nicht in
   Betrieb (Urlaub, App lange nicht geöffnet), erscheint beim nächsten Start
   eine Meldung, dass der Datenbestand einmal komplett neu abgeglichen werden
-  muss — „Jetzt abgleichen“ sichert zuerst eigene, noch nicht übertragene
+  muss — „Jetzt abgleichen" sichert zuerst eigene, noch nicht übertragene
   Änderungen und fordert danach zu einem Neustart der App auf, um den
-  Abgleich abzuschließen. „Später erinnern“ verschiebt die Meldung auf den
+  Abgleich abzuschließen. „Später erinnern" verschiebt die Meldung auf den
   nächsten App-Start.
-- **„Gerät seit langem nicht gesehen“:** Erkennt die App bei App-Start/
+- **„Gerät seit langem nicht gesehen":** Erkennt die App bei App-Start/
   Rückkehr aus dem Hintergrund ein Gerät in der Gruppe, das seit mehr als 30
   Tagen nicht mehr synchronisiert hat, fragt sie aktiv nach, ob es entfernt
-  werden soll (z.B. weil es nicht mehr genutzt wird) — „Entfernen“ löscht
-  seinen Beitrag vollständig aus dem Sync-Ordner, „Später erinnern“
+  werden soll (z.B. weil es nicht mehr genutzt wird) — „Entfernen" löscht
+  seinen Beitrag vollständig aus dem Sync-Ordner, „Später erinnern"
   verschiebt die Frage auf den nächsten App-Start. Dasselbe lässt sich auch
-  jederzeit manuell einsehen/auslösen: Einstellungen → „Debugging“ →
-  „Bekannte Geräte“, dort per Wischen.
-- **„Aus der Sync-Gruppe entfernt“:** Wurde dieses Gerät von einem anderen
+  jederzeit manuell einsehen/auslösen: Einstellungen → „Debugging" →
+  „Bekannte Geräte", dort per Wischen.
+- **„Aus der Sync-Gruppe entfernt":** Wurde dieses Gerät von einem anderen
   Mitglied der Gruppe auf die oben beschriebene Art entfernt, erkennt es das
   selbst beim nächsten Start und trennt sich automatisch vom Sync-Ordner —
   dabei entsteht immer zuerst ein lokales Backup des bisherigen Bestands. Die
-  anschließende Meldung bietet „Alleine weitermachen“ (nichts weiter zu tun)
-  oder „Wieder beitreten“ (öffnet die Sync-Einstellungen, um erneut einen
+  anschließende Meldung bietet „Alleine weitermachen" (nichts weiter zu tun)
+  oder „Wieder beitreten" (öffnet die Sync-Einstellungen, um erneut einen
   Ordner zu wählen — der eigene Bestand wird dabei durch den aktuellen
   Gruppenstand ersetzt).
-- **Sync-Debug-Modus** (Einstellungen → „Debugging“) — zeichnet zur
+- **Sync-Debug-Modus** (Einstellungen → „Debugging") — zeichnet zur
   Fehlersuche/Optimierung lokal auf, wie lange ein Abgleich dauert und wie
   aktuell empfangene Änderungen waren; im Normalbetrieb nicht nötig. Dort
-  zeigt der Abschnitt „Multipeer-Kanal“ zusätzlich denselben Nahbereich-Status
+  zeigt der Abschnitt „Multipeer-Kanal" zusätzlich denselben Nahbereich-Status
   wie in den Sync-Einstellungen.
 
 ## Einstellungen
@@ -377,21 +382,25 @@ werden ausgetauscht.
   Verwaltung (Anlegen/Bearbeiten/Löschen); die App startet immer direkt mit der
   Einkaufsliste, Artikel und Geschäfte sind daher nur noch hier erreichbar.
 - **Produkte** — durchsuchbare Übersicht aller Produkte artikelübergreifend
-  (z.B. um schnell „Paradontol“ zu finden, ohne vorher zu wissen, dass es unter
-  „Zahnpasta“ hängt). Zeigt zu jedem Produkt den zugehörigen Artikel und
-  navigiert zur selben Bearbeitungsansicht wie unter „Artikel“ (Name,
+  (z.B. um schnell „Paradontol" zu finden, ohne vorher zu wissen, dass es unter
+  „Zahnpasta" hängt). Zeigt zu jedem Produkt den zugehörigen Artikel und
+  navigiert zur selben Bearbeitungsansicht wie unter „Artikel" (Name,
   Produktnamen je Geschäft, Preishistorie). Neue Produkte anlegen oder
   löschen geht weiterhin nur über den jeweiligen Artikel (siehe oben).
 - **Geschäftstypen** — legt je Geschäftstyp (Lebensmittel, Drogerie, …) fest,
   welche Abteilungen als Standard gelten und dadurch automatisch in
-  jedem Geschäft dieses Typs verfügbar sind (siehe „Geschäfte“ oben). Name,
+  jedem Geschäft dieses Typs verfügbar sind (siehe „Geschäfte" oben). Name,
   Symbol und Farbe eines Geschäftstyps lassen sich in derselben Ansicht ändern.
-  Ist Apple Intelligence verfügbar, schlägt ein „KI-Vorschlag“-Knopf passende
+  Ist Apple Intelligence verfügbar, schlägt ein „KI-Vorschlag"-Knopf passende
   Abteilungen vor, bevorzugt aus bereits vorhandenen Abteilungen — gerade
   vorgeschlagene Abteilungen sind für die Dauer der Sitzung zusätzlich mit
-  „KI-Vorschlag“ markiert. Reicht die vorinstallierte Auswahl an Geschäftstypen
+  „KI-Vorschlag" markiert. Reicht die vorinstallierte Auswahl an Geschäftstypen
   nicht aus, lässt sich hier oder direkt beim Anlegen eines Geschäfts (Abschnitt
-  „Typ“) ein neuer, eigener Geschäftstyp (inkl. Symbol/Farbe) anlegen.
+  „Typ") ein neuer, eigener Geschäftstyp (inkl. Symbol/Farbe) anlegen.
+- **Listendarstellung** — wählt den Anzeigemodus der Einkaufsliste: klassische
+  Gruppenliste, Chips (groß oder klein) oder Kacheln (2 oder 3 Spalten). Jeder
+  Modus ist separat konfigurierbar (Akkordeon, Fortschrittsbalken, Farbstreifen
+  bzw. Spaltenanzahl und Kategorie-Farbhintergrund bei Kacheln).
 - **Preishistorie** — Aufbewahrungsdauer/Bereinigung alter Preiseinträge; räumt ab
   derselben Frist zusätzlich alte, abgeschlossene Einkäufe ohne verbleibende
   Preiseinträge mit auf. Zusätzlich die Schwellwerte der automatischen
@@ -403,9 +412,9 @@ werden ausgetauscht.
   auf einem Gerät gleichzeitig aktiv nutzen, um Konflikte zu vermeiden. Wirkt erst
   nach einem Neustart der App.
 - **Debugging** — bündelt alle Diagnose-Einstellungen in einer Ansicht; im
-  Normalbetrieb nicht nötig. Ein gemeinsamer „Debug-Modus“-Abschnitt mit den
-  Unteroptionen „Sync-Protokoll“ und „Datenbank-Protokoll“ (je einzeln
+  Normalbetrieb nicht nötig. Ein gemeinsamer „Debug-Modus"-Abschnitt mit den
+  Unteroptionen „Sync-Protokoll" und „Datenbank-Protokoll" (je einzeln
   ein-/ausschaltbar, gemeinsame Protokollgröße/Teilen/Leeren), sowie in
   Debug-Builds zusätzlich der Standort-Suchradius.
 - **Datensynchronisation** — siehe eigener Abschnitt „Datensynchronisation
-  (gemeinsam einkaufen)“ oben.
+  (gemeinsam einkaufen)" oben.

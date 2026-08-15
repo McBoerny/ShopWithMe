@@ -23,7 +23,8 @@ ShopWithMe/
     Services/                 # AISuggestionService, ReceiptScanService,
                                # PriceTagScanService, AbteilungsDistanzService,
                                # SyncOrdnerService, MilkForUsImportService
-    DesignSystem/              # Liquid-Glass-Wrapper, Symbol/Farb-Picker
+    DesignSystem/              # Liquid-Glass-Wrapper, Symbol/Farb-Picker,
+                               # ChipFlowLayout (Flow-Layout für Chip-Darstellung)
     Views/                    # nach Feature gruppiert: Artikel, Geschaefte,
                                # Einkaufen, Historie, Einstellungen
     Resources/                # Assets.xcassets
@@ -209,13 +210,13 @@ Abschnitt zurückfällt (Belegscan, Preisschild-Scan, Sync-Import).
   Mehrfach-Regal-Scan in `docs/PREISSCHILD_SCAN.md`.
 - **Automatischer Geschäfts-Abgleich beim Belegscan** (nur dort, nicht beim
   Preisschild-Scan — siehe `docs/PREISSCHILD_SCAN.md` → „Kein geschäftsloser
-  Einstieg“): `Geschaeft.passendes(fuerErkannterName:unter:)` ordnet einen aus einem
+  Einstieg"): `Geschaeft.passendes(fuerErkannterName:unter:)` ordnet einen aus einem
   Beleg erkannten Geschäftsnamen einem bekannten `Geschaeft` zu (Name oder gelernte
   `alternativeNamen`); ohne Treffer fragt `GeschaeftWahlSheet` nach.
   `Geschaeft.alternativenNamenLernen(_:)` merkt sich den erkannten Namen danach als
   Alias für künftige Scans. Greift nur, wenn der Scan-Kontext noch kein Geschäft
   feststehend mitbringt (z.B. nachträglich zuhause gescannter Beleg) — Details in
-  `docs/BELEGSCAN.md` → „Automatischer Geschäfts-Abgleich“.
+  `docs/BELEGSCAN.md` → „Automatischer Geschäfts-Abgleich".
 - **AbteilungsDistanzService**: lernt nach jedem abgeschlossenen `Einkaufsvorgang`
   aus der Abhakreihenfolge eine paarweise Distanz zwischen Artikelkategorien je
   Geschäft (`WarengruppenDistanz`) und sortiert die Einkaufsliste danach dynamisch
@@ -244,6 +245,15 @@ Abschnitt zurückfällt (Belegscan, Preisschild-Scan, Sync-Import).
   Sheet für exakte Menge + Notiz; Swipe links/rechts erhöht/verringert die Menge;
   Sektions-Header ohne Fortschrittszähler — Details in
   `docs/EINKAUFSLISTE_INTERAKTION.md`.
+- **Konfigurierbare Listendarstellung** (v0.15): `EinkaufslisteDarstellungsView`
+  als modularer Dispatcher vor `EinkaufslisteView` — wählt je nach
+  `@AppStorage(DarstellungsKey.modus)` zwischen `ListenInhaltView` (klassisch,
+  Chips groß/klein — optional Akkordeon/Fortschrittsbalken/Farbstreifen) und
+  `KachelInhaltView` (2- oder 3-spaltiges Raster, optional Kategorie-Farbhintergrund).
+  `ChipFlowLayout: Layout` als shared Flow-Layout in `DesignSystem/`. Neue
+  Einstellungsseite `EinkaufslisteDarstellungsSettingsView` über
+  `SettingsNavigationsziel.listendarstellung`. Vollständiges Design:
+  `docs/LISTENDARSTELLUNG.md`.
 - **Artikel-Alias-Namen** (GitHub #111, v0.13): `ArtikelAlias` — bislang nur für
   die Bon-Scan-Erkennung genutzt (siehe oben) — trägt seit v0.13 zusätzlich
   manuell in `ArtikelEditView` gepflegte Alias-Namen
@@ -257,7 +267,7 @@ Abschnitt zurückfällt (Belegscan, Preisschild-Scan, Sync-Import).
   denselben Artikel, kein eigenständiges Produkt mit eigenem Preis.
 - **Artikel hinzufügen — Mehrfachauswahl**: Tap auf eine ganze Zeile in
   `ArtikelHinzufuegenView` wählt sie aus/ab (statt sofort zu übernehmen); „Hinzufügen
-  (n)“ committet die gesamte Auswahl auf einmal; ein per Direktanlage neu erstellter
+  (n)" committet die gesamte Auswahl auf einmal; ein per Direktanlage neu erstellter
   Artikel landet automatisch in der Auswahl — Details (inkl. einer SwiftUI-
   Sheet-Dismiss-Falle) in `docs/ARTIKEL_HINZUFUEGEN_INTERAKTION.md`.
 - **Mehrere Einkaufslisten**: der Nutzer kann beliebig viele benannte `Einkaufsliste`n
@@ -266,7 +276,7 @@ Abschnitt zurückfällt (Belegscan, Preisschild-Scan, Sync-Import).
   Ablösung des früheren globalen `Artikel.istAufEinkaufsliste`, in
   `docs/EINKAUFSLISTEN.md`.
 - **GeschaeftErkennungService**: erkennt per einmaliger `CLLocationManager`-
-  Standortabfrage (nur „Bei Nutzung“, kein Hintergrund-Tracking) und
+  Standortabfrage (nur „Bei Nutzung", kein Hintergrund-Tracking) und
   `MKLocalPointsOfInterestRequest`, ob sich der Nutzer in der Nähe eines bekannten
   Ladens befindet — schlägt ihn dafür in `EinkaufenView` vor (bereits angelegtes
   `Geschaeft` oder neuer, von Apple Maps bekannter Laden zum Hinzufügen). Details in

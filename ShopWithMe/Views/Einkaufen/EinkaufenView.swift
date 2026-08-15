@@ -879,6 +879,15 @@ private struct GeschaeftInDerNaeheZeile: View {
     }
 }
 
+/// Eine Gruppe von Artikeln derselben Artikelkategorie — Ergebnis von
+/// ``EinkaufslisteView/kategorieGruppen(fuer:)``. Auf Modulebene (nicht `private`),
+/// damit ``EinkaufslisteDarstellungsView`` den Typ als Parameter nutzen kann.
+struct KategorieGruppe: Identifiable {
+    let kategorie: ArtikelKategorie
+    var artikel: [Artikel]
+    var id: PersistentIdentifier { kategorie.persistentModelID }
+}
+
 /// Die Einkaufsliste einer ``Einkaufsliste`` für einen laufenden Einkaufsvorgang —
 /// nach Artikelkategorie gruppiert und, bei gewähltem Geschäft, per
 /// ``AbteilungsDistanzService`` sortiert.
@@ -1116,14 +1125,6 @@ private struct EinkaufslisteView: View {
         return verfuegbarkeitsgefiltert(basis)
     }
 
-    /// Eine Gruppe von Artikeln derselben Artikelkategorie. Artikel ohne eigene
-    /// Kategorie fallen dabei automatisch in die Kategorie "Sonstiges".
-    private struct KategorieGruppe: Identifiable {
-        let kategorie: ArtikelKategorie
-        var artikel: [Artikel]
-        var id: PersistentIdentifier { kategorie.persistentModelID }
-    }
-
     /// `artikelListe` (üblicherweise ``artikelAufListe``), gruppiert nach
     /// Artikelkategorie und sortiert über ``AbteilungsDistanzService`` — der
     /// gelernten, paarweisen Abteilungs-Distanzmatrix dieses Geschäfts
@@ -1293,52 +1294,20 @@ private struct EinkaufslisteView: View {
     }
 
     var body: some View {
-        let artikelListe = artikelAufListe
-        let gruppen = kategorieGruppen(fuer: artikelListe)
-        List {
-            ForEach(gruppen) { gruppe in
-                let kategorie = gruppe.kategorie
-                Section {
-                    ForEach(gruppe.artikel) { artikel in
-                        ArtikelAbhakZeile(
-                            artikel: artikel,
-                            eintrag: einkaufsliste.eintrag(fuer: artikel),
-                            mengeAnzeige: menge(fuer: artikel),
-                            istAbgehakt: istAbgehakt(artikel),
-                            mehrfachKategorisiert: kategorienFuerAnzeige(artikel).count > 1,
-                            abhaken: { umschalten(artikel, kategorie: kategorie) },
-                            mengeErhoehen: { mengeErhoehen(artikel) },
-                            mengeVerringern: { mengeVerringern(artikel) },
-                            dauerhaftEntfernen: istAbgehakt(artikel) ? { entferneDauerhaft(artikel) } : nil
-                        )
-                    }
-                } header: {
-                    EinkaufslistenSektionHeader(kategorie: gruppe.kategorie)
-                }
-            }
-
-            if artikelListe.isEmpty {
-                if !offeneArtikel.isEmpty {
-                    ContentUnavailableView(
-                        "Keine verfügbaren Artikel",
-                        systemImage: "checklist",
-                        description: Text("Halte die Schnellauswahl oben gedrückt und aktiviere den Lernmodus, um bislang unbekannte Artikel abzuhaken.")
-                    )
-                } else if abgehakteArtikel.isEmpty {
-                    ContentUnavailableView(
-                        "Einkaufsliste ist leer",
-                        systemImage: "checklist",
-                        description: Text("Füge oben rechts Artikel zu „\(einkaufsliste.name)“ hinzu.")
-                    )
-                } else {
-                    ContentUnavailableView(
-                        "Alles erledigt",
-                        systemImage: "checkmark.circle.fill",
-                        description: Text("Tippe oben auf die Schnellauswahl, um auch abgehakte Artikel zu sehen.")
-                    )
-                }
-            }
-        }
+        let gruppen = kategorieGruppen(fuer: artikelAufListe)
+        EinkaufslisteDarstellungsView(
+            gruppen: gruppen,
+            offeneArtikel: offeneArtikel,
+            abgehakteArtikel: abgehakteArtikel,
+            einkaufsliste: einkaufsliste,
+            istAbgehakt: istAbgehakt(_:),
+            menge: menge(fuer:),
+            mehrfachKategorisiert: { artikel in kategorienFuerAnzeige(artikel).count > 1 },
+            abhaken: umschalten(_:kategorie:),
+            mengeErhoehen: mengeErhoehen(_:),
+            mengeVerringern: mengeVerringern(_:),
+            dauerhaftEntfernen: entferneDauerhaft(_:)
+        )
         .refreshable { await pullToRefreshSynchronisieren() }
         .safeAreaInset(edge: .top) {
             VStack(alignment: .leading, spacing: 0) {
@@ -1651,7 +1620,7 @@ private struct SchnellauswahlButton: View {
 
 /// Kopfzeile einer Einkaufslisten-Kategorie-Sektion mit Icon/Farbe
 /// (``ArtikelKategorie/standardSymbol``/``standardFarbeHex``).
-private struct EinkaufslistenSektionHeader: View {
+struct EinkaufslistenSektionHeader: View {
     let kategorie: ArtikelKategorie
 
     var body: some View {
@@ -1678,7 +1647,7 @@ private struct EinkaufslistenSektionHeader: View {
 /// bei noch offenen Artikeln), und ein voller Swipe löst dann bewusst **nicht**
 /// automatisch aus — sonst könnte ein schnelles Wischen versehentlich dauerhaft
 /// löschen statt nur die Menge zu erhöhen.
-private struct ArtikelAbhakZeile: View {
+struct ArtikelAbhakZeile: View {
     let artikel: Artikel
     /// Der offene Einkaufslisten-Eintrag dieses Artikels — `nil`, wenn er bereits
     /// abgehakt wurde (dann gibt es keinen Eintrag mehr, siehe ``mengeAnzeige``).
@@ -1690,6 +1659,9 @@ private struct ArtikelAbhakZeile: View {
     /// erscheint — blendet ein kleines Hinweis-Symbol neben dem Namen ein, damit
     /// das nicht wie ein doppelter Eintrag wirkt.
     let mehrfachKategorisiert: Bool
+    /// Optionaler 4pt-Farbstreifen links — gesetzt von ``EinkaufslisteDarstellungsView``
+    /// wenn der Nutzer „Farbiger Streifen" aktiviert hat.
+    var kategoriefarbe: Color? = nil
     let abhaken: () -> Void
     let mengeErhoehen: () -> Void
     let mengeVerringern: () -> Void
@@ -1698,42 +1670,59 @@ private struct ArtikelAbhakZeile: View {
     @State private var zeigeMengenSheet = false
 
     var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
-                    Text(artikel.name)
-                        .strikethrough(istAbgehakt)
-                        .foregroundStyle(istAbgehakt ? .secondary : .primary)
-                    if mehrfachKategorisiert {
-                        Image(systemName: "rectangle.on.rectangle")
-                            .font(.caption2)
+        if kategoriefarbe != nil {
+            zeilenInhalt
+                .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 16))
+        } else {
+            zeilenInhalt
+        }
+    }
+
+    private var zeilenInhalt: some View {
+        HStack(spacing: 0) {
+            if let farbe = kategoriefarbe {
+                Rectangle()
+                    .fill(istAbgehakt ? Color.green : farbe)
+                    .frame(width: 4)
+            }
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 4) {
+                        Text(artikel.name)
+                            .strikethrough(istAbgehakt)
+                            .foregroundStyle(istAbgehakt ? .secondary : .primary)
+                        if mehrfachKategorisiert {
+                            Image(systemName: "rectangle.on.rectangle")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .accessibilityLabel("Artikel gehört mehreren Kategorien an und erscheint in mehreren Abschnitten")
+                        }
+                    }
+                    if let produktName = eintrag?.produkt?.name {
+                        Text(produktName)
+                            .font(.caption)
                             .foregroundStyle(.secondary)
-                            .accessibilityLabel("Artikel gehört mehreren Kategorien an und erscheint in mehreren Abschnitten")
+                    }
+                    if let notiz = eintrag?.notiz, !notiz.isEmpty {
+                        Text(notiz)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
-                if let produktName = eintrag?.produkt?.name {
-                    Text(produktName)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                Spacer()
+                Text("\(mengeAnzeige.formatted()) \(artikel.einheit.kurzform)")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .contentShape(Rectangle())
+                    .onTapGesture { if eintrag != nil { zeigeMengenSheet = true } }
+                Button(action: abhaken) {
+                    Image(systemName: istAbgehakt ? "checkmark.circle.fill" : "circle")
+                        .font(.title3)
+                        .foregroundStyle(istAbgehakt ? Color.accentColor : .secondary)
                 }
-                if let notiz = eintrag?.notiz, !notiz.isEmpty {
-                    Text(notiz)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                .buttonStyle(.plain)
             }
-            Spacer()
-            Text("\(mengeAnzeige.formatted()) \(artikel.einheit.kurzform)")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .contentShape(Rectangle())
-                .onTapGesture { if eintrag != nil { zeigeMengenSheet = true } }
-            Button(action: abhaken) {
-                Image(systemName: istAbgehakt ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
-                    .foregroundStyle(istAbgehakt ? Color.accentColor : .secondary)
-            }
-            .buttonStyle(.plain)
+            .padding(.leading, kategoriefarbe != nil ? 12 : 0)
         }
         .swipeActions(edge: .leading) {
             Button(action: mengeVerringern) {

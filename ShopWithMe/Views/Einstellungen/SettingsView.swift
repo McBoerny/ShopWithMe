@@ -4,8 +4,8 @@ import SwiftUI
 /// Kategorien-, Geschäftstypen- und Einkaufslisten-Verwaltung, Datensynchronisation
 /// und App-Informationen.
 ///
-/// „Artikel“ und „Geschäfte“ sind seit GitHub #1 keine eigenen Tabs mehr (die App
-/// startet immer direkt auf „Einkaufen“, siehe ``RootView``) — beide verlinken
+/// „Artikel" und „Geschäfte" sind seit GitHub #1 keine eigenen Tabs mehr (die App
+/// startet immer direkt auf „Einkaufen", siehe ``RootView``) — beide verlinken
 /// direkt auf ``ArtikelListView``/``GeschaeftListView``, die deshalb bewusst
 /// keinen eigenen `NavigationStack` anlegen, sondern den von hier erwarten.
 ///
@@ -27,6 +27,7 @@ private enum SettingsNavigationsziel: Hashable {
     case produkte
     case geschaeftsTypen
     case einkaufslisten
+    case listendarstellung
     case preishistorie
     case syncOrdner
     case debugging
@@ -57,6 +58,9 @@ struct SettingsView: View {
                     }
                     NavigationLink(value: SettingsNavigationsziel.einkaufslisten) {
                         Label("Einkaufslisten", systemImage: "checklist")
+                    }
+                    NavigationLink(value: SettingsNavigationsziel.listendarstellung) {
+                        Label("Listendarstellung", systemImage: "list.bullet.rectangle")
                     }
                     NavigationLink(value: SettingsNavigationsziel.preishistorie) {
                         Label("Preishistorie", systemImage: "clock.arrow.circlepath")
@@ -95,6 +99,8 @@ struct SettingsView: View {
                     GeschaeftsTypenVerwaltungView()
                 case .einkaufslisten:
                     EinkaufslistenVerwaltungView()
+                case .listendarstellung:
+                    EinkaufslisteDarstellungsSettingsView()
                 case .preishistorie:
                     PreisHistorieSettingsView()
                 case .syncOrdner:

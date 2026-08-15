@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.15 (Build 281) — Konfigurierbare Listendarstellung (Liste / Chips / Kacheln)
+
+Hardcodierter `List/Section/ArtikelAbhakZeile`-Block in `EinkaufslisteView`
+ersetzt durch modulares `EinkaufslisteDarstellungsView`-System: klassische Liste
+(wahlweise Akkordeon, Fortschrittsbalken, Kategorie-Farbstreifen), Chips groß/klein
+(`ChipFlowLayout`, Akkordeon, kein Icon bei groß) und Kacheln (2 oder 3 Spalten,
+optional Kategorie-Farbhintergrund). Einstellungen -> "Listendarstellung"; alle
+Optionen via `@AppStorage(DarstellungsKey.*)` persistiert. `ChipFlowLayout` aus
+`EinkaufslisteDesignVarianten.swift` extrahiert und in `DesignSystem/` zentralisiert.
+
 ## v0.15 (Build 280) — SyncConnector-Abstraktionsschicht eingeführt
 
 `SyncConnector`-Protokoll + `FileShareSyncConnector` als erste Implementierung
