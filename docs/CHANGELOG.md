@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.16 (Build 282) — Minor-Versionssprung: konfigurierbare Listendarstellung
+
+Enthält alle Änderungen aus v0.15 (SyncConnector-Abstraktionsschicht,
+konfigurierbare Listendarstellung).
+
 ## v0.15 (Build 281) — Konfigurierbare Listendarstellung (Liste / Chips / Kacheln)
 
 Hardcodierter `List/Section/ArtikelAbhakZeile`-Block in `EinkaufslisteView`
