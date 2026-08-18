@@ -49,6 +49,7 @@ struct EinkaufenView: View {
     /// anfasst) ihn je erreichen kann.
     private static let inaktivitaetsSchwelleOhneGeschaeft: TimeInterval = 24 * 60 * 60
 
+    @AppStorage("einkaufen.zuletztGewaehlteListe") private var gespeicherteListenID: String = ""
     @State private var ausgewaehltesGeschaeft: Geschaeft?
     @State private var ausgewaehlteListe: Einkaufsliste?
     @State private var zeigeNeueListe = false
@@ -167,7 +168,10 @@ struct EinkaufenView: View {
             pruefeStandortErgaenzung(fuer: neu)
             if neu != nil { letzteInteraktion = .now }
         }
-        .onChange(of: ausgewaehlteListe) { _, _ in Task { await einkaufSicherstellen() } }
+        .onChange(of: ausgewaehlteListe) { _, neue in
+            if let neue { gespeicherteListenID = neue.id.uuidString }
+            Task { await einkaufSicherstellen() }
+        }
         .onChange(of: scenePhase) { _, neu in
             guard neu == .active else { return }
             inaktivitaetPruefen()
@@ -529,6 +533,11 @@ struct EinkaufenView: View {
     /// ``Einkaufsliste/standard(context:)`` eine erste an.
     private func listeSicherstellen() async {
         guard ausgewaehlteListe == nil else { return }
+        if let gespeicherteID = UUID(uuidString: gespeicherteListenID),
+           let gespeicherte = einkaufslisten.first(where: { $0.id == gespeicherteID }) {
+            ausgewaehlteListe = gespeicherte
+            return
+        }
         if let erste = einkaufslisten.first {
             ausgewaehlteListe = erste
             return
