@@ -77,6 +77,46 @@ inhaltlich nicht widersprechen.
 `README.md` verlinkt sowohl auf `docs/CHANGELOG.md` als auch auf
 `docs/BEDIENUNGSANLEITUNG.md`.
 
+## Typografische Anführungszeichen in Swift-Dateien — VERBOTENE FEHLERQUELLE
+
+**Das Edit-Tool konvertiert ASCII-`"` (U+0022) in typografische Curly-Quotes `"` / `"` (U+201C/D), wenn der neue Text Standard-Anführungszeichen enthält.** Das bricht Swift-String-Literale sofort, weil der Swift-Compiler U+201C/D als illegale String-Delimiter behandelt und Fehler wie „Unterminated string literal", „Cannot find 'X' in scope" oder „Invalid character in source file" wirft. Dreimal in diesem Projekt passiert.
+
+**Pflichtregeln:**
+
+1. **Nach jedem Edit mit String-Literalen sofort `XcodeRefreshCodeIssuesInFile` aufrufen** — nicht erst beim vollständigen Build.
+
+2. **Im `old_string` des Edit-Tools: typografische Quotes so übernehmen, wie sie in der Datei stehen** (also `"` / `"` statt `"`), damit das Tool keine Konvertierung vornimmt. Mit `cat -v` oder Python prüfen, welcher Byte-Wert tatsächlich in der Datei steht.
+
+3. **Im `new_string`: niemals `"` (U+201D) oder `"` (U+201C) als String-Delimiter** schreiben. Quoted Terms in Swift-Strings mit `\"...\"`  oder `\u{201E}...\u{201D}` formulieren.
+
+4. **Fix, wenn es trotzdem passiert:** Python-Byte-Ersetzung auf den betroffenen Zeilen:
+   - `\xe2\x80\x9c` (U+201C) → `\x22` (ASCII `"`)
+   - `\xe2\x80\x9d` (U+201D) bei Paaren (U+201D gefolgt von U+201D): erstes behalten (Inhalt), zweites → `\x22`
+   - `\xe2\x80\x9d` (U+201D) allein → `\x22`
+   - Zeilen außerhalb des bearbeiteten Bereichs **nicht** anfassen (dort können U+201D korrekte Inhalts-Zeichen sein).
+
+Gilt auch für `@Guide`-Macro-Attribute in `@Generable`-Structs.
+
+## Belegscan-Integrationstests: Fixture-Regeln
+
+Fixture-Dateien in `ShopWithMeTests/Belege/*.json` repräsentieren die autoritären
+Zielerwartungen des Scanners. Für die KI gelten folgende Regeln:
+
+- **Fixtures nie selbst ändern.** Weder Erwartungswerte abschwächen (Trefferquote
+  senken, Datum/Adresse anpassen) noch Items entfernen, um einen Test grün zu machen.
+- **Änderungen nur durch den User.** Die KI darf jedoch Korrekturen *vorschlagen*,
+  wenn offensichtliche Authoring-Fehler entdeckt werden (z.B. Copy-Paste-Datum,
+  falsches Dezimaltrennzeichen).
+- **Codeverbesserung steht im Vordergrund.** Schlägt ein Test fehl, wird der
+  Scanner-Code (`ReceiptScanService.swift`) oder die Test-Matching-Logik
+  (`BelegScanIntegrationTests.swift`) verbessert — nicht das Fixture.
+- **Typische Verbesserungsansätze:**
+  - `@Guide`/`anweisungen` im Scanner präzisieren (Datum, Mengen, Markennamen vs.
+    Firmenname, Abkürzungen)
+  - Adress-/Namensvergleich im Test normalisieren (Umlaute: ü↔ue, ß↔ss) um
+    KI-korrekte UTF-8-Ausgaben gegen ASCII-Fixtures matchen zu können
+  - OCR-Parameter tunen (z.B. `minimumTextHeight`, Sprache)
+
 ## Doku-Konvention
 
 Neue, substanzielle Design-/Architekturentscheidungen bekommen eine eigene
