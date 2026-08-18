@@ -11,9 +11,13 @@ import SwiftData
 /// Produkt ohne Artikel-Kontext anzulegen ergibt fachlich keinen Sinn.
 /// Automatisch angelegte Platzhalter-Produkte (``Produkt/istStandard``) sind
 /// ausgeblendet, da sie kein vom Nutzer benanntes, echtes Produkt darstellen.
+///
+/// Kein SessionLeaseGate auf Listenebene — die Liste ist rein lesend; das Lease
+/// übernimmt ProduktEditView beim Öffnen als Sheet selbst.
 struct ProduktVerwaltungView: View {
     @Query(sort: \Produkt.name) private var alleProdukte: [Produkt]
     @State private var suchtext = ""
+    @State private var bearbeitetesProdukt: Produkt?
 
     private var produkte: [Produkt] {
         let echte = alleProdukte.filter { !$0.istStandard }
@@ -22,24 +26,29 @@ struct ProduktVerwaltungView: View {
     }
 
     var body: some View {
-        SessionLeaseGate { listInhalt }
-    }
-
-    private var listInhalt: some View {
         List {
             ForEach(produkte) { produkt in
-                NavigationLink {
-                    ProduktEditView(produkt: produkt, istNeu: false)
+                Button {
+                    bearbeitetesProdukt = produkt
                 } label: {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(produkt.name)
-                        if let artikelName = produkt.artikel?.name {
-                            Text(artikelName)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(produkt.name)
+                                .foregroundStyle(.primary)
+                            if let artikelName = produkt.artikel?.name {
+                                Text(artikelName)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
                     }
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
             }
         }
         .searchable(text: $suchtext, prompt: "Produkt suchen")
@@ -51,13 +60,16 @@ struct ProduktVerwaltungView: View {
                     description: Text(
                         suchtext.isEmpty
                             ? "Produkte werden je Artikel angelegt."
-                            : "Kein Produkt passt zu „\(suchtext)“."
+                            : "Kein Produkt passt zu \u{201E}\(suchtext)\u{201D}."
                     )
                 )
             }
         }
         .navigationTitle("Produkte")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $bearbeitetesProdukt) { produkt in
+            ProduktEditView(produkt: produkt, istNeu: false)
+        }
     }
 }
 
