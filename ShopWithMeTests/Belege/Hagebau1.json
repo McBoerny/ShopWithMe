@@ -1,0 +1,13 @@
+{
+  "beschreibung": "Hagebaumarkt Fuerstenfeldbruck - zerknittert, Barcode-Format",
+  "sollErgebnis": {
+    "geschaeftName": "hagebaumarkt",
+    "geschaeftAdresse": "Nicolaus-Otto-Strasse 3, 82256 Fuerstenfeldbruck",
+    "datum": "2026-07-04",
+    "positionen": [
+      { "artikelName": "COOL FISH ARTEM", "barcode": "4014719000608", "einzelpreis": "2.32", "menge": 2 },
+      { "artikelName": "HANDSCHUHE GR08", "barcode": "8717869059453", "einzelpreis": "5.49" }
+    ]
+  },
+  "mindestPositionenTrefferQuote": 0.5
+}

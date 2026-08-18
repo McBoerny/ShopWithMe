@@ -83,6 +83,30 @@ enum AISuggestionService {
         return antwort.content
     }
 
+    /// Schlägt für einen auf einem Kassenbon erkannten, oft abgekürzten oder
+    /// markenspezifischen Produktnamen (z.B. „SEBAMED UR") einen menschenlesbaren
+    /// Klarnamen vor (z.B. „Sebamed Urea 5% Shampoo") — genutzt von
+    /// ``BelegScanView`` (GitHub #121). Bestehende Klarnames des Artikels werden als
+    /// Kontext mitgegeben, damit das Modell bevorzugt bekannte Namen wiederverwendet.
+    static func produktKlarname(
+        fuerErkannterName erkannterName: String,
+        bekannteKlarnamen: [String]
+    ) async throws -> ProduktKlarnameVorschlag {
+        let bekannteAufzaehlung = bekannteKlarnamen.isEmpty ? "–" : bekannteKlarnamen.joined(separator: ", ")
+        let anweisungen = """
+        Du hilfst in einer Einkaufs-App dabei, für auf Kassenbons erkannte, oft \
+        abgekürzte Produktbezeichnungen einen menschenlesbaren Klarnamen zu ermitteln. \
+        Wähle bevorzugt einen aus dieser Liste bereits bekannter Klarnamen, falls er \
+        inhaltlich passt: \(bekannteAufzaehlung). \
+        Falls keiner passt, formuliere einen neuen, allgemeinverständlichen Namen \
+        (z.B. „Sebamed Urea 5% Shampoo" für „SEBAMED UR"). Bleibe sachlich — \
+        erfinde keine Marke, wenn du dir nicht sicher bist.
+        """
+        let session = LanguageModelSession(instructions: anweisungen)
+        let antwort = try await session.respond(to: "Bon-Text: \(erkannterName)", generating: ProduktKlarnameVorschlag.self)
+        return antwort.content
+    }
+
     /// Schlägt für einen ``GeschaeftTyp`` (z.B. Drogerie) typische Abteilungen vor,
     /// genutzt in der Typ-Verwaltung der Einstellungen (GitHub #5), um
     /// ``ArtikelKategorie/geschaeftsTypen`` schneller zu befüllen. Bestehende
@@ -133,4 +157,14 @@ struct KategorieMatchVorschlag {
 struct ArtikelMatchVorschlag {
     @Guide(description: "Name des am besten passenden bestehenden Artikels, oder ein leerer String, falls keiner wirklich passt")
     var passenderArtikel: String
+}
+
+/// Von der lokalen Apple-KI vorgeschlagener, menschenlesbarer Klarname für ein auf
+/// einem Kassenbon erkanntes Produkt — siehe
+/// ``AISuggestionService/produktKlarname(fuerErkannterName:bekannteKlarnamen:)``
+/// (GitHub #121).
+@Generable
+struct ProduktKlarnameVorschlag {
+    @Guide(description: "Menschenlesbarer Klarname des Produkts — bevorzugt aus den bekannten Namen, sonst ein neu formulierter allgemeinverständlicher Name")
+    var klarname: String
 }

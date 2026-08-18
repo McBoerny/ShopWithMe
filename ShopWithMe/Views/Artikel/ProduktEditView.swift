@@ -56,7 +56,7 @@ struct ProduktEditView: View {
                         LabeledContent("Artikel", value: artikelName)
                     }
                 } footer: {
-                    Text("Der konkrete Produktname, z.B. \"Paradontol Zahncreme\".")
+                    Text("Menschenlesbarer Klarname des Produkts, z.B. \"Paradontol Zahncreme\" — unabhängig vom geschäftsspezifischen Bon-Text.")
                 }
 
                 if !istNeu {
@@ -95,7 +95,7 @@ struct ProduktEditView: View {
                     } header: {
                         Text("Produktnamen je Geschäft")
                     } footer: {
-                        Text("Derselbe Produktname kann je Geschäft unterschiedlich lauten, z.B. \"Parad Zahncr\" in Geschäft A, \"Paradontol Zahn\" in Geschäft B.")
+                        Text("Der auf Kassenbons gedruckte, oft abgekürzte Name — kann je Geschäft unterschiedlich lauten (z.B. \"Parad Zahncr\" vs. \"Paradontol Zahn\"). Wird beim Belegscan automatisch mit diesem Produkt verknüpft.")
                     }
                 }
 

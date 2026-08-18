@@ -105,13 +105,21 @@ Belegscans hinweg.
    Treffer).
 5. **Prüfen/Korrigieren** (`ErgebnisListe`/`PositionsZeile` in `BelegScanView.swift`):
    editierbare Kopie jeder Position (`BearbeitbarePosition`: `erkannterName`
-   unveränderlich, `artikelName`/`preisText` editierbar, `zugeordneterArtikel` aus
-   Schritt 4, `boundingBox` aus Schritt 4) plus editierbares `belegDatum` (vorbelegt
-   aus `erkanntesDatum`, sonst Startzeit des Einkaufsvorgangs bzw. heute). Details
-   zur Anzeige/Korrektur der Zuordnung siehe „Automatische Artikel-Zuordnung“ unten.
+   unveränderlich, `artikelName`/`produktKlarname`/`preisText` editierbar,
+   `zugeordneterArtikel` aus Schritt 4, `boundingBox` aus Schritt 4) plus
+   editierbares `belegDatum`. Drei Namens-Ebenen pro Position (GitHub #121):
+   - `erkannterName` (read-only): der rohe Bon-Text, z.B. „SEBAMED UR” — wird als
+     `Preispunkt.produktName` und ggf. als geschäftsspezifischer `Produktname` gespeichert.
+   - `artikelName` (editierbar): verknüpft die Position mit einem generischen `Artikel`
+     (z.B. „Shampoo”) — zeigt nach erfolgreicher Zuordnung dessen Namen.
+   - `produktKlarname` (editierbar, neu): menschenlesbarer Klarname (z.B. „Sebamed
+     Urea 5%”), von der KI aus bestehenden Produkt-Klarnames vorbelegt oder neu
+     generiert; leer gelassen → `erkannterName` dient als Produktidentität. Wird als
+     `Produkt.name` und als `Preispunkt.alternativerName` übernommen.
+   Details zur Anzeige/Korrektur der Zuordnung siehe „Automatische Artikel-Zuordnung” unten.
 6. **Übernahme** (`BelegScanView.uebernehmen()`): abhängig vom `BelegScanKontext`,
    in allen drei Fällen mit `position.effektivZugeordneterArtikel` verknüpft (siehe
-   „Automatische Artikel-Zuordnung“ unten):
+   „Automatische Artikel-Zuordnung” unten):
    - `.einkaufsvorgang(Einkaufsvorgang)`: die operative Buchungszeile (Namensabgleich
      `passtZu` gegen bereits abgehakte `KaufEintrag`e dieses Einkaufsvorgangs) bleibt
      bis auf das Datum unverändert (bzw. wird bei fehlendem Treffer neu, rein
@@ -120,18 +128,17 @@ Belegscans hinweg.
    - `.geschaeft(Geschaeft)`: unabhängig von einem laufenden Einkauf, direkt aus der
      Geschäfts-Detailansicht. Jede Position erzeugt einen `Preispunkt`, keinen
      `KaufEintrag` (kein laufender Einkauf, also keine operative Rolle).
-   - `.unbekannt`: geschäftsloser Scan (siehe „Automatischer Geschäfts-Abgleich“
+   - `.unbekannt`: geschäftsloser Scan (siehe „Automatischer Geschäfts-Abgleich”
      unten) — verhält sich sonst wie `.geschaeft`, nur dass das Geschäft erst nach
      dem Scan feststeht (`erkanntesGeschaeft` statt eines fest übergebenen Werts).
-   - In allen Fällen: weicht der (ggf. korrigierte) Anzeigetext vom rohen erkannten
-     Namen ab, wird er als `alternativerName` auf dem `Preispunkt` übernommen
-     (`leiteAlternativenNamenAb`) und zusätzlich als `ArtikelAlias` gelernt — das ist
-     die Quelle für das Mitlernen beim nächsten Scan (siehe „Mitlernen zwischen
-     Belegscans“ unten).
+   - In allen Fällen: weicht `produktKlarname` vom rohen `erkannterName` ab, wird er
+     als `alternativerName` auf dem `Preispunkt` übernommen (`leiteAlternativenNamenAb`)
+     und als `ArtikelAlias` gelernt — das ist die Quelle für das Mitlernen beim
+     nächsten Scan (siehe „Mitlernen zwischen Belegscans” unten).
    - Existiert für Artikel+Geschäft bereits **heute** ein `Preispunkt` mit
      abweichendem Preis, zeigt die Prüf-Ansicht dafür einen Hinweis mit
-     Umschalt-Button („wird ersetzt" ↔ „Bisherigen behalten") — siehe
-     `docs/PREISHISTORIE_VERDICHTUNG.md` → „Interaktive Tages-Kollisionsabfrage".
+     Umschalt-Button („wird ersetzt” ↔ „Bisherigen behalten”) — siehe
+     `docs/PREISHISTORIE_VERDICHTUNG.md` → „Interaktive Tages-Kollisionsabfrage”.
 
 ## Originalbeleg anzeigen
 
@@ -315,26 +322,28 @@ Pipeline. Ersetzt die frühere, nur für `.geschaeft`/`.unbekannt` beim **Speich
 (nicht in der Prüf-Ansicht sichtbare) `passendesArtikel(fuer:)`-Methode — `.einkaufsvorgang`
 bekam bislang gar keine Katalog-Zuordnung.
 
-**Anzeige/Korrektur (`PositionsZeile`):**
-- Das Artikel-Textfeld zeigt den gefundenen generischen Namen (`alias` bzw.
-  `artikel.name`). Weicht das vom rohen Beleg-Text (`erkannterName`) ab, erscheint
-  dieser zusätzlich klein darunter als „Original: „<Text>““ — beide Namen sind
-  damit gleichzeitig sichtbar.
-- Ein Status-Label darunter zeigt „Wird verknüpft mit „<Artikel>““ (Treffer) oder
-  „Neu erkannt“ (keine Stufe erfolgreich).
+**Anzeige/Korrektur (`PositionsZeile`):** Zwei Textfelder pro Position (GitHub #121):
+
+- **Artikel-Textfeld** (`artikelName`): zeigt immer den generischen Artikelnamen
+  (z.B. „Shampoo”) — nie mehr den Alias/Klarname wie zuvor. Ein Status-Label
+  darunter zeigt „Wird verknüpft mit „<Artikel>”” (Treffer) oder „Neu erkannt”
+  (keine Stufe erfolgreich). Bei „Neu erkannt” erscheint darunter zusätzlich der
+  rohe Bon-Text als „Original: „<Text>””.
+- **Produktname-Textfeld** (`produktKlarname`, neu): erscheint unterhalb des
+  Status-Labels, sobald ein Artikel zugeordnet ist. Vorbelegt mit dem Klarname des
+  gematchten `Produkt`s, dem gespeicherten Alias-Namen oder einem KI-Vorschlag
+  aus den bestehenden Klarnames des Artikels. Leer lassen → `erkannterName` wird
+  als Produktidentität verwendet. Weicht der Klarname vom `erkannterName` ab,
+  erscheint dieser zusätzlich als „Erkannt auf Bon: „<Text>”” darunter.
 - **`BearbeitbarePosition.effektivZugeordneterArtikel`**: liefert die automatische
-  Zuordnung nur, solange der Text im Feld noch exakt zum zugeordneten Artikelnamen
-  passt — bearbeitet der Nutzer das Feld frei weiter, ohne neu auszuwählen, gilt
-  die Position wieder als „neu erkannt“, rein reaktiv ohne `onChange`-Seiteneffekt.
-  Sowohl Anzeige als auch `BelegScanView.uebernehmen()` nutzen ausschließlich diese
-  Property.
-- **Inline-Autocomplete**: solange das Textfeld fokussiert ist, erscheinen bis zu 5
-  nach Teilstring gefilterte Vorschläge aus allen vorhandenen `Artikel`n direkt
-  darunter; Antippen übernimmt Name + Zuordnung. Passt der eingegebene Text zu
-  keinem bestehenden Artikel, erscheint zusätzlich „„<Text>“ neu anlegen“ — öffnet
-  `ArtikelEditView(artikel: entwurf, istNeu: true)` als Sheet (identisches Muster
-  wie `PreispunktZuordnenSheet.neuenArtikelAnlegen()`), übernimmt den neu
-  gesicherten Artikel danach automatisch als Zuordnung.
+  Zuordnung nur, solange der Text im Artikel-Feld noch exakt zum zugeordneten
+  Artikelnamen passt — bearbeitet der Nutzer das Feld frei weiter, ohne neu
+  auszuwählen, gilt die Position wieder als „neu erkannt”, rein reaktiv ohne
+  `onChange`-Seiteneffekt. Sowohl Anzeige als auch `BelegScanView.uebernehmen()`
+  nutzen ausschließlich diese Property. Das Produktname-Feld verschwindet dann
+  ebenfalls (da ohne Artikel-Kontext bedeutungslos).
+- **Inline-Autocomplete** (nur Artikel-Feld): solange fokussiert, bis zu 5
+  Teilstring-Vorschläge; „„<Text>” neu anlegen” öffnet `ArtikelEditView` als Sheet.
 
 ## Dauerhaft ignorierte Artikel pro Geschäft
 

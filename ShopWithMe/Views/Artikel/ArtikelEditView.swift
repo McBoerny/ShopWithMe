@@ -162,8 +162,16 @@ struct ArtikelEditView: View {
                                 bearbeitetesProdukt = produkt
                             } label: {
                                 HStack {
-                                    Text(produkt.name)
-                                        .foregroundStyle(.primary)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(produkt.name)
+                                            .foregroundStyle(.primary)
+                                        if !produkt.produktnamen.isEmpty {
+                                            let anzahl = produkt.produktnamen.count
+                                            Text("\(anzahl) Bon-Name\(anzahl == 1 ? "" : "n")")
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
                                     Spacer()
                                     Image(systemName: "chevron.right")
                                         .font(.caption)

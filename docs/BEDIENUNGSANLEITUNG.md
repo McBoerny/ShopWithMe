@@ -219,28 +219,22 @@ gewählte Geschäft, oder direkt in der Geschäfts-Detailansicht — z.B. für �
 nachträglich gefundene Bons.
 
 Lokale KI erkennt Geschäft, Datum, Artikel und Preise (Foto oder aus der
-Mediathek) und trägt sie in die passenden Positionen ein. Für jede Position
-versucht die App automatisch, den auf dem Bon erkannten (oft abgekürzten) Namen
-einem deiner vorhandenen Artikel zuzuordnen — gelingt das, zeigt das Feld den
-generischen Namen (z.B. „Zahnpasta") mit dem Original-Beleg-Text „COL-ZAH" klein
-darunter; gelingt es nicht, ist die Position als „Neu erkannt" markiert. Tippst du
-ins Namensfeld, schlägt dir die App passende vorhandene Artikel zum Antippen vor,
-oder du legst über „„…" neu anlegen" direkt einen neuen Artikel an. Hast du für
-einen Artikel bereits Produkte mit Produktnamen für das gerade erkannte Geschäft
-hinterlegt (siehe Abschnitt „Artikel"), erkennt die App darüber hinaus auch das
-konkrete Produkt — die Position zeigt dann zusätzlich klein „Erkanntes Produkt:
-…" an, und der erfasste Preis landet direkt bei diesem Produkt statt nur beim
-generischen Artikel. Ist noch kein Produktname für dieses Geschäft hinterlegt, die
-Position aber (per Textabgleich oder KI) trotzdem einem Artikel zugeordnet, legt
-die App automatisch ein neues, eigenständiges Produkt an, statt den Preis im
-gemeinsamen Basis-Eintrag des Artikels zu vermischen — verschiedene Marken
-desselben Artikels behalten dadurch von Anfang an getrennte Preishistorien, auch
-ohne dass du sie vorher manuell unter „Artikel" anlegst. Lässt du das Namensfeld
-dabei unverändert, dient der kleine Original-Beleg-Text als Name des neuen
-Produkts; benennst du das Feld bewusst um (z.B. auf „Paradontol Zahncreme" statt
-„Zahnpasta"), wird dein bestätigter Name verwendet — tippst du denselben Namen
-später in einem anderen Geschäft erneut ein, erkennt die App das bereits
-bestehende Produkt wieder, statt ein weiteres anzulegen. Nicht
+Mediathek) und trägt sie in die passenden Positionen ein. Jede Position hat zwei
+Namensfelder: **Artikel** (generische Kategorie, z.B. „Shampoo") und
+**Produktname** (konkreter Markenname, z.B. „Sebamed Urea 5%" — optional, von der
+KI vorbelegt). Der auf dem Bon gedruckte, oft abgekürzte Originaltext bleibt dabei
+separat erhalten und wird als geschäftsspezifischer Bon-Name gespeichert. Für jede
+Position versucht die App automatisch, den Bon-Text einem deiner vorhandenen
+Artikel zuzuordnen — gelingt das, zeigt das Artikel-Feld den generischen Namen
+(z.B. „Shampoo"); gelingt es nicht, ist die Position als „Neu erkannt" markiert.
+Tippst du ins Artikel-Feld, schlägt dir die App passende vorhandene Artikel zum
+Antippen vor, oder du legst über „„…" neu anlegen" direkt einen neuen Artikel an.
+Das Produktname-Feld zeigt: bei bekanntem Bon-Namen des Geschäfts den zugehörigen
+Klarname, sonst einen KI-Vorschlag aus deinen vorhandenen Produkten (oder einen
+neu formulierten Namen). Du kannst den Produktname jederzeit anpassen oder leer
+lassen — dann dient der Bon-Text als Produktname. Verschiedene Marken desselben
+Artikels (z.B. „Odol" und „Paradontol" für „Zahnpasta") erhalten dadurch von
+Anfang an getrennte Preishistorien, auch ohne vorherige manuelle Anlage. Nicht
 benötigte Positionen kannst du vor der Übernahme entfernen: Wischen nach links
 löscht eine Position nur für diesen Scan, Wischen nach rechts ignoriert sie
 dauerhaft für dieses Geschäft (z.B. für wiederkehrende Pfand-/Rabattzeilen).

@@ -1,0 +1,17 @@
+{
+  "beschreibung": "Hagebaumarkt Fuerstenfeldbruck - queformat , Barcode-Format",
+  "sollErgebnis": {
+    "geschaeftName": "hagebaumarkt Fürstenfeldbruck",
+    "geschaeftAdresse": "Nicolaus-Otto-Strasse 3, 82256 Fuerstenfeldbruck",
+    "datum": "2026-07-04",
+    "positionen": [
+      { "artikelName": "SCHLÜSSELANÄNG", "barcode": "4046806026079", "einzelpreis": "6.99" },
+      { "artikelName": "KRIPPENRING", "barcode": "4046806026987", "einzelpreis": "16.98", "menge": 2 },
+      { "artikelName": "FARBGITTER", "barcode": "4046806209045", "einzelpreis": "2.79" },
+      { "artikelName": "KLETTBAND", "barcode": "4042448859891", "einzelpreis": "6.99" },
+      { "artikelName": "PA-SEIL 4.0 MM", "barcode": "4046806030342", "einzelpreis": "12.99" },
+      { "artikelName": "SPUN-POLYESTER", "barcode": "4046806028714", "einzelpreis": "52.99" }
+    ]
+  },
+  "mindestPositionenTrefferQuote": 0.5
+}

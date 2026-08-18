@@ -60,11 +60,13 @@ enum BelegScanKontext {
 /// **Automatische Artikel-Zuordnung (``ArtikelZuordnungsService``):** Beim Einlesen
 /// wird jede erkannte Position dreistufig einem bestehenden, generischen ``Artikel``
 /// zugeordnet — gelernter Alias (``ArtikelAlias``), sonst Teilstring-Abgleich, sonst
-/// (nur falls lokale KI verfügbar) ein KI-Best-Match. Das Textfeld zeigt dabei den
-/// gefundenen generischen Namen, der ursprüngliche Beleg-Text bleibt zusätzlich
-/// sichtbar (``ErgebnisListe``). Bleibt jede Stufe erfolglos, gilt die Position als
-/// „neu erkannt“ — der Anwender kann dann per Autocomplete einen bestehenden Artikel
-/// wählen oder direkt einen neuen anlegen. Siehe `docs/BELEGSCAN.md`.
+/// (nur falls lokale KI verfügbar) ein KI-Best-Match. Das Artikel-Textfeld zeigt den
+/// gefundenen generischen Namen (z.B. „Shampoo”). Getrennt davon (GitHub #121) zeigt
+/// ein zweites Feld den editierbaren Produktname/Klarname (z.B. „Sebamed Urea 5%”),
+/// von der KI vorbelegt oder vom Nutzer eingegeben — getrennt vom abgekürzten
+/// Bon-Text, der als ``Preispunkt/produktName`` und ``Produktname`` erhalten bleibt.
+/// Bleibt jede Zuordnungs-Stufe erfolglos, gilt die Position als „neu erkannt”.
+/// Siehe `docs/BELEGSCAN.md`.
 ///
 /// **Originalbeleg prüfen:** Solange die Ergebnis-Prüfung läuft, bleibt das
 /// aufgenommene Foto in-memory verfügbar (``erfasstesBild``, nie persistiert) und
@@ -254,9 +256,30 @@ struct BelegScanView: View {
                         )?.preis
                         if bestehenderPreisHeute == position.einzelpreis { bestehenderPreisHeute = nil }
                     }
+                    // Klarname bestimmen (GitHub #121): Produktname-Treffer → direkt;
+                    // Alias-Treffer → alias als Klarname (war vorher im artikelName);
+                    // sonst KI-Vorschlag aus bekannten Klarnames (falls verfügbar).
+                    let produktKlarname: String
+                    if let produkt = zuordnung.produkt {
+                        produktKlarname = produkt.name
+                    } else if let alias = zuordnung.alias {
+                        produktKlarname = alias
+                    } else if let artikel = zuordnung.artikel, AISuggestionService.istVerfuegbar {
+                        let bekannteKlarnamen = artikel.produkte.filter { !$0.istStandard }.map { $0.name }
+                        let vorschlag = try? await AISuggestionService.produktKlarname(
+                            fuerErkannterName: position.artikelName,
+                            bekannteKlarnamen: bekannteKlarnamen
+                        )
+                        produktKlarname = vorschlag?.klarname ?? ""
+                    } else {
+                        produktKlarname = ""
+                    }
                     neuePositionen.append(BearbeitbarePosition(
                         erkannterName: position.artikelName,
-                        artikelName: zuordnung.alias ?? zuordnung.artikel.flatMap { modelContext.existiertNochImStore($0) ? $0.name : nil } ?? position.artikelName,
+                        // artikelName zeigt jetzt immer den generischen Artikel, nicht den Alias
+                        // (der wandert in produktKlarname — GitHub #121).
+                        artikelName: zuordnung.artikel.flatMap { modelContext.existiertNochImStore($0) ? $0.name : nil } ?? position.artikelName,
+                        produktKlarname: produktKlarname,
                         preisText: "\(position.einzelpreis.aufCentGerundet)",
                         zugeordneterArtikel: zuordnung.artikel,
                         zugeordnetesProdukt: zuordnung.produkt,
@@ -312,6 +335,8 @@ struct BelegScanView: View {
         // Folgearbeit zu GitHub #47/#116 (automatische Produkt-Neuanlage unten) —
         // reiner Enum-Wert, keine `ModelReference` nötig.
         let positionsQuelleReferenzen = positionen.map(\.zuordnungsQuelle)
+        // GitHub #121 — reiner String, keine `ModelReference` nötig.
+        let positionsKlarnamen = positionen.map { $0.produktKlarname.trimmingCharacters(in: .whitespacesAndNewlines) }
 
         Task {
             // Geocoding braucht Netzwerk (async) und muss daher vor dem
@@ -352,8 +377,14 @@ struct BelegScanView: View {
                 for (index, position) in positionen.enumerated() {
                     let name = position.artikelName.trimmingCharacters(in: .whitespacesAndNewlines)
                     let erkannterName = position.erkannterName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let getrimmterProduktKlarname = positionsKlarnamen[index]
                     let produktName: String? = erkannterName.isEmpty ? nil : erkannterName
-                    let neuerAlternativerName = leiteAlternativenNamenAb(eingegeben: name, erkannt: erkannterName)
+                    // Klarname als alternativerName → in `Preispunkt.anzeigeName` gegenüber dem
+                    // abgekürzten Bon-Text (`produktName`) bevorzugt (GitHub #121).
+                    let neuerAlternativerName = leiteAlternativenNamenAb(
+                        eingegeben: getrimmterProduktKlarname.isEmpty ? erkannterName : getrimmterProduktKlarname,
+                        erkannt: erkannterName
+                    )
                     guard !name.isEmpty,
                           let preis = Decimal(string: position.preisText.replacingOccurrences(of: ",", with: "."))
                     else { continue }
@@ -403,10 +434,14 @@ struct BelegScanView: View {
                     // ein neues, eigenständiges Produkt auflösen/anlegen statt im
                     // geteilten Standardprodukt des Artikels zu landen — siehe
                     // `docs/ARTIKEL_PRODUKT_MODELL.md` → „Automatische Neuanlage
-                    // beim Belegscan“.
-                    if produkt == nil, let artikel, positionsQuelleReferenzen[index] != .alias {
+                    // beim Belegscan”. Hat der Nutzer einen Klarname eingegeben,
+                    // wird selbst bei einem Alias-Treffer ein eigenes Produkt
+                    // aufgelöst/angelegt (GitHub #121).
+                    if produkt == nil, let artikel,
+                       positionsQuelleReferenzen[index] != .alias || !getrimmterProduktKlarname.isEmpty {
+                        let klarname = getrimmterProduktKlarname.isEmpty ? erkannterName : getrimmterProduktKlarname
                         produkt = Produkt.aufgeloestesOderNeuesProdukt(
-                            klarname: name, erkannterName: erkannterName, artikel: artikel,
+                            klarname: klarname, erkannterName: erkannterName, artikel: artikel,
                             geschaeft: geschaeftFuerPreispunkt, context: modelContext
                         )
                     }
@@ -495,18 +530,24 @@ struct BelegScanView: View {
 /// Eine editierbare Kopie einer erkannten Belegposition, solange der Anwender sie
 /// noch prüfen/korrigieren kann.
 ///
-/// `artikelName` ist editierbar, damit der Anwender die Position zwecks Zuordnung
-/// auf einen bestehenden (ggf. generischen) ``Artikel`` umbenennen kann — z.B.
-/// „Colgate Total“ → „Zahnpasta“. `erkannterName` bleibt dabei unverändert der
-/// ursprünglich erkannte Produktname und wird als ``Preispunkt/produktName``
-/// übernommen, damit die Preishistorie weiterhin nach Marke/Produkt unterscheidet.
-/// `zugeordneterArtikel` ist bereits beim Einlesen über
+/// Drei Namens-Ebenen (GitHub #121): `erkannterName` ist der unveränderliche
+/// Roh-Bon-Text (z.B. „SEBAMED UR”) — wird als ``Preispunkt/produktName`` und
+/// ggf. als ``Produktname`` (geschäftsspezifisch) übernommen. `artikelName`
+/// (editierbar) verknüpft die Position mit einem generischen ``Artikel`` (z.B.
+/// „Shampoo”). `produktKlarname` (editierbar, GitHub #121) benennt das konkrete
+/// Produkt menschenlesbar (z.B. „Sebamed Urea 5%”) — von der KI vorbelegt oder
+/// leer. `zugeordneterArtikel` ist bereits beim Einlesen über
 /// ``ArtikelZuordnungsService/zuordnen(erkannterName:bekannteAliase:alleArtikel:geschaeft:bekannteProduktnamen:)``
 /// ermittelt (siehe ``BelegScanView/verarbeite(bild:)``).
 private struct BearbeitbarePosition: Identifiable {
     let id = UUID()
     let erkannterName: String
     var artikelName: String
+    /// Menschenlesbarer Klarname des konkreten Produkts, z.B. „Sebamed Urea 5%” für
+    /// den Bon-Text „SEBAMED UR” — von der KI vorbelegt (GitHub #121), editierbar.
+    /// Wird als ``Produkt/name`` beim automatischen Anlegen/Suchen verwendet und als
+    /// ``Preispunkt/alternativerName``, sofern er vom `erkannterName` abweicht.
+    var produktKlarname: String
     var preisText: String
     var zugeordneterArtikel: Artikel?
     /// Über ``Produktname`` erkanntes konkretes Produkt (GitHub #47, Schritt
@@ -692,7 +733,7 @@ private struct ErgebnisListe: View {
                 } header: {
                     Text("Erkannte Positionen")
                 } footer: {
-                    Text("Prüfe Name und Preis, bevor du übernimmst. Bereits bekannte Produkte werden automatisch dem passenden Artikel zugeordnet. Wischen nach links löscht eine Position nur für diesen Scan, nach rechts ignoriert sie dauerhaft für dieses Geschäft. Das Lupen-Symbol markiert die erkannte Stelle im Beleg-Foto oben, sofern eindeutig zuordenbar.")
+                    Text("\"Artikel\" benennt die generische Kategorie (z.B. \"Shampoo\"), \"Produktname\" den konkreten Markennamen (z.B. \"Sebamed Urea 5%\") — leer lassen, wenn du keinen vergeben möchtest. Wischen nach links löscht eine Position nur für diesen Scan, nach rechts ignoriert sie dauerhaft für dieses Geschäft. Das Lupen-Symbol markiert die erkannte Stelle im Beleg-Foto oben.")
                 }
             }
             .safeAreaInset(edge: .bottom) {
@@ -748,16 +789,8 @@ private struct PositionsZeile: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    TextField("Artikel", text: $position.artikelName)
-                        .focused($istFokussiert)
-                    if !position.erkannterName.isEmpty,
-                       position.artikelName.localizedCaseInsensitiveCompare(position.erkannterName) != .orderedSame {
-                        Text("Original: „\(position.erkannterName)“")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                TextField("Artikel", text: $position.artikelName)
+                    .focused($istFokussiert)
                 Spacer()
                 TextField("Preis", text: $position.preisText)
                     .keyboardType(.decimalPad)
@@ -777,18 +810,32 @@ private struct PositionsZeile: View {
             }
 
             if let artikel = position.effektivZugeordneterArtikel {
-                Label("Wird verknüpft mit „\(artikel.name)“", systemImage: "checkmark.circle")
+                Label("Wird verknüpft mit „\(artikel.name)”", systemImage: "checkmark.circle")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                if let produkt = position.effektivZugeordnetesProdukt {
-                    Text("Erkanntes Produkt: \(produkt.name)")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                // Klarname-Feld (GitHub #121): editierbarer, menschenlesbarer Produktname,
+                // von der KI vorbelegt — getrennt vom generischen Artikel-Textfeld oben.
+                VStack(alignment: .leading, spacing: 2) {
+                    TextField("Produktname (optional)", text: $position.produktKlarname)
+                        .font(.subheadline)
+                    let getrimmterKlarname = position.produktKlarname.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !position.erkannterName.isEmpty, !getrimmterKlarname.isEmpty,
+                       getrimmterKlarname.localizedCaseInsensitiveCompare(position.erkannterName) != .orderedSame {
+                        Text("Erkannt auf Bon: „\(position.erkannterName)”")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             } else {
                 Label("Neu erkannt", systemImage: "sparkles")
                     .font(.caption)
                     .foregroundStyle(.orange)
+                if !position.erkannterName.isEmpty,
+                   position.artikelName.localizedCaseInsensitiveCompare(position.erkannterName) != .orderedSame {
+                    Text("Original: „\(position.erkannterName)”")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             if let bestehenderPreisHeute = position.bestehenderPreisHeute {
@@ -814,7 +861,7 @@ private struct PositionsZeile: View {
                         Button {
                             neuenArtikelAnlegen()
                         } label: {
-                            Label("„\(getrimmterName)“ neu anlegen", systemImage: "plus.circle.fill")
+                            Label("\u{201E}\(getrimmterName)\u{201D} neu anlegen", systemImage: "plus.circle.fill")
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .contentShape(Rectangle())
                         }
