@@ -12,26 +12,34 @@ import SwiftData
 /// bleibt davon unabhängig weiterhin möglich.
 struct GeschaeftsTypenVerwaltungView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \GeschaeftTyp.sortIndex) private var geschaeftsTypen: [GeschaeftTyp]
+    @Query private var geschaeftsTypen: [GeschaeftTyp]
     @State private var zeigeNeuerTyp = false
+
+    private var sortierteTypen: [GeschaeftTyp] {
+        geschaeftsTypen.sorted { $0.name.vergleicheAlphabetisch(mit: $1.name) == .orderedAscending }
+    }
 
     var body: some View {
         List {
-            ForEach(geschaeftsTypen) { typ in
+            AlphabetischeListenSektion(sortierteTypen, name: \.name) { typ in
                 NavigationLink {
                     GeschaeftsTypKategorienView(typ: typ)
                 } label: {
                     Label(typ.name, systemImage: typ.symbolName)
                 }
             }
-            Button {
-                zeigeNeuerTyp = true
-            } label: {
-                Label("Neuen Geschäftstyp anlegen", systemImage: "plus")
-            }
         }
         .navigationTitle("Geschäftstypen")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    zeigeNeuerTyp = true
+                } label: {
+                    Label("Neuen Geschäftstyp anlegen", systemImage: "plus")
+                }
+            }
+        }
         .sheet(isPresented: $zeigeNeuerTyp) {
             NeuerGeschaeftsTypSheet(naechsterSortIndex: (geschaeftsTypen.map(\.sortIndex).max() ?? -1) + 1) { _ in }
         }
@@ -140,7 +148,7 @@ private struct GeschaeftsTypKategorienView: View {
                         .foregroundStyle(.orange)
                 }
             } footer: {
-                Text("Markierte Abteilungen sind automatisch in jedem Geschäft mit diesem Typ verfügbar, ohne sie dort einzeln zuzuordnen. Mehrfachauswahl möglich. Die „KI-Vorschlag“-Markierung gilt nur für die aktuelle Sitzung, zur Überprüfung des letzten Vorschlags.")
+                Text("Markierte Abteilungen sind automatisch in jedem Geschäft mit diesem Typ verfügbar, ohne sie dort einzeln zuzuordnen. Mehrfachauswahl möglich. Die \u{201E}KI-Vorschlag\u{201C}-Markierung gilt nur für die aktuelle Sitzung, zur Überprüfung des letzten Vorschlags.")
             }
         }
         .navigationTitle(typ.name)

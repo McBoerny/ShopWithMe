@@ -15,40 +15,28 @@ import SwiftData
 /// Kein SessionLeaseGate auf Listenebene — die Liste ist rein lesend; das Lease
 /// übernimmt ProduktEditView beim Öffnen als Sheet selbst.
 struct ProduktVerwaltungView: View {
-    @Query(sort: \Produkt.name) private var alleProdukte: [Produkt]
+    @Query private var alleProdukte: [Produkt]
     @State private var suchtext = ""
     @State private var bearbeitetesProdukt: Produkt?
 
     private var produkte: [Produkt] {
-        let echte = alleProdukte.filter { !$0.istStandard }
+        let echte = alleProdukte
+            .filter { !$0.istStandard }
+            .sorted { $0.name.vergleicheAlphabetisch(mit: $1.name) == .orderedAscending }
         guard !suchtext.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return echte }
         return echte.filter { $0.name.localizedCaseInsensitiveContains(suchtext) }
     }
 
     var body: some View {
         List {
-            ForEach(produkte) { produkt in
-                Button {
-                    bearbeitetesProdukt = produkt
-                } label: {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(produkt.name)
-                                .foregroundStyle(.primary)
-                            if let artikelName = produkt.artikel?.name {
-                                Text(artikelName)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
+            // Sektionen nur ohne aktive Suche — bei Suche ist die gefilterte
+            // Flachliste übersichtlicher als wenige Buchstaben-Sektionen.
+            AlphabetischeListenSektion(
+                produkte,
+                name: \.name,
+                sektionSchwelle: suchtext.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 50 : .max
+            ) { produkt in
+                produktZeile(produkt)
             }
         }
         .searchable(text: $suchtext, prompt: "Produkt suchen")
@@ -60,7 +48,7 @@ struct ProduktVerwaltungView: View {
                     description: Text(
                         suchtext.isEmpty
                             ? "Produkte werden je Artikel angelegt."
-                            : "Kein Produkt passt zu \u{201E}\(suchtext)\u{201D}."
+                            : "Kein Produkt passt zu \u{201E}\(suchtext)\u{201C}."
                     )
                 )
             }
@@ -70,6 +58,31 @@ struct ProduktVerwaltungView: View {
         .sheet(item: $bearbeitetesProdukt) { produkt in
             ProduktEditView(produkt: produkt, istNeu: false)
         }
+    }
+
+    @ViewBuilder
+    private func produktZeile(_ produkt: Produkt) -> some View {
+        Button {
+            bearbeitetesProdukt = produkt
+        } label: {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(produkt.name)
+                        .foregroundStyle(.primary)
+                    if let artikelName = produkt.artikel?.name {
+                        Text(artikelName)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 

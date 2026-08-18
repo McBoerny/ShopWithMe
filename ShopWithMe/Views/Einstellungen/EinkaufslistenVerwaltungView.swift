@@ -10,9 +10,13 @@ import SwiftData
 /// per Wischgeste, ein zusätzlicher `EditButton()` wäre daher ohne Mehrwert.
 struct EinkaufslistenVerwaltungView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \Einkaufsliste.erstelltAm) private var listen: [Einkaufsliste]
+    @Query private var listen: [Einkaufsliste]
     @State private var zeigeNeueListe = false
     @State private var zeigeMilkForUsImport = false
+
+    private var sortierteListen: [Einkaufsliste] {
+        listen.sorted { $0.name.vergleicheAlphabetisch(mit: $1.name) == .orderedAscending }
+    }
 
     var body: some View {
         SessionLeaseGate { listInhalt }
@@ -20,13 +24,13 @@ struct EinkaufslistenVerwaltungView: View {
 
     private var listInhalt: some View {
         List {
-            Section {
-                ForEach(listen) { liste in
-                    EinkaufslisteZeile(liste: liste)
-                }
-                .onDelete(perform: listeLoeschen)
-            } footer: {
-                Text("Zum Umbenennen antippen. Zum Löschen nach links wischen — die Artikel darauf verschwinden von dieser Liste, bleiben aber im Artikel-Katalog erhalten.")
+            AlphabetischeListenSektion(
+                sortierteListen,
+                name: \.name,
+                loeschen: { offsets, gruppe in listeLoeschen(at: offsets, aus: gruppe) },
+                fusszeile: "Zum Umbenennen antippen. Zum Löschen nach links wischen — die Artikel darauf verschwinden von dieser Liste, bleiben aber im Artikel-Katalog erhalten."
+            ) { liste in
+                EinkaufslisteZeile(liste: liste)
             }
         }
         .navigationTitle("Einkaufslisten")
@@ -55,9 +59,9 @@ struct EinkaufslistenVerwaltungView: View {
         }
     }
 
-    private func listeLoeschen(at offsets: IndexSet) {
+    private func listeLoeschen(at offsets: IndexSet, aus sortiert: [Einkaufsliste]) {
         for index in offsets {
-            let liste = listen[index]
+            let liste = sortiert[index]
             // Tombstone verhindert, dass ein Peer, der die Liste noch in
             // seinem eigenen Snapshot führt, sie beim nächsten Sync
             // unwissentlich wiederbelebt (GitHub #52-Nachfolgefund).

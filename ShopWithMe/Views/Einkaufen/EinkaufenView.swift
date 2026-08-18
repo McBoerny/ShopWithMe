@@ -1669,6 +1669,14 @@ struct ArtikelAbhakZeile: View {
 
     @State private var zeigeMengenSheet = false
 
+    private var preisSpanneText: String? {
+        let preise = artikel.preispunkte.map(\.preis).filter { $0 > 0 }
+        guard !preise.isEmpty, let min = preise.min(), let max = preise.max() else { return nil }
+        let minFormatiert = min.formatted(Decimal.FormatStyle.euro)
+        if min == max { return minFormatiert }
+        return minFormatiert + " \u{2013} " + max.formatted(Decimal.FormatStyle.euro)
+    }
+
     var body: some View {
         if kategoriefarbe != nil {
             zeilenInhalt
@@ -1705,6 +1713,11 @@ struct ArtikelAbhakZeile: View {
                     }
                     if let notiz = eintrag?.notiz, !notiz.isEmpty {
                         Text(notiz)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let spanne = preisSpanneText {
+                        Text(spanne)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

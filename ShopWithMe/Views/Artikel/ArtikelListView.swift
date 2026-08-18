@@ -3,7 +3,8 @@ import SwiftData
 
 /// Wie die Artikelliste in ``ArtikelListView`` sortiert/gruppiert wird.
 private enum ArtikelSortierung: String, CaseIterable, Identifiable {
-    /// Eine flache, alphabetisch sortierte Liste (Standard).
+    /// Alphabetisch — ab 50 Artikeln automatisch nach Anfangsbuchstaben gruppiert
+    /// mit iOS A–Z-Schnellscrollleiste.
     case alphabetisch
     /// Nach ``ArtikelKategorie`` gruppiert (Reihenfolge nach
     /// ``ArtikelKategorie/sortIndex``), innerhalb einer Kategorie alphabetisch.
@@ -38,22 +39,11 @@ struct ArtikelListView: View {
     }
 
     /// ``artikel``, alphabetisch sortiert — Umlaute einsortiert bei ihrem
-    /// Basisbuchstaben (GitHub #46) statt in der rohen `@Query`-Reihenfolge
-    /// (reine Unicode-Codepoint-Sortierung durch SwiftData/SQLite), die
-    /// umlauthaltige Namen ans Ende sortiert. Grundlage für beide
-    /// ``ArtikelSortierung``-Modi, damit auch innerhalb einer Kategorie-Gruppe
-    /// (``kategorieGruppen``) alphabetisch korrekt sortiert ist.
+    /// Basisbuchstaben (GitHub #46).
     private var alphabetischSortiert: [Artikel] {
         artikel.sorted { $0.name.vergleicheAlphabetisch(mit: $1.name) == .orderedAscending }
     }
 
-    /// ``alphabetischSortiert``, gruppiert nach der ersten
-    /// ``Artikel/effektiveKategorien(context:)`` und nach
-    /// ``ArtikelKategorie/sortIndex`` sortiert — nur relevant im
-    /// ``ArtikelSortierung/kategorie``-Modus. Rein geschäftsunabhängige
-    /// Verwaltungsansicht, daher (anders als beim Einkaufen) keine „führende
-    /// Kategorie pro Geschäft“-Auflösung nötig — einfach die erste zugeordnete
-    /// Kategorie.
     private var kategorieGruppen: [KategorieGruppe] {
         var nachKategorie: [PersistentIdentifier: KategorieGruppe] = [:]
         for eintrag in alphabetischSortiert {
@@ -71,11 +61,12 @@ struct ArtikelListView: View {
         List {
             switch sortierung {
             case .alphabetisch:
-                ForEach(alphabetischSortiert) { eintrag in
+                AlphabetischeListenSektion(
+                    alphabetischSortiert,
+                    name: \.name,
+                    loeschen: { offsets, gruppe in artikelLoeschen(offsets.map { gruppe[$0] }) }
+                ) { eintrag in
                     artikelZeile(eintrag)
-                }
-                .onDelete { offsets in
-                    artikelLoeschen(offsets.map { alphabetischSortiert[$0] })
                 }
             case .abteilung:
                 ForEach(kategorieGruppen) { gruppe in
@@ -160,7 +151,8 @@ struct ArtikelListView: View {
     }
 }
 
-/// Eine Zeile in der Artikel-Liste.
+/// Eine Zeile in der Artikel-Liste — die gesamte Zeile ist tappbar dank
+/// `.contentShape(Rectangle())`, das auch den Spacer-Bereich einschließt.
 private struct ArtikelZeile: View {
     let artikel: Artikel
 
@@ -176,11 +168,8 @@ private struct ArtikelZeile: View {
                 }
             }
             Spacer()
-            if !artikel.einkaufslistenEintraege.isEmpty {
-                Image(systemName: "checklist")
-                    .foregroundStyle(.tint)
-            }
         }
+        .contentShape(Rectangle())
     }
 }
 

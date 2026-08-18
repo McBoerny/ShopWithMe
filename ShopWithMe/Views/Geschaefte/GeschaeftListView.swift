@@ -12,14 +12,14 @@ import SwiftData
 /// `docs/BELEGSCAN.md`. Der Preisschild-Scan hat bewusst keinen geschäftslosen
 /// Einstieg (siehe `docs/PREISSCHILD_SCAN.md`) und ist deshalb hier nicht verlinkt.
 ///
-/// Gruppiert alphabetisch nach Anfangsbuchstaben — bei vielen Geschäften zeigt iOS
+/// Gruppiert alphabetisch nach Anfangsbuchstaben — bei ≥50 Geschäften zeigt iOS
 /// dafür automatisch eine A–Z-Sprungleiste wie im Adressbuch (GitHub #29).
 ///
-/// Zeigt zusätzlich eine „Favoriten“-Sektion mit den meistgenutzten Geschäften
+/// Zeigt zusätzlich eine „Favoriten"-Sektion mit den meistgenutzten Geschäften
 /// (``GeschaeftHaeufigkeitService``, GitHub #31) vor der vollständigen,
 /// alphabetischen Liste — konfigurierbar über den Zähler-Button im Toolbar.
 struct GeschaeftListView: View {
-    @Query(sort: \Geschaeft.name) private var geschaefte: [Geschaeft]
+    @Query private var geschaefte: [Geschaeft]
     @Query private var einkaufsvorgaenge: [Einkaufsvorgang]
     @Environment(\.modelContext) private var modelContext
 
@@ -38,12 +38,8 @@ struct GeschaeftListView: View {
         GeschaeftHaeufigkeitService.favoriten(aus: einkaufsvorgaenge)
     }
 
-    /// ``geschaefte`` gruppiert nach Anfangsbuchstaben, alphabetisch — Umlaute
-    /// einsortiert bei ihrem Basisbuchstaben (GitHub #34).
-    private var gruppierteGeschaefte: [(buchstabe: String, geschaefte: [Geschaeft])] {
-        let sortiert = geschaefte.sorted { $0.name.vergleicheAlphabetisch(mit: $1.name) == .orderedAscending }
-        let gruppen = Dictionary(grouping: sortiert) { $0.name.alphabetischerAnfangsbuchstabe }
-        return gruppen.keys.sorted().map { buchstabe in (buchstabe, gruppen[buchstabe] ?? []) }
+    private var sortierteGeschaefte: [Geschaeft] {
+        geschaefte.sorted { $0.name.vergleicheAlphabetisch(mit: $1.name) == .orderedAscending }
     }
 
     var body: some View {
@@ -58,16 +54,13 @@ struct GeschaeftListView: View {
                 }
             }
 
-            ForEach(gruppierteGeschaefte, id: \.buchstabe) { gruppe in
-                Section(gruppe.buchstabe) {
-                    ForEach(gruppe.geschaefte) { geschaeft in
-                        NavigationLink(value: geschaeft) {
-                            GeschaeftZeile(geschaeft: geschaeft, istDuplikat: namenMitDuplikaten.contains(geschaeft.name.lowercased()))
-                        }
-                    }
-                    .onDelete { offsets in
-                        geschaeftLoeschen(gruppe.geschaefte, at: offsets)
-                    }
+            AlphabetischeListenSektion(
+                sortierteGeschaefte,
+                name: \.name,
+                loeschen: { offsets, gruppe in geschaeftLoeschen(gruppe, at: offsets) }
+            ) { geschaeft in
+                NavigationLink(value: geschaeft) {
+                    GeschaeftZeile(geschaeft: geschaeft, istDuplikat: namenMitDuplikaten.contains(geschaeft.name.lowercased()))
                 }
             }
         }

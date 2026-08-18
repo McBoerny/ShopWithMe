@@ -1,17 +1,20 @@
 import SwiftUI
 import SwiftData
 
-/// Globale Verwaltung aller ``ArtikelKategorie``n: Umbenennen, Symbol/Farbe ändern,
-/// Reihenfolge per Drag-Handle anpassen sowie Anlegen/Löschen — aufrufbar aus
-/// ``SettingsView``.
+/// Globale Verwaltung aller ``ArtikelKategorie``n: Umbenennen, Symbol/Farbe ändern
+/// sowie Anlegen/Löschen — aufrufbar aus ``SettingsView``.
 ///
 /// Anders als ``AbteilungHinzufuegenSheet`` (ordnet eine bestehende Kategorie einem
 /// Geschäft zu) bearbeitet diese Ansicht die Kategorien selbst, unabhängig von
 /// einem Geschäft.
 struct AbteilungenVerwaltungView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \ArtikelKategorie.sortIndex) private var kategorien: [ArtikelKategorie]
+    @Query private var kategorien: [ArtikelKategorie]
     @State private var zeigeNeueKategorie = false
+
+    private var sortierteKategorien: [ArtikelKategorie] {
+        kategorien.sorted { $0.name.vergleicheAlphabetisch(mit: $1.name) == .orderedAscending }
+    }
 
     var body: some View {
         SessionLeaseGate { listInhalt }
@@ -19,19 +22,18 @@ struct AbteilungenVerwaltungView: View {
 
     private var listInhalt: some View {
         List {
-            Section {
-                ForEach(kategorien) { kategorie in
-                    NavigationLink {
-                        AbteilungBearbeitenView(kategorie: kategorie)
-                    } label: {
-                        Label(kategorie.name, systemImage: kategorie.standardSymbol)
-                            .foregroundStyle(Color(hex: kategorie.standardFarbeHex))
-                    }
+            AlphabetischeListenSektion(
+                sortierteKategorien,
+                name: \.name,
+                loeschen: { offsets, gruppe in kategorieLoeschen(at: offsets, aus: gruppe) },
+                fusszeile: "Zum Ändern von Name, Symbol oder Farbe antippen. Zum Löschen nach links wischen — Artikel dieser Abteilung landen danach automatisch in \u{201E}Sonstiges\u{201C}."
+            ) { kategorie in
+                NavigationLink {
+                    AbteilungBearbeitenView(kategorie: kategorie)
+                } label: {
+                    Label(kategorie.name, systemImage: kategorie.standardSymbol)
+                        .foregroundStyle(Color(hex: kategorie.standardFarbeHex))
                 }
-                .onDelete(perform: kategorieLoeschen)
-                .onMove(perform: kategorieVerschieben)
-            } footer: {
-                Text("Zum Ändern von Name, Symbol oder Farbe antippen. Zum Löschen nach links wischen — Artikel dieser Abteilung landen danach automatisch in „Sonstiges“.")
             }
         }
         .navigationTitle("Abteilungen")
@@ -44,32 +46,21 @@ struct AbteilungenVerwaltungView: View {
                     Label("Abteilung hinzufügen", systemImage: "plus")
                 }
             }
-            ToolbarItem(placement: .cancellationAction) {
-                EditButton()
-            }
         }
         .sheet(isPresented: $zeigeNeueKategorie) {
             NeueAbteilungSheet(naechsterSortIndex: (kategorien.map(\.sortIndex).max() ?? -1) + 1) { _ in }
         }
     }
 
-    private func kategorieLoeschen(at offsets: IndexSet) {
+    private func kategorieLoeschen(at offsets: IndexSet, aus sortiert: [ArtikelKategorie]) {
         for index in offsets {
-            let kategorie = kategorien[index]
+            let kategorie = sortiert[index]
             guard kategorie.name != ArtikelKategorie.sonstigesName else { continue }
             // Tombstone verhindert, dass ein Peer, der die Kategorie noch in
             // seinem eigenen Snapshot führt, sie beim nächsten Sync
             // unwissentlich wiederbelebt (GitHub #52-Nachfolgefund).
             SyncTombstoneService.markiereGeloescht(art: SyncEntitaetsArt.artikelKategorie, id: kategorie.id, context: modelContext)
             modelContext.delete(kategorie)
-        }
-    }
-
-    private func kategorieVerschieben(from source: IndexSet, to destination: Int) {
-        var sortiert = kategorien
-        sortiert.move(fromOffsets: source, toOffset: destination)
-        for (index, kategorie) in sortiert.enumerated() {
-            kategorie.sortIndex = index
         }
     }
 }
@@ -103,7 +94,7 @@ private struct AbteilungBearbeitenView: View {
                 SymbolFarbAuswahlZeile(symbolName: $kategorie.standardSymbol, farbeHex: $kategorie.standardFarbeHex)
             } footer: {
                 if kategorie.name == ArtikelKategorie.sonstigesName {
-                    Text("„Sonstiges“ ist die Auffang-Abteilung für Artikel ohne eigene Abteilung und kann nicht gelöscht werden.")
+                    Text("\u{201E}Sonstiges\u{201C} ist die Auffang-Abteilung für Artikel ohne eigene Abteilung und kann nicht gelöscht werden.")
                 }
             }
 

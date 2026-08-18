@@ -10,10 +10,13 @@ import SwiftData
 /// Adressbuch (GitHub #8). Ein Tap auf einen Artikel fügt ihn sofort zu
 /// ``einkaufsliste`` hinzu, ganz ohne zusätzlichen Bestätigungsschritt — die
 /// Zeile zeigt danach das Standard-Abhak-Symbol und bleibt tappbar, um den
-/// Artikel wieder zu entfernen (echtes An-/Abwähl-Toggle, GitHub #45). Findet
-/// die Suche keinen exakten Treffer, kann der gesuchte Artikel direkt hier
-/// angelegt werden — er landet danach ebenfalls sofort auf der Liste
-/// (GitHub #6).
+/// Artikel wieder zu entfernen (echtes An-/Abwähl-Toggle, GitHub #45). Hat ein
+/// Artikel Produkte, erscheint ein Chevron — Tippen klappt die Produktliste
+/// inline aus, sodass ein konkretes Produkt direkt in der Liste gewählt werden
+/// kann. Sucht man nach einem Produktnamen (z.B. „Sebamed"), erscheint der
+/// zugehörige Artikel automatisch aufgeklappt. Findet die Suche keinen
+/// exakten Treffer, kann der gesuchte Artikel direkt hier angelegt werden —
+/// er landet danach ebenfalls sofort auf der Liste (GitHub #6).
 struct ArtikelHinzufuegenView: View {
     let einkaufsliste: Einkaufsliste
 
@@ -32,21 +35,20 @@ struct ArtikelHinzufuegenView: View {
     /// Unterdrückt genau eine Aktualisierung von ``wirksamerSuchtext`` — gesetzt
     /// unmittelbar bevor `suchtext` nach einer Auswahl programmatisch geleert wird.
     @State private var filterEinfrieren = false
-    /// Explizit auf `false` initialisiert und an `.searchable(isPresented:)`
-    /// gebunden, damit das Suchfeld beim Öffnen dieses Sheets garantiert
-    /// unfokussiert startet (GitHub #23) — unabhängig von der genauen Ursache
-    /// eines gelegentlichen automatischen Aktivierens durch SwiftUI.
-    @State private var sucheAktiv = false
+    /// Auf `true` initialisiert, damit die Tastatur beim Öffnen des Sheets
+    /// sofort erscheint und der Nutzer direkt tippen kann.
+    @State private var sucheAktiv = true
     @State private var neuerArtikelEntwurf: Artikel?
-    /// Artikel, für den gerade das Produktwahl-Sheet offen ist (GitHub #47,
-    /// Schritt 4/5) — nur relevant für Artikel mit mehreren eigenen Produkten,
-    /// siehe ``produkte(fuer:)``.
-    @State private var artikelFuerProduktwahl: Artikel?
-    // SwiftUI setzt die an `.sheet(item:)` gebundene Property bereits vor dem
-    // Aufruf von `onDismiss` auf `nil` zurück — ``nachNeuanlageAufraeumen`` braucht
-    // daher eine eigene, davon unabhängige Referenz auf den zuletzt angelegten
-    // Entwurf, um ihn nach dem Schließen des Editier-Sheets noch verarbeiten zu können.
+    /// SwiftUI setzt die an `.sheet(item:)` gebundene Property bereits vor dem
+    /// Aufruf von `onDismiss` auf `nil` zurück — ``nachNeuanlageAufraeumen`` braucht
+    /// daher eine eigene, davon unabhängige Referenz auf den zuletzt angelegten
+    /// Entwurf, um ihn nach dem Schließen des Editier-Sheets noch verarbeiten zu können.
     @State private var zuletztAngelegterEntwurf: Artikel?
+    /// Steuert das inline Aufklappen der Produktliste je Artikel. XOR-Verknüpfung
+    /// mit dem Auto-Aufklapp-Zustand (``trefferNurUeberProdukt(_:)``): ein Eintrag
+    /// hier kehrt den jeweiligen Standardzustand um — manuell aufklappen wenn
+    /// kein Produkttreffer, manuell zuklappen wenn Produkttreffer.
+    @State private var umgeklappteArtikel: Set<UUID> = []
 
     private var getrimmterSuchtext: String {
         wirksamerSuchtext.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -56,8 +58,9 @@ struct ArtikelHinzufuegenView: View {
     /// (GitHub #44, ``String/passtAlsSingularPluralZu(_:)``) — pro Wort des
     /// Artikelnamens, damit auch mehrteilige Namen (z.B. "Roter Apfel") erfasst
     /// werden, wenn nach "Äpfel" gesucht wird. Zusätzlich über gepflegte
-    /// Alias-Namen (GitHub #111, z.B. "Zahncreme" für "Zahnpasta") — derselbe
-    /// Artikel bleibt dabei einmalig in der Ergebnisliste.
+    /// Alias-Namen (GitHub #111, z.B. "Zahncreme" für "Zahnpasta") und über
+    /// Produktnamen (z.B. "Sebamed" für "Shampoo") — derselbe Artikel bleibt
+    /// dabei einmalig in der Ergebnisliste.
     private var gefilterteArtikel: [Artikel] {
         guard !getrimmterSuchtext.isEmpty else { return alleArtikel }
         return alleArtikel.filter { artikel in
@@ -68,15 +71,16 @@ struct ArtikelHinzufuegenView: View {
                 || alleAliase.contains {
                     $0.artikel == artikel && $0.erkannterName.localizedCaseInsensitiveContains(getrimmterSuchtext)
                 }
+                || alleProdukte.contains {
+                    $0.artikel == artikel && !$0.istStandard && $0.elternProdukt == nil
+                        && $0.name.localizedCaseInsensitiveContains(getrimmterSuchtext)
+                }
         }
     }
 
     /// Eigene, oberste-Ebene-Produkte von `artikel` (GitHub #47) — ohne das
     /// automatisch angelegte Platzhalter-Produkt (``Produkt/istStandard``) und
     /// ohne Unter-Produkte (keine Rekursions-UI, siehe ``ProduktEditView``).
-    /// Nur bei mehr als einem Treffer zeigt die Suche eine Produktwahl an
-    /// (``ProduktWahlSheet``) — bei null oder einem Produkt bleibt der
-    /// bisherige Sofort-Tap unverändert (GitHub #6/#45).
     private func produkte(fuer artikel: Artikel) -> [Produkt] {
         alleProdukte.filter { $0.artikel == artikel && !$0.istStandard && $0.elternProdukt == nil }
     }
@@ -96,6 +100,24 @@ struct ArtikelHinzufuegenView: View {
         return gruppen.keys.sorted().map { buchstabe in (buchstabe, gruppen[buchstabe] ?? []) }
     }
 
+    /// `true` wenn `artikel` in ``gefilterteArtikel`` ausschließlich über einen
+    /// Produktnamen taucht — Grundlage für das automatische Aufklappen der
+    /// Produktliste, damit der Treffer sofort sichtbar ist.
+    private func trefferNurUeberProdukt(_ artikel: Artikel) -> Bool {
+        guard !getrimmterSuchtext.isEmpty else { return false }
+        let direktTreffer = artikel.name.localizedCaseInsensitiveContains(getrimmterSuchtext)
+            || artikel.name.split(separator: " ").contains { String($0).passtAlsSingularPluralZu(getrimmterSuchtext) }
+            || alleAliase.contains { $0.artikel == artikel && $0.erkannterName.localizedCaseInsensitiveContains(getrimmterSuchtext) }
+        return !direktTreffer
+    }
+
+    /// Ob die Produktliste für `artikel` gerade aufgeklappt ist. XOR aus
+    /// Auto-Aufklapp-Zustand (``trefferNurUeberProdukt(_:)``) und
+    /// ``umgeklappteArtikel``: ein Eintrag dort kehrt den Standardzustand um.
+    private func istAufgeklappt(_ artikel: Artikel) -> Bool {
+        trefferNurUeberProdukt(artikel) != umgeklappteArtikel.contains(artikel.id)
+    }
+
     var body: some View {
         NavigationStack {
             List {
@@ -104,7 +126,7 @@ struct ArtikelHinzufuegenView: View {
                         Button {
                             neuenArtikelAnlegen()
                         } label: {
-                            Label("„\(getrimmterSuchtext)“ neu anlegen", systemImage: "plus.circle.fill")
+                            Label("\u{201E}\(getrimmterSuchtext)\u{201C} neu anlegen", systemImage: "plus.circle.fill")
                         }
                     }
                 }
@@ -114,6 +136,11 @@ struct ArtikelHinzufuegenView: View {
                         ForEach(gruppe.artikel) { artikel in
                             let bereitsAufListe = einkaufsliste.enthaelt(artikel)
                             let produkteDesArtikels = produkte(fuer: artikel)
+                            let aufgeklappt = istAufgeklappt(artikel)
+                            let gewaehltesProduktnamen = bereitsAufListe
+                                ? einkaufsliste.eintrag(fuer: artikel)?.produkt?.name
+                                : nil
+
                             HStack(spacing: 0) {
                                 Button {
                                     if bereitsAufListe {
@@ -123,20 +150,49 @@ struct ArtikelHinzufuegenView: View {
                                     }
                                     suchfeldFuerNaechsteEingabeZuruecksetzen()
                                 } label: {
-                                    ArtikelAuswahlZeile(artikel: artikel, bereitsAufListe: bereitsAufListe)
+                                    ArtikelAuswahlZeile(
+                                        artikel: artikel,
+                                        bereitsAufListe: bereitsAufListe,
+                                        gewaehltesProduktnamen: gewaehltesProduktnamen
+                                    )
                                 }
                                 .buttonStyle(.plain)
 
-                                if produkteDesArtikels.count > 1 {
+                                if !produkteDesArtikels.isEmpty {
                                     Button {
-                                        artikelFuerProduktwahl = artikel
+                                        withAnimation {
+                                            umgeklappteArtikel.formSymmetricDifference([artikel.id])
+                                        }
                                     } label: {
-                                        Image(systemName: "chevron.right.circle")
+                                        Image(systemName: aufgeklappt ? "chevron.down.circle" : "chevron.right.circle")
                                             .foregroundStyle(.secondary)
                                             .padding(.leading, 10)
                                     }
                                     .buttonStyle(.plain)
-                                    .accessibilityLabel("Produkt wählen")
+                                    .accessibilityLabel(aufgeklappt ? "Produkte zuklappen" : "Produkt wählen")
+                                }
+                            }
+
+                            if aufgeklappt && !produkteDesArtikels.isEmpty {
+                                if bereitsAufListe && einkaufsliste.eintrag(fuer: artikel)?.produkt != nil {
+                                    Button {
+                                        produktWaehlen(nil, fuer: artikel)
+                                        suchfeldFuerNaechsteEingabeZuruecksetzen()
+                                    } label: {
+                                        ProduktSubZeile(name: "Kein bestimmtes Produkt", istGewaehlt: false)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+
+                                ForEach(produkteDesArtikels) { produkt in
+                                    let istGewaehlt = einkaufsliste.eintrag(fuer: artikel)?.produkt == produkt
+                                    Button {
+                                        produktWaehlen(istGewaehlt ? nil : produkt, fuer: artikel)
+                                        suchfeldFuerNaechsteEingabeZuruecksetzen()
+                                    } label: {
+                                        ProduktSubZeile(name: produkt.name, istGewaehlt: istGewaehlt)
+                                    }
+                                    .buttonStyle(.plain)
                                 }
                             }
                         }
@@ -151,12 +207,16 @@ struct ArtikelHinzufuegenView: View {
                     )
                 }
             }
-            .searchable(text: $suchtext, isPresented: $sucheAktiv, prompt: "Artikel suchen oder anlegen")
+            // `.navigationBarDrawer(displayMode: .always)` hält Titel und „Fertig"-Button
+            // dauerhaft sichtbar — bei `.automatic` (Standard) ersetzt der aktive Suchbalken
+            // die gesamte Navigationsleiste und versteckt beide Elemente.
+            .searchable(text: $suchtext, isPresented: $sucheAktiv, placement: .navigationBarDrawer(displayMode: .always), prompt: "Artikel oder Produkt suchen")
             .onChange(of: suchtext) { _, neuerText in
                 if filterEinfrieren {
                     filterEinfrieren = false
                 } else {
                     wirksamerSuchtext = neuerText
+                    umgeklappteArtikel = []
                 }
             }
             .onChange(of: sucheAktiv) { _, aktiv in
@@ -186,11 +246,6 @@ struct ArtikelHinzufuegenView: View {
             }
             .sheet(item: $neuerArtikelEntwurf, onDismiss: nachNeuanlageAufraeumen) { entwurf in
                 ArtikelEditView(artikel: entwurf, istNeu: true)
-            }
-            .sheet(item: $artikelFuerProduktwahl) { artikel in
-                ProduktWahlSheet(artikel: artikel, produkte: produkte(fuer: artikel)) { produkt in
-                    produktWaehlen(produkt, fuer: artikel)
-                }
             }
         }
     }
@@ -261,7 +316,7 @@ struct ArtikelHinzufuegenView: View {
 
     /// Wurde der Entwurf tatsächlich gesichert (also in den Model-Context
     /// eingefügt), landet er sofort auf ``einkaufsliste`` (GitHub #6) — ohne
-    /// zusätzlichen Tap auf „Hinzufügen”. Die Zeile zeigt danach automatisch das
+    /// zusätzlichen Tap auf „Hinzufügen". Die Zeile zeigt danach automatisch das
     /// Abhak-Symbol (``ArtikelAuswahlZeile``/``bereitsAufListe``).
     private func nachNeuanlageAufraeumen() {
         defer { zuletztAngelegterEntwurf = nil }
@@ -282,12 +337,22 @@ struct ArtikelHinzufuegenView: View {
 /// Eine kompakte Zeile in der Artikelsuche: Kategorie-Icon/Farbe, Name und das
 /// App-weit einheitliche Abhak-Symbol (GitHub #8), das anzeigt, ob der Artikel
 /// bereits auf der aktuellen Einkaufsliste steht — Tippen schaltet um
-/// (GitHub #45).
+/// (GitHub #45). Ist ein konkretes Produkt gewählt, erscheint dessen Name als
+/// sekundäre Zeile unter dem Artikelnamen.
 private struct ArtikelAuswahlZeile: View {
     let artikel: Artikel
     let bereitsAufListe: Bool
+    var gewaehltesProduktnamen: String? = nil
 
     private var kategorie: ArtikelKategorie? { artikel.kategorien.first }
+
+    private var preisSpanneText: String? {
+        let preise = artikel.preispunkte.map(\.preis).filter { $0 > 0 }
+        guard !preise.isEmpty, let min = preise.min(), let max = preise.max() else { return nil }
+        let minFormatiert = min.formatted(Decimal.FormatStyle.euro)
+        if min == max { return minFormatiert }
+        return minFormatiert + " \u{2013} " + max.formatted(Decimal.FormatStyle.euro)
+    }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -297,9 +362,23 @@ private struct ArtikelAuswahlZeile: View {
                 groesse: 28
             )
 
-            Text(artikel.name)
-                .foregroundStyle(.primary)
-                .lineLimit(1)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(artikel.name)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                if let pname = gewaehltesProduktnamen {
+                    Text(pname)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                if let spanne = preisSpanneText {
+                    Text(spanne)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
 
             Spacer()
 
@@ -310,53 +389,29 @@ private struct ArtikelAuswahlZeile: View {
     }
 }
 
-/// Sheet zur Wahl eines konkreten ``Produkt``s eines Artikels mit mehreren
-/// eigenen Produkten (GitHub #47, Schritt 4/5) — nur erreichbar über den
-/// Chevron in ``ArtikelHinzufuegenView``, der bestehende Sofort-Tap zum
-/// Hinzufügen/Entfernen bleibt davon unberührt.
-private struct ProduktWahlSheet: View {
-    let artikel: Artikel
-    let produkte: [Produkt]
-    let onAuswahl: (Produkt?) -> Void
-
-    @Environment(\.dismiss) private var dismiss
+/// Eingerückte Produktzeile unterhalb einer Artikel-Hauptzeile — zeigt den
+/// Produktnamen und ob dieses Produkt derzeit auf der Einkaufsliste gewählt ist.
+private struct ProduktSubZeile: View {
+    let name: String
+    let istGewaehlt: Bool
 
     var body: some View {
-        NavigationStack {
-            List {
-                Button {
-                    onAuswahl(nil)
-                    dismiss()
-                } label: {
-                    Text("Kein bestimmtes Produkt")
-                }
-                ForEach(produkte) { produkt in
-                    Button {
-                        onAuswahl(produkt)
-                        dismiss()
-                    } label: {
-                        Text(produkt.name)
-                            .foregroundStyle(.primary)
-                    }
-                }
-            }
-            .navigationTitle("Produkt wählen")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    VStack(spacing: 0) {
-                        Text("Produkt wählen")
-                            .font(.headline)
-                        Text(artikel.name)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Abbrechen") { dismiss() }
-                }
-            }
+        HStack(spacing: 10) {
+            Image(systemName: "circle.fill")
+                .font(.system(size: 5))
+                .foregroundStyle(.tertiary)
+                .padding(.leading, 38)
+
+            Text(name)
+                .foregroundStyle(istGewaehlt ? .primary : .secondary)
+                .lineLimit(1)
+
+            Spacer()
+
+            Image(systemName: istGewaehlt ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(istGewaehlt ? Color.accentColor : .secondary)
         }
+        .contentShape(Rectangle())
     }
 }
 
