@@ -65,12 +65,13 @@ diesem Artikel gehören (z.B. „Odol", „Paradontol Zahncreme", „Sebamed" f�
 „Zahnpasta"). Tippe auf ein Produkt, um es zu bearbeiten: dort kannst du ihm
 je Geschäft einen eigenen **Produktnamen** geben (derselbe Artikel kann in
 Geschäft A anders auf dem Preisschild stehen als in Geschäft B) und siehst
-seine eigene Preishistorie. Hat ein Artikel mehr als ein Produkt, zeigt
+seine eigene Preishistorie. Hat ein Artikel mindestens ein Produkt, zeigt
 „Artikel hinzufügen" beim entsprechenden Eintrag zusätzlich einen kleinen
-Pfeil zum Antippen — darüber wählst du, welches Produkt konkret gemeint ist;
-der Name erscheint danach klein unter dem Artikel auf der Einkaufsliste. Ohne
-diese Auswahl (einfacher Tap wie bisher) landet der Artikel weiterhin ohne
-festgelegtes Produkt auf der Liste.
+Chevron-Pfeil — Antippen klappt die Produktliste direkt in der Suche aus,
+sodass du das gewünschte Produkt sofort antippen kannst; der Name erscheint
+danach klein unter dem Artikel auf der Einkaufsliste. Ohne diese Auswahl
+(einfacher Tap wie bisher) landet der Artikel weiterhin ohne festgelegtes
+Produkt auf der Liste.
 
 ## Geschäfte
 
@@ -85,6 +86,14 @@ Abteilungen manuell aus, betrifft das nur dieses eine Geschäft, nicht generell 
 Geschäftstyp. Die Reihenfolge, in der die Abteilungen beim Einkaufen erscheinen,
 legst du nicht manuell fest — die App lernt sie automatisch aus deinem
 Abhakverhalten (siehe „Einkaufen" unten).
+
+**Filialen / Ketten:** Gehören mehrere Geschäfte zur selben Kette (z.B. „Rewe
+Maisach" und „Rewe Sendling" zu „Rewe"), kannst du beim Anlegen oder Bearbeiten
+eines Geschäfts im Feld „Marke / Kette" denselben Markennamen hinterlegen (z.B.
+„Rewe"). In der Geschäfte-Liste werden alle Filialen dieser Marke dann unter
+einer aufklappbaren Zeile mit dem Markennamen zusammengefasst — antippen klappt
+die einzelnen Filialen aus. Geschäfte ohne Markennamen bleiben eigenständige
+Einträge.
 
 In der Detailansicht eines Geschäfts siehst du alle verfügbaren Abteilungen
 gemeinsam, alphabetisch — automatisch über den Geschäftstyp verfügbare sind mit
@@ -200,9 +209,11 @@ dem Abschließen ein kurzer Hinweis, dass sich die App automatisch anpasst.
   abgehakt"), dass es sich erledigt hat — kein Dialog zum Wegklicken nötig.
 - **„Artikel hinzufügen"** zeigt unter dem Titel zusätzlich den Namen der
   Einkaufsliste. Die Suche erkennt Singular und Plural gleichermaßen (z.B.
-  findet „Äpfel" auch den Artikel „Apfel"). Bereits auf der Liste stehende
-  Artikel sind mit dem Abhak-Symbol markiert — erneutes Antippen nimmt sie
-  wieder von der Liste.
+  findet „Äpfel" auch den Artikel „Apfel") und findet Artikel auch über
+  Produktnamen (z.B. findet „Sebamed" den Artikel „Shampoo", der dann
+  automatisch mit aufgeklappter Produktliste erscheint). Bereits auf der
+  Liste stehende Artikel sind mit dem Abhak-Symbol markiert — erneutes
+  Antippen nimmt sie wieder von der Liste.
 - **Darstellung anpassen:** Einstellungen → „Listendarstellung" — wählt zwischen
   klassischer Gruppenliste, Chips (groß oder klein) und Kacheln (2 oder 3 Spalten).
   Je Modus konfigurierbar: Akkordeon-Kategorien, Fortschrittsbalken und

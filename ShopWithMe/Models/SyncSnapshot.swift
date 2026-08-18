@@ -176,6 +176,8 @@ struct GeschaeftSnapshot: Codable {
     var kategorieIDs: [UUID]
     var ausgeschlosseneKategorieIDs: [UUID]
     var alternativeNamen: [String]
+    /// Markenname der Kette (z.B. „Rewe") — analog zu ``Geschaeft/markenname``.
+    var markenname: String?
     /// Dauerhaft ignorierte Belegscan-Artikelnamen (GitHub #19) — laut
     /// Nutzerentscheidung eine Eigenschaft des Ladens ("obwohl es ein
     /// Lebensmittelladen ist, gibt es dort kein XY"), daher Bereich B statt

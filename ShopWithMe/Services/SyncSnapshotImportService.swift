@@ -106,6 +106,35 @@ enum SyncSnapshotImportService {
         return wasserstand
     }
 
+    /// Peer-Lebenszyklus: entfernt ``SyncPeerInfo``- und zugehörige
+    /// G-Counter-Einträge für jeden Peer, dessen Ordner nicht mehr in
+    /// `bekannteOrdner` (dem aktuell gelesenen `peers/`-Listing) auftaucht —
+    /// ohne Nutzerdialog, weil das Verschwinden des Ordners bereits eine
+    /// Gruppen-Entscheidung (von einem anderen Gerät) ist.
+    ///
+    /// Nur aufgerufen, wenn `peers/` erfolgreich gelesen werden konnte (nicht
+    /// `nil`) — ein transienter Zugriffsfehler darf keine DB-Einträge löschen.
+    @MainActor
+    static func bereinigeFehlendeGruppenPeers(bekannteOrdner: [URL], context: ModelContext) {
+        let alle = (try? context.fetch(FetchDescriptor<SyncPeerInfo>())) ?? []
+        for peer in alle {
+            let hatOrdner = bekannteOrdner.contains {
+                PeerOrdnerName.gehoertZu($0.lastPathComponent, geraeteID: peer.peerGeraeteID)
+            }
+            guard !hatOrdner else { continue }
+            let geraeteID = peer.peerGeraeteID
+            let zaehlerDeskriptor = FetchDescriptor<SyncPeerZaehlerStand>(
+                predicate: #Predicate { $0.peerGeraeteID == geraeteID }
+            )
+            for zeile in (try? context.fetch(zaehlerDeskriptor)) ?? [] { context.delete(zeile) }
+            let distanzDeskriptor = FetchDescriptor<WarengruppenDistanzPeerZaehlerStand>(
+                predicate: #Predicate { $0.peerGeraeteID == geraeteID }
+            )
+            for zeile in (try? context.fetch(distanzDeskriptor)) ?? [] { context.delete(zeile) }
+            context.delete(peer)
+        }
+    }
+
     /// Rückgabewert meldet ausschließlich, ob der Ordnerzugriff (Berechtigung)
     /// geklappt hat — die einzige Fehlerart, die für die Person tatsächlich
     /// handlungsrelevant ist (z.B. Ordner erneut auswählen). Alle anderen,
@@ -133,6 +162,11 @@ enum SyncSnapshotImportService {
         guard let peerVerzeichnisse = await Task.detached(priority: .utility, operation: {
             SyncDateiZugriff.listeKoordiniert(peersOrdner)
         }).value else { return true }
+
+        // Peer-Lebenszyklus: DB-Einträge für nicht mehr vorhandene Peer-Ordner
+        // automatisch bereinigen — Ordnerlisting war erfolgreich (nicht nil),
+        // also ist das Fehlen eines Ordners eine definitive Gruppen-Entscheidung.
+        bereinigeFehlendeGruppenPeers(bekannteOrdner: peerVerzeichnisse, context: context)
 
         for peerOrdner in peerVerzeichnisse where !PeerOrdnerName.gehoertZu(peerOrdner.lastPathComponent, geraeteID: eigeneGeraeteID) {
             let peerName = peerOrdner.lastPathComponent
@@ -758,6 +792,7 @@ enum SyncSnapshotImportService {
             if lokal.breitengrad == nil, let b = eintrag.breitengrad { lokal.breitengrad = b }
             if lokal.laengengrad == nil, let l = eintrag.laengengrad { lokal.laengengrad = l }
             if lokal.erkennungsradiusRaw == nil, let radius = eintrag.erkennungsradius { lokal.erkennungsradiusRaw = radius }
+            if lokal.markenname == nil, let marke = eintrag.markenname { lokal.markenname = marke }
 
             vereinigeGeordnetFallsNoetig(&lokal.typen, mit: eintrag.typIDs.compactMap { typZuordnung[$0] })
             vereinigeGeordnetFallsNoetig(&lokal.kategorien, mit: eintrag.kategorieIDs.compactMap { kategorieZuordnung[$0] })

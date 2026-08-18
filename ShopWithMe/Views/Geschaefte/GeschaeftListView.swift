@@ -12,12 +12,13 @@ import SwiftData
 /// `docs/BELEGSCAN.md`. Der Preisschild-Scan hat bewusst keinen geschäftslosen
 /// Einstieg (siehe `docs/PREISSCHILD_SCAN.md`) und ist deshalb hier nicht verlinkt.
 ///
-/// Gruppiert alphabetisch nach Anfangsbuchstaben — bei ≥50 Geschäften zeigt iOS
-/// dafür automatisch eine A–Z-Sprungleiste wie im Adressbuch (GitHub #29).
+/// Geschäfte mit einem gemeinsamen ``Geschaeft/markenname`` werden als aufklappbare
+/// Gruppe zusammengefasst — sinnvoll, wenn mehrere Filialen derselben Kette erfasst
+/// sind. Einzelne oder markennamen-lose Geschäfte erscheinen als eigenständige Zeilen.
 ///
 /// Zeigt zusätzlich eine „Favoriten"-Sektion mit den meistgenutzten Geschäften
-/// (``GeschaeftHaeufigkeitService``, GitHub #31) vor der vollständigen,
-/// alphabetischen Liste — konfigurierbar über den Zähler-Button im Toolbar.
+/// (``GeschaeftHaeufigkeitService``, GitHub #31) vor der vollständigen Liste —
+/// konfigurierbar über den Stern-Button im Toolbar.
 struct GeschaeftListView: View {
     @Query private var geschaefte: [Geschaeft]
     @Query private var einkaufsvorgaenge: [Einkaufsvorgang]
@@ -26,10 +27,8 @@ struct GeschaeftListView: View {
     @State private var neuesGeschaeftEntwurf: Geschaeft?
     @State private var zeigeBelegScan = false
     @State private var zeigeFavoritenEinstellungen = false
+    @State private var aufgeklappteMarken: Set<String> = []
 
-    /// Namen, die mehrfach vorkommen — steuert, ob ``GeschaeftZeile`` zusätzlich die
-    /// Kurzadresse anzeigt, um namensgleiche Geschäfte unterscheidbar zu machen
-    /// (analog `GeschaeftWahlSheet`, siehe `docs/BELEGSCAN.md`).
     private var namenMitDuplikaten: Set<String> {
         Geschaeft.namenMitDuplikaten(unter: geschaefte)
     }
@@ -38,8 +37,34 @@ struct GeschaeftListView: View {
         GeschaeftHaeufigkeitService.favoriten(aus: einkaufsvorgaenge)
     }
 
-    private var sortierteGeschaefte: [Geschaeft] {
-        geschaefte.sorted { $0.name.vergleicheAlphabetisch(mit: $1.name) == .orderedAscending }
+    /// Gruppiert alle Geschäfte in eine gemischte, alphabetisch sortierte Liste:
+    /// Geschäfte mit ``Geschaeft/markenname`` werden — sofern mehrere Filialen
+    /// unter derselben Marke bekannt sind — als ``GeschaeftListEintrag/markenGruppe``
+    /// zusammengefasst; alle anderen erscheinen als ``GeschaeftListEintrag/einzeln``.
+    private var listenEintraege: [GeschaeftListEintrag] {
+        var einzel: [Geschaeft] = []
+        var markiert: [String: [Geschaeft]] = [:]
+
+        for g in geschaefte {
+            let marke = g.markenname?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !marke.isEmpty {
+                markiert[marke, default: []].append(g)
+            } else {
+                einzel.append(g)
+            }
+        }
+
+        var result: [GeschaeftListEintrag] = einzel.map { .einzeln($0) }
+        for (marke, filialen) in markiert {
+            let sortiert = filialen.sorted { $0.name.vergleicheAlphabetisch(mit: $1.name) == .orderedAscending }
+            if sortiert.count == 1, let einzige = sortiert.first {
+                result.append(.einzeln(einzige))
+            } else {
+                result.append(.markenGruppe(markenname: marke, filialen: sortiert))
+            }
+        }
+
+        return result.sorted { $0.sortierschluessel.vergleicheAlphabetisch(mit: $1.sortierschluessel) == .orderedAscending }
     }
 
     var body: some View {
@@ -54,13 +79,40 @@ struct GeschaeftListView: View {
                 }
             }
 
-            AlphabetischeListenSektion(
-                sortierteGeschaefte,
-                name: \.name,
-                loeschen: { offsets, gruppe in geschaeftLoeschen(gruppe, at: offsets) }
-            ) { geschaeft in
-                NavigationLink(value: geschaeft) {
-                    GeschaeftZeile(geschaeft: geschaeft, istDuplikat: namenMitDuplikaten.contains(geschaeft.name.lowercased()))
+            ForEach(listenEintraege) { eintrag in
+                switch eintrag {
+                case .einzeln(let g):
+                    NavigationLink(value: g) {
+                        GeschaeftZeile(geschaeft: g, istDuplikat: namenMitDuplikaten.contains(g.name.lowercased()))
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button("Löschen", role: .destructive) {
+                            geschaeftLoeschen(g)
+                        }
+                    }
+                case .markenGruppe(let markenname, let filialen):
+                    DisclosureGroup(
+                        isExpanded: Binding(
+                            get: { aufgeklappteMarken.contains(markenname) },
+                            set: { offen in
+                                if offen { aufgeklappteMarken.insert(markenname) }
+                                else { aufgeklappteMarken.remove(markenname) }
+                            }
+                        )
+                    ) {
+                        ForEach(filialen) { filiale in
+                            NavigationLink(value: filiale) {
+                                GeschaeftZeile(geschaeft: filiale, istDuplikat: true)
+                            }
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button("Löschen", role: .destructive) {
+                                    geschaeftLoeschen(filiale)
+                                }
+                            }
+                        }
+                    } label: {
+                        GeschaeftMarkenZeile(markenname: markenname, filialen: filialen)
+                    }
                 }
             }
         }
@@ -114,24 +166,36 @@ struct GeschaeftListView: View {
         }
     }
 
-    private func geschaeftLoeschen(_ geschaefte: [Geschaeft], at offsets: IndexSet) {
-        // Nur Identitäten über die `await`-Grenze hinweg sichern (siehe
-        // ``ModelReference``) — während des Micro-Lease-Erwerbs kann ein
-        // nebenläufiger Sync-Zyklus eines dieser Geschäfte bereits gelöscht
-        // haben (dann einfach überspringen, es ist ja bereits weg).
-        let zuLoeschendeReferenzen = offsets.map { ModelReference(geschaefte[$0]) }
+    private func geschaeftLoeschen(_ geschaeft: Geschaeft) {
+        let referenz = ModelReference(geschaeft)
         Task {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
-                for referenz in zuLoeschendeReferenzen {
-                    guard let eintrag = referenz.resolved(in: modelContext) else { continue }
-                    // Tombstone VOR dem Löschen, solange die ID noch bekannt
-                    // ist — verhindert, dass ein Peer, der das Geschäft noch
-                    // in seinem eigenen Snapshot führt, es beim nächsten Sync
-                    // unwissentlich wiederbelebt (GitHub #52-Nachfolgefund).
-                    SyncTombstoneService.markiereGeloescht(art: SyncEntitaetsArt.geschaeft, id: eintrag.id, context: modelContext)
-                    modelContext.delete(eintrag)
-                }
+                guard let eintrag = referenz.resolved(in: modelContext) else { return }
+                SyncTombstoneService.markiereGeloescht(art: SyncEntitaetsArt.geschaeft, id: eintrag.id, context: modelContext)
+                modelContext.delete(eintrag)
             }
+        }
+    }
+}
+
+/// Listeneintrag in ``GeschaeftListView``: entweder ein einzelnes ``Geschaeft``
+/// (ohne ``Geschaeft/markenname`` oder als einzige Filiale seiner Marke) oder
+/// eine aufklappbare Gruppe gleichnamiger Filialen.
+private enum GeschaeftListEintrag: Identifiable {
+    case einzeln(Geschaeft)
+    case markenGruppe(markenname: String, filialen: [Geschaeft])
+
+    var id: String {
+        switch self {
+        case .einzeln(let g): return "e:\(g.id.uuidString)"
+        case .markenGruppe(let m, _): return "m:\(m)"
+        }
+    }
+
+    var sortierschluessel: String {
+        switch self {
+        case .einzeln(let g): return g.name
+        case .markenGruppe(let m, _): return m
         }
     }
 }
@@ -172,9 +236,32 @@ private struct GeschaeftFavoritenEinstellungenSheet: View {
     }
 }
 
+/// Kopfzeile einer Filialgruppe in ``GeschaeftListView``: zeigt den Markennamen
+/// und die Anzahl der zugehörigen Filialen.
+private struct GeschaeftMarkenZeile: View {
+    let markenname: String
+    let filialen: [Geschaeft]
+
+    var body: some View {
+        HStack(spacing: 12) {
+            GlassSymbolBadge(
+                symbolName: filialen.first?.fuehrenderTyp?.symbolName ?? "shippingbox.fill",
+                farbe: .accentColor
+            )
+            VStack(alignment: .leading, spacing: 2) {
+                Text(markenname)
+                Text("\(filialen.count) Filialen")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
 /// Eine Zeile in der Geschäfte-Liste. Zeigt zusätzlich die Kurzadresse
 /// (``Geschaeft/kurzeAdresse``), wenn ``istDuplikat`` gesetzt ist — d.h. mindestens
-/// ein weiteres Geschäft denselben Namen trägt (siehe ``GeschaeftListView/namenMitDuplikaten``).
+/// ein weiteres Geschäft denselben Namen trägt oder die Zeile innerhalb einer
+/// Filialgruppe angezeigt wird.
 private struct GeschaeftZeile: View {
     let geschaeft: Geschaeft
     var istDuplikat: Bool = false

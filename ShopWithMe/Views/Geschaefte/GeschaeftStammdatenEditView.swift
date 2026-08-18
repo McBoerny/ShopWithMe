@@ -50,6 +50,12 @@ struct GeschaeftStammdatenEditView: View {
             Form {
                 Section {
                     TextField("Name", text: $geschaeft.name)
+                    TextField("Marke / Kette", text: Binding(
+                        get: { geschaeft.markenname ?? "" },
+                        set: { geschaeft.markenname = $0.isEmpty ? nil : $0 }
+                    ))
+                } footer: {
+                    Text("Optionaler Markenname (z.B. Rewe), um Filialen in der Liste zu gruppieren.")
                 }
 
                 Section {

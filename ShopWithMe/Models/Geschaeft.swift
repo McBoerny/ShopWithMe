@@ -124,6 +124,11 @@ final class Geschaeft {
         get { (alternativeNamenRaw ?? "").split(separator: "\n").map(String.init) }
         set { alternativeNamenRaw = newValue.isEmpty ? nil : newValue.joined(separator: "\n") }
     }
+    /// Markenname der Kette, zu der diese Filiale gehört — z.B. „Rewe" für
+    /// „Rewe Maisach". Dient als Gruppierungsschlüssel in ``GeschaeftListView``:
+    /// Filialen mit demselben Markennamen werden dort zusammengefasst und können
+    /// aufgeklappt werden. `nil`, solange keine Kette zugeordnet ist.
+    var markenname: String?
     /// Rohwert für ``eigeneAnzahlEinkaufsvorgaenge``. Optional gespeichert, damit
     /// vor Einführung dieses Attributs angelegte Geschäfte beim automatischen
     /// Laden nicht abstürzen — ein `nil`-Rohwert fällt auf `0` zurück.

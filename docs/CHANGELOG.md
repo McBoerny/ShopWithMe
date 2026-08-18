@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.16 (Build 292) — Geschäfte: Filialen & Markenname
+
+`Geschaeft.markenname: String?` gruppiert Filialen derselben Kette in der
+Geschäfte-Liste (Einstellungen): Marken mit >1 Filialen werden als aufklappbare
+`DisclosureGroup` angezeigt. Neues Textfeld „Marke / Kette" in
+`GeschaeftStammdatenEditView`. `GeschaeftListEintrag`-Enum löst `AlphabetischeListenSektion`
+in `GeschaeftListView` ab. Sync-Serialisierung (`GeschaeftSnapshot.markenname`) und
+-Import (`mergeGeschaefte`) ergänzt. Additiv-optional — kein neues SchemaVN nötig.
+
 ## v0.16 (Build 283) — Fixture-basierte Belegscan-Integrationstests
 
 `BelegScanIntegrationTests` + `ShopWithMeTests/Belege/`-Ordner: echte Kassenbon-Fotos
