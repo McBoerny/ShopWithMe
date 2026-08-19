@@ -6,7 +6,7 @@ import UIKit
 /// Eine einzelne, aus einem Kassenbon extrahierte Position.
 ///
 /// Kassenbons weisen bei mehreren Stück oft nur den Gesamtpreis der Zeile aus (z.B.
-/// „3 x 1.50 = 4.50“). Da ``BelegScanView`` nur den ``einzelpreis`` in die
+/// "3 x 1.50 = 4.50"). Da ``BelegScanView`` nur den ``einzelpreis`` in die
 /// Preishistorie übernimmt, hält dieser Typ ``menge`` separat, damit das Modell die
 /// Rechnung (Gesamtpreis ÷ Menge) nachvollziehbar in einem eigenen Feld ablegt statt
 /// sie unsichtbar in einem einzelnen Preisfeld zu vermischen.
@@ -14,9 +14,9 @@ import UIKit
 struct BelegPosition {
     @Guide(description: "Artikelname wie auf dem Kassenbon, ohne Mengenangabe oder Artikelnummer")
     var artikelName: String
-    @Guide(description: "Auf dem Kassenbon angegebene Menge dieser Position, z.B. 3 bei „3 x Milch“ oder 0.5 bei „0,5 kg Äpfel“. Steht keine Menge auf dem Bon, hier 1 angeben.")
+    @Guide(description: "Menge dieser Position. Norma/Lidl/Penny-Format: Folgezeile direkt unter dem Artikel, z.B. Artikelzeile gefolgt von \"2 x 1,49\" bedeutet menge=2. Prefix-Format: \"2x Artikel 2,98\" bedeutet menge=2. Gewichtsangabe: \"0,5 kg\" bedeutet menge=0.5. Ohne jede Mengenangabe auf dem Bon: 1 angeben.")
     var menge: Double
-    @Guide(description: "Einzelpreis (Preis pro Stück/Einheit) dieser Position in Euro, z.B. 2.49. Weist der Bon nur einen Gesamtpreis für mehrere Stück aus (z.B. „3 x 1.50 = 4.50“), hier den Gesamtpreis geteilt durch die Menge angeben — niemals den Gesamtpreis selbst.")
+    @Guide(description: "Einzelpreis (Preis pro Stueck/Einheit) in Euro, z.B. 2.49. Erscheint nach einem Artikel eine Folgezeile der Form N x P (z.B. \"2 x 1,49\"), ist P der Einzelpreis und N die Menge — niemals den Gesamtpreis einer Mengenposition uebernehmen.")
     var einzelpreis: Decimal
 }
 
@@ -25,7 +25,7 @@ struct BelegPosition {
 struct BelegErgebnis {
     @Guide(description: "Name des Geschäfts, falls auf dem Bon erkennbar, sonst ein leerer String")
     var geschaeftName: String
-    @Guide(description: "Adresse des Geschäfts (Straße, Hausnummer, ggf. Postleitzahl und Ort), meist in der Kopf- oder Fußzeile des Kassenbons, falls erkennbar, sonst ein leerer String")
+    @Guide(description: "Adresse des Geschaefts (Strassenname und -abkuerzung genau wie auf dem Bon, Hausnummer, Postleitzahl, Ort), meist in der Kopf- oder Fusszeile. Postleitzahl einschliessen wenn vorhanden. Abkuerzungen nicht aendern. Sonst leerer String.")
     var geschaeftAdresse: String
     @Guide(description: "Datum des Einkaufs im Format JJJJ-MM-TT (z.B. 2026-03-24), falls auf dem Bon erkennbar, sonst ein leerer String")
     var datum: String
@@ -195,13 +195,32 @@ struct VisionFoundationModelsReceiptScanner: ReceiptScanService {
     private func extrahiere(aus zeilen: [ErkannteZeile]) async throws -> BelegErgebnis {
         let anweisungen = """
         Du extrahierst Kassenbon-Daten aus rohem OCR-Text einer deutschen \
-        Einkaufs-App. Ignoriere Zwischensummen, Pfand-Sammel-Zeilen, \
-        MwSt.-Hinweise und Zahlungsart. Erkenne das Datum des Einkaufs und gib es \
-        im Format JJJJ-MM-TT zurück (z.B. „24.03.26“ auf dem Bon → „2026-03-24“). \
-        Erkenne pro Artikelzeile Name, Menge und Einzelpreis in Euro. Weist eine \
-        Zeile nur einen Gesamtpreis für mehrere Stück aus, berechne daraus den \
-        Einzelpreis (Gesamtpreis geteilt durch die Menge) statt den Gesamtpreis zu \
-        übernehmen.
+        Einkaufs-App.
+
+        DATUM: Gib das Kaufdatum im Format JJJJ-MM-TT zurück. \
+        Steht das Jahr vierstellig auf dem Bon (z.B. '17.07.2026'), dieses \
+        unverändert übernehmen. Zweistellige Jahreszahlen: '26' → 2026.
+
+        GESCHAEFTSNAME: Den Markennamen bevorzugen (z.B. 'hagebaumarkt', \
+        'REWE', 'Aldi Süd'), der prominent im Kopf des Bons erscheint. \
+        Den Firmennamen des Betreibers (z.B. 'HEV Heimwerkermarkt GmbH \
+        & Co.KG') im Kleingedruckten ignorieren.
+
+        MENGEN – besonders wichtig: Viele deutsche Kassenbons (Norma, Lidl, \
+        Penny, Netto) drucken die Menge in einer separaten Folgezeile direkt \
+        unter der Artikelzeile, z.B.:
+          Saftige Stueckchen      1,49 B
+          2 x 1,49
+        Diese Folgezeile 'N x P' bedeutet: Menge N, Einzelpreis P. Ordne sie \
+        immer der unmittelbar vorangehenden Artikelzeile zu und erstelle \
+        keine eigene Position dafür. Dasselbe gilt für Formate wie \
+        'Nx Artikel GESAMT' (Menge als Prefix) oder Gewichtsangaben.
+
+        EINZELPREISE: Immer den Preis pro Stück/Einheit angeben, nie den \
+        Gesamtpreis einer Mengenposition.
+
+        IGNORIEREN: Zwischensummen, Rabattzeilen, Pfand-Sammelzeilen, \
+        MwSt.-Hinweise, Zahlungsart, Treuepunkte.
         """
         let text = zeilen.map(\.text).joined(separator: "\n")
         let session = LanguageModelSession(instructions: anweisungen)

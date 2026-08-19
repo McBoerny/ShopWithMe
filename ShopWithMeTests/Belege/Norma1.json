@@ -1,0 +1,33 @@
+{
+  "beschreibung": "Norma, Fleckig, Mehrfachpositionen, Rabatte",
+  "sollErgebnis": {
+    "geschaeftName": "Norma",
+    "geschaeftAdresse": "Augsburger St. 32, 82256 Fürstenfeldbruck",
+    "datum": "2026-06-29",
+    "positionen": [
+      { "artikelName": "TRIMM Orangennektar", "einzelpreis": "10.74" },
+      { "artikelName": "EW-Pfand", "einzelpreis": "1.50" },
+      { "artikelName": "Saftige Stückchen", "einzelpreis": "1.49", "menge": 2},
+      { "artikelName": "Karotten 2kg", "einzelpreis": "2.99" },
+      { "artikelName": "Äpfel 2kg", "einzelpreis": "2.79" },
+      { "artikelName": "LED Solar Gießkanne", "einzelpreis": "14.99" },
+      { "artikelName": "Pflegende Handcreme", "einzelpreis": "0.85" },
+      { "artikelName": "Vitalis Müsle + 20% Gratis", "einzelpreis": "3.99" },
+      { "artikelName": "FERRERO Yogurette", "einzelpreis": "3.99" },
+      { "artikelName": "Knuspermüsli", "einzelpreis": "2.99" },
+      { "artikelName": "DAUNASOFT Wattepads", "einzelpreis": "0.95" },
+      { "artikelName": "Laktosefreie", "einzelpreis": "0.99", "menge": 3 },
+      { "artikelName": "Berbauern Butter", "einzelpreis": "1.59", "menge": 2 },
+      { "artikelName": "Professional Shampoo", "einzelpreis": "2.19" },
+      { "artikelName": "Instant-Nudeln 4+1 gratis", "einzelpreis": "1.69" },
+      { "artikelName": "FUNNY FRISCH Chipsfrisch", "einzelpreis": "1.99", "menge": 2 },
+      { "artikelName": "Karotten 2kg", "einzelpreis": "2.99" },
+      { "artikelName": "Kompakt-Deospray", "einzelpreis": "1.45" },
+      { "artikelName": "Bunte gekochte Eier 6er", "einzelpreis": "1.79" },
+      { "artikelName": "PFIFF Gebäckstängli", "einzelpreis": "1.49", "menge": 2 },
+      { "artikelName": "Tafeltrauben Mix 500g", "einzelpreis": "2.69" }
+    ]
+  },
+  "mindestPositionenTrefferQuote": 0.75
+}
+

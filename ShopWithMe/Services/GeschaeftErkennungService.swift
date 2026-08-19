@@ -210,22 +210,21 @@ enum GeschaeftErkennungService {
         return istGleicherOrt(nameA: a.name, koordinatenA: a.koordinaten, nameB: b.name, koordinatenB: b.koordinaten)
     }
 
-    /// Zentrale Namens-/Koordinaten-Matching-Logik, die
-    /// ``istBekannterTreffer(_:fuer:)``, ``istIgnoriert(_:ignorierte:)``,
-    /// ``istSelberLaden(_:_:)`` und ``ignorierteEintraege(fuer:in:)`` gemeinsam
-    /// nutzen: Namensübereinstimmung (exakt ODER Teilstring in beide Richtungen —
-    /// deckt Kurzformen wie Apple-Maps-„REWE“ vs. selbst vergebenem „Rewe am Markt“
-    /// ab) ODER Koordinaten innerhalb `toleranz`, falls für beide Seiten vorhanden.
-    /// `toleranz` ist standardmäßig ``koordinatenTreffertoleranz``, aber für ein
-    /// konkretes ``Geschaeft`` mit individuellem ``Geschaeft/erkennungsradius``
-    /// überschreibbar (siehe ``istBekannterTreffer(_:fuer:)``, GitHub #41).
+    /// Zentrale Matching-Logik für Standort-Erkennung und Ignorieren-Abgleich.
+    /// Liegen auf **beiden** Seiten Koordinaten vor, entscheiden ausschließlich
+    /// die Koordinaten (Abstand < `toleranz`) — Name spielt dann keine Rolle
+    /// (deckt Umbenennungen ab, verhindert aber Falsch-Treffer über Orte hinweg:
+    /// zwei „REWE”-Filialen in verschiedenen Städten dürfen sich nicht gegenseitig
+    /// als bekannt behandeln). Fehlen auf einer Seite die Koordinaten, greift der
+    /// Name-Fallback (exakt ODER Teilstring in beide Richtungen — deckt Kurzformen
+    /// wie Apple-Maps-„REWE” vs. selbst vergebenem „Rewe am Markt” ab). `toleranz`
+    /// ist standardmäßig ``koordinatenTreffertoleranz``, aber für ein konkretes
+    /// ``Geschaeft`` mit individuellem ``Geschaeft/erkennungsradius`` überschreibbar
+    /// (siehe ``istBekannterTreffer(_:fuer:)``, GitHub #41).
     ///
     /// **Bewusst NICHT für den automatischen Sync-Merge verwendet** (GitHub
     /// #86) — dort nutzt ``istGleicherOrtFuerSyncMerge(nameA:koordinatenA:radiusA:nameB:koordinatenB:radiusB:)``
-    /// eine strengere Regel. Diese großzügige Variante bleibt nur für die
-    /// interaktiven, vom Nutzer bestätigbaren Fälle hier (Standort-Erkennung,
-    /// Ignorieren-Abgleich) — dort ist ein gelegentlicher falscher Vorschlag
-    /// unkritisch, weil ablehnbar.
+    /// eine strengere Regel.
     private static func istGleicherOrt(
         nameA: String,
         koordinatenA: (breitengrad: Double, laengengrad: Double)?,
@@ -233,13 +232,14 @@ enum GeschaeftErkennungService {
         koordinatenB: (breitengrad: Double, laengengrad: Double)?,
         toleranz: CLLocationDistance = koordinatenTreffertoleranz
     ) -> Bool {
-        if nameA.localizedCaseInsensitiveCompare(nameB) == .orderedSame { return true }
-        if nameA.localizedCaseInsensitiveContains(nameB) || nameB.localizedCaseInsensitiveContains(nameA) { return true }
         if let koordinatenA, let koordinatenB {
             let ortA = CLLocation(latitude: koordinatenA.breitengrad, longitude: koordinatenA.laengengrad)
             let ortB = CLLocation(latitude: koordinatenB.breitengrad, longitude: koordinatenB.laengengrad)
             return ortA.distance(from: ortB) < toleranz
         }
+        // Fallback für Geschäfte ohne Koordinaten: rein über Namen
+        if nameA.localizedCaseInsensitiveCompare(nameB) == .orderedSame { return true }
+        if nameA.localizedCaseInsensitiveContains(nameB) || nameB.localizedCaseInsensitiveContains(nameA) { return true }
         return false
     }
 

@@ -1088,7 +1088,8 @@ enum SyncSnapshotImportService {
         for eintrag in remote {
             guard let liste = listeZuordnung[eintrag.einkaufslisteID], let artikel = artikelZuordnung[eintrag.artikelID]
             else { continue }
-            guard !liste.enthaelt(artikel) else { continue }
+            let produkt = eintrag.produktID.flatMap { produktZuordnung[$0] }
+            guard !liste.enthaelt(artikel, produkt: produkt) else { continue }
             // Architektur-Review (2026-08-10, siehe ArtikelListenKauf-Typ-Doku
             // „zuletztHinzugefuegtAm"): die Meldung dieses Peers zuerst
             // DAUERHAFT als robustes, additiv gemergtes Faktum vermerken —
@@ -1118,7 +1119,6 @@ enum SyncSnapshotImportService {
                 }
                 continue
             }
-            let produkt = eintrag.produktID.flatMap { produktZuordnung[$0] }
             let neu = EinkaufslistenEintrag(
                 einkaufsliste: liste, artikel: artikel, produkt: produkt, menge: eintrag.menge, notiz: eintrag.notiz
             )

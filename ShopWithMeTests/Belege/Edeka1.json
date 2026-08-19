@@ -1,0 +1,14 @@
+{
+  "beschreibung": "Edeka Maisach, 2026-07-17 — 12 Positionen",
+  "sollErgebnis": {
+    "geschaeftName": "Edeka",
+    "geschaeftAdresse": "Bahnhofstraße 10, 82216 Maisach",
+    "datum": "2026-07-17",
+    "positionen": [
+      { "artikelName": "Herz.Saur.Buns", "einzelpreis": "1.99" },
+      { "artikelName": "Herz.Craf Buns", "einzelpreis": "1.99" },
+      { "artikelName": "Meggle Butterkäse", "einzelpreis": "2.49"}
+    ]
+  },
+  "mindestPositionenTrefferQuote": 0.75
+}

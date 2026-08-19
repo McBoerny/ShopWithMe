@@ -38,6 +38,10 @@ struct BelegFixture: Codable, Sendable {
         /// Relevant fuer Belege mit Gesamtpreiszeilen (z.B. "3 x Milch 4.50"),
         /// wo die KI die Menge benoetigt um den Einzelpreis zu berechnen.
         let menge: Double?
+        /// EAN/Barcode des Artikels wie auf dem Bon gedruckt (z.B. "4014719000608").
+        /// nil oder weggelassen -> wird nicht geprueft.
+        /// Relevant fuer Hagebau u.a., wo Zeile 1 die Barcodenummer und Zeile 2 den Klarnamen zeigt.
+        let barcode: String?
     }
 }
 
@@ -114,12 +118,15 @@ struct BelegScanIntegrationTests {
                 $0.text.localizedCaseInsensitiveContains(sollPos.artikelName) ||
                 sollPos.artikelName.localizedCaseInsensitiveContains($0.text)
             }
+            let barcodeTreffer = sollPos.barcode.map { bc in
+                zeilen.contains { $0.text.contains(bc) }
+            } ?? false
             let preisTreffer = zeilen.contains {
                 $0.text.contains(preisUS) || $0.text.contains(preisDE)
             }
             #expect(
-                namenTreffer || preisTreffer,
-                "OCR-Text enthaelt weder Name '\(sollPos.artikelName)' noch Preis '\(sollPos.einzelpreis)' [Testfall: \(testfall.name)]"
+                namenTreffer || barcodeTreffer || preisTreffer,
+                "OCR-Text enthaelt weder Name '\(sollPos.artikelName)' noch Barcode '\(sollPos.barcode ?? "-")' noch Preis '\(sollPos.einzelpreis)' [Testfall: \(testfall.name)]"
             )
         }
     }
@@ -183,7 +190,12 @@ struct BelegScanIntegrationTests {
                 let namePasst =
                     istPos.artikelName.localizedCaseInsensitiveContains(sollPos.artikelName) ||
                     sollPos.artikelName.localizedCaseInsensitiveContains(istPos.artikelName)
-                return preisPasst || namePasst
+                // Manche Belege (z.B. Hagebau) zeigen Barcode + Klarname auf zwei Zeilen.
+                // Die KI uebernimmt oft beides in artikelName -- Barcode-Substring genuegt.
+                let barcodePasst = sollPos.barcode.map { bc in
+                    istPos.artikelName.contains(bc)
+                } ?? false
+                return preisPasst || namePasst || barcodePasst
             }
             if treffer != nil { erkannt += 1 }
 

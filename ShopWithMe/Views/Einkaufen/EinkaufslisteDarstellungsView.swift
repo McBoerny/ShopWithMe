@@ -13,16 +13,16 @@ import SwiftData
 /// 4. Einstellungs-Section in ``EinkaufslisteDarstellungsSettingsView`` ergänzen
 struct EinkaufslisteDarstellungsView: View {
     let gruppen: [KategorieGruppe]
-    let offeneArtikel: [Artikel]
+    let offeneEintraegeAnzahl: Int
     let abgehakteArtikel: [Artikel]
-    let einkaufsliste: Einkaufsliste
-    let istAbgehakt: (Artikel) -> Bool
-    let menge: (Artikel) -> Double
-    let mehrfachKategorisiert: (Artikel) -> Bool
-    let abhaken: (Artikel, ArtikelKategorie) -> Void
-    let mengeErhoehen: (Artikel) -> Void
-    let mengeVerringern: (Artikel) -> Void
-    let dauerhaftEntfernen: (Artikel) -> Void
+    let einkaufslistenName: String
+    let istAbgehakt: (KategorieGruppe.Element) -> Bool
+    let menge: (KategorieGruppe.Element) -> Double
+    let mehrfachKategorisiert: (KategorieGruppe.Element) -> Bool
+    let abhaken: (KategorieGruppe.Element, ArtikelKategorie) -> Void
+    let mengeErhoehen: (KategorieGruppe.Element) -> Void
+    let mengeVerringern: (KategorieGruppe.Element) -> Void
+    let dauerhaftEntfernen: (KategorieGruppe.Element) -> Void
 
     @AppStorage(DarstellungsKey.modus) private var modus = EinkaufslisteDarstellungsModus.liste
 
@@ -32,10 +32,9 @@ struct EinkaufslisteDarstellungsView: View {
             case .liste:
                 ListenInhaltView(
                     gruppen: gruppen,
-                    offeneArtikel: offeneArtikel,
+                    offeneEintraegeAnzahl: offeneEintraegeAnzahl,
                     abgehakteArtikel: abgehakteArtikel,
-                    einkaufslistenName: einkaufsliste.name,
-                    einkaufsliste: einkaufsliste,
+                    einkaufslistenName: einkaufslistenName,
                     istAbgehakt: istAbgehakt,
                     menge: menge,
                     mehrfachKategorisiert: mehrfachKategorisiert,
@@ -47,9 +46,9 @@ struct EinkaufslisteDarstellungsView: View {
             case .kacheln:
                 KachelInhaltView(
                     gruppen: gruppen,
-                    offeneArtikel: offeneArtikel,
+                    offeneEintraegeAnzahl: offeneEintraegeAnzahl,
                     abgehakteArtikel: abgehakteArtikel,
-                    einkaufslistenName: einkaufsliste.name,
+                    einkaufslistenName: einkaufslistenName,
                     istAbgehakt: istAbgehakt,
                     menge: menge,
                     abhaken: abhaken
@@ -66,17 +65,16 @@ struct EinkaufslisteDarstellungsView: View {
 /// Farbstreifen (nur Klassisch).
 private struct ListenInhaltView: View {
     let gruppen: [KategorieGruppe]
-    let offeneArtikel: [Artikel]
+    let offeneEintraegeAnzahl: Int
     let abgehakteArtikel: [Artikel]
     let einkaufslistenName: String
-    let einkaufsliste: Einkaufsliste
-    let istAbgehakt: (Artikel) -> Bool
-    let menge: (Artikel) -> Double
-    let mehrfachKategorisiert: (Artikel) -> Bool
-    let abhaken: (Artikel, ArtikelKategorie) -> Void
-    let mengeErhoehen: (Artikel) -> Void
-    let mengeVerringern: (Artikel) -> Void
-    let dauerhaftEntfernen: (Artikel) -> Void
+    let istAbgehakt: (KategorieGruppe.Element) -> Bool
+    let menge: (KategorieGruppe.Element) -> Double
+    let mehrfachKategorisiert: (KategorieGruppe.Element) -> Bool
+    let abhaken: (KategorieGruppe.Element, ArtikelKategorie) -> Void
+    let mengeErhoehen: (KategorieGruppe.Element) -> Void
+    let mengeVerringern: (KategorieGruppe.Element) -> Void
+    let dauerhaftEntfernen: (KategorieGruppe.Element) -> Void
 
     @AppStorage(DarstellungsKey.listenTyp)    private var listenTyp        = ListenAnzeigeTyp.klassisch
     @AppStorage(DarstellungsKey.akkordeon)    private var akkordeon        = false
@@ -87,7 +85,7 @@ private struct ListenInhaltView: View {
     @State private var geschlosseneKategorien: Set<PersistentIdentifier> = []
 
     private var fortschrittswert: Double {
-        let total = offeneArtikel.count + abgehakteArtikel.count
+        let total = offeneEintraegeAnzahl + abgehakteArtikel.count
         guard total > 0 else { return 0 }
         return Double(abgehakteArtikel.count) / Double(total)
     }
@@ -128,18 +126,18 @@ private struct ListenInhaltView: View {
     private func flacheSektion(gruppe: KategorieGruppe) -> some View {
         let kategorie = gruppe.kategorie
         Section {
-            ForEach(gruppe.artikel) { artikel in
+            ForEach(gruppe.elemente) { element in
                 ArtikelAbhakZeile(
-                    artikel: artikel,
-                    eintraege: einkaufsliste.alleEintraege(fuer: artikel),
-                    mengeAnzeige: menge(artikel),
-                    istAbgehakt: istAbgehakt(artikel),
-                    mehrfachKategorisiert: mehrfachKategorisiert(artikel),
+                    artikel: element.artikel,
+                    eintrag: element.eintrag,
+                    mengeAnzeige: menge(element),
+                    istAbgehakt: istAbgehakt(element),
+                    mehrfachKategorisiert: mehrfachKategorisiert(element),
                     kategoriefarbe: zeigeFarbstreifen ? Color(hex: kategorie.standardFarbeHex) : nil,
-                    abhaken: { abhaken(artikel, kategorie) },
-                    mengeErhoehen: { mengeErhoehen(artikel) },
-                    mengeVerringern: { mengeVerringern(artikel) },
-                    dauerhaftEntfernen: istAbgehakt(artikel) ? { dauerhaftEntfernen(artikel) } : nil
+                    abhaken: { abhaken(element, kategorie) },
+                    mengeErhoehen: { mengeErhoehen(element) },
+                    mengeVerringern: { mengeVerringern(element) },
+                    dauerhaftEntfernen: istAbgehakt(element) ? { dauerhaftEntfernen(element) } : nil
                 )
             }
         } header: {
@@ -150,7 +148,7 @@ private struct ListenInhaltView: View {
     @ViewBuilder
     private func akkordeonSektion(gruppe: KategorieGruppe) -> some View {
         let kategorie = gruppe.kategorie
-        let offenCount = gruppe.artikel.filter { !istAbgehakt($0) }.count
+        let offenCount = gruppe.elemente.filter { $0.eintrag != nil }.count
         DisclosureGroup(
             isExpanded: Binding(
                 get: { !geschlosseneKategorien.contains(kategorie.persistentModelID) },
@@ -163,18 +161,18 @@ private struct ListenInhaltView: View {
                 }
             )
         ) {
-            ForEach(gruppe.artikel) { artikel in
+            ForEach(gruppe.elemente) { element in
                 ArtikelAbhakZeile(
-                    artikel: artikel,
-                    eintraege: einkaufsliste.alleEintraege(fuer: artikel),
-                    mengeAnzeige: menge(artikel),
-                    istAbgehakt: istAbgehakt(artikel),
-                    mehrfachKategorisiert: mehrfachKategorisiert(artikel),
+                    artikel: element.artikel,
+                    eintrag: element.eintrag,
+                    mengeAnzeige: menge(element),
+                    istAbgehakt: istAbgehakt(element),
+                    mehrfachKategorisiert: mehrfachKategorisiert(element),
                     kategoriefarbe: zeigeFarbstreifen ? Color(hex: kategorie.standardFarbeHex) : nil,
-                    abhaken: { abhaken(artikel, kategorie) },
-                    mengeErhoehen: { mengeErhoehen(artikel) },
-                    mengeVerringern: { mengeVerringern(artikel) },
-                    dauerhaftEntfernen: istAbgehakt(artikel) ? { dauerhaftEntfernen(artikel) } : nil
+                    abhaken: { abhaken(element, kategorie) },
+                    mengeErhoehen: { mengeErhoehen(element) },
+                    mengeVerringern: { mengeVerringern(element) },
+                    dauerhaftEntfernen: istAbgehakt(element) ? { dauerhaftEntfernen(element) } : nil
                 )
             }
         } label: {
@@ -256,17 +254,17 @@ private struct ListenInhaltView: View {
 
     private func chipFlow(gruppe: KategorieGruppe, farbe: Color, gross: Bool) -> some View {
         ChipFlowLayout(abstand: 8) {
-            ForEach(gruppe.artikel) { artikel in
-                let erledigt = istAbgehakt(artikel)
+            ForEach(gruppe.elemente) { element in
+                let erledigt = istAbgehakt(element)
                 Button {
                     withAnimation(.easeInOut(duration: 0.15)) {
-                        abhaken(artikel, gruppe.kategorie)
+                        abhaken(element, gruppe.kategorie)
                     }
                 } label: {
                     if gross {
-                        grosserChip(artikel: artikel, farbe: farbe, erledigt: erledigt)
+                        grosserChip(element: element, farbe: farbe, erledigt: erledigt)
                     } else {
-                        kleinerChip(artikel: artikel, farbe: farbe, erledigt: erledigt)
+                        kleinerChip(element: element, farbe: farbe, erledigt: erledigt)
                     }
                 }
                 .buttonStyle(.plain)
@@ -274,10 +272,10 @@ private struct ListenInhaltView: View {
         }
     }
 
-    private func kleinerChip(artikel: Artikel, farbe: Color, erledigt: Bool) -> some View {
+    private func kleinerChip(element: KategorieGruppe.Element, farbe: Color, erledigt: Bool) -> some View {
         HStack(spacing: 5) {
             if erledigt { Image(systemName: "checkmark").font(.caption2.bold()) }
-            Text(artikel.name).font(.subheadline).strikethrough(erledigt)
+            Text(element.artikel.name).font(.subheadline).strikethrough(erledigt)
         }
         .padding(.horizontal, 14).padding(.vertical, 8)
         .background(farbe.opacity(erledigt ? 0.12 : 0.07))
@@ -288,13 +286,13 @@ private struct ListenInhaltView: View {
 
     // Großer Chip bewusst OHNE Kategorie-Icon — bessere Lesbarkeit bei mehreren Chips
     // pro Zeile; das Abhak-Symbol übernimmt die Statuskommunikation.
-    private func grosserChip(artikel: Artikel, farbe: Color, erledigt: Bool) -> some View {
+    private func grosserChip(element: KategorieGruppe.Element, farbe: Color, erledigt: Bool) -> some View {
         VStack(alignment: .leading, spacing: 1) {
-            Text(artikel.name)
+            Text(element.artikel.name)
                 .font(.subheadline.weight(.medium))
                 .strikethrough(erledigt)
                 .foregroundStyle(erledigt ? Color.secondary : Color.primary)
-            Text("\(menge(artikel).formatted()) \(artikel.einheit.kurzform)")
+            Text("\(menge(element).formatted()) \(element.artikel.einheit.kurzform)")
                 .font(.caption2).foregroundStyle(Color.secondary)
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
@@ -310,12 +308,12 @@ private struct ListenInhaltView: View {
     @ViewBuilder
     private var fortschrittHeader: some View {
         if zeigeFortschritt {
-            let total = offeneArtikel.count + abgehakteArtikel.count
+            let total = offeneEintraegeAnzahl + abgehakteArtikel.count
             let wert = total > 0 ? Double(abgehakteArtikel.count) / Double(total) : 0.0
             VStack(spacing: 4) {
                 ProgressView(value: wert).tint(.green).padding(.horizontal)
                 HStack {
-                    Text("\(total - abgehakteArtikel.count) übrig")
+                    Text("\(offeneEintraegeAnzahl) übrig")
                         .font(.caption2).foregroundStyle(.secondary)
                     Spacer()
                     Text("\(Int(wert * 100)) %")
@@ -329,7 +327,7 @@ private struct ListenInhaltView: View {
 
     @ViewBuilder
     private var leerzustandView: some View {
-        if !offeneArtikel.isEmpty {
+        if offeneEintraegeAnzahl > 0 {
             ContentUnavailableView(
                 "Keine verfügbaren Artikel",
                 systemImage: "checklist",
@@ -357,31 +355,31 @@ private struct ListenInhaltView: View {
 /// Kategoriesektionen, wahlweise mit Kategorie-Farbhintergrund.
 private struct KachelInhaltView: View {
     let gruppen: [KategorieGruppe]
-    let offeneArtikel: [Artikel]
+    let offeneEintraegeAnzahl: Int
     let abgehakteArtikel: [Artikel]
     let einkaufslistenName: String
-    let istAbgehakt: (Artikel) -> Bool
-    let menge: (Artikel) -> Double
-    let abhaken: (Artikel, ArtikelKategorie) -> Void
+    let istAbgehakt: (KategorieGruppe.Element) -> Bool
+    let menge: (KategorieGruppe.Element) -> Double
+    let abhaken: (KategorieGruppe.Element, ArtikelKategorie) -> Void
 
     @AppStorage(DarstellungsKey.spalten) private var spaltenRaw = KachelSpaltenanzahl.zwei.rawValue
     @AppStorage(DarstellungsKey.farbig)  private var farbig = false
 
     private struct KachelItem: Identifiable {
-        let artikel: Artikel
+        let element: KategorieGruppe.Element
         let kategorie: ArtikelKategorie
         let farbe: Color
         let symbol: String
-        var id: PersistentIdentifier { artikel.persistentModelID }
+        var id: PersistentIdentifier { element.id }
     }
 
     private var kachelArtikel: [KachelItem] {
         var gesehen = Set<PersistentIdentifier>()
         return gruppen.flatMap { gruppe in
-            gruppe.artikel.compactMap { artikel in
-                guard gesehen.insert(artikel.persistentModelID).inserted else { return nil }
+            gruppe.elemente.compactMap { element in
+                guard gesehen.insert(element.artikel.persistentModelID).inserted else { return nil }
                 return KachelItem(
-                    artikel: artikel,
+                    element: element,
                     kategorie: gruppe.kategorie,
                     farbe: Color(hex: gruppe.kategorie.standardFarbeHex),
                     symbol: gruppe.kategorie.standardSymbol
@@ -403,10 +401,10 @@ private struct KachelInhaltView: View {
             ScrollView {
                 LazyVGrid(columns: spalten, spacing: dreispaltig ? 8 : 12) {
                     ForEach(kachelArtikel) { item in
-                        let erledigt = istAbgehakt(item.artikel)
+                        let erledigt = istAbgehakt(item.element)
                         Button {
                             withAnimation(.spring(response: 0.25, dampingFraction: 0.7)) {
-                                abhaken(item.artikel, item.kategorie)
+                                abhaken(item.element, item.kategorie)
                             }
                         } label: {
                             kachelLabel(item: item, erledigt: erledigt)
@@ -427,13 +425,13 @@ private struct KachelInhaltView: View {
                 .font(dreispaltig ? .title3 : .system(size: 30))
                 .foregroundStyle(erledigt ? .green : (farbig ? Color.white : item.farbe))
                 .frame(height: dreispaltig ? 28 : 40)
-            Text(item.artikel.name)
+            Text(item.element.artikel.name)
                 .font(dreispaltig ? .caption.weight(.medium) : .subheadline.weight(.medium))
                 .strikethrough(erledigt)
                 .foregroundStyle(erledigt ? Color.secondary : (farbig ? Color.white : Color.primary))
                 .multilineTextAlignment(.center)
                 .lineLimit(dreispaltig ? 2 : nil)
-            Text("\(menge(item.artikel).formatted()) \(item.artikel.einheit.kurzform)")
+            Text("\(menge(item.element).formatted()) \(item.element.artikel.einheit.kurzform)")
                 .font(.caption2)
                 .foregroundStyle(farbig ? Color.white.opacity(0.75) : Color.secondary)
         }
@@ -467,7 +465,7 @@ private struct KachelInhaltView: View {
 
     @ViewBuilder
     private var leerzustandView: some View {
-        if !offeneArtikel.isEmpty {
+        if offeneEintraegeAnzahl > 0 {
             ContentUnavailableView(
                 "Keine verfügbaren Artikel",
                 systemImage: "checklist",

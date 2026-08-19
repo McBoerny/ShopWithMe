@@ -1,13 +1,12 @@
 import SwiftData
 
-/// Version 2 des SwiftData-Schemas — fügt ``Produkt``/``Produktname`` hinzu
-/// und erweitert ``Artikel``/``Preispunkt``/``EinkaufslistenEintrag`` um die
-/// dafür nötigen Relationships (GitHub #47, Schritt 1/5, v0.13). Referenziert
-/// die aktuellen, lebenden Modell-Typen aus `Models/*.swift` — im Unterschied
-/// zu ``SchemaV1`` (`SchemaV1Frozen.swift`), das den eingefrorenen Vorzustand
-/// verschachtelt nachbildet. Siehe `docs/ARTIKEL_PRODUKT_MODELL.md`.
-enum SchemaV2: VersionedSchema {
-    static var versionIdentifier: Schema.Version { Schema.Version(2, 0, 0) }
+/// Version 3 des SwiftData-Schemas — erweitert ``Geschaeft`` um ``markenname``
+/// zur Filial-Gruppierung in ``GeschaeftListView`` (v0.16). Referenziert die
+/// aktuellen, lebenden Modell-Typen aus `Models/*.swift` — im Unterschied zu
+/// ``SchemaV1`` (`SchemaV1Frozen.swift`) und ``SchemaV2`` (`SchemaV2Frozen.swift`),
+/// die eingefrorene Vorzustände verschachtelt nachbilden.
+enum SchemaV3: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(3, 0, 0) }
 
     static var models: [any PersistentModel.Type] {
         [
@@ -40,13 +39,15 @@ enum SchemaV2: VersionedSchema {
     }
 }
 
-/// Migrationsplan für das SwiftData-Schema — erste echte strukturelle
-/// Migration dieses Projekts (``SchemaV1`` → ``SchemaV2``, siehe
-/// `docs/ARTIKEL_PRODUKT_MODELL.md`). Frühere Änderungen waren additiv-optional
-/// und brauchten keine ``MigrationStage`` (siehe `docs/DECISIONS.md`).
+/// Migrationsplan für das SwiftData-Schema.
+/// - ``SchemaV1`` → ``SchemaV2``: fügt ``Produkt``/``Produktname`` hinzu und
+///   verknüpft bestehende ``Preispunkt``/``EinkaufslistenEintrag``-Einträge per
+///   Custom-Stage (GitHub #47, v0.13, siehe `docs/ARTIKEL_PRODUKT_MODELL.md`).
+/// - ``SchemaV2`` → ``SchemaV3``: fügt ``Geschaeft/markenname`` additiv-optional
+///   hinzu (v0.16) — Lightweight-Migration, keine Datentransformation nötig.
 enum ShopWithMeMigrationPlan: SchemaMigrationPlan {
-    static var schemas: [any VersionedSchema.Type] { [SchemaV1.self, SchemaV2.self] }
-    static var stages: [MigrationStage] { [migrateV1toV2] }
+    static var schemas: [any VersionedSchema.Type] { [SchemaV1.self, SchemaV2.self, SchemaV3.self] }
+    static var stages: [MigrationStage] { [migrateV1toV2, migrateV2toV3] }
 
     /// Verknüpft jeden ``Preispunkt``/``EinkaufslistenEintrag`` mit bereits
     /// gesetztem ``Artikel``, aber noch ohne ``Produkt`` (zwangsläufig JEDER
@@ -75,12 +76,19 @@ enum ShopWithMeMigrationPlan: SchemaMigrationPlan {
             try? context.save()
         }
     )
+
+    /// Lightweight-Migration: fügt ``Geschaeft/markenname`` als optionale Spalte
+    /// hinzu — bestehende Datensätze erhalten automatisch `nil`.
+    static let migrateV2toV3 = MigrationStage.lightweight(
+        fromVersion: SchemaV2.self,
+        toVersion: SchemaV3.self
+    )
 }
 
 /// Zentrale Definition des SwiftData-Schemas, damit an allen Stellen, die einen
 /// `ModelContainer`/`ModelConfiguration` aufbauen, dieselbe Modell-Liste sowie
 /// derselbe Migrationsplan verwendet werden.
 enum SchemaDefinition {
-    static let schema = Schema(versionedSchema: SchemaV2.self)
+    static let schema = Schema(versionedSchema: SchemaV3.self)
     static let migrationPlan = ShopWithMeMigrationPlan.self
 }

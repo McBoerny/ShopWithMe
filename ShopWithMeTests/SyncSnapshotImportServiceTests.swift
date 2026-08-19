@@ -2907,4 +2907,46 @@ struct SyncSnapshotImportServiceTests {
         #expect(try context.fetch(FetchDescriptor<Einkaufsliste>()).count == 1)
         #expect(try context.fetch(FetchDescriptor<SyncAbgleichKandidat>()).isEmpty)
     }
+
+    // MARK: - Peer-Lebenszyklus: bereinigeFehlendeGruppenPeers
+
+    @Test
+    func bereinigeFehlendeGruppenPeersEntferntPeerInfoWennOrdnerFehlt() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        context.insert(SyncPeerInfo(peerGeraeteID: "peer-a", geraeteName: "Fremdes iPhone"))
+
+        let bekannteOrdner = [URL(fileURLWithPath: "/tmp/peers/peer-b")]
+        SyncSnapshotImportService.bereinigeFehlendeGruppenPeers(bekannteOrdner: bekannteOrdner, context: context)
+
+        #expect(try context.fetch(FetchDescriptor<SyncPeerInfo>()).isEmpty)
+    }
+
+    @Test
+    func bereinigeFehlendeGruppenPeersBehältPeerInfoWennOrdnerExistiert() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        context.insert(SyncPeerInfo(peerGeraeteID: "peer-a", geraeteName: "Fremdes iPhone"))
+
+        let bekannteOrdner = [URL(fileURLWithPath: "/tmp/peers/peer-a")]
+        SyncSnapshotImportService.bereinigeFehlendeGruppenPeers(bekannteOrdner: bekannteOrdner, context: context)
+
+        #expect(try context.fetch(FetchDescriptor<SyncPeerInfo>()).count == 1)
+    }
+
+    @Test
+    func bereinigeFehlendeGruppenPeersEntferntAuchZaehlerUndDistanzEintraege() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let geraeteID = "peer-a"
+        context.insert(SyncPeerInfo(peerGeraeteID: geraeteID, geraeteName: "Fremdes iPhone"))
+        context.insert(SyncPeerZaehlerStand(peerGeraeteID: geraeteID, geschaeftID: UUID(), zuletztGesehenerWert: 3))
+        context.insert(WarengruppenDistanzPeerZaehlerStand(peerGeraeteID: geraeteID, distanzID: UUID(), zuletztGesehenerWert: 5))
+
+        SyncSnapshotImportService.bereinigeFehlendeGruppenPeers(bekannteOrdner: [], context: context)
+
+        #expect(try context.fetch(FetchDescriptor<SyncPeerInfo>()).isEmpty)
+        #expect(try context.fetch(FetchDescriptor<SyncPeerZaehlerStand>()).isEmpty)
+        #expect(try context.fetch(FetchDescriptor<WarengruppenDistanzPeerZaehlerStand>()).isEmpty)
+    }
 }

@@ -1,0 +1,13 @@
+{
+  "beschreibung": "Segmüller",
+  "sollErgebnis": {
+    "geschaeftName": "Segmüller Möbelhaus",
+    "datum": "2026-07-18",
+    "positionen": [
+      { "artikelName": "Aperitivo \"Perfett", "barcode": "3910255/00000", "einzelpreis": "7.99" },
+      { "artikelName": "Dipschalen-Set \"Ga", "barcode": "3859799/00000", "einzelpreis": "11.89" }
+    ]
+  },
+  "mindestPositionenTrefferQuote": 0.75
+}
+

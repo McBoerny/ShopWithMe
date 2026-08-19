@@ -15,6 +15,18 @@ struct ShopWithMeApp: App {
 
     init() {
         let schema = SchemaDefinition.schema
+
+        // Im Test-Umfeld reicht ein In-Memory-Store — BelegScan-Tests benoetigen
+        // SwiftData nicht, und der persistente Store oeffnet auf dem Mac nicht zuverlaessig.
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            do {
+                modelContainer = try ModelContainer(for: schema, configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+            } catch {
+                fatalError("In-Memory-ModelContainer konnte nicht erstellt werden: \(error)")
+            }
+            return
+        }
+
         let konfiguration = ModelConfiguration(schema: schema)
 
         // Muss VOR dem Öffnen des Containers passieren (siehe

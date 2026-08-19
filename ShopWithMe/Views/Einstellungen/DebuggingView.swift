@@ -63,6 +63,8 @@ struct DebuggingView: View {
 
             StatuskonsolidierungSection()
 
+            AufraeumWasserstandSection()
+
             DatenintegritaetSection()
 
             ModellIDDuplikatSection()
@@ -294,6 +296,97 @@ private struct StatuskonsolidierungSection: View {
             wirdAusgefuehrt = false
             meldung = erfolgsmeldung
         }
+    }
+}
+
+/// Akkordeon-Abschnitt, der den aktuellen dynamischen Aufbewahrungs-Wasserstand
+/// (Peer-Lebenszyklus, Baustein C) und die Anzahl der bereits bereinigbaren
+/// lokalen Einträge (Tombstones in der DB, eigene Event-Dateien im Sync-Ordner)
+/// anzeigt — rein informativ, kein Löschen.
+private struct AufraeumWasserstandSection: View {
+    @Environment(\.modelContext) private var modelContext
+    @State private var isExpanded = false
+    @State private var wirdGeladen = false
+    @State private var ergebnis: Ergebnis?
+
+    private struct Ergebnis {
+        let wasserstand: Date?
+        let tombstoneAnzahl: Int
+        let eventDateiAnzahl: Int
+    }
+
+    var body: some View {
+        if SyncOrdnerService.gewaehlterOrdner() != nil {
+            Section {
+                DisclosureGroup(isExpanded: $isExpanded) {
+                    if wirdGeladen {
+                        ProgressView()
+                    } else if let e = ergebnis {
+                        if let datum = e.wasserstand {
+                            LabeledContent("Wasserstand", value: datum.formatted(date: .abbreviated, time: .shortened))
+                            LabeledContent("Tombstones bereinigbar", value: "\(e.tombstoneAnzahl)")
+                            LabeledContent("Event-Dateien bereinigbar", value: "\(e.eventDateiAnzahl)")
+                        } else {
+                            Text("Kein anderer Peer bekannt oder Ordner nicht erreichbar — kein Wasserstand.")
+                                .foregroundStyle(.secondary)
+                        }
+                        Button("Aktualisieren") { laden() }
+                    }
+                } label: {
+                    Label("Aufräum-Wasserstand", systemImage: "drop.triangle")
+                }
+            } header: {
+                Text("Aufräum-Wasserstand")
+            } footer: {
+                Text("Minimum aller Peer-Manifest-Zeitstempel. Tombstones und eigene Event-Dateien, die davor entstanden sind, wurden von allen bekannten Peers gesehen und könnten beim nächsten automatischen Lauf gelöscht werden.")
+            }
+            .task { laden() }
+        }
+    }
+
+    private func laden() {
+        guard !wirdGeladen else { return }
+        wirdGeladen = true
+        Task {
+            ergebnis = await berechne()
+            wirdGeladen = false
+        }
+    }
+
+    @MainActor
+    private func berechne() async -> Ergebnis {
+        guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else {
+            return Ergebnis(wasserstand: nil, tombstoneAnzahl: 0, eventDateiAnzahl: 0)
+        }
+        let wasserstand = await SyncSnapshotImportService.aktuellerAufraeumWasserstand(in: syncOrdner)
+
+        let tombstoneAnzahl: Int
+        if let ws = wasserstand {
+            let alle = (try? modelContext.fetch(FetchDescriptor<SyncTombstone>())) ?? []
+            tombstoneAnzahl = alle.filter { $0.geloeschtAm < ws }.count
+        } else {
+            tombstoneAnzahl = 0
+        }
+
+        let eventDateiAnzahl: Int
+        if let ws = wasserstand, syncOrdner.startAccessingSecurityScopedResource() {
+            defer { syncOrdner.stopAccessingSecurityScopedResource() }
+            let eventsOrdner = SyncExportService.eigenerEventsOrdner(in: syncOrdner)
+            let dateien = await Task.detached(priority: .utility) {
+                SyncDateiZugriff.listeKoordiniert(eventsOrdner) ?? []
+            }.value
+            eventDateiAnzahl = dateien.filter { datei in
+                guard datei.pathExtension == "json",
+                      let werte = try? datei.resourceValues(forKeys: [.contentModificationDateKey]),
+                      let geaendertAm = werte.contentModificationDate
+                else { return false }
+                return geaendertAm < ws
+            }.count
+        } else {
+            eventDateiAnzahl = 0
+        }
+
+        return Ergebnis(wasserstand: wasserstand, tombstoneAnzahl: tombstoneAnzahl, eventDateiAnzahl: eventDateiAnzahl)
     }
 }
 

@@ -120,7 +120,7 @@ final class Einkaufsvorgang {
     /// gehoben — nur der reine `nil`-Literal bedeutet „kein Override".
     @discardableResult
     func artikelAbhakenOhneEventAufzeichnung(
-        _ artikel: Artikel, context: ModelContext, ursprungsGeraeteID: String? = nil,
+        _ artikel: Artikel, produkt: Produkt? = nil, context: ModelContext, ursprungsGeraeteID: String? = nil,
         kategorie kategorieUeberschreibung: ArtikelKategorie? = nil,
         geschaeft geschaeftUeberschreibung: Geschaeft?? = nil
     ) -> AbhakErgebnis {
@@ -137,7 +137,7 @@ final class Einkaufsvorgang {
         // Artikel blieb scheinbar dauerhaft „abgehakt" hängen.
         let artikelID = artikel.persistentModelID
         let deskriptor = FetchDescriptor<KaufEintrag>(predicate: #Predicate { $0.artikel?.persistentModelID == artikelID })
-        let listenEintraege = einkaufsliste?.alleEintraege(fuer: artikel) ?? []
+        let listenEintrag = einkaufsliste?.eintrag(fuer: artikel, produkt: produkt)
         let bereitsVorhanden = ((try? context.fetch(deskriptor)) ?? []).first {
             $0.einkaufsvorgang?.einkaufsliste?.persistentModelID == einkaufsliste?.persistentModelID
                 && $0.einkaufsvorgang?.endZeit == nil
@@ -153,9 +153,9 @@ final class Einkaufsvorgang {
             // gemeldeten Befund überhaupt ursächlich sein kann.
             DatabaseDebugLogger.log(
                 .dedupeConflictDetected,
-                details: "artikelAbhaken: \(artikel.name) listenEintragVorhanden=\(!listenEintraege.isEmpty)"
+                details: "artikelAbhaken: \(artikel.name) listenEintragVorhanden=\(listenEintrag != nil)"
             )
-            for le in listenEintraege { context.delete(le) }
+            if let listenEintrag { context.delete(listenEintrag) }
             let besitzerID = bereitsVorhanden.einkaufsvorgang?.id ?? id
             let gewinner = SyncEventService.aktuellerGewinner(bezugsID: besitzerID, artikelID: artikel.id, context: context)
             return .bereitsAbgehaktVon(geraeteID: gewinner?.autorGeraeteID)
@@ -168,13 +168,13 @@ final class Einkaufsvorgang {
             artikel: artikel,
             geschaeft: geschaeftFuerEintrag,
             kategorie: kategorie,
-            menge: listenEintraege.first?.menge ?? artikel.mengenSchritt,
+            menge: listenEintrag?.menge ?? artikel.mengenSchritt,
             kategorieBesuchsIndex: index,
             ursprungsGeraeteID: ursprungsGeraeteID
         )
         context.insert(eintrag)
         eintrag.einkaufsvorgang = self
-        for le in listenEintraege { context.delete(le) }
+        if let listenEintrag { context.delete(listenEintrag) }
         if let geschaeftFuerEintrag {
             ArtikelVerfuegbarkeitService.vermerkeGekauft(artikel: artikel, geschaeft: geschaeftFuerEintrag, context: context)
         }
@@ -195,8 +195,8 @@ final class Einkaufsvorgang {
     /// Empfänger den Kaufeintrag auch nach einer Umleitung auf einen anderen
     /// Vorgang mit dem tatsächlich zutreffenden Geschäft anlegen kann.
     @discardableResult
-    func artikelAbhaken(_ artikel: Artikel, context: ModelContext, kategorie: ArtikelKategorie? = nil) -> AbhakErgebnis {
-        let ergebnis = artikelAbhakenOhneEventAufzeichnung(artikel, context: context, kategorie: kategorie)
+    func artikelAbhaken(_ artikel: Artikel, produkt: Produkt? = nil, context: ModelContext, kategorie: ArtikelKategorie? = nil) -> AbhakErgebnis {
+        let ergebnis = artikelAbhakenOhneEventAufzeichnung(artikel, produkt: produkt, context: context, kategorie: kategorie)
         if ergebnis == .abgehakt {
             SyncEventService.aufzeichnen(.artikelAbgehakt, bezugsID: id, artikelID: artikel.id, geschaeftID: geschaeft?.id, context: context)
         }

@@ -1,0 +1,13 @@
+{
+  "beschreibung": "Rewe, kein Shopname",
+  "sollErgebnis": {
+    "geschaeftAdresse": "Am Strasserwinkel 4, 82216 Maisach",
+    "datum": "2026-07-18",
+    "positionen": [
+      { "artikelName": "Douglas15-150": "20.00" }
+    ]
+  },
+  "mindestPositionenTrefferQuote": 0.75
+}
+
+

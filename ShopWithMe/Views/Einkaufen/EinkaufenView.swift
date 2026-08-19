@@ -892,8 +892,14 @@ private struct GeschaeftInDerNaeheZeile: View {
 /// ``EinkaufslisteView/kategorieGruppen(fuer:)``. Auf Modulebene (nicht `private`),
 /// damit ``EinkaufslisteDarstellungsView`` den Typ als Parameter nutzen kann.
 struct KategorieGruppe: Identifiable {
+    struct Element: Identifiable {
+        var id: PersistentIdentifier
+        var artikel: Artikel
+        /// `nil` bedeutet: Eintrag wurde bereits abgehakt (kein `EinkaufslistenEintrag` mehr vorhanden).
+        var eintrag: EinkaufslistenEintrag?
+    }
     let kategorie: ArtikelKategorie
-    var artikel: [Artikel]
+    var elemente: [Element]
     var id: PersistentIdentifier { kategorie.persistentModelID }
 }
 
@@ -969,24 +975,12 @@ private struct EinkaufslisteView: View {
     /// Einstellungen gewechselt werden muss.
     @State private var zeigeSyncTriggerPicker = false
 
-    /// Bewusst aus ``abgehakteKaufEintraege`` (liste-weit, EGAL welcher
-    /// Vorgang) statt aus ``einkaufsvorgang.kaufEintraege`` allein — siehe
-    /// Typ-Doku dort.
-    private var abgehakteArtikelIDs: Set<PersistentIdentifier> {
-        Set(abgehakteKaufEintraege.compactMap { $0.artikel?.persistentModelID })
-    }
-
-    /// Artikel, die noch auf ``einkaufsliste`` stehen — schließt bewusst
-    /// bereits abgehakte Artikel aus, auch wenn (z.B. durch einen inzwischen
-    /// behobenen Sync-Fehler, GitHub #52-Nachfolgefund) noch ein
-    /// ``EinkaufslistenEintrag`` für sie existiert. Verhindert, dass derselbe
-    /// Artikel gleichzeitig als „offen" und als „abgehakt" erscheint.
-    private var offeneArtikel: [Artikel] {
-        var gesehen = Set<PersistentIdentifier>()
-        return einkaufsliste.eintraege.compactMap(\.artikel).filter {
-            !abgehakteArtikelIDs.contains($0.persistentModelID)
-            && gesehen.insert($0.persistentModelID).inserted
-        }
+    /// Offene Listeneinträge — alle ``EinkaufslistenEintrag``e der ``einkaufsliste``
+    /// mit gültigem Artikel. Abgehakte Einträge verschwinden dadurch, dass
+    /// ``artikelAbhaken`` den ``EinkaufslistenEintrag`` löscht, bevor es den
+    /// ``KaufEintrag`` anlegt — kein separater `abgehakteArtikelIDs`-Filter nötig.
+    private var offeneEintraege: [EinkaufslistenEintrag] {
+        einkaufsliste.eintraege.filter { $0.artikel != nil }
     }
 
     /// Artikel, die für diese Liste bereits abgehakt wurden (an EGAL welchem
@@ -1003,7 +997,7 @@ private struct EinkaufslisteView: View {
     /// Bildschirmtitel inkl. Fortschritt für diesen Einkaufsvorgang, Format
     /// „<Titel> (<abgehakt>/<gesamt>)" (GitHub #74).
     private var listenTitel: String {
-        "\(einkaufsliste.name) (\(abgehakteArtikel.count)/\(offeneArtikel.count + abgehakteArtikel.count))"
+        "\(einkaufsliste.name) (\(abgehakteArtikel.count)/\(offeneEintraege.count + abgehakteArtikel.count))"
     }
 
     /// Der „Einkauf abschließen“-Button am unteren Bildschirmrand: zeigt die Anzahl
@@ -1127,15 +1121,12 @@ private struct EinkaufslisteView: View {
     /// (noch) nicht als verfügbar gelten (siehe ``ArtikelVerfuegbarkeitService``).
     /// Per ``zeigeAlleArtikel`` kann der Anwender diesen Filter für den laufenden
     /// Einkauf übergehen.
-    private func verfuegbarkeitsgefiltert(_ artikel: [Artikel]) -> [Artikel] {
-        guard let geschaeft, !zeigeAlleArtikel else { return artikel }
-        return artikel.filter { ArtikelVerfuegbarkeitService.istVerfuegbar($0, in: geschaeft, context: modelContext) }
-    }
-
-    /// Die aktuell darzustellenden Artikel — abhängig von ``zeigeAbgehakteArtikel``.
-    private var artikelAufListe: [Artikel] {
-        let basis = zeigeAbgehakteArtikel ? offeneArtikel + abgehakteArtikel : offeneArtikel
-        return verfuegbarkeitsgefiltert(basis)
+    private func verfuegbarkeitsgefiltert(_ eintraege: [EinkaufslistenEintrag]) -> [EinkaufslistenEintrag] {
+        guard let geschaeft, !zeigeAlleArtikel else { return eintraege }
+        return eintraege.filter { eintrag in
+            guard let artikel = eintrag.artikel else { return false }
+            return ArtikelVerfuegbarkeitService.istVerfuegbar(artikel, in: geschaeft, context: modelContext)
+        }
     }
 
     /// `artikelListe` (üblicherweise ``artikelAufListe``), gruppiert nach
@@ -1185,11 +1176,21 @@ private struct EinkaufslisteView: View {
     /// Render mit einer bereits berechneten `artikelListe` aufruft, statt sie
     /// (inklusive der darin enthaltenen Sortierung samt SwiftData-Fetch) mehrfach
     /// neu auszuwerten.
-    private func kategorieGruppen(fuer artikelListe: [Artikel]) -> [KategorieGruppe] {
+    private func kategorieGruppen() -> [KategorieGruppe] {
         var nachKategorie: [PersistentIdentifier: KategorieGruppe] = [:]
-        for artikel in artikelListe {
+        for eintrag in verfuegbarkeitsgefiltert(offeneEintraege) {
+            guard let artikel = eintrag.artikel else { continue }
+            let element = KategorieGruppe.Element(id: eintrag.persistentModelID, artikel: artikel, eintrag: eintrag)
             for kategorie in kategorienFuerAnzeige(artikel) {
-                nachKategorie[kategorie.persistentModelID, default: KategorieGruppe(kategorie: kategorie, artikel: [])].artikel.append(artikel)
+                nachKategorie[kategorie.persistentModelID, default: KategorieGruppe(kategorie: kategorie, elemente: [])].elemente.append(element)
+            }
+        }
+        if zeigeAbgehakteArtikel {
+            for artikel in abgehakteArtikel {
+                let element = KategorieGruppe.Element(id: artikel.persistentModelID, artikel: artikel, eintrag: nil)
+                for kategorie in kategorienFuerAnzeige(artikel) {
+                    nachKategorie[kategorie.persistentModelID, default: KategorieGruppe(kategorie: kategorie, elemente: [])].elemente.append(element)
+                }
             }
         }
         let alphabetisch = nachKategorie.values.map(\.kategorie)
@@ -1279,9 +1280,9 @@ private struct EinkaufslisteView: View {
     /// Die momentan für die Anzeige relevante Menge eines Artikels: solange er noch
     /// auf ``einkaufsliste`` steht, dessen ``EinkaufslistenEintrag/menge``, sonst
     /// (bereits abgehakt) die im ``KaufEintrag`` festgehaltene Menge.
-    private func menge(fuer artikel: Artikel) -> Double {
-        if let eintrag = einkaufsliste.eintraege.first(where: { $0.artikel == artikel }) { return eintrag.menge }
-        return kaufEintrag(fuer: artikel)?.menge ?? artikel.mengenSchritt
+    private func menge(fuer element: KategorieGruppe.Element) -> Double {
+        if let eintrag = element.eintrag { return eintrag.menge }
+        return kaufEintrag(fuer: element.artikel)?.menge ?? element.artikel.mengenSchritt
     }
 
     /// Bewusst aus ``abgehakteKaufEintraege`` (liste-weit) statt nur
@@ -1307,15 +1308,15 @@ private struct EinkaufslisteView: View {
     }
 
     var body: some View {
-        let gruppen = kategorieGruppen(fuer: artikelAufListe)
+        let gruppen = kategorieGruppen()
         EinkaufslisteDarstellungsView(
             gruppen: gruppen,
-            offeneArtikel: offeneArtikel,
+            offeneEintraegeAnzahl: offeneEintraege.count,
             abgehakteArtikel: abgehakteArtikel,
-            einkaufsliste: einkaufsliste,
+            einkaufslistenName: einkaufsliste.name,
             istAbgehakt: istAbgehakt(_:),
             menge: menge(fuer:),
-            mehrfachKategorisiert: { artikel in kategorienFuerAnzeige(artikel).count > 1 },
+            mehrfachKategorisiert: { element in kategorienFuerAnzeige(element.artikel).count > 1 },
             abhaken: umschalten(_:kategorie:),
             mengeErhoehen: mengeErhoehen(_:),
             mengeVerringern: mengeVerringern(_:),
@@ -1443,8 +1444,8 @@ private struct EinkaufslisteView: View {
 
     /// Bewusst aus ``abgehakteKaufEintraege`` (liste-weit) statt nur
     /// ``einkaufsvorgang`` — siehe Typ-Doku dort.
-    private func istAbgehakt(_ artikel: Artikel) -> Bool {
-        abgehakteKaufEintraege.contains { $0.artikel == artikel }
+    private func istAbgehakt(_ element: KategorieGruppe.Element) -> Bool {
+        element.eintrag == nil
     }
 
     /// `kategorie`: die Sektion, aus der heraus getappt wurde (siehe
@@ -1452,31 +1453,13 @@ private struct EinkaufslisteView: View {
     /// ist das die tatsächliche Beobachtung, in welcher davon er in diesem
     /// Geschäft steht, und wird unverändert an
     /// ``Einkaufsvorgang/artikelAbhaken(_:context:kategorie:)`` weitergereicht.
-    private func umschalten(_ artikel: Artikel, kategorie: ArtikelKategorie) {
+    private func umschalten(_ element: KategorieGruppe.Element, kategorie: ArtikelKategorie) {
         interaktionRegistrieren()
-        // Nur die Identitäten über die `await`-Grenze hinweg sichern (siehe
-        // ``ModelReference``) — während des Micro-Lease-Erwerbs kann ein
-        // nebenläufiger Sync-Zyklus genau diesen Artikel, Einkaufsvorgang,
-        // diese Kategorie oder den Kaufeintrag (z.B. per Peer-Zusammenführung/
-        // Löschung) verändert haben.
-        //
-        // Die TATSÄCHLICHEN Besitzer-Vorgänge eines ggf. bereits abgehakten
-        // Eintrags kommen bewusst direkt aus ``alleAbgehaktenEintraege(fuer:)``
-        // (dieselbe Quelle, die auch ``istAbgehakt(_:)``/die Sichtbarkeit
-        // dieses Buttons bestimmt hat) — NICHT über einen neuen, zeitfenster-
-        // beschränkten Fetch relativ zu `einkaufsvorgang.startZeit` erneut
-        // geraten (Regressionsfund: machte „Abwählen" zum stillen No-op nach
-        // einer Vorgangs-Rotation). Bewusst ALLE (nicht nur der erste)
-        // Treffer: vor dem listenweiten Dedupe-Fix (Live-Test-Fund, Nachtrag
-        // Session 2026-08-03) konnte derselbe Artikel unter zwei
-        // unterschiedlichen, beide offenen Vorgängen abgehakt sein — ein
-        // Abwählen, das nur den ersten Treffer bearbeitet, hätte den Artikel
-        // wegen des verbleibenden zweiten Eintrags scheinbar dauerhaft
-        // „abgehakt" hängen lassen.
-        let artikelReferenz = ModelReference(artikel)
+        let artikelReferenz = ModelReference(element.artikel)
+        let produktReferenz = ModelReference(element.eintrag?.produkt)
         let einkaufsvorgangReferenz = ModelReference(einkaufsvorgang)
         let kategorieReferenz = ModelReference(kategorie)
-        let vorhandeneEintragReferenzen = alleAbgehaktenEintraege(fuer: artikel).map(ModelReference.init)
+        let vorhandeneEintragReferenzen = alleAbgehaktenEintraege(fuer: element.artikel).map(ModelReference.init)
         Task {
             var abhakErgebnis: AbhakErgebnis?
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
@@ -1489,11 +1472,11 @@ private struct EinkaufslisteView: View {
                         vorgang.artikelAbwaehlen(artikelFrisch, context: modelContext)
                     }
                 } else {
-                    // `nil`, falls die Kategorie inzwischen gelöscht wurde — fällt
-                    // dann auf `Artikel/fuehrendeKategorie(inGeschaeft:context:)`
-                    // zurück, statt abzustürzen oder die Aktion abzubrechen.
                     let kategorieFrisch = kategorieReferenz.resolved(in: modelContext)
-                    abhakErgebnis = einkaufsvorgangFrisch.artikelAbhaken(artikelFrisch, context: modelContext, kategorie: kategorieFrisch)
+                    let produktFrisch = produktReferenz?.resolved(in: modelContext)
+                    abhakErgebnis = einkaufsvorgangFrisch.artikelAbhaken(
+                        artikelFrisch, produkt: produktFrisch, context: modelContext, kategorie: kategorieFrisch
+                    )
                 }
             }
             if let abhakErgebnis {
@@ -1521,19 +1504,10 @@ private struct EinkaufslisteView: View {
         }
     }
 
-    private func entferneDauerhaft(_ artikel: Artikel) {
+    private func entferneDauerhaft(_ element: KategorieGruppe.Element) {
         interaktionRegistrieren()
-        // Siehe ``umschalten(_:kategorie:)`` — derselbe Grund, ALLE
-        // TATSÄCHLICHEN Besitzer-Vorgänge direkt aus
-        // ``alleAbgehaktenEintraege(fuer:)`` zu nehmen statt über einen
-        // zeitfenster-beschränkten Fetch erneut zu raten, und bewusst ALLE
-        // (nicht nur den ersten) Treffer zu entfernen — sonst bliebe bei
-        // einem doppelt abgehakten Artikel (zwei offene Vorgänge, siehe
-        // ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:kategorie:geschaeft:)``)
-        // der zweite Eintrag bestehen und der Artikel scheinbar weiterhin
-        // „abgehakt".
-        let artikelReferenz = ModelReference(artikel)
-        let vorhandeneEintragReferenzen = alleAbgehaktenEintraege(fuer: artikel).map(ModelReference.init)
+        let artikelReferenz = ModelReference(element.artikel)
+        let vorhandeneEintragReferenzen = alleAbgehaktenEintraege(fuer: element.artikel).map(ModelReference.init)
         Task {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
                 guard let artikelFrisch = artikelReferenz.resolved(in: modelContext) else { return }
@@ -1550,26 +1524,32 @@ private struct EinkaufslisteView: View {
     /// Schreibvorgang-Katalog“). Solange der Artikel noch auf ``einkaufsliste``
     /// steht, wirkt sich das auf dessen ``EinkaufslistenEintrag/menge`` aus, danach
     /// (bereits abgehakt) auf die im ``KaufEintrag`` festgehaltene Menge.
-    private func mengeErhoehen(_ artikel: Artikel) {
+    private func mengeErhoehen(_ element: KategorieGruppe.Element) {
         interaktionRegistrieren()
+        let eintragReferenz = element.eintrag.map(ModelReference.init)
+        let artikelReferenz = ModelReference(element.artikel)
         Task {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
-                if let eintrag = einkaufsliste.eintraege.first(where: { $0.artikel == artikel }) {
+                if let ref = eintragReferenz, let eintrag = ref.resolved(in: modelContext) {
                     eintrag.mengeErhoehen()
-                } else if let kauf = kaufEintrag(fuer: artikel) {
+                } else if let artikel = artikelReferenz.resolved(in: modelContext),
+                          let kauf = kaufEintrag(fuer: artikel) {
                     kauf.menge += artikel.mengenSchritt
                 }
             }
         }
     }
 
-    private func mengeVerringern(_ artikel: Artikel) {
+    private func mengeVerringern(_ element: KategorieGruppe.Element) {
         interaktionRegistrieren()
+        let eintragReferenz = element.eintrag.map(ModelReference.init)
+        let artikelReferenz = ModelReference(element.artikel)
         Task {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
-                if let eintrag = einkaufsliste.eintraege.first(where: { $0.artikel == artikel }) {
+                if let ref = eintragReferenz, let eintrag = ref.resolved(in: modelContext) {
                     eintrag.mengeVerringern()
-                } else if let kauf = kaufEintrag(fuer: artikel) {
+                } else if let artikel = artikelReferenz.resolved(in: modelContext),
+                          let kauf = kaufEintrag(fuer: artikel) {
                     kauf.menge = max(artikel.mengenSchritt, kauf.menge - artikel.mengenSchritt)
                 }
             }
@@ -1662,11 +1642,8 @@ struct EinkaufslistenSektionHeader: View {
 /// löschen statt nur die Menge zu erhöhen.
 struct ArtikelAbhakZeile: View {
     let artikel: Artikel
-    /// Offene Einkaufslisten-Einträge dieses Artikels — leer, wenn er bereits
-    /// abgehakt wurde (dann gibt es keine Einträge mehr, siehe ``mengeAnzeige``).
-    /// Enthält einen Eintrag je gewähltem Produkt (plus ggf. einen nil-Produkt-
-    /// Eintrag für generische Auswahl ohne konkretes Produkt).
-    let eintraege: [EinkaufslistenEintrag]
+    /// Der Einkaufslisten-Eintrag für diesen Artikel+Produkt-Eintrag — `nil`, wenn bereits abgehakt.
+    let eintrag: EinkaufslistenEintrag?
     let mengeAnzeige: Double
     let istAbgehakt: Bool
     /// `true`, wenn ``artikel`` mehreren Kategorien angehört und deshalb (siehe
@@ -1685,9 +1662,7 @@ struct ArtikelAbhakZeile: View {
     @State private var zeigeMengenSheet = false
 
     private var produktText: String? {
-        let namen = eintraege.compactMap(\.produkt?.name)
-        guard !namen.isEmpty else { return nil }
-        return namen.count == 1 ? namen[0] : "\(namen[0]) +\(namen.count - 1)"
+        eintrag?.produkt?.name
     }
 
     private var preisSpanneText: String? {
@@ -1732,7 +1707,7 @@ struct ArtikelAbhakZeile: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    if let notiz = eintraege.first?.notiz, !notiz.isEmpty {
+                    if let notiz = eintrag?.notiz, !notiz.isEmpty {
                         Text(notiz)
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -1748,7 +1723,7 @@ struct ArtikelAbhakZeile: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .contentShape(Rectangle())
-                    .onTapGesture { if !eintraege.isEmpty { zeigeMengenSheet = true } }
+                    .onTapGesture { if eintrag != nil { zeigeMengenSheet = true } }
                 Button(action: abhaken) {
                     Image(systemName: istAbgehakt ? "checkmark.circle.fill" : "circle")
                         .font(.title3)
@@ -1776,8 +1751,8 @@ struct ArtikelAbhakZeile: View {
             .tint(.blue)
         }
         .sheet(isPresented: $zeigeMengenSheet) {
-            if let erster = eintraege.first {
-                MengenNotizSheet(eintrag: erster)
+            if let eintrag {
+                MengenNotizSheet(eintrag: eintrag)
             }
         }
     }
@@ -1878,7 +1853,7 @@ private struct MengenNotizSheet: View {
 
 #Preview {
     EinkaufenView()
-        .modelContainer(for: SchemaV2.models, inMemory: true)
+        .modelContainer(for: SchemaV3.models, inMemory: true)
         .environmentObject(SyncPollingService())
         .environmentObject(MultipeerSyncService())
 }

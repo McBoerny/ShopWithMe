@@ -1,0 +1,16 @@
+{
+  "beschreibung": "Rewe, Multi ohne Shopname",
+  "sollErgebnis": {
+    "geschaeftAdresse": "Am Strasserwinkel 4, 82216 Maisach",
+    "datum": "2026-07-18",
+    "positionen": [
+      { "artikelName": "KNUSP.MUESLI W.S", "einzelpreis": "2.99" },
+      { "artikelName": "BIO OLIVEN ENTS", "einzelpreis": "3.59" },
+      { "artikelName": "BIO GETR. TOMATEN", "einzelpreis": "2.69" },
+      { "artikelName": "AGLIO-OLIO PEPE.", "einzelpreis": "1.69" },
+      { "artikelName": "TRUEFFEL SCHWARZ", "einzelpreis": "4.49" }
+    ]
+  },
+  "mindestPositionenTrefferQuote": 0.75
+}
+

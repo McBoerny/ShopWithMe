@@ -129,11 +129,12 @@ struct RootView: View {
                     }
             }
         }
-        // Peer-Lebenszyklus, Sterblichkeits-Warnung: dieselbe 30-Tage-Schwelle
-        // wie der bestehende Ignorier-Mechanismus beim Import
-        // (``SyncSnapshotImportService/maximalesSnapshotAlter``, siehe
-        // ``SyncPeerInfo/istWahrscheinlichTot``). Rein manuell/bestätigt —
-        // kein automatisches Entfernen.
+        // Peer-Lebenszyklus, Sterblichkeits-Warnung: greift nur, wenn ein
+        // Peer-Ordner noch vorhanden ist, der Peer aber schon 30 Tage nicht
+        // mehr aktiv war — falls ein anderes Gerät den Ordner bereits gelöscht
+        // hat, übernimmt ``SyncSnapshotImportService/bereinigeFehlendeGruppenPeers``
+        // das automatisch beim nächsten Sync-Zyklus; dieser Dialog deckt
+        // nur den manuell zu entscheidenden Restfall ab.
         .confirmationDialog(
             "Gerät seit langem nicht gesehen", isPresented: $zeigeToterGruppenPeerDialog, presenting: toterGruppenPeer
         ) { peer in

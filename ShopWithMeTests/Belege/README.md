@@ -22,7 +22,8 @@ Pro Testfall zwei Dateien mit identischem Basisnamen:
     "positionen": [
       { "artikelName": "Vollmilch 3,5%", "einzelpreis": "1.29" },
       { "artikelName": "Butter mild", "einzelpreis": "1.99" },
-      { "artikelName": "Milch", "einzelpreis": "1.50", "menge": 3 }
+      { "artikelName": "Milch", "einzelpreis": "1.50", "menge": 3 },
+      { "artikelName": "HANDSCHUHE GR08", "barcode": "8717869059453", "einzelpreis": "5.49" }
     ]
   },
   "mindestPositionenTrefferQuote": 0.75
@@ -40,6 +41,7 @@ Pro Testfall zwei Dateien mit identischem Basisnamen:
 | `sollErgebnis.positionen[].artikelName` | Erwarteter Artikelname (Teilstring-Abgleich) |
 | `sollErgebnis.positionen[].einzelpreis` | Erwarteter Einzelpreis, Dezimalpunkt `.` (exakter Cent-Abgleich) |
 | `sollErgebnis.positionen[].menge` | Erwartete Menge/Stückzahl (weggelassen oder `null` = nicht geprüft). Relevant bei Gesamtpreiszeilen, z.B. `"3 x Milch 4.50"` → `"menge": 3, "einzelpreis": "1.50"` |
+| `sollErgebnis.positionen[].barcode` | EAN/Barcode wie auf dem Bon gedruckt (weggelassen oder `null` = nicht geprüft). Relevant bei Geschäften (z.B. hagebaumarkt), die Barcode + Klarname auf zwei Zeilen drucken. OCR-Test: prüft ob die Nummer im OCR-Text vorkommt. Pipeline-Test: gilt als Treffer wenn die KI den Barcode im Artikelnamen übernimmt. |
 | `mindestPositionenTrefferQuote` | Anteil der Positionen, der erkannt werden muss (0.0–1.0, z.B. 0.75 = 75 %) |
 
 ## Datenschutz

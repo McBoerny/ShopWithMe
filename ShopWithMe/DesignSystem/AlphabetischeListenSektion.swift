@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Zeigt bereits sortierte `items` innerhalb eines `List`-Kontexts alphabetisch:
 /// - bei ≥ `sektionSchwelle` Einträgen als buchstabengegliederte `Section`en
-///   (iOS zeigt dafür automatisch eine A–Z-Sidebar wie im Adressbuch),
+///   mit `sectionIndexLabel` — iOS zeigt daraufhin eine A–Z-Sidebar wie im Adressbuch,
 /// - darunter als flache `ForEach`-Reihe (optional mit Fußzeile in einer Section).
 ///
 /// Die Items müssen **bereits alphabetisch sortiert** übergeben werden —
@@ -53,6 +53,7 @@ struct AlphabetischeListenSektion<Item: Identifiable, RowContent: View>: View {
                     }
                     .onDelete(perform: loeschen.map { fn in { fn($0, gruppe.eintraege) } })
                 }
+                .sectionIndexLabel(Text(gruppe.buchstabe))
             }
         } else if let fusszeile {
             Section {

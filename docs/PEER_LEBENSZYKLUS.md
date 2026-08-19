@@ -97,14 +97,27 @@ statt koordiniertem Zugriff, und ohne Alters-Hervorhebung, nur im Debug-Menü ve
 3. Neuer proaktiver Dialog in `RootView.swift`, strukturell analog zu
    `pruefeAusDerZeitGefallen()`/`zeigeAusDerZeitGefallenDialog`: `pruefeToteGruppenPeers()`,
    gleiche Auslöser (`.task`, `scenePhase == .active`), zeigt bei mindestens einem
-   `istWahrscheinlichTot`-Peer einen eigenen Dialog ("Gerät seit langem nicht gesehen")
-   mit „Entfernen“ (ruft `entfernePeer` auf) / „Später erinnern“ (kein „für immer
-   abbrechen“, wie beim bestehenden Vorbild) — pro Aufruf höchstens ein Peer, weitere
-   folgen bei erneutem Auslösen.
+   `istWahrscheinlichTot`-Peer einen eigenen Dialog (“Gerät seit langem nicht gesehen”)
+   mit „Entfernen” (ruft `entfernePeer` auf) / „Später erinnern” (kein „für immer
+   abbrechen”, wie beim bestehenden Vorbild) — pro Aufruf höchstens ein Peer, weitere
+   folgen bei erneutem Auslösen. **Greift nur, wenn der Peer-Ordner noch existiert**
+   (z.B. langer Schlaf ohne dass ein anderes Gerät bereits aktiv entfernt hat).
+4. **Automatischer Cleanup bei fehlendem Peer-Ordner:**
+   `SyncSnapshotImportService.bereinigeFehlendeGruppenPeers(bekannteOrdner:context:)` —
+   läuft in `importiereSnapshots` direkt nach dem `peers/`-Listing, das (nicht-nil)
+   eine zuverlässige Grundlage bietet: fehlt ein Peer-Ordner im aktuellen Listing,
+   wurde er von einem anderen Gerät entfernt (Gruppen-Entscheidung). Die lokalen
+   `SyncPeerInfo`-, `SyncPeerZaehlerStand`- und
+   `WarengruppenDistanzPeerZaehlerStand`-Einträge werden stillschweigend gelöscht —
+   kein Dialog nötig, weil der Nutzer des entfernenden Geräts die Entscheidung
+   bereits getroffen hat. Transiente Fehler (nil-Listing) lösen keinen Cleanup aus.
 
 **Tests:** `SyncPeerInfoTests.istWahrscheinlichTotIstFalseInnerhalbDerSchwelle`/
 `istWahrscheinlichTotIstTrueJenseitsDerSchwelle`;
-`SyncOrdnerServiceTests.entfernePeerLoeschtOrdnerUndSyncPeerInfo`. Der proaktive Dialog
+`SyncOrdnerServiceTests.entfernePeerLoeschtOrdnerUndSyncPeerInfo`;
+`SyncSnapshotImportServiceTests.bereinigeFehlendeGruppenPeersEntferntPeerInfoWennOrdnerFehlt`/
+`bereinigeFehlendeGruppenPeersBehältPeerInfoWennOrdnerExistiert`/
+`bereinigeFehlendeGruppenPeersEntferntAuchZaehlerUndDistanzEintraege`. Der proaktive Dialog
 selbst nur manuell im Simulator verifizierbar (nach expliziter Freigabe).
 
 ## Baustein C0: Manifest muss „vollständiger Sync" zertifizieren
