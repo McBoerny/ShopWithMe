@@ -131,7 +131,7 @@ private struct ListenInhaltView: View {
             ForEach(gruppe.artikel) { artikel in
                 ArtikelAbhakZeile(
                     artikel: artikel,
-                    eintrag: einkaufsliste.eintrag(fuer: artikel),
+                    eintraege: einkaufsliste.alleEintraege(fuer: artikel),
                     mengeAnzeige: menge(artikel),
                     istAbgehakt: istAbgehakt(artikel),
                     mehrfachKategorisiert: mehrfachKategorisiert(artikel),
@@ -166,7 +166,7 @@ private struct ListenInhaltView: View {
             ForEach(gruppe.artikel) { artikel in
                 ArtikelAbhakZeile(
                     artikel: artikel,
-                    eintrag: einkaufsliste.eintrag(fuer: artikel),
+                    eintraege: einkaufsliste.alleEintraege(fuer: artikel),
                     mengeAnzeige: menge(artikel),
                     istAbgehakt: istAbgehakt(artikel),
                     mehrfachKategorisiert: mehrfachKategorisiert(artikel),

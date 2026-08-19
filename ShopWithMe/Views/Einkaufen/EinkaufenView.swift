@@ -982,7 +982,11 @@ private struct EinkaufslisteView: View {
     /// ``EinkaufslistenEintrag`` für sie existiert. Verhindert, dass derselbe
     /// Artikel gleichzeitig als „offen" und als „abgehakt" erscheint.
     private var offeneArtikel: [Artikel] {
-        einkaufsliste.eintraege.compactMap(\.artikel).filter { !abgehakteArtikelIDs.contains($0.persistentModelID) }
+        var gesehen = Set<PersistentIdentifier>()
+        return einkaufsliste.eintraege.compactMap(\.artikel).filter {
+            !abgehakteArtikelIDs.contains($0.persistentModelID)
+            && gesehen.insert($0.persistentModelID).inserted
+        }
     }
 
     /// Artikel, die für diese Liste bereits abgehakt wurden (an EGAL welchem
@@ -1276,7 +1280,7 @@ private struct EinkaufslisteView: View {
     /// auf ``einkaufsliste`` steht, dessen ``EinkaufslistenEintrag/menge``, sonst
     /// (bereits abgehakt) die im ``KaufEintrag`` festgehaltene Menge.
     private func menge(fuer artikel: Artikel) -> Double {
-        if let eintrag = einkaufsliste.eintrag(fuer: artikel) { return eintrag.menge }
+        if let eintrag = einkaufsliste.eintraege.first(where: { $0.artikel == artikel }) { return eintrag.menge }
         return kaufEintrag(fuer: artikel)?.menge ?? artikel.mengenSchritt
     }
 
@@ -1550,7 +1554,7 @@ private struct EinkaufslisteView: View {
         interaktionRegistrieren()
         Task {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
-                if let eintrag = einkaufsliste.eintrag(fuer: artikel) {
+                if let eintrag = einkaufsliste.eintraege.first(where: { $0.artikel == artikel }) {
                     eintrag.mengeErhoehen()
                 } else if let kauf = kaufEintrag(fuer: artikel) {
                     kauf.menge += artikel.mengenSchritt
@@ -1563,7 +1567,7 @@ private struct EinkaufslisteView: View {
         interaktionRegistrieren()
         Task {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
-                if let eintrag = einkaufsliste.eintrag(fuer: artikel) {
+                if let eintrag = einkaufsliste.eintraege.first(where: { $0.artikel == artikel }) {
                     eintrag.mengeVerringern()
                 } else if let kauf = kaufEintrag(fuer: artikel) {
                     kauf.menge = max(artikel.mengenSchritt, kauf.menge - artikel.mengenSchritt)
@@ -1658,9 +1662,11 @@ struct EinkaufslistenSektionHeader: View {
 /// löschen statt nur die Menge zu erhöhen.
 struct ArtikelAbhakZeile: View {
     let artikel: Artikel
-    /// Der offene Einkaufslisten-Eintrag dieses Artikels — `nil`, wenn er bereits
-    /// abgehakt wurde (dann gibt es keinen Eintrag mehr, siehe ``mengeAnzeige``).
-    let eintrag: EinkaufslistenEintrag?
+    /// Offene Einkaufslisten-Einträge dieses Artikels — leer, wenn er bereits
+    /// abgehakt wurde (dann gibt es keine Einträge mehr, siehe ``mengeAnzeige``).
+    /// Enthält einen Eintrag je gewähltem Produkt (plus ggf. einen nil-Produkt-
+    /// Eintrag für generische Auswahl ohne konkretes Produkt).
+    let eintraege: [EinkaufslistenEintrag]
     let mengeAnzeige: Double
     let istAbgehakt: Bool
     /// `true`, wenn ``artikel`` mehreren Kategorien angehört und deshalb (siehe
@@ -1677,6 +1683,12 @@ struct ArtikelAbhakZeile: View {
     var dauerhaftEntfernen: (() -> Void)?
 
     @State private var zeigeMengenSheet = false
+
+    private var produktText: String? {
+        let namen = eintraege.compactMap(\.produkt?.name)
+        guard !namen.isEmpty else { return nil }
+        return namen.count == 1 ? namen[0] : "\(namen[0]) +\(namen.count - 1)"
+    }
 
     private var preisSpanneText: String? {
         let preise = artikel.preispunkte.map(\.preis).filter { $0 > 0 }
@@ -1715,12 +1727,12 @@ struct ArtikelAbhakZeile: View {
                                 .accessibilityLabel("Artikel gehört mehreren Kategorien an und erscheint in mehreren Abschnitten")
                         }
                     }
-                    if let produktName = eintrag?.produkt?.name {
-                        Text(produktName)
+                    if let pt = produktText {
+                        Text(pt)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    if let notiz = eintrag?.notiz, !notiz.isEmpty {
+                    if let notiz = eintraege.first?.notiz, !notiz.isEmpty {
                         Text(notiz)
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -1736,7 +1748,7 @@ struct ArtikelAbhakZeile: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .contentShape(Rectangle())
-                    .onTapGesture { if eintrag != nil { zeigeMengenSheet = true } }
+                    .onTapGesture { if !eintraege.isEmpty { zeigeMengenSheet = true } }
                 Button(action: abhaken) {
                     Image(systemName: istAbgehakt ? "checkmark.circle.fill" : "circle")
                         .font(.title3)
@@ -1764,8 +1776,8 @@ struct ArtikelAbhakZeile: View {
             .tint(.blue)
         }
         .sheet(isPresented: $zeigeMengenSheet) {
-            if let eintrag {
-                MengenNotizSheet(eintrag: eintrag)
+            if let erster = eintraege.first {
+                MengenNotizSheet(eintrag: erster)
             }
         }
     }

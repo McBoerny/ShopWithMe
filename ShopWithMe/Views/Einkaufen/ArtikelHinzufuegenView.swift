@@ -134,12 +134,14 @@ struct ArtikelHinzufuegenView: View {
                 ForEach(gruppierteArtikel, id: \.buchstabe) { gruppe in
                     Section(gruppe.buchstabe) {
                         ForEach(gruppe.artikel) { artikel in
-                            let bereitsAufListe = einkaufsliste.enthaelt(artikel)
+                            let bereitsAufListe = !einkaufsliste.alleEintraege(fuer: artikel).isEmpty
                             let produkteDesArtikels = produkte(fuer: artikel)
                             let aufgeklappt = istAufgeklappt(artikel)
-                            let gewaehltesProduktnamen = bereitsAufListe
-                                ? einkaufsliste.eintrag(fuer: artikel)?.produkt?.name
-                                : nil
+                            let gewaehltesProduktnamen: String? = {
+                                let namen = einkaufsliste.alleEintraege(fuer: artikel).compactMap(\.produkt?.name)
+                                guard !namen.isEmpty else { return nil }
+                                return namen.count == 1 ? namen[0] : "\(namen[0]) +\(namen.count - 1)"
+                            }()
 
                             HStack(spacing: 0) {
                                 Button {
@@ -174,20 +176,19 @@ struct ArtikelHinzufuegenView: View {
                             }
 
                             if aufgeklappt && !produkteDesArtikels.isEmpty {
-                                if bereitsAufListe && einkaufsliste.eintrag(fuer: artikel)?.produkt != nil {
-                                    Button {
-                                        produktWaehlen(nil, fuer: artikel)
-                                        suchfeldFuerNaechsteEingabeZuruecksetzen()
-                                    } label: {
-                                        ProduktSubZeile(name: "Kein bestimmtes Produkt", istGewaehlt: false)
-                                    }
-                                    .buttonStyle(.plain)
+                                let nilGewaehlt = einkaufsliste.enthaelt(artikel, produkt: nil)
+                                Button {
+                                    produktWaehlen(nil, fuer: artikel)
+                                    suchfeldFuerNaechsteEingabeZuruecksetzen()
+                                } label: {
+                                    ProduktSubZeile(name: "Kein bestimmtes Produkt", istGewaehlt: nilGewaehlt)
                                 }
+                                .buttonStyle(.plain)
 
                                 ForEach(produkteDesArtikels) { produkt in
-                                    let istGewaehlt = einkaufsliste.eintrag(fuer: artikel)?.produkt == produkt
+                                    let istGewaehlt = einkaufsliste.enthaelt(artikel, produkt: produkt)
                                     Button {
-                                        produktWaehlen(istGewaehlt ? nil : produkt, fuer: artikel)
+                                        produktWaehlen(produkt, fuer: artikel)
                                         suchfeldFuerNaechsteEingabeZuruecksetzen()
                                     } label: {
                                         ProduktSubZeile(name: produkt.name, istGewaehlt: istGewaehlt)
@@ -266,9 +267,9 @@ struct ArtikelHinzufuegenView: View {
         }
     }
 
-    /// Nimmt `artikel` wieder von ``einkaufsliste`` — Gegenstück zu
-    /// ``hinzufuegen(_:)``, macht die Zeile hier zu einem echten An-/Abwähl-
-    /// Toggle statt eines einmaligen Hinzufügens (GitHub #45).
+    /// Nimmt `artikel` mit ALLEN zugehörigen Einträgen (egal welches Produkt) von
+    /// ``einkaufsliste`` — entfernt sowohl generische als auch produktspezifische
+    /// Einträge auf einmal (Gegenstück zu ``hinzufuegen(_:)``, GitHub #45).
     private func entfernen(_ artikel: Artikel) {
         let artikelReferenz = ModelReference(artikel)
         let einkaufslisteReferenz = ModelReference(einkaufsliste)
@@ -277,16 +278,18 @@ struct ArtikelHinzufuegenView: View {
                 guard let artikelFrisch = artikelReferenz.resolved(in: modelContext),
                       let einkaufslisteFrisch = einkaufslisteReferenz.resolved(in: modelContext)
                 else { return }
-                einkaufslisteFrisch.artikelEntfernen(artikelFrisch, context: modelContext)
+                for eintrag in einkaufslisteFrisch.alleEintraege(fuer: artikelFrisch) {
+                    einkaufslisteFrisch.artikelEntfernen(artikelFrisch, produkt: eintrag.produkt, context: modelContext)
+                }
             }
         }
     }
 
-    /// Setzt `produkt` auf dem ``EinkaufslistenEintrag`` von `artikel` — legt
-    /// den Eintrag bei Bedarf zuerst an (GitHub #47, Schritt 4/5), damit die
-    /// Produktwahl auch für einen noch nicht auf der Liste stehenden Artikel
-    /// funktioniert, ohne einen separaten Tap auf die Zeile selbst zu
-    /// erzwingen.
+    /// Schaltet den Eintrag `(artikel, produkt)` auf ``einkaufsliste`` um —
+    /// fügt ihn hinzu, falls noch nicht vorhanden, entfernt ihn, falls bereits
+    /// vorhanden. Jedes `(artikel, produkt)`-Paar ist ein unabhängiger Eintrag,
+    /// sodass mehrere Produkte desselben Artikels gleichzeitig auf der Liste
+    /// stehen können (GitHub #47 Erweiterung).
     private func produktWaehlen(_ produkt: Produkt?, fuer artikel: Artikel) {
         let artikelReferenz = ModelReference(artikel)
         let einkaufslisteReferenz = ModelReference(einkaufsliste)
@@ -297,9 +300,11 @@ struct ArtikelHinzufuegenView: View {
                       let einkaufslisteFrisch = einkaufslisteReferenz.resolved(in: modelContext)
                 else { return }
                 let produktFrisch = produktReferenz?.resolved(in: modelContext)
-                let eintrag = einkaufslisteFrisch.eintrag(fuer: artikelFrisch)
-                    ?? einkaufslisteFrisch.artikelHinzufuegen(artikelFrisch, context: modelContext)
-                eintrag.produkt = produktFrisch
+                if einkaufslisteFrisch.enthaelt(artikelFrisch, produkt: produktFrisch) {
+                    einkaufslisteFrisch.artikelEntfernen(artikelFrisch, produkt: produktFrisch, context: modelContext)
+                } else {
+                    einkaufslisteFrisch.artikelHinzufuegen(artikelFrisch, produkt: produktFrisch, context: modelContext)
+                }
             }
         }
     }

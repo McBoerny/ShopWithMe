@@ -137,7 +137,7 @@ final class Einkaufsvorgang {
         // Artikel blieb scheinbar dauerhaft „abgehakt" hängen.
         let artikelID = artikel.persistentModelID
         let deskriptor = FetchDescriptor<KaufEintrag>(predicate: #Predicate { $0.artikel?.persistentModelID == artikelID })
-        let listenEintrag = einkaufsliste?.eintrag(fuer: artikel)
+        let listenEintraege = einkaufsliste?.alleEintraege(fuer: artikel) ?? []
         let bereitsVorhanden = ((try? context.fetch(deskriptor)) ?? []).first {
             $0.einkaufsvorgang?.einkaufsliste?.persistentModelID == einkaufsliste?.persistentModelID
                 && $0.einkaufsvorgang?.endZeit == nil
@@ -153,11 +153,9 @@ final class Einkaufsvorgang {
             // gemeldeten Befund überhaupt ursächlich sein kann.
             DatabaseDebugLogger.log(
                 .dedupeConflictDetected,
-                details: "artikelAbhaken: \(artikel.name) listenEintragVorhanden=\(listenEintrag != nil)"
+                details: "artikelAbhaken: \(artikel.name) listenEintragVorhanden=\(!listenEintraege.isEmpty)"
             )
-            if let listenEintrag {
-                context.delete(listenEintrag)
-            }
+            for le in listenEintraege { context.delete(le) }
             let besitzerID = bereitsVorhanden.einkaufsvorgang?.id ?? id
             let gewinner = SyncEventService.aktuellerGewinner(bezugsID: besitzerID, artikelID: artikel.id, context: context)
             return .bereitsAbgehaktVon(geraeteID: gewinner?.autorGeraeteID)
@@ -170,15 +168,13 @@ final class Einkaufsvorgang {
             artikel: artikel,
             geschaeft: geschaeftFuerEintrag,
             kategorie: kategorie,
-            menge: listenEintrag?.menge ?? artikel.mengenSchritt,
+            menge: listenEintraege.first?.menge ?? artikel.mengenSchritt,
             kategorieBesuchsIndex: index,
             ursprungsGeraeteID: ursprungsGeraeteID
         )
         context.insert(eintrag)
         eintrag.einkaufsvorgang = self
-        if let listenEintrag {
-            context.delete(listenEintrag)
-        }
+        for le in listenEintraege { context.delete(le) }
         if let geschaeftFuerEintrag {
             ArtikelVerfuegbarkeitService.vermerkeGekauft(artikel: artikel, geschaeft: geschaeftFuerEintrag, context: context)
         }

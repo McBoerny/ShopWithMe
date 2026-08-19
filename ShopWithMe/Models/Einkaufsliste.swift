@@ -67,14 +67,21 @@ extension Einkaufsliste {
         return neue
     }
 
-    /// Ob `artikel` bereits auf dieser Liste steht.
-    func enthaelt(_ artikel: Artikel) -> Bool {
-        eintraege.contains { $0.artikel == artikel }
+    /// Ob `(artikel, produkt)` bereits auf dieser Liste steht.
+    func enthaelt(_ artikel: Artikel, produkt: Produkt? = nil) -> Bool {
+        eintraege.contains { $0.artikel == artikel && $0.produkt == produkt }
     }
 
-    /// Der ``EinkaufslistenEintrag`` für `artikel` auf dieser Liste, falls vorhanden.
-    func eintrag(fuer artikel: Artikel) -> EinkaufslistenEintrag? {
-        eintraege.first { $0.artikel == artikel }
+    /// Der ``EinkaufslistenEintrag`` für `(artikel, produkt)` auf dieser Liste, falls vorhanden.
+    func eintrag(fuer artikel: Artikel, produkt: Produkt? = nil) -> EinkaufslistenEintrag? {
+        eintraege.first { $0.artikel == artikel && $0.produkt == produkt }
+    }
+
+    /// Alle ``EinkaufslistenEintrag``e für `artikel` auf dieser Liste — unabhängig vom
+    /// gewählten Produkt. Grundlage für die Mehrfach-Produkt-Auswahl in
+    /// ``ArtikelHinzufuegenView`` (GitHub #47 Erweiterung).
+    func alleEintraege(fuer artikel: Artikel) -> [EinkaufslistenEintrag] {
+        eintraege.filter { $0.artikel == artikel }
     }
 
     /// Setzt `artikel` (neu oder erneut) auf diese Liste: legt bei Bedarf einen
@@ -99,14 +106,14 @@ extension Einkaufsliste {
     /// künstlich auf „gerade eben" springen (dieselbe Klasse Fehler wie bei
     /// ``KaufEintrag/datum`` in ``SyncSnapshotImportService/mergeKaufEintraege(_:artikelZuordnung:einkaufsvorgangZuordnung:geschaeftZuordnung:kategorieZuordnung:peerGeraeteID:context:)``).
     @discardableResult
-    func artikelHinzufuegenOhneEventAufzeichnung(_ artikel: Artikel, am zeitpunkt: Date = Date(), context: ModelContext) -> EinkaufslistenEintrag {
+    func artikelHinzufuegenOhneEventAufzeichnung(_ artikel: Artikel, produkt: Produkt? = nil, am zeitpunkt: Date = Date(), context: ModelContext) -> EinkaufslistenEintrag {
         ArtikelListenKaufService.vermerkeHinzugefuegt(artikel: artikel, einkaufsliste: self, am: zeitpunkt, context: context)
-        if let bestehender = eintrag(fuer: artikel) {
+        if let bestehender = eintrag(fuer: artikel, produkt: produkt) {
             bestehender.menge = artikel.mengenSchritt
             bestehender.notiz = nil
             return bestehender
         }
-        let neuer = EinkaufslistenEintrag(einkaufsliste: self, artikel: artikel, menge: artikel.mengenSchritt)
+        let neuer = EinkaufslistenEintrag(einkaufsliste: self, artikel: artikel, produkt: produkt, menge: artikel.mengenSchritt)
         neuer.erstelltAm = zeitpunkt
         context.insert(neuer)
         return neuer
@@ -123,8 +130,8 @@ extension Einkaufsliste {
     /// Events für eine Nutzeraktion) — akzeptierte Vereinfachung, da erneutes
     /// Anwenden idempotent ist.
     @discardableResult
-    func artikelHinzufuegen(_ artikel: Artikel, context: ModelContext) -> EinkaufslistenEintrag {
-        let eintrag = artikelHinzufuegenOhneEventAufzeichnung(artikel, context: context)
+    func artikelHinzufuegen(_ artikel: Artikel, produkt: Produkt? = nil, context: ModelContext) -> EinkaufslistenEintrag {
+        let eintrag = artikelHinzufuegenOhneEventAufzeichnung(artikel, produkt: produkt, context: context)
         SyncEventService.aufzeichnen(.artikelHinzugefuegt, bezugsID: id, artikelID: artikel.id, context: context)
         return eintrag
     }
@@ -136,8 +143,8 @@ extension Einkaufsliste {
     /// etwas entfernt wurde (Grundlage dafür, ob die aufzeichnende Variante ein
     /// Event erzeugt).
     @discardableResult
-    func artikelEntfernenOhneEventAufzeichnung(_ artikel: Artikel, context: ModelContext) -> Bool {
-        guard let bestehender = eintrag(fuer: artikel) else { return false }
+    func artikelEntfernenOhneEventAufzeichnung(_ artikel: Artikel, produkt: Produkt? = nil, context: ModelContext) -> Bool {
+        guard let bestehender = eintrag(fuer: artikel, produkt: produkt) else { return false }
         context.delete(bestehender)
         return true
     }
@@ -148,8 +155,8 @@ extension Einkaufsliste {
     /// betreffend, nicht zu verwechseln mit
     /// ``Einkaufsvorgang/artikelAbwaehlen(_:context:)`` (macht ein Abhaken
     /// während eines laufenden Einkaufs rückgängig, GitHub #45).
-    func artikelEntfernen(_ artikel: Artikel, context: ModelContext) {
-        guard artikelEntfernenOhneEventAufzeichnung(artikel, context: context) else { return }
+    func artikelEntfernen(_ artikel: Artikel, produkt: Produkt? = nil, context: ModelContext) {
+        guard artikelEntfernenOhneEventAufzeichnung(artikel, produkt: produkt, context: context) else { return }
         SyncEventService.aufzeichnen(.artikelEntfernt, bezugsID: id, artikelID: artikel.id, context: context)
     }
 }
