@@ -151,6 +151,9 @@ enum SchemaV2: VersionedSchema {
         var anzahlEinkaufsvorgaengeRaw: Int?
         var umbauVerdachtRaw: Bool?
         var unauffaelligeEinkaeufeInFolgeRaw: Int?
+        // markenname wurde in v0.16 als Teil des damals lebenden SchemaV2-Fingerprints
+        // eingeführt — muss hier stehen, damit der gespeicherte V2-Fingerprint passt.
+        var markenname: String?
 
         init(
             id: UUID, name: String, typenRaw: [String]?, adresse: String?, breitengrad: Double?, laengengrad: Double?,

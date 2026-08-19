@@ -15,13 +15,14 @@ import CoreLocation
 ///
 /// Der Standort-Abschnitt (GitHub #24) zeigt eine Karte mit dem aktuellen Pin,
 /// sobald ``Geschaeft/koordinate`` gesetzt ist. Drei Wege dorthin: „Aktuellen
-/// Standort verwenden“ (GPS + Reverse-Geocoding füllt Adresse **und** Koordinaten),
-/// Adresse eintippen und mit dem Return-Key bestätigen (Geocoding füllt die
-/// Koordinaten, nur solange noch keine gesetzt sind — überschreibt keinen bereits
-/// manuell gesetzten Pin), oder direkt auf die Karte tippen, um den Pin exakt zu
-/// setzen (füllt die Adresse per Reverse-Geocoding nur nach, falls sie noch leer
-/// ist). Ein Slider darunter setzt ``Geschaeft/erkennungsradius`` (GitHub #41,
-/// Grundlage für ``GeschaeftErkennungService/istBekannterTreffer(_:fuer:)``) —
+/// Standort verwenden” (GPS + Reverse-Geocoding füllt Adresse **und** Koordinaten),
+/// Adresse eintippen und mit dem Return-Key bestätigen (Geocoding setzt Koordinaten
+/// und zentriert die Karte — auch wenn bereits eine Koordinate gesetzt war,
+/// GitHub #120), oder direkt auf die Karte tippen, um den Pin exakt zu setzen
+/// (befüllt das Adressfeld nicht — Adresse ist nur per Texteingabe oder Scan
+/// setzbar, GitHub #120). Ein Slider darunter setzt ``Geschaeft/erkennungsradius``
+/// (GitHub #41, Grundlage für
+/// ``GeschaeftErkennungService/istBekannterTreffer(_:fuer:)``) —
 /// als `MapCircle` direkt auf der Karte eingezeichnet.
 struct GeschaeftStammdatenEditView: View {
     @Bindable var geschaeft: Geschaeft
@@ -36,6 +37,7 @@ struct GeschaeftStammdatenEditView: View {
     @Query(sort: \GeschaeftTyp.sortIndex) private var alleTypen: [GeschaeftTyp]
     @State private var standortWirdErmittelt = false
     @State private var zeigeNeuerTyp = false
+    @State private var kartenKameraPosition: MapCameraPosition = .automatic
 
     var body: some View {
         if istNeu {
@@ -107,14 +109,14 @@ struct GeschaeftStammdatenEditView: View {
                         axis: .vertical
                     )
                     .onSubmit {
-                        Task { await adresseGeokodierenFallsNochOhneKoordinate() }
+                        Task { await adresseGeokodierenUndKarteZentrieren() }
                     }
                 }
 
                 Section {
                     if let koordinate = geschaeft.koordinate {
                         MapReader { proxy in
-                            Map(initialPosition: .region(kartenRegion(fuer: koordinate, radius: geschaeft.erkennungsradius))) {
+                            Map(position: $kartenKameraPosition) {
                                 Marker(geschaeft.name.isEmpty ? "Geschäft" : geschaeft.name, coordinate: koordinate)
                                 MapCircle(center: koordinate, radius: geschaeft.erkennungsradius)
                                     .foregroundStyle(Color.accentColor.opacity(0.15))
@@ -189,6 +191,11 @@ struct GeschaeftStammdatenEditView: View {
                 }
             }
         }
+        .onAppear {
+            if let koordinate = geschaeft.koordinate {
+                kartenKameraPosition = .region(kartenRegion(fuer: koordinate, radius: geschaeft.erkennungsradius))
+            }
+        }
         .sheet(isPresented: $zeigeNeuerTyp) {
             NeuerGeschaeftsTypSheet(naechsterSortIndex: (alleTypen.map(\.sortIndex).max() ?? -1) + 1) { typ in
                 geschaeft.typen.append(typ)
@@ -206,52 +213,47 @@ struct GeschaeftStammdatenEditView: View {
         geschaeft.typen = aktuelle
     }
 
-    /// Anfängliche Kartenregion, groß genug, um den ``MapCircle`` mit `radius`
-    /// vollständig zu zeigen (GitHub #41) — mindestens 500m Kantenlänge, sonst
-    /// das Dreifache des Radius. Bewusst nur als `initialPosition` verwendet,
-    /// nicht als gebundene, live nachgeführte Kameraposition — der Nutzer soll
-    /// die Karte nach dem ersten Anzeigen frei zoomen/verschieben können, ohne
-    /// dass ein Wechsel von Pin oder Radius das automatisch überschreibt
-    /// (GitHub #42).
+    /// Kartenregion, groß genug, um den ``MapCircle`` mit `radius` vollständig zu
+    /// zeigen (GitHub #41) — mindestens 500m Kantenlänge, sonst das Dreifache des
+    /// Radius. Wird an drei expliziten Stellen zur Kamerapositionierung genutzt
+    /// (`.onAppear`, Adress-Geocoding, GPS-Button), aber nicht live an
+    /// ``Geschaeft/koordinate`` gebunden — der Nutzer kann die Karte danach frei
+    /// zoomen/verschieben (GitHub #42).
     private func kartenRegion(fuer koordinate: CLLocationCoordinate2D, radius: Double) -> MKCoordinateRegion {
         let spanne = max(500, radius * 3)
         return MKCoordinateRegion(center: koordinate, latitudinalMeters: spanne, longitudinalMeters: spanne)
     }
 
-    /// Setzt den Standort-Pin auf `koordinate` und trägt — nur falls noch keine
-    /// Adresse hinterlegt ist — die per Reverse-Geocoding ermittelte Adresse nach,
-    /// ohne eine bereits vorhandene, ggf. bewusst abweichende Adresse zu
-    /// überschreiben.
+    /// Setzt den Standort-Pin auf `koordinate`. Befüllt das Adressfeld bewusst
+    /// nicht per Reverse-Geocoding — die Adresse ist ausschließlich über manuelle
+    /// Texteingabe oder Belegscan setzbar (GitHub #120).
     private func pinSetzen(_ koordinate: CLLocationCoordinate2D) {
         geschaeft.koordinate = koordinate
-        guard geschaeft.adresse == nil || geschaeft.adresse?.isEmpty == true else { return }
-        Task {
-            if let adresse = await GeschaeftErkennungService.adresse(fuerKoordinaten: koordinate) {
-                geschaeft.adresse = adresse
-            }
-        }
     }
 
-    /// Ermittelt Koordinaten aus der eingegebenen ``Geschaeft/adresse`` per
-    /// Geocoding — nur solange noch kein Standort gesetzt ist, um einen bereits
-    /// manuell auf der Karte platzierten Pin nicht zu verwerfen.
-    private func adresseGeokodierenFallsNochOhneKoordinate() async {
-        guard geschaeft.koordinate == nil, let adresse = geschaeft.adresse, !adresse.isEmpty else { return }
+    /// Geokodiert die eingegebene ``Geschaeft/adresse``, setzt die Koordinaten und
+    /// zentriert die Karte auf das Ergebnis (GitHub #120) — auch dann, wenn bereits
+    /// eine Koordinate gesetzt war (z.B. per GPS-Button). Wird beim Return-Key im
+    /// Adressfeld ausgelöst.
+    private func adresseGeokodierenUndKarteZentrieren() async {
+        guard let adresse = geschaeft.adresse, !adresse.isEmpty else { return }
         guard let koordinatenPaar = await GeschaeftErkennungService.koordinaten(fuerAdresse: adresse) else { return }
-        geschaeft.koordinate = CLLocationCoordinate2D(latitude: koordinatenPaar.breitengrad, longitude: koordinatenPaar.laengengrad)
+        let koordinate = CLLocationCoordinate2D(latitude: koordinatenPaar.breitengrad, longitude: koordinatenPaar.laengengrad)
+        geschaeft.koordinate = koordinate
+        kartenKameraPosition = .region(kartenRegion(fuer: koordinate, radius: geschaeft.erkennungsradius))
     }
 
     /// Übernimmt den aktuellen GPS-Standort als Koordinaten **und** überschreibt
-    /// die Adresse mit dem per Reverse-Geocoding ermittelten Ergebnis — anders als
-    /// ``pinSetzen(_:)``/``adresseGeokodierenFallsNochOhneKoordinate()`` bewusst
-    /// ohne Rückfrage, da der Anwender mit diesem Button explizit den aktuellen
-    /// Standort übernehmen möchte.
+    /// die Adresse mit dem per Reverse-Geocoding ermittelten Ergebnis und zentriert
+    /// die Karte — bewusst ohne Rückfrage, da der Anwender mit diesem Button
+    /// explizit den aktuellen Standort übernehmen möchte.
     private func aktuellenStandortVerwenden() async {
         standortWirdErmittelt = true
         defer { standortWirdErmittelt = false }
         guard let koordinatenPaar = await GeschaeftErkennungService.koordinatenAusAktuellerPosition() else { return }
         let koordinate = CLLocationCoordinate2D(latitude: koordinatenPaar.breitengrad, longitude: koordinatenPaar.laengengrad)
         geschaeft.koordinate = koordinate
+        kartenKameraPosition = .region(kartenRegion(fuer: koordinate, radius: geschaeft.erkennungsradius))
         if let adresse = await GeschaeftErkennungService.adresse(fuerKoordinaten: koordinate) {
             geschaeft.adresse = adresse
         }
