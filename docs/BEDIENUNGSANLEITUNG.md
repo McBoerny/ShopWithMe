@@ -390,8 +390,10 @@ werden ausgetauscht.
   (z.B. um schnell „Paradontol" zu finden, ohne vorher zu wissen, dass es unter
   „Zahnpasta" hängt). Zeigt zu jedem Produkt den zugehörigen Artikel und
   navigiert zur selben Bearbeitungsansicht wie unter „Artikel" (Name,
-  Produktnamen je Geschäft, Preishistorie). Neue Produkte anlegen oder
-  löschen geht weiterhin nur über den jeweiligen Artikel (siehe oben).
+  Produktnamen je Geschäft, Preishistorie). Mit „+" oben rechts kannst du
+  hier auch direkt ein neues Produkt anlegen — du wählst dazu den zugehörigen
+  Artikel aus und vergibst einen Namen. Löschen geht weiterhin nur über den
+  jeweiligen Artikel (Artikel bearbeiten → Produkte → Wischen).
 - **Geschäftstypen** — legt je Geschäftstyp (Lebensmittel, Drogerie, …) fest,
   welche Abteilungen als Standard gelten und dadurch automatisch in
   jedem Geschäft dieses Typs verfügbar sind (siehe „Geschäfte" oben). Name,
