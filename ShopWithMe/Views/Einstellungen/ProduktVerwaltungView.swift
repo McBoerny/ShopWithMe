@@ -100,31 +100,39 @@ struct ProduktVerwaltungView: View {
 }
 
 /// Sheet zum manuellen Anlegen eines neuen ``Produkt``s — wählbar aus
-/// ``ProduktVerwaltungView``. Erfordert Artikel-Auswahl, da ``Produkt/artikel``
-/// eine Pflichtbeziehung für die Preishistorie und Einkaufsliste darstellt.
+/// ``ProduktVerwaltungView``. Erfordert Artikel-Auswahl per ``ArtikelAuswahlSheet``,
+/// da ``Produkt/artikel`` eine Pflichtbeziehung für Preishistorie und Einkaufsliste
+/// darstellt.
 private struct NeuesProduktSheet: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @Query(sort: \Artikel.name) private var alleArtikel: [Artikel]
 
     @State private var gewaehlterArtikel: Artikel?
     @State private var produktName = ""
+    @State private var zeigeArtikelAuswahl = false
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Artikel") {
-                    Picker("Artikel", selection: $gewaehlterArtikel) {
-                        Text("Bitte wählen").tag(nil as Artikel?)
-                        ForEach(alleArtikel) { artikel in
-                            Text(artikel.name).tag(artikel as Artikel?)
+                    Button {
+                        zeigeArtikelAuswahl = true
+                    } label: {
+                        HStack {
+                            Text(gewaehlterArtikel?.name ?? "Bitte w\u{00E4}hlen")
+                                .foregroundStyle(gewaehlterArtikel == nil ? .secondary : .primary)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
                         }
                     }
+                    .buttonStyle(.plain)
                 }
                 Section {
                     TextField("Name", text: $produktName)
                 } footer: {
-                    Text("Menschenlesbarer Klarname des Produkts, z.\u{202F}B. \u{201E}Paradontol Zahncreme\u{201C} — unabh\u{00E4}ngig vom gesch\u{00E4}ftsspezifischen Bon-Text.")
+                    Text("Menschenlesbarer Klarname des Produkts, z.\u{202F}B. \u{201E}Paradontol Zahncreme\u{201C} \u{2014} unabh\u{00E4}ngig vom gesch\u{00E4}ftsspezifischen Bon-Text.")
                 }
             }
             .navigationTitle("Neues Produkt")
@@ -149,6 +157,66 @@ private struct NeuesProduktSheet: View {
                         gewaehlterArtikel == nil
                             || produktName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     )
+                }
+            }
+            .sheet(isPresented: $zeigeArtikelAuswahl) {
+                ArtikelAuswahlSheet(gewaehlterArtikel: $gewaehlterArtikel)
+            }
+        }
+    }
+}
+
+/// Suchbares Auswahlsheet für einen ``Artikel`` — genutzt von ``NeuesProduktSheet``.
+private struct ArtikelAuswahlSheet: View {
+    @Binding var gewaehlterArtikel: Artikel?
+    @Environment(\.dismiss) private var dismiss
+    @Query(sort: \Artikel.name) private var alleArtikel: [Artikel]
+    @State private var suchtext = ""
+
+    private var gefilterteArtikel: [Artikel] {
+        let trimmed = suchtext.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return alleArtikel }
+        return alleArtikel.filter { $0.name.localizedCaseInsensitiveContains(trimmed) }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List(gefilterteArtikel) { artikel in
+                Button {
+                    gewaehlterArtikel = artikel
+                    dismiss()
+                } label: {
+                    HStack {
+                        Text(artikel.name)
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        if gewaehlterArtikel == artikel {
+                            Image(systemName: "checkmark")
+                                .foregroundStyle(.tint)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+            .searchable(text: $suchtext, prompt: "Artikel suchen")
+            .overlay {
+                if gefilterteArtikel.isEmpty {
+                    ContentUnavailableView(
+                        suchtext.isEmpty ? "Keine Artikel" : "Keine Treffer",
+                        systemImage: "tag",
+                        description: Text(
+                            suchtext.isEmpty
+                                ? "Lege zuerst einen Artikel an."
+                                : "Kein Artikel passt zu \u{201E}\(suchtext)\u{201C}."
+                        )
+                    )
+                }
+            }
+            .navigationTitle("Artikel w\u{00E4}hlen")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Abbrechen") { dismiss() }
                 }
             }
         }

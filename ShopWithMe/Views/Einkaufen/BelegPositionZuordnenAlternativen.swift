@@ -16,13 +16,13 @@ struct BelegPositionEntwurf: Identifiable {
     var istZugeordnet: Bool
 
     static let beispiele: [BelegPositionEntwurf] = [
-        .init(erkannterName: "SEBAMED UR 5%",     artikelName: "Shampoo",
-              produktKlarname: "Sebamed Urea 5%",  preisText: "3,49", istZugeordnet: true),
-        .init(erkannterName: "VOLLMILCH 3,5%",    artikelName: "Milch",
-              produktKlarname: "",                 preisText: "1,09", istZugeordnet: true),
-        .init(erkannterName: "XTRA WASCHMITTEL",  artikelName: "XTRA WASCHMITTEL",
-              produktKlarname: "",                 preisText: "4,99", istZugeordnet: false),
-        .init(erkannterName: "COLG TOTAL PLUS",   artikelName: "Zahnpasta",
+        .init(erkannterName: "SEBAMED UR 5%",    artikelName: "Shampoo",
+              produktKlarname: "Sebamed Urea 5%", preisText: "3,49", istZugeordnet: true),
+        .init(erkannterName: "VOLLMILCH 3,5%",   artikelName: "Milch",
+              produktKlarname: "",                preisText: "1,09", istZugeordnet: true),
+        .init(erkannterName: "XTRA WASCHMITTEL", artikelName: "XTRA WASCHMITTEL",
+              produktKlarname: "",                preisText: "4,99", istZugeordnet: false),
+        .init(erkannterName: "COLG TOTAL PLUS",  artikelName: "Zahnpasta",
               produktKlarname: "Colgate Total Plus", preisText: "2,79", istZugeordnet: true),
     ]
 }
@@ -30,17 +30,10 @@ struct BelegPositionEntwurf: Identifiable {
 // =============================================================================
 // MARK: - Variante A: Karten-Zeile
 //
-// Ansatz: Artikel-Name steht oben als Headline, Bon-Text erscheint am Ende als
-// kleine, sekundäre Fußnote. Schnellste Integration — tauscht nur PositionsZeile
-// gegen diese View aus; kein Umbau der umgebenden ErgebnisListe nötig.
+// Klare Hierarchie: Artikel als Headline oben, Bon-Text als kleine Fußnote unten.
+// Drop-in-Ersatz für PositionsZeile — kein Umbau der ErgebnisListe nötig.
 // =============================================================================
 
-/// Variante A: Jede Belegposition als lesbare Karte mit klarer Hierarchie.
-///
-/// Unterschied zum aktuellen PositionsZeile:
-/// - Artikel-Name hat mehr visuelles Gewicht (Headline statt body)
-/// - Produktname ist immer sichtbar, nicht hinter einer Bedingung versteckt
-/// - Bon-Text steht unten als Hinweis, nicht als primäre Beschriftung
 struct BelegPositionKartenZeile: View {
     @Binding var position: BelegPositionEntwurf
 
@@ -98,9 +91,9 @@ struct BelegPositionKartenZeile: View {
 // =============================================================================
 // MARK: - Variante B: Fokus-Assistent
 //
-// Ansatz: Eine Position nach der anderen, Wizard-artig mit TabView.
-// Gut für sorgfältige Prüfung oder wenn Nutzer mit dem Bon-Scan wenig
-// vertraut ist — jeder Schritt ist fokussiert und nicht überwältigend.
+// Eine Position nach der anderen — ohne TabView (Absturzgefahr durch
+// Subscript-Binding + selection-Binding). Stattdessen direktes if-Rendering
+// mit .animation für den Seitenwechsel-Effekt.
 // =============================================================================
 
 private struct FokusSeite: View {
@@ -119,7 +112,7 @@ private struct FokusSeite: View {
                 }
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .glassCard()
+                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Artikel")
@@ -158,18 +151,12 @@ private struct FokusSeite: View {
                         .font(.title3)
                         .foregroundStyle(.secondary)
                 }
-
-                Spacer()
             }
             .padding()
         }
     }
 }
 
-/// Variante B: Wizard-Navigation durch alle Positionen, eine nach der anderen.
-///
-/// Jede Position hat eine eigene Seite mit groß lesbarem Bon-Text oben und
-/// klaren Eingabefeldern darunter. Zurück/Weiter-Navigation mit Fortschrittsbalken.
 struct BelegPositionFokusAssistent: View {
     @Binding var positionen: [BelegPositionEntwurf]
     var uebernehmen: () -> Void = {}
@@ -188,21 +175,24 @@ struct BelegPositionFokusAssistent: View {
                     .foregroundStyle(.secondary)
             }
 
-            TabView(selection: $seite) {
-                ForEach(positionen.indices, id: \.self) { i in
-                    FokusSeite(position: $positionen[i]).tag(i)
-                }
+            // Kein TabView+selection — direkte Anzeige mit id()-Trick für Animation.
+            if seite < positionen.count {
+                FokusSeite(position: $positionen[seite])
+                    .id(positionen[seite].id)
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .trailing).combined(with: .opacity),
+                        removal:   .move(edge: .leading).combined(with: .opacity)
+                    ))
             }
-            .tabViewStyle(.page(indexDisplayMode: .never))
 
             HStack(spacing: 12) {
                 if seite > 0 {
-                    Button("Zur\u{00FC}ck") { withAnimation { seite -= 1 } }
+                    Button("Zur\u{00FC}ck") { withAnimation(.easeInOut) { seite -= 1 } }
                         .buttonStyle(.glass)
                 }
                 Spacer()
                 Button(istLetzte ? "Preise \u{00FC}bernehmen" : "Weiter") {
-                    if istLetzte { uebernehmen() } else { withAnimation { seite += 1 } }
+                    if istLetzte { uebernehmen() } else { withAnimation(.easeInOut) { seite += 1 } }
                 }
                 .buttonStyle(.glass)
             }
@@ -223,10 +213,8 @@ struct BelegPositionFokusAssistent: View {
 // =============================================================================
 // MARK: - Variante C: Kompakt-Liste + Bearbeitungs-Sheet
 //
-// Ansatz: Die Liste zeigt nur das Nötigste (Status, Name, Preis). Wer eine
-// Position bearbeiten will, tippt sie an — dann öffnet sich ein fokussiertes
-// Sheet. Für Nutzer, die dem KI-Ergebnis meist vertrauen und nur gelegentlich
-// korrigieren.
+// Minimale Listenzeilen (Status, Name, Preis) — Bearbeitung im Sheet.
+// Ideal, wenn Nutzer dem KI-Ergebnis meist vertraut und selten eingreift.
 // =============================================================================
 
 private struct PositionsBearbeitenSheet: View {
@@ -307,11 +295,6 @@ private struct KompaktZeile: View {
     }
 }
 
-/// Variante C: Minimale Listenzeilen — Bearbeitung ausschließlich im Sheet.
-///
-/// Jede Zeile zeigt nur Status-Icon, Artikel-Name und Preis. Antippen öffnet
-/// ein fokussiertes Bearbeitungs-Sheet mit allen Feldern. Die Liste bleibt dadurch
-/// auch bei vielen Positionen \u{00FC}bersichtlich.
 struct BelegPositionKompaktListe: View {
     @Binding var positionen: [BelegPositionEntwurf]
     var uebernehmen: () -> Void = {}
