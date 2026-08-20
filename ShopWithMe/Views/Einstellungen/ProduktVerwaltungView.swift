@@ -166,41 +166,71 @@ private struct NeuesProduktSheet: View {
     }
 }
 
-/// Suchbares Auswahlsheet für einen ``Artikel`` — genutzt von ``NeuesProduktSheet``.
-private struct ArtikelAuswahlSheet: View {
+/// Suchbares Auswahlsheet für einen ``Artikel`` — genutzt von ``NeuesProduktSheet``
+/// und ``BelegScanView`` (GitHub #123). Zeigt bei Suchbegriffen ohne exakten Treffer
+/// einen „Neu anlegen"-Button; nach dem Sichern schließt das Sheet und übergibt den
+/// neuen Artikel an den Aufrufer.
+struct ArtikelAuswahlSheet: View {
     @Binding var gewaehlterArtikel: Artikel?
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \Artikel.name) private var alleArtikel: [Artikel]
     @State private var suchtext = ""
+    @State private var neuerArtikelEntwurf: Artikel?
+    /// Löst den Dismiss dieses Sheets verzögert aus, nachdem ein neu angelegter
+    /// Artikel übergeben wurde — vermeidet Re-Entranz im `onDismiss`-Callback
+    /// des inneren ``ArtikelEditView``-Sheets.
+    @State private var sollteDismissen = false
+
+    private var getrimmterSuchtext: String {
+        suchtext.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     private var gefilterteArtikel: [Artikel] {
-        let trimmed = suchtext.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return alleArtikel }
-        return alleArtikel.filter { $0.name.localizedCaseInsensitiveContains(trimmed) }
+        guard !getrimmterSuchtext.isEmpty else { return alleArtikel }
+        return alleArtikel.filter { $0.name.localizedCaseInsensitiveContains(getrimmterSuchtext) }
+    }
+
+    private var zeigtNeuAnlegenOption: Bool {
+        !getrimmterSuchtext.isEmpty &&
+        !alleArtikel.contains { $0.name.localizedCaseInsensitiveCompare(getrimmterSuchtext) == .orderedSame }
     }
 
     var body: some View {
         NavigationStack {
-            List(gefilterteArtikel) { artikel in
-                Button {
-                    gewaehlterArtikel = artikel
-                    dismiss()
-                } label: {
-                    HStack {
-                        Text(artikel.name)
-                            .foregroundStyle(.primary)
-                        Spacer()
-                        if gewaehlterArtikel == artikel {
-                            Image(systemName: "checkmark")
-                                .foregroundStyle(.tint)
+            List {
+                ForEach(gefilterteArtikel) { artikel in
+                    Button {
+                        gewaehlterArtikel = artikel
+                        dismiss()
+                    } label: {
+                        HStack {
+                            Text(artikel.name)
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            if gewaehlterArtikel == artikel {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(.tint)
+                            }
                         }
                     }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
+                if zeigtNeuAnlegenOption {
+                    Button {
+                        neuerArtikelEntwurf = Artikel(
+                            name: getrimmterSuchtext,
+                            symbolName: SymbolPalette.alle[0],
+                            farbeHex: Color.artikelPalette[0]
+                        )
+                    } label: {
+                        Label("\u{201E}\(getrimmterSuchtext)\u{201D} neu anlegen", systemImage: "plus.circle.fill")
+                    }
+                    .foregroundStyle(.tint)
+                }
             }
             .searchable(text: $suchtext, prompt: "Artikel suchen")
             .overlay {
-                if gefilterteArtikel.isEmpty {
+                if gefilterteArtikel.isEmpty && !zeigtNeuAnlegenOption {
                     ContentUnavailableView(
                         suchtext.isEmpty ? "Keine Artikel" : "Keine Treffer",
                         systemImage: "tag",
@@ -219,7 +249,23 @@ private struct ArtikelAuswahlSheet: View {
                     Button("Abbrechen") { dismiss() }
                 }
             }
+            .sheet(item: $neuerArtikelEntwurf, onDismiss: nachNeuanlageAufraeumen) { entwurf in
+                ArtikelEditView(artikel: entwurf, istNeu: true)
+            }
+            .onChange(of: sollteDismissen) { _, neu in
+                if neu { dismiss() }
+            }
         }
+    }
+
+    private func nachNeuanlageAufraeumen() {
+        guard let entwurf = neuerArtikelEntwurf, entwurf.modelContext != nil else {
+            neuerArtikelEntwurf = nil
+            return
+        }
+        gewaehlterArtikel = entwurf
+        neuerArtikelEntwurf = nil
+        sollteDismissen = true
     }
 }
 

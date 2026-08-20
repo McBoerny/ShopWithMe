@@ -1760,15 +1760,15 @@ struct ArtikelAbhakZeile: View {
 
 /// Sheet zum exakten Vorgeben der Menge, der Mengeneinheit und einer temporären
 /// Notiz für einen ``EinkaufslistenEintrag`` (Tap auf die Mengenangabe in
-/// ``ArtikelAbhakZeile``). Arbeitet mit lokalem Entwurfs-Zustand (analog
-/// `NeueAbteilungSheet`) — die Übernahme ins Modell geschieht erst bei „Sichern“,
-/// gekapselt in einem einzelnen Micro-Lease.
+/// ``ArtikelAbhakZeile`` und ``ArtikelHinzufuegenView``, GitHub #124). Arbeitet mit
+/// lokalem Entwurfs-Zustand (analog `NeueAbteilungSheet`) — die Übernahme ins Modell
+/// geschieht erst bei „Sichern”, gekapselt in einem einzelnen Micro-Lease.
 ///
 /// Die Einheit ist (anders als Menge/Notiz) kein Feld von
 /// ``EinkaufslistenEintrag``, sondern von ``Artikel/einheit`` — eine Änderung
 /// hier wirkt sich also, wie beim direkten Bearbeiten in ``ArtikelEditView``, auf
 /// den Artikel insgesamt aus, nicht nur auf diesen einen Eintrag (GitHub #12).
-private struct MengenNotizSheet: View {
+struct MengenNotizSheet: View {
     let eintrag: EinkaufslistenEintrag
 
     @Environment(\.modelContext) private var modelContext

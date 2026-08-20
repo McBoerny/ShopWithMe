@@ -213,7 +213,9 @@ dem Abschließen ein kurzer Hinweis, dass sich die App automatisch anpasst.
   Produktnamen (z.B. findet „Sebamed" den Artikel „Shampoo", der dann
   automatisch mit aufgeklappter Produktliste erscheint). Bereits auf der
   Liste stehende Artikel sind mit dem Abhak-Symbol markiert — erneutes
-  Antippen nimmt sie wieder von der Liste.
+  Antippen nimmt sie wieder von der Liste. Links vom Abhak-Symbol steht
+  die aktuelle Menge; Antippen öffnet dasselbe Blatt zum Anpassen von
+  Menge, Einheit und Notiz wie beim Einkaufen selbst.
 - **Darstellung anpassen:** Einstellungen → „Listendarstellung" — wählt zwischen
   klassischer Gruppenliste, Chips (groß oder klein) und Kacheln (2 oder 3 Spalten).
   Je Modus konfigurierbar: Akkordeon-Kategorien, Fortschrittsbalken und

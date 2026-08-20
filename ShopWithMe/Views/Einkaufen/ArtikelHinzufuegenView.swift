@@ -17,6 +17,9 @@ import SwiftData
 /// zugehörige Artikel automatisch aufgeklappt. Findet die Suche keinen
 /// exakten Treffer, kann der gesuchte Artikel direkt hier angelegt werden —
 /// er landet danach ebenfalls sofort auf der Liste (GitHub #6).
+/// Für bereits auf der Liste stehende Artikel (ohne spezifisches Produkt) und
+/// für ausgewählte Produktzeilen zeigt ein Tap auf die Mengenangabe links vom
+/// Haken ``MengenNotizSheet`` — identisch zur Funktion beim Einkaufen (GitHub #124).
 struct ArtikelHinzufuegenView: View {
     let einkaufsliste: Einkaufsliste
 
@@ -49,6 +52,10 @@ struct ArtikelHinzufuegenView: View {
     /// hier kehrt den jeweiligen Standardzustand um — manuell aufklappen wenn
     /// kein Produkttreffer, manuell zuklappen wenn Produkttreffer.
     @State private var umgeklappteArtikel: Set<UUID> = []
+    /// Der Eintrag, dessen Menge/Notiz gerade per ``MengenNotizSheet`` bearbeitet
+    /// wird — `nil` wenn kein Sheet offen (GitHub #124).
+    @State private var zuVerfeinernderEintrag: EinkaufslistenEintrag?
+    @State private var zeigeVerfeinerungsSheet = false
 
     private var getrimmterSuchtext: String {
         wirksamerSuchtext.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -118,6 +125,12 @@ struct ArtikelHinzufuegenView: View {
         trefferNurUeberProdukt(artikel) != umgeklappteArtikel.contains(artikel.id)
     }
 
+    /// Formatiert ``EinkaufslistenEintrag/menge`` mit ``Artikel/einheit`` zur
+    /// kompakten Anzeige links vom Haken (GitHub #124).
+    private func mengeText(fuer eintrag: EinkaufslistenEintrag) -> String {
+        "\(eintrag.menge.formatted()) \(eintrag.artikel?.einheit.kurzform ?? Einheit.stueck.kurzform)"
+    }
+
     var body: some View {
         NavigationStack {
             List {
@@ -143,6 +156,9 @@ struct ArtikelHinzufuegenView: View {
                                 return namen.count == 1 ? namen[0] : "\(namen[0]) +\(namen.count - 1)"
                             }()
 
+                            // Hauptzeile: Toggle-Button füllt verfügbare Breite, rechts
+                            // davon optionale Mengenanzeige (nur wenn auf Liste und keine
+                            // benannten Produkte), Haken und ggf. Chevron (GitHub #124).
                             HStack(spacing: 0) {
                                 Button {
                                     if bereitsAufListe {
@@ -154,11 +170,28 @@ struct ArtikelHinzufuegenView: View {
                                 } label: {
                                     ArtikelAuswahlZeile(
                                         artikel: artikel,
-                                        bereitsAufListe: bereitsAufListe,
                                         gewaehltesProduktnamen: gewaehltesProduktnamen
                                     )
                                 }
                                 .buttonStyle(.plain)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+
+                                if bereitsAufListe && produkteDesArtikels.isEmpty,
+                                   let eintrag = einkaufsliste.eintrag(fuer: artikel) {
+                                    Button {
+                                        zuVerfeinernderEintrag = eintrag
+                                        zeigeVerfeinerungsSheet = true
+                                    } label: {
+                                        Text(mengeText(fuer: eintrag))
+                                            .font(.subheadline)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .padding(.trailing, 8)
+                                }
+
+                                Image(systemName: bereitsAufListe ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(bereitsAufListe ? Color.accentColor : .secondary)
 
                                 if !produkteDesArtikels.isEmpty {
                                     Button {
@@ -176,24 +209,64 @@ struct ArtikelHinzufuegenView: View {
                             }
 
                             if aufgeklappt && !produkteDesArtikels.isEmpty {
-                                let nilGewaehlt = einkaufsliste.enthaelt(artikel, produkt: nil)
-                                Button {
-                                    produktWaehlen(nil, fuer: artikel)
-                                    suchfeldFuerNaechsteEingabeZuruecksetzen()
-                                } label: {
-                                    ProduktSubZeile(name: "Kein bestimmtes Produkt", istGewaehlt: nilGewaehlt)
+                                let nilEintrag = einkaufsliste.eintrag(fuer: artikel, produkt: nil)
+                                let nilGewaehlt = nilEintrag != nil
+                                HStack(spacing: 0) {
+                                    Button {
+                                        produktWaehlen(nil, fuer: artikel)
+                                        suchfeldFuerNaechsteEingabeZuruecksetzen()
+                                    } label: {
+                                        ProduktSubZeile(name: "Kein bestimmtes Produkt", istGewaehlt: nilGewaehlt)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                                    if nilGewaehlt, let eintrag = nilEintrag {
+                                        Button {
+                                            zuVerfeinernderEintrag = eintrag
+                                            zeigeVerfeinerungsSheet = true
+                                        } label: {
+                                            Text(mengeText(fuer: eintrag))
+                                                .font(.subheadline)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .padding(.trailing, 8)
+                                    }
+
+                                    Image(systemName: nilGewaehlt ? "checkmark.circle.fill" : "circle")
+                                        .foregroundStyle(nilGewaehlt ? Color.accentColor : .secondary)
                                 }
-                                .buttonStyle(.plain)
 
                                 ForEach(produkteDesArtikels) { produkt in
                                     let istGewaehlt = einkaufsliste.enthaelt(artikel, produkt: produkt)
-                                    Button {
-                                        produktWaehlen(produkt, fuer: artikel)
-                                        suchfeldFuerNaechsteEingabeZuruecksetzen()
-                                    } label: {
-                                        ProduktSubZeile(name: produkt.name, istGewaehlt: istGewaehlt)
+                                    let produktEintrag = einkaufsliste.eintrag(fuer: artikel, produkt: produkt)
+                                    HStack(spacing: 0) {
+                                        Button {
+                                            produktWaehlen(produkt, fuer: artikel)
+                                            suchfeldFuerNaechsteEingabeZuruecksetzen()
+                                        } label: {
+                                            ProduktSubZeile(name: produkt.name, istGewaehlt: istGewaehlt)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                                        if istGewaehlt, let eintrag = produktEintrag {
+                                            Button {
+                                                zuVerfeinernderEintrag = eintrag
+                                                zeigeVerfeinerungsSheet = true
+                                            } label: {
+                                                Text(mengeText(fuer: eintrag))
+                                                    .font(.subheadline)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                            .buttonStyle(.plain)
+                                            .padding(.trailing, 8)
+                                        }
+
+                                        Image(systemName: istGewaehlt ? "checkmark.circle.fill" : "circle")
+                                            .foregroundStyle(istGewaehlt ? Color.accentColor : .secondary)
                                     }
-                                    .buttonStyle(.plain)
                                 }
                             }
                         }
@@ -247,6 +320,11 @@ struct ArtikelHinzufuegenView: View {
             }
             .sheet(item: $neuerArtikelEntwurf, onDismiss: nachNeuanlageAufraeumen) { entwurf in
                 ArtikelEditView(artikel: entwurf, istNeu: true)
+            }
+            .sheet(isPresented: $zeigeVerfeinerungsSheet) {
+                if let eintrag = zuVerfeinernderEintrag {
+                    MengenNotizSheet(eintrag: eintrag)
+                }
             }
         }
     }
@@ -321,8 +399,8 @@ struct ArtikelHinzufuegenView: View {
 
     /// Wurde der Entwurf tatsächlich gesichert (also in den Model-Context
     /// eingefügt), landet er sofort auf ``einkaufsliste`` (GitHub #6) — ohne
-    /// zusätzlichen Tap auf „Hinzufügen". Die Zeile zeigt danach automatisch das
-    /// Abhak-Symbol (``ArtikelAuswahlZeile``/``bereitsAufListe``).
+    /// zusätzlichen Tap auf „Hinzufügen". Die Zeile zeigt danach automatisch den
+    /// Haken.
     private func nachNeuanlageAufraeumen() {
         defer { zuletztAngelegterEntwurf = nil }
         guard let entwurf = zuletztAngelegterEntwurf, entwurf.modelContext != nil else { return }
@@ -339,25 +417,14 @@ struct ArtikelHinzufuegenView: View {
     }
 }
 
-/// Eine kompakte Zeile in der Artikelsuche: Kategorie-Icon/Farbe, Name und das
-/// App-weit einheitliche Abhak-Symbol (GitHub #8), das anzeigt, ob der Artikel
-/// bereits auf der aktuellen Einkaufsliste steht — Tippen schaltet um
-/// (GitHub #45). Ist ein konkretes Produkt gewählt, erscheint dessen Name als
-/// sekundäre Zeile unter dem Artikelnamen.
+/// Kompakter linker Teil einer Artikel-Auswahlzeile: Kategorie-Icon/Farbe, Name
+/// und optionaler Produktname. Auswahlstatus (Haken) und Mengenanzeige werden
+/// vom Aufrufer in der äußeren HStack gesetzt (GitHub #124).
 private struct ArtikelAuswahlZeile: View {
     let artikel: Artikel
-    let bereitsAufListe: Bool
     var gewaehltesProduktnamen: String? = nil
 
     private var kategorie: ArtikelKategorie? { artikel.kategorien.first }
-
-    private var preisSpanneText: String? {
-        let preise = artikel.preispunkte.map(\.preis).filter { $0 > 0 }
-        guard !preise.isEmpty, let min = preise.min(), let max = preise.max() else { return nil }
-        let minFormatiert = min.formatted(Decimal.FormatStyle.euro)
-        if min == max { return minFormatiert }
-        return minFormatiert + " \u{2013} " + max.formatted(Decimal.FormatStyle.euro)
-    }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -377,25 +444,14 @@ private struct ArtikelAuswahlZeile: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
-                if let spanne = preisSpanneText {
-                    Text(spanne)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
             }
-
-            Spacer()
-
-            Image(systemName: bereitsAufListe ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(bereitsAufListe ? Color.accentColor : .secondary)
         }
-        .contentShape(Rectangle())
     }
 }
 
 /// Eingerückte Produktzeile unterhalb einer Artikel-Hauptzeile — zeigt den
-/// Produktnamen und ob dieses Produkt derzeit auf der Einkaufsliste gewählt ist.
+/// Produktnamen. Auswahlstatus (Haken) und Mengenanzeige werden vom Aufrufer
+/// in der äußeren HStack gesetzt (GitHub #124).
 private struct ProduktSubZeile: View {
     let name: String
     let istGewaehlt: Bool
@@ -410,13 +466,7 @@ private struct ProduktSubZeile: View {
             Text(name)
                 .foregroundStyle(istGewaehlt ? .primary : .secondary)
                 .lineLimit(1)
-
-            Spacer()
-
-            Image(systemName: istGewaehlt ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(istGewaehlt ? Color.accentColor : .secondary)
         }
-        .contentShape(Rectangle())
     }
 }
 
