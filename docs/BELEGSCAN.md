@@ -97,9 +97,13 @@ Belegscans hinweg.
      zusammen mit den `ErkannteZeile`n als `BelegScanErgebnis`.
 4. **Ignorier-Filter + Artikel-Zuordnung** (`BelegScanView.verarbeite(bild:)`): pro
    erkannter Position erst `IgnorierterArtikel.istIgnoriert(...)` (Position
-   verschwindet komplett, siehe „Dauerhaft ignorierte Artikel pro Geschäft“ unten),
-   sonst `ArtikelZuordnungsService.zuordnen(...)` (siehe „Automatische
-   Artikel-Zuordnung“ unten). Zusätzlich ermittelt
+   verschwindet komplett, siehe „Dauerhaft ignorierte Artikel pro Geschäft” unten),
+   sonst dreistufig (GitHub #123): (a) Text-Abgleich mit OCR-Text (Stufe 1+2,
+   `ArtikelZuordnungsService.textBasierteZuordnung(...)`), (b) Klarname-Ableitung —
+   bei Treffer aus Produkt-/Aliasname, sonst KI-Vorschlag
+   (`AISuggestionService.produktKlarname`), (c) KI-Artikel-Match
+   (`AISuggestionService.artikelMatch`) auf Basis des Klarnamens statt des OCR-Texts
+   (nur wenn Stufen 1+2 ohne Treffer). Zusätzlich ermittelt
    `[ErkannteZeile].boundingBox(fuerArtikelName:)` per beidseitigem
    Teilstring-Abgleich die zur Position passende OCR-Zeile (`nil` ohne eindeutigen
    Treffer).
@@ -322,28 +326,24 @@ Pipeline. Ersetzt die frühere, nur für `.geschaeft`/`.unbekannt` beim **Speich
 (nicht in der Prüf-Ansicht sichtbare) `passendesArtikel(fuer:)`-Methode — `.einkaufsvorgang`
 bekam bislang gar keine Katalog-Zuordnung.
 
-**Anzeige/Korrektur (`PositionsZeile`):** Zwei Textfelder pro Position (GitHub #121):
+**Anzeige/Korrektur (`PositionsZeile`, GitHub #123):** Zwei Elemente pro Position:
 
-- **Artikel-Textfeld** (`artikelName`): zeigt immer den generischen Artikelnamen
-  (z.B. „Shampoo”) — nie mehr den Alias/Klarname wie zuvor. Ein Status-Label
-  darunter zeigt „Wird verknüpft mit „<Artikel>”” (Treffer) oder „Neu erkannt”
-  (keine Stufe erfolgreich). Bei „Neu erkannt” erscheint darunter zusätzlich der
-  rohe Bon-Text als „Original: „<Text>””.
-- **Produktname-Textfeld** (`produktKlarname`, neu): erscheint unterhalb des
-  Status-Labels, sobald ein Artikel zugeordnet ist. Vorbelegt mit dem Klarname des
-  gematchten `Produkt`s, dem gespeicherten Alias-Namen oder einem KI-Vorschlag
-  aus den bestehenden Klarnames des Artikels. Leer lassen → `erkannterName` wird
-  als Produktidentität verwendet. Weicht der Klarname vom `erkannterName` ab,
-  erscheint dieser zusätzlich als „Erkannt auf Bon: „<Text>”” darunter.
-- **`BearbeitbarePosition.effektivZugeordneterArtikel`**: liefert die automatische
-  Zuordnung nur, solange der Text im Artikel-Feld noch exakt zum zugeordneten
-  Artikelnamen passt — bearbeitet der Nutzer das Feld frei weiter, ohne neu
-  auszuwählen, gilt die Position wieder als „neu erkannt”, rein reaktiv ohne
-  `onChange`-Seiteneffekt. Sowohl Anzeige als auch `BelegScanView.uebernehmen()`
-  nutzen ausschließlich diese Property. Das Produktname-Feld verschwindet dann
-  ebenfalls (da ohne Artikel-Kontext bedeutungslos).
-- **Inline-Autocomplete** (nur Artikel-Feld): solange fokussiert, bis zu 5
-  Teilstring-Vorschläge; „„<Text>” neu anlegen” öffnet `ArtikelEditView` als Sheet.
+- **Produktname-Feld** (`produktKlarname`, dominant): das primäre Textfeld, von der
+  KI vorbelegt (aus Produkt-/Aliasname oder neu generiert), direkt editierbar. Weicht
+  der Klarname vom rohen `erkannterName` ab oder ist er leer, erscheint darunter
+  „Erkannt auf Bon: „<Text>”” in kleiner Schrift.
+- **Artikel-Button** (`artikelName`): tappbarer Button darunter — zeigt
+  „Artikel: <Name>” (sekundär) bei erfolgreicher Zuordnung oder
+  „Neu erkannt – Artikel zuordnen” (orange) ohne Treffer. Antippen öffnet
+  `ArtikelAuswahlSheet` (selbe Komponente wie `NeuesProduktSheet`, GitHub #123):
+  durchsuchbare Liste aller Artikel; erscheint im Suchfeld ein Name ohne exakten
+  Treffer, öffnet sich zusätzlich ein „<Text> neu anlegen”-Button, der
+  `ArtikelEditView(istNeu:true)` direkt aus dem Sheet heraus öffnet. Nach
+  Auswahl oder Neuanlage schließt das Sheet und die Zuweisung wird übernommen.
+- **`BearbeitbarePosition.effektivZugeordneterArtikel`**: liefert die Zuordnung nur,
+  solange `artikelName` noch exakt zum Namen des `zugeordneterArtikel` passt —
+  rein reaktiv, kein `onChange`-Seiteneffekt. Sowohl Anzeige als auch
+  `BelegScanView.uebernehmen()` nutzen ausschließlich diese Property.
 
 ## Dauerhaft ignorierte Artikel pro Geschäft
 

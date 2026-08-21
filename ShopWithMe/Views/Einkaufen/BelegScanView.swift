@@ -57,16 +57,15 @@ enum BelegScanKontext {
 /// so lassen sich verschiedene Marken desselben generischen Artikels weiterhin
 /// getrennt in der Preishistorie nachverfolgen.
 ///
-/// **Automatische Artikel-Zuordnung (``ArtikelZuordnungsService``):** Beim Einlesen
-/// wird jede erkannte Position dreistufig einem bestehenden, generischen ``Artikel``
-/// zugeordnet — gelernter Alias (``ArtikelAlias``), sonst Teilstring-Abgleich, sonst
-/// (nur falls lokale KI verfügbar) ein KI-Best-Match. Das Artikel-Textfeld zeigt den
-/// gefundenen generischen Namen (z.B. „Shampoo”). Getrennt davon (GitHub #121) zeigt
-/// ein zweites Feld den editierbaren Produktname/Klarname (z.B. „Sebamed Urea 5%”),
-/// von der KI vorbelegt oder vom Nutzer eingegeben — getrennt vom abgekürzten
-/// Bon-Text, der als ``Preispunkt/produktName`` und ``Produktname`` erhalten bleibt.
-/// Bleibt jede Zuordnungs-Stufe erfolglos, gilt die Position als „neu erkannt”.
-/// Siehe `docs/BELEGSCAN.md`.
+/// **Automatische Artikel-Zuordnung (``ArtikelZuordnungsService``, GitHub #123):**
+/// Beim Einlesen wird jede erkannte Position dreistufig verarbeitet: (1) Text-Abgleich
+/// (Alias und Teilstring) mit dem rohen Bon-Text, (2) Klarname-Ableitung — bei Treffer
+/// aus Produkt-/Aliasname, sonst KI-Vorschlag (``AISuggestionService/produktKlarname``),
+/// (3) KI-Artikel-Match (``AISuggestionService/artikelMatch``) auf Basis des Klarnamens
+/// statt des rohen Bon-Texts. ``PositionsZeile`` zeigt den Klarname dominant (editierbar)
+/// und den generischen ``Artikel`` als antippe-baren Button — Antippen öffnet
+/// ``ArtikelAuswahlSheet`` zur Auswahl oder Neuanlage. Bleibt jede Stufe erfolglos,
+/// gilt die Position als „neu erkannt”. Siehe `docs/BELEGSCAN.md`.
 ///
 /// **Originalbeleg prüfen:** Solange die Ergebnis-Prüfung läuft, bleibt das
 /// aufgenommene Foto in-memory verfügbar (``erfasstesBild``, nie persistiert) und
@@ -157,7 +156,6 @@ struct BelegScanView: View {
                         geschaeftAbgleichNoetig: geschaeftAbgleichNoetig,
                         erkanntesGeschaeft: erkanntesGeschaeft,
                         belegFoto: erfasstesBild,
-                        alleArtikel: alleArtikel,
                         geschaeftWaehlen: { zeigeGeschaeftWahl = true },
                         artikelDauerhaftIgnorieren: artikelDauerhaftIgnorieren,
                         uebernehmen: uebernehmen
@@ -236,13 +234,45 @@ struct BelegScanView: View {
                     if IgnorierterArtikel.istIgnoriert(position.artikelName, geschaeft: erkanntesGeschaeft, unter: alleIgnoriertenArtikel) {
                         continue
                     }
-                    let zuordnung = await ArtikelZuordnungsService.zuordnen(
+                    // Stage 1+2: text-based matching with OCR text (alias + substring).
+                    let textTreffer = ArtikelZuordnungsService.textBasierteZuordnung(
                         erkannterName: position.artikelName,
                         bekannteAliase: bekannteAliase,
                         alleArtikel: alleArtikel,
                         geschaeft: erkanntesGeschaeft,
                         bekannteProduktnamen: bekannteProduktnamen
                     )
+                    // Klarname (GitHub #121, #123): Produktname-Treffer → direkt;
+                    // Alias-Treffer → alias; sonst KI aus erkanntem Bon-Text.
+                    let produktKlarname: String
+                    if let produkt = textTreffer?.produkt {
+                        produktKlarname = produkt.name
+                    } else if let alias = textTreffer?.alias {
+                        produktKlarname = alias
+                    } else if AISuggestionService.istVerfuegbar {
+                        let bekannteKlarnamen = textTreffer?.artikel?.produkte.filter { !$0.istStandard }.map { $0.name } ?? []
+                        let vorschlag = try? await AISuggestionService.produktKlarname(
+                            fuerErkannterName: position.artikelName,
+                            bekannteKlarnamen: bekannteKlarnamen
+                        )
+                        produktKlarname = vorschlag?.klarname ?? ""
+                    } else {
+                        produktKlarname = ""
+                    }
+                    // Stage 3: AI article match using Klarname (not OCR text) —
+                    // only when stages 1+2 found nothing (GitHub #123).
+                    let zuordnung: (alias: String?, artikel: Artikel?, produkt: Produkt?, quelle: ArtikelZuordnungsService.Quelle?)
+                    if let treffer = textTreffer {
+                        zuordnung = (treffer.alias, treffer.artikel, treffer.produkt, treffer.quelle)
+                    } else if AISuggestionService.istVerfuegbar {
+                        let matchInput = produktKlarname.isEmpty ? position.artikelName : produktKlarname
+                        let kiVorschlag = try? await AISuggestionService.artikelMatch(fuerName: matchInput, bekannteArtikel: alleArtikel.map(\.name))
+                        let passend = kiVorschlag?.passenderArtikel ?? ""
+                        let kiArtikel = passend.isEmpty ? nil : alleArtikel.first { $0.name.localizedCaseInsensitiveCompare(passend) == .orderedSame }
+                        zuordnung = (nil, kiArtikel, nil, kiArtikel != nil ? .ki : nil)
+                    } else {
+                        zuordnung = (nil, nil, nil, nil)
+                    }
                     // Tages-Kollisionsprüfung (GitHub #76-Folgearbeit): existiert für
                     // den zugeordneten Artikel bereits ein Preispunkt vom selben
                     // Kalendertag mit abweichendem Preis, bekommt der Anwender die
@@ -255,24 +285,6 @@ struct BelegScanView: View {
                             artikel: artikel, produkt: zuordnung.produkt, geschaeft: erkanntesGeschaeft, amDatum: belegDatum, context: modelContext
                         )?.preis
                         if bestehenderPreisHeute == position.einzelpreis { bestehenderPreisHeute = nil }
-                    }
-                    // Klarname bestimmen (GitHub #121): Produktname-Treffer → direkt;
-                    // Alias-Treffer → alias als Klarname (war vorher im artikelName);
-                    // sonst KI-Vorschlag aus bekannten Klarnames (falls verfügbar).
-                    let produktKlarname: String
-                    if let produkt = zuordnung.produkt {
-                        produktKlarname = produkt.name
-                    } else if let alias = zuordnung.alias {
-                        produktKlarname = alias
-                    } else if let artikel = zuordnung.artikel, AISuggestionService.istVerfuegbar {
-                        let bekannteKlarnamen = artikel.produkte.filter { !$0.istStandard }.map { $0.name }
-                        let vorschlag = try? await AISuggestionService.produktKlarname(
-                            fuerErkannterName: position.artikelName,
-                            bekannteKlarnamen: bekannteKlarnamen
-                        )
-                        produktKlarname = vorschlag?.klarname ?? ""
-                    } else {
-                        produktKlarname = ""
                     }
                     neuePositionen.append(BearbeitbarePosition(
                         erkannterName: position.artikelName,
@@ -663,8 +675,6 @@ private struct ErgebnisListe: View {
     /// Das Originalfoto, direkt inline oben angezeigt (kein separater Bildschirm) —
     /// `nil`, falls (noch) kein Foto verfügbar (siehe ``BelegScanView/erfasstesBild``).
     let belegFoto: UIImage?
-    /// Grundlage für die Autocomplete-Vorschläge in ``PositionsZeile``.
-    let alleArtikel: [Artikel]
     let geschaeftWaehlen: () -> Void
     /// Wischen nach rechts auf einer Position (siehe ``PositionsZeile``) — nur
     /// verfügbar, solange ``erkanntesGeschaeft`` gesetzt ist (Skalierung braucht ein
@@ -715,7 +725,7 @@ private struct ErgebnisListe: View {
 
                 Section {
                     ForEach($positionen) { $position in
-                        PositionsZeile(position: $position, alleArtikel: alleArtikel) { boundingBox in
+                        PositionsZeile(position: $position) { boundingBox in
                             positionMarkieren(boundingBox, proxy: proxy)
                         }
                         .swipeActions(edge: .leading) {
@@ -733,7 +743,7 @@ private struct ErgebnisListe: View {
                 } header: {
                     Text("Erkannte Positionen")
                 } footer: {
-                    Text("\"Artikel\" benennt die generische Kategorie (z.B. \"Shampoo\"), \"Produktname\" den konkreten Markennamen (z.B. \"Sebamed Urea 5%\") — leer lassen, wenn du keinen vergeben möchtest. Wischen nach links löscht eine Position nur für diesen Scan, nach rechts ignoriert sie dauerhaft für dieses Geschäft. Das Lupen-Symbol markiert die erkannte Stelle im Beleg-Foto oben.")
+                    Text("Der Produktname ist der menschenlesbare Klarname \u{2013} von der KI vorbelegt, antippen zum Bearbeiten. Artikel ist die generische Kategorie \u{2013} antippen zum W\u{E4}hlen oder Neuanlegen. Wischen nach links l\u{F6}scht die Position f\u{FC}r diesen Scan, nach rechts ignoriert sie dauerhaft f\u{FC}r dieses Gesch\u{E4}ft. Das Lupen-Symbol markiert die erkannte Stelle im Beleg-Foto.")
                 }
             }
             .safeAreaInset(edge: .bottom) {
@@ -755,48 +765,26 @@ private struct ErgebnisListe: View {
 }
 
 /// Eine Zeile in ``ErgebnisListe`` für eine einzelne erkannte Belegposition —
-/// Artikel-/Preisfeld, Original-Beleg-Name (falls abweichend), Zuordnungs-Status
-/// sowie Inline-Autocomplete gegen ``alleArtikel``, solange das Artikelfeld
-/// fokussiert ist. Tippen auf einen Vorschlag oder Neuanlegen eines Artikels
-/// (``ArtikelEditView``, identisches Muster wie `PreispunktZuordnenSheet`)
-/// aktualisiert `position` direkt — siehe `docs/BELEGSCAN.md` → „Automatische
-/// Artikel-Zuordnung“.
+/// Klarname (dominant, KI-vorbelegt, editierbar) plus Preis, darunter Bon-Text
+/// (falls abweichend) und der generische Artikel als antippe-barer Button.
+/// Tippen öffnet ``ArtikelAuswahlSheet`` zur Auswahl oder Neuanlage. GitHub #123.
 private struct PositionsZeile: View {
     @Binding var position: BearbeitbarePosition
-    let alleArtikel: [Artikel]
     let belegFotoAnzeigen: (CGRect) -> Void
 
-    @FocusState private var istFokussiert: Bool
-    @State private var neuerArtikelEntwurf: Artikel?
-    @State private var zeigeVorschlaege = false
-
-    private var getrimmterName: String {
-        position.artikelName.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    /// Bis zu 5 nach Teilstring gefilterte Vorschläge — kompakt gehalten, damit die
-    /// Liste nicht unübersichtlich wird.
-    private var vorschlaege: [Artikel] {
-        guard !getrimmterName.isEmpty else { return [] }
-        return Array(alleArtikel.filter { $0.name.localizedCaseInsensitiveContains(getrimmterName) }.prefix(5))
-    }
-
-    private var zeigtNeuAnlegenOption: Bool {
-        guard !getrimmterName.isEmpty else { return false }
-        return !alleArtikel.contains { $0.name.localizedCaseInsensitiveCompare(getrimmterName) == .orderedSame }
-    }
+    @State private var zeigeArtikelAuswahl = false
+    @State private var artikelFuerSheet: Artikel?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                TextField("Artikel", text: $position.artikelName)
-                    .focused($istFokussiert)
+                TextField("Produktname", text: $position.produktKlarname)
                 Spacer()
                 TextField("Preis", text: $position.preisText)
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.trailing)
                     .frame(width: 70)
-                Text("€")
+                Text("\u{20AC}")
                     .foregroundStyle(.secondary)
                 if let boundingBox = position.boundingBox {
                     Button {
@@ -808,117 +796,49 @@ private struct PositionsZeile: View {
                     .foregroundStyle(.secondary)
                 }
             }
-
-            if let artikel = position.effektivZugeordneterArtikel {
-                Label("Wird verknüpft mit „\(artikel.name)”", systemImage: "checkmark.circle")
-                    .font(.caption)
+            let getrimmterKlarname = position.produktKlarname.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !position.erkannterName.isEmpty,
+               getrimmterKlarname.isEmpty ||
+               getrimmterKlarname.localizedCaseInsensitiveCompare(position.erkannterName) != .orderedSame {
+                Text("Erkannt auf Bon: \u{201E}\(position.erkannterName)\u{201C}")
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
-                // Klarname-Feld (GitHub #121): editierbarer, menschenlesbarer Produktname,
-                // von der KI vorbelegt — getrennt vom generischen Artikel-Textfeld oben.
-                VStack(alignment: .leading, spacing: 2) {
-                    TextField("Produktname (optional)", text: $position.produktKlarname)
-                        .font(.subheadline)
-                    let getrimmterKlarname = position.produktKlarname.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !position.erkannterName.isEmpty, !getrimmterKlarname.isEmpty,
-                       getrimmterKlarname.localizedCaseInsensitiveCompare(position.erkannterName) != .orderedSame {
-                        Text("Erkannt auf Bon: „\(position.erkannterName)”")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            } else {
-                Label("Neu erkannt", systemImage: "sparkles")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-                if !position.erkannterName.isEmpty,
-                   position.artikelName.localizedCaseInsensitiveCompare(position.erkannterName) != .orderedSame {
-                    Text("Original: „\(position.erkannterName)”")
-                        .font(.caption2)
+            }
+            Button {
+                artikelFuerSheet = position.effektivZugeordneterArtikel
+                zeigeArtikelAuswahl = true
+            } label: {
+                if let artikel = position.effektivZugeordneterArtikel {
+                    Label("Artikel: \(artikel.name)", systemImage: "checkmark.circle")
+                        .font(.caption)
                         .foregroundStyle(.secondary)
+                } else {
+                    Label("Neu erkannt \u{2013} Artikel zuordnen", systemImage: "sparkles")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
                 }
             }
-
+            .buttonStyle(.plain)
             if let bestehenderPreisHeute = position.bestehenderPreisHeute {
                 TagesKollisionZeile(
                     bestehenderPreis: bestehenderPreisHeute,
                     behalteBestehenden: $position.behalteBestehendenPreisHeute
                 )
             }
-
-            if zeigeVorschlaege, position.effektivZugeordneterArtikel == nil, !vorschlaege.isEmpty || zeigtNeuAnlegenOption {
-                VStack(alignment: .leading, spacing: 10) {
-                    ForEach(vorschlaege) { artikel in
-                        Button {
-                            artikelZuweisen(artikel)
-                        } label: {
-                            Text(artikel.name)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    if zeigtNeuAnlegenOption {
-                        Button {
-                            neuenArtikelAnlegen()
-                        } label: {
-                            Label("\u{201E}\(getrimmterName)\u{201D} neu anlegen", systemImage: "plus.circle.fill")
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .contentShape(Rectangle())
-                        }
-                    }
-                }
-                .font(.body)
-                .foregroundStyle(Color.accentColor)
-                .padding(.top, 2)
-            }
         }
-        .onChange(of: istFokussiert) { _, fokussiert in
-            if fokussiert {
-                zeigeVorschlaege = true
-            } else {
-                // Verzögert ausblenden statt sofort: Ein Tap auf einen
-                // Vorschlags-Button entzieht dem TextField den Fokus (Touch
-                // trifft eine andere View), wodurch `istFokussiert` schon vor
-                // der Tap-Erkennung des Buttons auf false wechselt. Ohne
-                // Verzögerung verschwindet die Liste, bevor der Tap ankommt,
-                // und die Auswahl geht verloren (GitHub #57).
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                    zeigeVorschlaege = false
-                }
+        .sheet(isPresented: $zeigeArtikelAuswahl, onDismiss: {
+            if let gewaehlter = artikelFuerSheet,
+               gewaehlter.persistentModelID != position.zugeordneterArtikel?.persistentModelID {
+                artikelZuweisen(gewaehlter)
             }
-        }
-        .sheet(item: $neuerArtikelEntwurf, onDismiss: nachNeuanlageAufraeumen) { entwurf in
-            ArtikelEditView(artikel: entwurf, istNeu: true)
+        }) {
+            ArtikelAuswahlSheet(gewaehlterArtikel: $artikelFuerSheet)
         }
     }
 
     private func artikelZuweisen(_ artikel: Artikel) {
         position.artikelName = artikel.name
         position.zugeordneterArtikel = artikel
-        // Manuelle Zuweisung überschreibt eine ggf. vorherige automatische
-        // Quelle (z.B. Alias) — zählt für die automatische Produkt-Neuanlage
-        // in ``BelegScanView/uebernehmen()`` wie ein Substring-/KI-Treffer.
         position.zuordnungsQuelle = nil
-        istFokussiert = false
-    }
-
-    private func neuenArtikelAnlegen() {
-        neuerArtikelEntwurf = Artikel(
-            name: getrimmterName,
-            symbolName: SymbolPalette.alle[0],
-            farbeHex: Color.artikelPalette[0]
-        )
-    }
-
-    /// Wurde der Entwurf tatsächlich gesichert (also in den Model-Context
-    /// eingefügt), übernimmt diese Zeile ihn direkt als Zuordnung — siehe
-    /// `PreispunktZuordnenSheet.nachNeuanlageAufraeumen()` für dasselbe Muster.
-    private func nachNeuanlageAufraeumen() {
-        guard let entwurf = neuerArtikelEntwurf, entwurf.modelContext != nil else {
-            neuerArtikelEntwurf = nil
-            return
-        }
-        artikelZuweisen(entwurf)
-        neuerArtikelEntwurf = nil
     }
 }
