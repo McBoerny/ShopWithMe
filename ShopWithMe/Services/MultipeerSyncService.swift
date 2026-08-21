@@ -48,6 +48,17 @@ final class MultipeerSyncService: NSObject, ObservableObject {
 
     private static let discoveryInfoSchluessel = "gruppe"
 
+    /// Nutzer-Einstellung (GitHub #127): erlaubt, den Multipeer-Kanal
+    /// vollständig abzuschalten, z.B. bei Akku-/Privacy-Bedenken zum lokalen
+    /// Bonjour-Advertising — der Datei-Kanal bleibt davon unberührt. Default
+    /// `true` (unveränderter Bestandsschutz für bereits installierte Apps,
+    /// bei denen der Key noch nicht existiert).
+    @MainActor
+    static var vonNutzerAktiviert: Bool {
+        get { UserDefaults.standard.object(forKey: "multipeerVonNutzerAktiviert") as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: "multipeerVonNutzerAktiviert") }
+    }
+
     /// Von `EinkaufenView` gesetzt, solange der Einkaufen-Bildschirm sichtbar
     /// ist (analog ``SyncPollingService/einkaufAktiv``) — startet/stoppt
     /// Advertising+Browsing. Bewusst kein Dauerbetrieb im Hintergrund (Akku,

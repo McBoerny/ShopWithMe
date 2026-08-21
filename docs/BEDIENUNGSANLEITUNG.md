@@ -297,7 +297,7 @@ Anders als bei „Datenbank & Speicherort" (siehe unten) bleibt dabei die
 eigentliche Datenbank jedes Geräts unverändert an ihrem Ort — nur Änderungen
 werden ausgetauscht.
 
-- **Einrichten:** Einstellungen → „Datensynchronisation" → „Ordner wählen…".
+- **Einrichten:** Einstellungen → „Synchronisation" → „Ordner wählen…".
   Ist der gewählte Ordner noch leer (niemand sonst hat ihn bisher verwendet),
   startet direkt der erste Abgleich. Enthält er bereits Daten anderer Geräte
   (z.B. weil ein Mitnutzer schon eingerichtet hat), fragt die App vor dem
@@ -333,8 +333,10 @@ werden ausgetauscht.
   ersten gemeinsamen Einkaufen nach dieser Funktion einmalig nach der
   Berechtigung „Im lokalen Netzwerk suchen" — ohne diese Berechtigung
   funktioniert weiterhin alles, nur eben etwas langsamer über den geteilten
-  Ordner.
-- **Sichtbarer Sync-Status:** Einstellungen → „Datensynchronisation" zeigt
+  Ordner. Über den Schalter „Multipeer-Sync" in den Sync-Einstellungen lässt
+  sich dieser Nahbereich-Kanal komplett abschalten (Standard: an) — der
+  Abgleich über den geteilten Ordner läuft davon unabhängig weiter.
+- **Sichtbarer Sync-Status:** Einstellungen → „Synchronisation" zeigt
   jederzeit, wann der Ordner-Abgleich zuletzt erfolgreich lief und ob gerade
   zusätzlich eine schnellere Nahbereich-Verbindung zu anderen Geräten besteht
   (und mit welchen). Während des gemeinsamen Einkaufens erscheint bei
@@ -363,7 +365,7 @@ werden ausgetauscht.
   werden soll (z.B. weil es nicht mehr genutzt wird) — „Entfernen" löscht
   seinen Beitrag vollständig aus dem Sync-Ordner, „Später erinnern"
   verschiebt die Frage auf den nächsten App-Start. Dasselbe lässt sich auch
-  jederzeit manuell einsehen/auslösen: Einstellungen → „Datensynchronisation" →
+  jederzeit manuell einsehen/auslösen: Einstellungen → „Synchronisation" →
   „Bekannte Geräte", dort per Wischen.
 - **„Aus der Sync-Gruppe entfernt":** Wurde dieses Gerät von einem anderen
   Mitglied der Gruppe auf die oben beschriebene Art entfernt, erkennt es das
@@ -429,5 +431,6 @@ werden ausgetauscht.
   Unteroptionen „Sync-Protokoll" und „Datenbank-Protokoll" (je einzeln
   ein-/ausschaltbar, gemeinsame Protokollgröße/Teilen/Leeren), sowie in
   Debug-Builds zusätzlich der Standort-Suchradius.
-- **Datensynchronisation** — siehe eigener Abschnitt „Datensynchronisation
-  (gemeinsam einkaufen)" oben.
+- **Synchronisation** — siehe eigener Abschnitt „Datensynchronisation
+  (gemeinsam einkaufen)" oben, inkl. des Schalters „Multipeer-Sync" für den
+  optionalen Nahbereich-Kanal.

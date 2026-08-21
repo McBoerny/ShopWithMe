@@ -43,6 +43,14 @@ struct SyncOrdnerSettingsView: View {
     @State private var zeigeNeustartHinweis = false
     @State private var zeigeBackupWiederherstellenBestaetigung = false
 
+    /// Nutzer-Einstellung für den Multipeer-Kanal (GitHub #127) — separat von
+    /// ``MultipeerSyncService/aktiv`` (View-Sichtbarkeits-Flag von
+    /// `EinkaufenView`): dieser Schalter entscheidet, ob `EinkaufenView`
+    /// `aktiv` überhaupt setzen darf. In `@State` gespiegelt, damit die
+    /// `Toggle`-Bindung unten funktioniert; einzige Quelle der Wahrheit bleibt
+    /// ``MultipeerSyncService/vonNutzerAktiviert`` (UserDefaults).
+    @State private var multipeerAktiviert = MultipeerSyncService.vonNutzerAktiviert
+
     /// Beim laufenden Hintergrund-Sync zurückgestellte Merge-Kandidaten
     /// (Geschäft/Artikel/Einkaufsliste) — siehe Ambiguitäts-Rückstellung in
     /// `SyncSnapshotImportService.mergeGeschaefte`/`mergeArtikel`/
@@ -96,6 +104,18 @@ struct SyncOrdnerSettingsView: View {
                 }
             } footer: {
                 Text("Ein geteilter Ordner (z.B. iCloud Drive oder Synology Drive), über den mehrere Geräte ihre Einkaufslisten-Änderungen austauschen. Die lokale Datenbank bleibt dabei unverändert am Standardort. Zum Deaktivieren nach links wischen.")
+            }
+
+            Section {
+                Toggle("Multipeer-Sync", isOn: $multipeerAktiviert)
+                    .onChange(of: multipeerAktiviert) { _, neuerWert in
+                        MultipeerSyncService.vonNutzerAktiviert = neuerWert
+                        if !neuerWert {
+                            multipeerSyncService.aktiv = false
+                        }
+                    }
+            } footer: {
+                Text("Zusätzlicher Direktkanal zum Sync-Ordner: gleicht Änderungen sofort mit anderen Geräten in der Nähe ab, während gemeinsam eingekauft wird. Ohne diesen Kanal werden Änderungen weiterhin über den Sync-Ordner ausgetauscht, nur etwas verzögert.")
             }
 
             if !abgleichWarteschlange.isEmpty {
@@ -163,7 +183,7 @@ struct SyncOrdnerSettingsView: View {
                 }
             }
         }
-        .navigationTitle("Datensynchronisation")
+        .navigationTitle("Synchronisation")
         .navigationBarTitleDisplayMode(.inline)
         .fileImporter(isPresented: $zeigeOrdnerauswahl, allowedContentTypes: [.folder]) { ergebnis in
             switch ergebnis {

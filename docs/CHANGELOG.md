@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.16 (Build 315) — Multipeer-Sync abschaltbar, Menü umbenannt in „Synchronisation"
+
+GitHub #127: neuer Schalter „Multipeer-Sync" in den Sync-Einstellungen
+(`MultipeerSyncService.vonNutzerAktiviert`, UserDefaults-backed, Default an) —
+`EinkaufenView` aktiviert den Nahbereich-Kanal beim Betreten des
+Einkaufen-Bildschirms nur noch, wenn der Schalter an ist; wird er während eines
+laufenden Einkaufs ausgeschaltet, trennt sich die Verbindung sofort. Der
+Menüpunkt/Titel „Datensynchronisation" heißt jetzt „Synchronisation", da er
+inzwischen mehrere Kanäle (Datei + Multipeer) bündelt.
+
 ## v0.16 (Build 308) — Sync „Ersetzen"/„Wiederherstellen" läuft jetzt live, ohne App-Neustart
 
 Zweiter Anlauf (der erste, Build 138/139, stürzte auf einem echten Gerät ab —

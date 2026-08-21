@@ -1435,7 +1435,7 @@ private struct EinkaufslisteView: View {
         .animation(.default, value: ueberkaufHinweisText)
         .onAppear {
             syncPollingService.einkaufAktiv = true
-            multipeerSyncService.aktiv = true
+            multipeerSyncService.aktiv = MultipeerSyncService.vonNutzerAktiviert
         }
         .onDisappear {
             syncPollingService.einkaufAktiv = false

@@ -66,7 +66,7 @@ struct SettingsView: View {
                         Label("Preishistorie", systemImage: "clock.arrow.circlepath")
                     }
                     NavigationLink(value: SettingsNavigationsziel.syncOrdner) {
-                        Label("Datensynchronisation", systemImage: "arrow.triangle.2.circlepath")
+                        Label("Synchronisation", systemImage: "arrow.triangle.2.circlepath")
                     }
                 }
 
