@@ -14,7 +14,50 @@ import Foundation
 /// längst lokal zwischengespeichert, das neue Gerät sah sie zum ersten Mal.
 /// Analog zum bestehenden koordinierten Schreib-Muster in
 /// ``SyncExportService``/``SyncSnapshotExportService``, nur für Lesezugriffe.
+/// Kumulative Datei-I/O-Zähler seit dem letzten ``SyncDateiZugriff/statistikZuruecksetzen()``
+/// — reine Debug-Anzeige (`DebuggingView`), kein Einfluss auf das Sync-Verhalten.
+/// Zählt nur die beiden mit Abstand häufigsten Operationen dieses Chokepoints
+/// (``SyncDateiZugriff/leseKoordiniert(_:)``/``SyncDateiZugriff/schreibeKoordiniert(_:nach:)``),
+/// nicht Verzeichnis-Listing/-Anlage/Löschen/Verschieben.
+struct DateiZugriffStatistik: Sendable {
+    var dateienGeoeffnet = 0
+    var dateienErstellt = 0
+    var bytesGelesen = 0
+    var bytesGeschrieben = 0
+    var seit = Date.now
+}
+
 enum SyncDateiZugriff {
+    private static let statistikSperre = NSLock()
+    private nonisolated(unsafe) static var _statistik = DateiZugriffStatistik()
+
+    /// Aktueller Stand der Datei-I/O-Zähler seit dem letzten Reset. Thread-sicher
+    /// per `NSLock`, da ``leseKoordiniert(_:)``/``schreibeKoordiniert(_:nach:)``
+    /// von beliebigen Hintergrund-Tasks (`Task.detached`) aus gleichzeitig
+    /// aufgerufen werden können.
+    static var statistik: DateiZugriffStatistik {
+        statistikSperre.withLock { _statistik }
+    }
+
+    /// Setzt alle Zähler auf 0 zurück und den „seit"-Zeitpunkt auf jetzt.
+    static func statistikZuruecksetzen() {
+        statistikSperre.withLock { _statistik = DateiZugriffStatistik() }
+    }
+
+    private static func vermerkeGelesen(bytes: Int) {
+        statistikSperre.withLock {
+            _statistik.dateienGeoeffnet += 1
+            _statistik.bytesGelesen += bytes
+        }
+    }
+
+    private static func vermerkeGeschrieben(bytes: Int, neuErstellt: Bool) {
+        statistikSperre.withLock {
+            _statistik.bytesGeschrieben += bytes
+            if neuErstellt { _statistik.dateienErstellt += 1 }
+        }
+    }
+
     /// Blockierender Aufruf (Netzwerk-Download kann mehrere Sekunden dauern) —
     /// bewusst `nonisolated`, damit Aufrufer ihn per `Task.detached` vom
     /// `MainActor` fernhalten können, statt die UI während des Downloads zu
@@ -43,6 +86,9 @@ enum SyncDateiZugriff {
         var ergebnis: Data?
         coordinator.coordinate(readingItemAt: url, options: [], error: &fehler) { koordinierteURL in
             ergebnis = try? Data(contentsOf: koordinierteURL)
+        }
+        if fehler == nil, let ergebnis {
+            vermerkeGelesen(bytes: ergebnis.count)
         }
         return fehler == nil ? ergebnis : nil
     }
@@ -124,8 +170,13 @@ enum SyncDateiZugriff {
         let coordinator = NSFileCoordinator()
         var fehler: NSError?
         var erfolgreich = false
+        var neuErstellt = false
         coordinator.coordinate(writingItemAt: url, options: [], error: &fehler) { zielURL in
+            neuErstellt = !FileManager.default.fileExists(atPath: zielURL.path)
             erfolgreich = (try? daten.write(to: zielURL, options: .atomic)) != nil
+        }
+        if fehler == nil, erfolgreich {
+            vermerkeGeschrieben(bytes: daten.count, neuErstellt: neuErstellt)
         }
         return fehler == nil && erfolgreich
     }

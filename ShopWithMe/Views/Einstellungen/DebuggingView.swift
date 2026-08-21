@@ -57,6 +57,8 @@ struct DebuggingView: View {
                 Text("Sync-Protokoll: wie alt empfangene Updates beim Eintreffen waren und wie lange ein Sync-Zyklus dauert. Datenbank-Protokoll: Probleme rund um den Mehrbenutzerzugriff (Sperren, Öffnen, Speichern). „Fehler“: nur Störungen und seltene bedeutsame Ereignisse. „Standard“: zusätzlich die normale Zyklus-Aktivität. „Ausführlich“: zusätzlich hochfrequente Detail-Ereignisse (u.a. je Sync-Teilbereich eine „unverändert“-Zeile, sowie eine Security-Ordnerzugriffs-Diagnose) — nur für eine gezielte Tiefenanalyse einschalten, nicht dauerhaft. Beide Protokolle nur lokal auf diesem Gerät, nicht geteilt.")
             }
 
+            DateiZugriffStatistikSection()
+
             MultipeerStatusSection()
 
             StatuskonsolidierungSection()
@@ -123,6 +125,40 @@ private struct SuchradiusUeberschreibungSection: View {
     }
 }
 #endif
+
+/// Zeigt die kumulativen Datei-I/O-Zähler von ``SyncDateiZugriff`` seit dem
+/// letzten Reset — wie oft koordiniert gelesen/geschrieben wurde und wie viele
+/// dieser Dateien dabei neu angelegt wurden, sowie die dabei übertragene
+/// Datenmenge. Erfasst nur diesen zentralen Chokepoint, nicht die wenigen
+/// Stellen, die direkt per `FileManager`/`Data` am Chokepoint vorbeigreifen
+/// (z.B. ``SyncErsetzenService``, ``DatabaseLeaseService``).
+private struct DateiZugriffStatistikSection: View {
+    @State private var statistik = SyncDateiZugriff.statistik
+
+    var body: some View {
+        Section {
+            LabeledContent("Dateien geöffnet", value: "\(statistik.dateienGeoeffnet)")
+            LabeledContent("Dateien erstellt", value: "\(statistik.dateienErstellt)")
+            LabeledContent("Gelesen", value: statistik.bytesGelesen.formatted(.byteCount(style: .file)))
+            LabeledContent("Geschrieben", value: statistik.bytesGeschrieben.formatted(.byteCount(style: .file)))
+            LabeledContent("Seit", value: statistik.seit.formatted(date: .abbreviated, time: .shortened))
+            Button("Aktualisieren") {
+                statistik = SyncDateiZugriff.statistik
+            }
+            Button("Zurücksetzen", role: .destructive) {
+                SyncDateiZugriff.statistikZuruecksetzen()
+                statistik = SyncDateiZugriff.statistik
+            }
+        } header: {
+            Text("Datei-I/O-Statistik")
+        } footer: {
+            Text("Zählt koordinierte Lese-/Schreibzugriffe (``SyncDateiZugriff``) seit dem letzten Zurücksetzen — den zentralen Datei-I/O-Chokepoint der Datensynchronisation. Nicht erfasst: die wenigen Stellen, die direkt am Chokepoint vorbeigreifen (u.a. Geräte-Neuaufbau, Datenbank-Sperrdatei).")
+        }
+        .onAppear {
+            statistik = SyncDateiZugriff.statistik
+        }
+    }
+}
 
 /// Zeigt, ob der zusätzliche Multipeer-Beschleunigungskanal (GitHub #49,
 /// ``MultipeerSyncService``) gerade läuft und mit wem verbunden ist — bislang

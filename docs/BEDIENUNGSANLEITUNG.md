@@ -429,8 +429,11 @@ werden ausgetauscht.
 - **Debugging** — bündelt alle Diagnose-Einstellungen in einer Ansicht; im
   Normalbetrieb nicht nötig. Ein gemeinsamer „Debug-Modus"-Abschnitt mit den
   Unteroptionen „Sync-Protokoll" und „Datenbank-Protokoll" (je einzeln
-  ein-/ausschaltbar, gemeinsame Protokollgröße/Teilen/Leeren), sowie in
-  Debug-Builds zusätzlich der Standort-Suchradius.
+  ein-/ausschaltbar, gemeinsame Protokollgröße/Teilen/Leeren), eine
+  „Datei-I/O-Statistik" (Anzahl geöffneter/erstellter Dateien sowie gelesene/
+  geschriebene Datenmenge des Sync-Ordners seit dem letzten Zurücksetzen, mit
+  eigenem Reset-Button), sowie in Debug-Builds zusätzlich der
+  Standort-Suchradius.
 - **Synchronisation** — siehe eigener Abschnitt „Datensynchronisation
   (gemeinsam einkaufen)" oben, inkl. des Schalters „Multipeer-Sync" für den
   optionalen Nahbereich-Kanal.
