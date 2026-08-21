@@ -1,5 +1,84 @@
 # Changelog
 
+## v0.16 (Build 305) — Sync-Aufräumen: Catch-all für verwaiste `kaeufe/`-Dateien
+
+`SyncKaeufeExportService.raeumeVerwaisteDateienAuf(context:)`: löscht täglich
+(aus `KaufEintragBereinigungService.automatischBereinigenFallsFaellig`) eigene
+`kaeufe/`-Dateien, deren UUID keinem lokalen `KaufEintrag` mehr entspricht und
+die älter als `karenzzeit` sind — Netz falls die reguläre Einzel-Löschung
+fehlschlug. `ModellIDDuplikatSection` (GitHub #102, abgeschlossen) aus
+`DebuggingView` entfernt. „Baumelnde Referenzen bereinigen"-Footer präzisiert.
+`FileShareSyncConnector`-Diagnosezähler-Aufrufstelle korrigiert; `BelegScanView`
+schreibt Artikel-Zuweisung jetzt atomar (vermeidet Stale-Capture-Race im
+custom Binding).
+
+## v0.16 (Build 304) — DebuggingView: Peer-Verwaltung → Datensynchronisation
+
+`BekannteSyncPeersSection` aus `DebuggingView` in `SyncOrdnerSettingsView`
+verschoben (passt thematisch zur Sync-Konfiguration). `AufraeumWasserstandSection`
+erhält „Jetzt aufräumen"-Button, der die 24h-Sperre umgeht und Tombstones/
+Event-Dateien sofort bereinigt.
+
+## v0.16 (Build 303) — ProduktEditView: Akkordeon + Barcode + Preisdiagramm (#123)
+
+Bekannte Namen je Geschäft jetzt als Akkordeon (Titel zeigt Anzahl der
+Geschäfte) inkl. Barcode-Anzeige. Preishistorie als Liniendiagramm plus
+„Datenpunkte"-Sheet mit Einzellöschung per Wischen.
+
+## v0.16 (Build 302) — Preispunkte in ProduktEditView/ArtikelEditView einzeln löschbar
+
+`PreisHistorieZeile` hatte den `loeschen`-Parameter bereits, wurde aber
+nirgends übergeben — nachgezogen. Wischen nach links löscht den Eintrag
+direkt im `ModelContext`.
+
+## v0.16 (Build 301) — ProduktVerwaltungView: Wischen löscht Produkt; Artikel neu zuordbar
+
+Swipe-to-delete (trailing edge) in `ProduktVerwaltungView` mit Micro-Lease.
+`ProduktEditView`: antippbarer Button mit `ArtikelAuswahlSheet` ersetzt die
+bisherige statische Artikel-Anzeige.
+
+## v0.16 (Build 299–300) — BelegScanView: dreistufige KI-Artikel-Zuordnung (#123)
+
+Text-Abgleich (Stufen 1+2) über `ArtikelZuordnungsService`, danach
+Klarname-Ableitung aus Produkt-/Aliasname oder KI-Vorschlag, schließlich
+KI-Artikel-Match auf Klarname-Basis (Stufe 3). `PositionsZeile`:
+Klarname-`TextField` primär, Artikel als Button mit `ArtikelAuswahlSheet`.
+Bugfix: `onSelect`-Callback feuert synchron vor `dismiss()` (SwiftUI-Timing).
+
+## v0.16 (Build 298) — ArtikelHinzufuegenView: Menge anzeigen und per Tap verfeinern (#124)
+
+Mengenanzeige links vom Haken für bereits hinzugefügte Artikel/ausgewählte
+Produktzeilen; Tap öffnet `MengenNotizSheet` (wie in der Einkaufsansicht).
+Preise aus der Artikelauswahlliste entfernt.
+
+## v0.16 (Build 296–297) — Produkte: Neuanlage per „+"-Button, Artikel-Auswahl per Such-Sheet
+
+„+"-Button in `ProduktVerwaltungView` (Einstellungen → Produkte) legt neue
+Produkte direkt an — Artikel-Auswahl und Namenseingabe im selben Sheet, per
+Such-Sheet statt Dropdown (`NeuesProduktSheet`).
+
+## v0.16 (Build 295) — EinkaufenView: mehrere Produkte desselben Artikels als eigene Einträge
+
+Lockert den Invariant von `(Einkaufsliste, Artikel)` auf `(Einkaufsliste,
+Artikel, Produkt)`: z.B. Sebamed und Garnier können gleichzeitig unter
+„Shampoo" stehen, als separate Zeilen unabhängig abhakbar. `SchemaV3` als
+aktuelle Version etabliert (`SchemaV2Frozen` eingefroren).
+
+## v0.16 (Build 294) — GeschaeftStammdatenEditView: Adresse per Karten-Tap entfernt (Issue #120)
+
+Antippen der Standort-Karte befüllt das Adressfeld nicht mehr — Adresse ist
+nur noch per Texteingabe oder Belegscan setzbar. Adress-Eingabe geokodiert
+und zentriert die Karte jetzt immer, auch wenn bereits eine Koordinate
+gesetzt war. Karte nutzt eine gebundene `MapCameraPosition` statt
+`initialPosition`, bleibt aber frei zoom-/verschiebbar (GitHub #42).
+
+## v0.16 (Build 293) — ArtikelHinzufuegenView: mehrere Produkte eines Artikels gleichzeitig auf die Einkaufsliste
+
+Jedes `(Artikel, Produkt)`-Paar ist jetzt ein unabhängiger
+`EinkaufslistenEintrag` — Produkt-Sub-Zeilen schalten ihren Eintrag an/ab
+statt das Produkt am nil-Eintrag zu ersetzen. Abhaken im `EinkaufenView`
+löscht alle Einträge des Artikels.
+
 ## v0.16 (Build 292) — Geschäfte: Filialen & Markenname
 
 `Geschaeft.markenname: String?` gruppiert Filialen derselben Kette in der

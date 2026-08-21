@@ -149,6 +149,15 @@ selbst, kein verschachtelter Aufruf), NICHT mehr aus `loescheFallsVorhanden`
 — eine dadurch verwaist liegenbleibende `kaeufe/`-Datei ist weiterhin nur
 Platzersparnis, keine Korrektheitsfrage.
 
+**Catch-all für fehlgeschlagene Einzel-Löschung (Build 305):**
+`SyncKaeufeExportService.raeumeVerwaisteDateienAuf(context:)` löscht zusätzlich
+täglich — aufgerufen aus
+`KaufEintragBereinigungService.automatischBereinigenFallsFaellig(context:)`,
+direkt nach `bereinigen(context:)` — eigene `kaeufe/`-Dateien, deren UUID
+keinem lokalen `KaufEintrag` mehr entspricht und die älter als `karenzzeit`
+sind. Netz für den Fall, dass `entferneDateien(fuerKaufEintragIDs:)` beim
+regulären Löschen fehlschlug. Best-effort, ohne Fehler nach außen zu melden.
+
 ## Harter Formatschnitt — kein Dual-Read
 
 Entschieden mit dem Nutzer: kein Übergangspfad, der sowohl altes `export.json`

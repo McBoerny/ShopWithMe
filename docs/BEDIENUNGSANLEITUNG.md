@@ -105,11 +105,12 @@ zugeordnete Abteilungen entfernst du wie gewohnt per Wischgeste.
 
 **Standort beim Anlegen/Bearbeiten:** Sobald ein Geschäft Koordinaten hat, zeigt
 das Bearbeiten-Formular eine kleine Karte mit einem Pin — durch Antippen der
-Karte lässt sich der Standort exakt setzen (die Adresse wird dabei automatisch
-nachgetragen, falls noch keine hinterlegt ist). Alternativ füllt „Aktuellen
-Standort verwenden" Adresse und Koordinaten direkt aus deinem GPS-Standort, oder
-du tippst eine Adresse ein und bestätigst mit der Eingabetaste — die Koordinaten
-werden dann automatisch ermittelt, solange noch kein Standort gesetzt ist.
+Karte lässt sich der Standort exakt setzen (die Adresse wird dabei **nicht**
+befüllt; sie ist ausschließlich per Texteingabe oder Belegscan setzbar).
+Alternativ füllt „Aktuellen Standort verwenden" Adresse und Koordinaten direkt
+aus deinem GPS-Standort, oder du tippst eine Adresse ein und bestätigst mit der
+Eingabetaste — die Koordinaten werden dann automatisch ermittelt und die Karte
+darauf zentriert, auch wenn bereits ein Standort gesetzt war.
 
 **Erkennungsradius:** Unter der Karte legt ein Schieberegler (20–500m) fest, in
 welchem Umkreis um den Standort-Pin die App dieses Geschäft automatisch erkennt
@@ -363,7 +364,7 @@ werden ausgetauscht.
   werden soll (z.B. weil es nicht mehr genutzt wird) — „Entfernen" löscht
   seinen Beitrag vollständig aus dem Sync-Ordner, „Später erinnern"
   verschiebt die Frage auf den nächsten App-Start. Dasselbe lässt sich auch
-  jederzeit manuell einsehen/auslösen: Einstellungen → „Debugging" →
+  jederzeit manuell einsehen/auslösen: Einstellungen → „Datensynchronisation" →
   „Bekannte Geräte", dort per Wischen.
 - **„Aus der Sync-Gruppe entfernt":** Wurde dieses Gerät von einem anderen
   Mitglied der Gruppe auf die oben beschriebene Art entfernt, erkennt es das
