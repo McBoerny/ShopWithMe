@@ -4050,3 +4050,52 @@ unabhängigen regulären Start stehen lässt. Gilt einheitlich für alle drei
 Live-Pfade (Ersetzen/Wiederherstellen/Bereinigen) — dieselbe Großzügigkeit,
 die der alte Neustart-Mechanismus bereits für jede beliebige
 `ausstehendeAktion` gewährte.
+
+### Live-Fund: Solo-Gerät räumt Events/Tombstones/Kaeufe-Dateien nie auf
+
+**Symptom:** Auf einem Gerät, das aktuell das einzige Mitglied im Sync-Ordner
+ist, bleiben alte Sync-Event-Dateien, `SyncTombstone`-Einträge und
+`kaeufe/{id}.json`-Dateien dauerhaft liegen — auch Tage/Wochen später und
+auch nach Betätigen der Aufräum-Buttons in `DebuggingView`.
+
+**Ursache 1 (Events/Tombstones):**
+``SyncSnapshotImportService/aktuellerAufraeumWasserstand(in:)`` liefert
+bewusst `nil`, wenn aktuell kein anderer Peer-Ordner existiert (siehe
+`docs/PEER_LEBENSZYKLUS.md`, Baustein C — Absicht: „kein Peer zum Abgleich
+bekannt" soll nicht automatisch als „für alle sicher" gelten). Für ein
+dauerhaftes Solo-Gerät bedeutet das aber: der Wasserstand bleibt für immer
+`nil`, jeder automatische Aufräumlauf bricht sofort ab, und der „Jetzt
+aufräumen"-Button in `DebuggingView` ist für genau diesen Fall sogar
+deaktiviert.
+
+**Fix:** Automatisches Verhalten bewusst NICHT geändert (weiterhin
+konservativ `nil` bei fehlendem Peer). Stattdessen neuer, manueller
+Bestätigungsweg: ``SyncSnapshotImportService/istAktuellEinzigerPeer(in:)``
+unterscheidet „kein anderer Peer, aber Ordnerzugriff war erfolgreich" von
+echten Fehlerfällen. `DebuggingView`s `AufraeumWasserstandSection` zeigt in
+genau diesem Fall den Button „Ich bin sicher, dass ich der einzige Peer
+bin" mit Bestätigungsdialog; nach Zustimmung räumen
+``SyncExportService/raeumeAlteEigeneEventDateienAufFallsFaellig(erzwungenerWasserstand:)``
+und ``SyncTombstoneService/raeumeAlteTombstonesAufFallsFaellig(context:erzwungenerWasserstand:)``
+einmalig mit `.distantFuture` als erzwungenem Wasserstand auf. Normale
+automatische Aufrufe übergeben weiterhin `nil` und bleiben unverändert.
+
+**Ursache 2 (Kaeufe-Dateien):** Unabhängig vom Wasserstand — zwei Stellen
+löschten einen `KaufEintrag` direkt (Artikel-Abwählen/dauerhaftes Entfernen,
+`Einkaufsvorgang.artikelAbwaehlenOhneEventAufzeichnung`/
+`artikelDauerhaftEntfernenOhneEventAufzeichnung`), ohne die bereits
+exportierte `kaeufe/{id}.json` mitzulöschen — anders als
+`KaufEintragBereinigungService.bereinigen`, das dafür extra
+`SyncKaeufeExportService.entferneDateien(fuerKaufEintragIDs:)` aufruft. Der
+einzige Catch-all dafür (`SyncKaeufeExportService.raeumeVerwaisteDateienAuf`)
+lief bisher ausschließlich aus dem täglichen
+`KaufEintragBereinigungService.automatischBereinigenFallsFaellig` — nicht aus
+dem manuellen „KaufEintraege jetzt bereinigen"-Button in `DebuggingView`,
+weshalb der beim Debuggen benutzte Button diese Altlasten nie erreichte.
+
+**Fix:** Beide `Einkaufsvorgang`-Methoden rufen `entferneDateien` jetzt
+sofort selbst auf (verhindert das Entstehen neuer Waisen, statt auf den
+täglichen Catch-all zu warten); der manuelle Debug-Button ruft zusätzlich
+`raeumeVerwaisteDateienAuf` auf, um bereits vorhandene Altlasten
+mitzunehmen.
+`ausstehendeAktion` gewährte.

@@ -102,15 +102,22 @@ enum SyncTombstoneService {
     /// ``automatischesBereinigungsintervall`` tatsächlich ausgeführt. Kein
     /// Löschversuch, wenn der Wasserstand `nil` liefert (kein anderer Peer
     /// bekannt, oder ein aktuell vorhandener Peer-Ordner nicht lesbar).
+    /// - Parameter erzwungenerWasserstand: Wird nur vom manuellen „Ich bin
+    ///   sicher, dass ich der einzige Peer bin"-Bestätigungs-Button in
+    ///   `DebuggingView` übergeben, siehe
+    ///   ``SyncExportService/raeumeAlteEigeneEventDateienAufFallsFaellig(erzwungenerWasserstand:)``.
     @MainActor
-    static func raeumeAlteTombstonesAufFallsFaellig(context: ModelContext) async {
+    static func raeumeAlteTombstonesAufFallsFaellig(context: ModelContext, erzwungenerWasserstand: Date? = nil) async {
         if let letzte = letzteBereinigung, Date().timeIntervalSince(letzte) < automatischesBereinigungsintervall {
             return
         }
         letzteBereinigung = Date()
 
         guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return }
-        guard let wasserstand = await SyncSnapshotImportService.aktuellerAufraeumWasserstand(in: syncOrdner) else { return }
+        let berechneterWasserstand = erzwungenerWasserstand == nil
+            ? await SyncSnapshotImportService.aktuellerAufraeumWasserstand(in: syncOrdner)
+            : erzwungenerWasserstand
+        guard let wasserstand = berechneterWasserstand else { return }
 
         let alle = (try? context.fetch(FetchDescriptor<SyncTombstone>())) ?? []
         let zuLoeschende = alle.filter { $0.geloeschtAm < wasserstand }

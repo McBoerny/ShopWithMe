@@ -128,8 +128,15 @@ enum SyncExportService {
     /// — ein Peer, der tatsächlich so lange abwesend war, dass er eine Datei
     /// verpasst haben könnte, hält den Wasserstand selbst zurück, solange er
     /// nicht per Peer-Lebenszyklus (Baustein A/B) ausgeschlossen wurde.
+    /// - Parameter erzwungenerWasserstand: Wird nur vom manuellen „Ich bin
+    ///   sicher, dass ich der einzige Peer bin"-Bestätigungs-Button in
+    ///   `DebuggingView` übergeben und ersetzt dann den live berechneten
+    ///   Wasserstand — für den Fall, dass ``SyncSnapshotImportService/aktuellerAufraeumWasserstand(in:)``
+    ///   dauerhaft `nil` liefert, weil aktuell kein anderer Peer bekannt ist.
+    ///   Normale automatische Aufrufe lassen den Parameter `nil` und ändern
+    ///   damit nichts am bisherigen Verhalten.
     @MainActor
-    static func raeumeAlteEigeneEventDateienAufFallsFaellig() async {
+    static func raeumeAlteEigeneEventDateienAufFallsFaellig(erzwungenerWasserstand: Date? = nil) async {
         if let letzte = letzteEventBereinigung, Date().timeIntervalSince(letzte) < automatischesBereinigungsintervall {
             return
         }
@@ -140,7 +147,10 @@ enum SyncExportService {
         // Öffnen des eigenen Scopes unten aufgerufen, nicht von innen heraus,
         // um keinen verschachtelten/überlappenden Zugriff auf denselben
         // Bookmark zu erzeugen (siehe ``SyncOrdnerZugriffsDiagnose``-Typ-Doku).
-        guard let wasserstand = await SyncSnapshotImportService.aktuellerAufraeumWasserstand(in: syncOrdner) else { return }
+        let berechneterWasserstand = erzwungenerWasserstand == nil
+            ? await SyncSnapshotImportService.aktuellerAufraeumWasserstand(in: syncOrdner)
+            : erzwungenerWasserstand
+        guard let wasserstand = berechneterWasserstand else { return }
 
         let zugriffErfolgreich = syncOrdner.startAccessingSecurityScopedResource()
         SyncOrdnerZugriffsDiagnose.markiereOeffnen(aufrufstelle: "raeumeAlteEigeneEventDateienAuf", erfolgreich: zugriffErfolgreich)

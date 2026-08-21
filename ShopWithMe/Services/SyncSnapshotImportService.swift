@@ -106,6 +106,30 @@ enum SyncSnapshotImportService {
         return wasserstand
     }
 
+    /// Liefert `true` nur, wenn der Ordnerzugriff/das Listing erfolgreich war
+    /// UND aktuell kein anderer Peer-Ordner existiert (nicht bei echten
+    /// Fehlern wie fehlgeschlagenem Zugriff) — Grundlage für den manuellen
+    /// „Ich bin sicher, dass ich der einzige Peer bin"-Bestätigungs-Button in
+    /// `DebuggingView`. `aktuellerAufraeumWasserstand(in:)` liefert in genau
+    /// diesem Fall bewusst `nil` (siehe dortige Doku) — dieser Zustand kann
+    /// dauerhaft bestehen bleiben, wenn das Gerät nie einen Sync-Partner
+    /// hatte oder bekommt, weshalb hier eine explizite, manuelle
+    /// Nutzerbestätigung statt automatischen Aufräumens verlangt wird.
+    @MainActor
+    static func istAktuellEinzigerPeer(in ordner: URL) async -> Bool {
+        guard ordner.startAccessingSecurityScopedResource() else { return false }
+        defer { ordner.stopAccessingSecurityScopedResource() }
+
+        let peersOrdner = ordner.appendingPathComponent("peers", isDirectory: true)
+        let eigeneGeraeteID = DatabaseLeaseService.geraeteID
+        guard let peerVerzeichnisse = await SyncDateiZugriff.mitZeitlimit({
+            SyncDateiZugriff.listeKoordiniert(peersOrdner)
+        }) ?? nil else { return false }
+
+        let fremdePeerOrdner = peerVerzeichnisse.filter { !PeerOrdnerName.gehoertZu($0.lastPathComponent, geraeteID: eigeneGeraeteID) }
+        return fremdePeerOrdner.isEmpty
+    }
+
     /// Peer-Lebenszyklus: entfernt ``SyncPeerInfo``- und zugehörige
     /// G-Counter-Einträge für jeden Peer, dessen Ordner nicht mehr in
     /// `bekannteOrdner` (dem aktuell gelesenen `peers/`-Listing) auftaucht —

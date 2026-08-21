@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.16 (Build 318) — Solo-Peer-Aufräumen (Kaeufe-Dateien sofort, Events/Tombstones per Bestätigung)
+
+GitHub-Bug-Report: auf einem Gerät, das aktuell der einzige Peer im Sync-Ordner
+ist, blieben Sync-Event-Dateien, `SyncTombstone`-Einträge und
+`kaeufe/{id}.json`-Dateien dauerhaft liegen (siehe
+`docs/DATENSYNCHRONISATION_VERLAUF.md`, Abschnitt „Solo-Gerät räumt
+Events/Tombstones/Kaeufe-Dateien nie auf"). Zwei unabhängige Ursachen: (1) der
+dynamische Aufräum-Wasserstand liefert ohne bekannten anderen Peer bewusst
+`nil`, was jeden automatischen Lauf sofort abbrechen ließ — neuer, manuell zu
+bestätigender Weg in `DebuggingView` („Ich bin sicher, dass ich der einzige
+Peer bin"). (2) `artikelAbwaehlen`/`artikelDauerhaftEntfernen` löschten einen
+`KaufEintrag`, ohne die zugehörige exportierte Datei mitzulöschen — räumen
+jetzt sofort selbst auf; der manuelle „KaufEintraege jetzt bereinigen"-Button
+räumt zusätzlich bereits vorhandene Altlasten dieser Art mit auf.
+
 ## v0.16 (Build 315) — Multipeer-Sync abschaltbar, Menü umbenannt in „Synchronisation"
 
 GitHub #127: neuer Schalter „Multipeer-Sync" in den Sync-Einstellungen

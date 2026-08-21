@@ -249,6 +249,13 @@ private struct StatuskonsolidierungSection: View {
                     wirdAusgefuehrt = true
                     Task {
                         let anzahl = await KaufEintragBereinigungService.bereinigen(context: modelContext)
+                        // Räumt zusätzlich verwaiste `kaeufe/{id}.json`-Dateien
+                        // auf, deren zugehöriger KaufEintrag bereits vorher
+                        // (z.B. durch Artikel-Abwählen/dauerhaftes Entfernen)
+                        // gelöscht wurde — sonst würde dieser Button genau die
+                        // Dateien übergehen, die der Nutzer hier typischerweise
+                        // sucht (siehe Typ-Doku ``SyncKaeufeExportService/raeumeVerwaisteDateienAuf(context:)``).
+                        await SyncKaeufeExportService.raeumeVerwaisteDateienAuf(context: modelContext)
                         wirdAusgefuehrt = false
                         meldung = anzahl == 0
                             ? "Keine abgelaufenen oder verwaisten KaufEintraege gefunden."
@@ -293,6 +300,7 @@ private struct AufraeumWasserstandSection: View {
     @State private var wirdAusgefuehrt = false
     @State private var ergebnis: Ergebnis?
     @State private var meldung: String?
+    @State private var zeigeEinzigerPeerBestaetigung = false
 
     private struct Ergebnis {
         let wasserstand: Date?
@@ -314,6 +322,7 @@ private struct AufraeumWasserstandSection: View {
                         } else {
                             Text("Kein anderer Peer bekannt oder Ordner nicht erreichbar — kein Wasserstand.")
                                 .foregroundStyle(.secondary)
+                            Button("Ich bin sicher, dass ich der einzige Peer bin") { pruefeEinzigerPeerUndFrage() }
                         }
                         if let meldung {
                             Text(meldung)
@@ -329,9 +338,19 @@ private struct AufraeumWasserstandSection: View {
             } header: {
                 Text("Aufräum-Wasserstand")
             } footer: {
-                Text("Minimum aller Peer-Manifest-Zeitstempel. Tombstones und eigene Event-Dateien, die davor entstanden sind, wurden von allen bekannten Peers gesehen. Automatisch höchstens einmal täglich beim App-Start bzw. Rückkehr aus dem Hintergrund bereinigt. „Jetzt aufräumen“ übergeht die 24h-Sperre und räumt sofort auf.")
+                Text("Minimum aller Peer-Manifest-Zeitstempel. Tombstones und eigene Event-Dateien, die davor entstanden sind, wurden von allen bekannten Peers gesehen. Automatisch höchstens einmal täglich beim App-Start bzw. Rückkehr aus dem Hintergrund bereinigt. „Jetzt aufräumen“ übergeht die 24h-Sperre und räumt sofort auf. Ist aktuell kein anderer Peer bekannt, bleibt der Wasserstand dauerhaft leer (kein automatisches Aufräumen) — „Ich bin sicher, dass ich der einzige Peer bin“ erlaubt nach expliziter Bestätigung ein einmaliges Aufräumen ohne Wasserstand.")
             }
             .task { laden() }
+            .confirmationDialog(
+                "Wirklich als einziger Peer aufräumen?",
+                isPresented: $zeigeEinzigerPeerBestaetigung,
+                titleVisibility: .visible
+            ) {
+                Button("Aufräumen", role: .destructive) { jetztAlsEinzigerPeer() }
+                Button("Abbrechen", role: .cancel) {}
+            } message: {
+                Text("Es ist aktuell kein anderer Peer im Sync-Ordner bekannt. Tombstones und eigene Event-Dateien werden ohne die sonst übliche Bestätigung durch andere Geräte gelöscht. Taucht später doch noch ein Peer mit älterem Stand auf, kann das zu erneuten Dubletten beim nächsten Abgleich führen.")
+            }
         }
     }
 
@@ -357,6 +376,36 @@ private struct AufraeumWasserstandSection: View {
             ergebnis = await berechne()
             wirdAusgefuehrt = false
             meldung = "Aufgeräumt."
+        }
+    }
+
+    /// Prüft, ob tatsächlich kein anderer Peer bekannt ist (statt eines
+    /// echten Zugriffsfehlers), bevor die Bestätigungs-Nachfrage erscheint —
+    /// siehe ``SyncSnapshotImportService/istAktuellEinzigerPeer(in:)``.
+    private func pruefeEinzigerPeerUndFrage() {
+        guard !wirdAusgefuehrt else { return }
+        Task {
+            guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return }
+            if await SyncSnapshotImportService.istAktuellEinzigerPeer(in: syncOrdner) {
+                zeigeEinzigerPeerBestaetigung = true
+            } else {
+                meldung = "Aktuell ist doch mindestens ein anderer Peer bekannt, oder der Ordner ist gerade nicht erreichbar — bitte „Aktualisieren“ und erneut versuchen."
+            }
+        }
+    }
+
+    private func jetztAlsEinzigerPeer() {
+        guard !wirdAusgefuehrt else { return }
+        meldung = nil
+        wirdAusgefuehrt = true
+        Task {
+            SyncExportService.letzteEventBereinigung = nil
+            SyncTombstoneService.letzteBereinigung = nil
+            await SyncExportService.raeumeAlteEigeneEventDateienAufFallsFaellig(erzwungenerWasserstand: .distantFuture)
+            await SyncTombstoneService.raeumeAlteTombstonesAufFallsFaellig(context: modelContext, erzwungenerWasserstand: .distantFuture)
+            ergebnis = await berechne()
+            wirdAusgefuehrt = false
+            meldung = "Als einziger Peer bereinigt."
         }
     }
 

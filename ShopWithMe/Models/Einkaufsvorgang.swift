@@ -211,6 +211,7 @@ final class Einkaufsvorgang {
     /// ``artikelAbwaehlen(_:context:)``. Liefert `true`, falls tatsächlich ein
     /// ``KaufEintrag`` gelöscht wurde.
     @discardableResult
+    @MainActor
     func artikelAbwaehlenOhneEventAufzeichnung(_ artikel: Artikel, context: ModelContext) -> Bool {
         guard let index = kaufEintraege.firstIndex(where: { $0.artikel == artikel }) else { return false }
         let eintrag = kaufEintraege.remove(at: index)
@@ -223,6 +224,10 @@ final class Einkaufsvorgang {
         // unten korrekt wieder auf die Liste gesetzt).
         SyncTombstoneService.markiereGeloescht(art: SyncEntitaetsArt.kaufEintrag, id: eintrag.id, context: context)
         context.delete(eintrag)
+        // Sofort entfernen statt auf den täglichen Catch-all
+        // (`SyncKaeufeExportService.raeumeVerwaisteDateienAuf`) zu warten —
+        // dieselbe Begründung wie bei `KaufEintragBereinigungService.bereinigen`.
+        SyncKaeufeExportService.entferneDateien(fuerKaufEintragIDs: [eintrag.id])
         einkaufsliste?.artikelHinzufuegenOhneEventAufzeichnung(artikel, context: context)
         return true
     }
@@ -230,6 +235,7 @@ final class Einkaufsvorgang {
     /// Wie ``artikelAbwaehlenOhneEventAufzeichnung(_:context:)``, zeichnet
     /// zusätzlich (nur bei tatsächlicher Rücknahme) ein
     /// ``SyncEventArt/artikelAbgewaehlt``-Event auf.
+    @MainActor
     func artikelAbwaehlen(_ artikel: Artikel, context: ModelContext) {
         guard artikelAbwaehlenOhneEventAufzeichnung(artikel, context: context) else { return }
         SyncEventService.aufzeichnen(.artikelAbgewaehlt, bezugsID: id, artikelID: artikel.id, context: context)
@@ -244,6 +250,7 @@ final class Einkaufsvorgang {
     /// wieder zurückgeholt werden zu können. Reine Zustandsmutation ohne
     /// Event-Aufzeichnung, siehe ``artikelDauerhaftEntfernen(_:context:)``.
     @discardableResult
+    @MainActor
     func artikelDauerhaftEntfernenOhneEventAufzeichnung(_ artikel: Artikel, context: ModelContext) -> Bool {
         guard let index = kaufEintraege.firstIndex(where: { $0.artikel == artikel }) else { return false }
         let eintrag = kaufEintraege.remove(at: index)
@@ -252,12 +259,16 @@ final class Einkaufsvorgang {
         // außerhalb von `KaufEintragBereinigungService` (das bereits tombstoned).
         SyncTombstoneService.markiereGeloescht(art: SyncEntitaetsArt.kaufEintrag, id: eintrag.id, context: context)
         context.delete(eintrag)
+        // Sofort entfernen statt auf den täglichen Catch-all zu warten, siehe
+        // Begründung an `artikelAbwaehlenOhneEventAufzeichnung`.
+        SyncKaeufeExportService.entferneDateien(fuerKaufEintragIDs: [eintrag.id])
         return true
     }
 
     /// Wie ``artikelDauerhaftEntfernenOhneEventAufzeichnung(_:context:)``,
     /// zeichnet zusätzlich (nur bei tatsächlicher Entfernung) ein
     /// ``SyncEventArt/artikelDauerhaftEntfernt``-Event auf.
+    @MainActor
     func artikelDauerhaftEntfernen(_ artikel: Artikel, context: ModelContext) {
         guard artikelDauerhaftEntfernenOhneEventAufzeichnung(artikel, context: context) else { return }
         SyncEventService.aufzeichnen(.artikelDauerhaftEntfernt, bezugsID: id, artikelID: artikel.id, context: context)
