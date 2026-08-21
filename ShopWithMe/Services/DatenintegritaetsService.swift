@@ -327,6 +327,64 @@ enum DatenintegritaetsService {
         )
     }
 
+    /// Wiederkehrendes Sicherheitsnetz (GitHub #126): entfernt (+ tombstoned)
+    /// ``KaufEintrag``e, die denselben ``Artikel`` ein zweites Mal im
+    /// SELBEN ``Einkaufsvorgang`` abbilden — strukturell IMMER ein Fehler
+    /// (ein Artikel wird pro Einkaufsvorgang höchstens einmal gekauft, siehe
+    /// den lokalen `bereitsVorhanden`-Schutz in
+    /// ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:produkt:context:ursprungsGeraeteID:kategorie:geschaeft:)``).
+    /// Dieser Schutz greift nur beim direkten lokalen Abhaken —
+    /// ``SyncSnapshotImportService/mergeKaufEintraege(_:artikelZuordnung:einkaufsvorgangZuordnung:geschaeftZuordnung:kategorieZuordnung:peerGeraeteID:context:)``
+    /// legt `KaufEintrag`e aus einem Bereich-C-Snapshot ohne dieselbe Prüfung
+    /// an und konnte dadurch, kombiniert mit dem inzwischen behobenen
+    /// fehlenden Tombstoning bei
+    /// ``Einkaufsvorgang/artikelAbwaehlenOhneEventAufzeichnung(_:context:)``/
+    /// ``Einkaufsvorgang/artikelDauerhaftEntfernenOhneEventAufzeichnung(_:context:)``,
+    /// Phantom-Duplikate entstehen lassen (Live-Vorfall „Buns", 2026-08-21).
+    ///
+    /// **Bewusst NICHT anhand von Zeitstempel-Heuristiken über verschiedene
+    /// Einkaufsvorgänge hinweg entschieden** — ein Artikel darf über mehrere
+    /// Einkäufe hinweg legitim wiederholt gekauft werden (z.B. Milch jede
+    /// Woche); ein Vergleich gegen ``ArtikelListenKauf/zuletztHinzugefuegtAm``
+    /// (wie in `mergeKaufEintraege`) würde dort fälschlich echte Kaufhistorie
+    /// löschen. Nur die enge, unzweideutige Bedingung „zwei `KaufEintrag`e,
+    /// ein Vorgang, ein Artikel" ist in jedem Fall ein Fehler. Behält den
+    /// `KaufEintrag` mit dem SPÄTEREN `datum` (der zuletzt bestätigte Stand),
+    /// löscht + tombstoned die übrigen.
+    ///
+    /// Läuft dauerhaft bei jedem App-Start (kein einmaliges Migrationsflag,
+    /// anders als ``migriereGeschaeftsAggregateFallsNoetig(context:)``) — dient
+    /// damit sowohl der einmaligen Bereinigung bereits bestehender
+    /// Dopplungen als auch als generelles Sicherheitsnetz gegen einen
+    /// künftigen, heute unbekannten Bug mit demselben Symptom. Bei den hier
+    /// relevanten Datenmengen (Anzahl `KaufEintrag`e pro Gerät, siehe
+    /// ``KaufEintragBereinigungService``) unkritisch teuer.
+    @MainActor
+    static func bereinigeDoppelteKaufEintraegeFallsNoetig(context: ModelContext) {
+        struct Schluessel: Hashable {
+            let vorgangID: PersistentIdentifier
+            let artikelID: PersistentIdentifier
+        }
+        var gruppen: [Schluessel: [KaufEintrag]] = [:]
+        for eintrag in (try? context.fetch(FetchDescriptor<KaufEintrag>())) ?? [] {
+            guard let vorgang = eintrag.einkaufsvorgang, let artikel = eintrag.artikel else { continue }
+            gruppen[Schluessel(vorgangID: vorgang.persistentModelID, artikelID: artikel.persistentModelID), default: []].append(eintrag)
+        }
+
+        var entfernt = 0
+        for (_, eintraege) in gruppen where eintraege.count > 1 {
+            let sortiert = eintraege.sorted { $0.datum < $1.datum }
+            for duplikat in sortiert.dropLast() {
+                SyncTombstoneService.markiereGeloescht(art: SyncEntitaetsArt.kaufEintrag, id: duplikat.id, context: context)
+                context.delete(duplikat)
+                entfernt += 1
+            }
+        }
+        guard entfernt > 0 else { return }
+        try? context.save()
+        DatenintegritaetsLogger.log("\(entfernt) doppelte KaufEintraege (gleicher Artikel im selben Einkaufsvorgang) bereinigt (GitHub #126)")
+    }
+
     /// `nil` gilt nie als baumelnd (ein leerer Bezug ist ein gültiger
     /// Fachzustand, siehe z.B. den `Einkaufsvorgang.einkaufsliste`-Sonderfall
     /// weiter unten) — nur ein gesetztes `objekt`, dessen `persistentModelID`

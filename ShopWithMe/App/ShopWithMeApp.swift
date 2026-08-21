@@ -90,6 +90,7 @@ struct ShopWithMeApp: App {
         KaufEintrag.preisverlaufMigrierenFallsNoetig(context: context)
         DatenintegritaetsService.migriereGeschaeftsAggregateFallsNoetig(context: context)
         DatenintegritaetsService.migriereArtikelListenKaeufeFallsNoetig(context: context)
+        DatenintegritaetsService.bereinigeDoppelteKaufEintraegeFallsNoetig(context: context)
         DatenintegritaetsService.raeumeLeereListenloseVorgaengeAuf(context: context)
         DatenintegritaetsService.pruefe(context: context)
         try? context.save()
