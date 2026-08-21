@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.16 (Build 306) — Sync „Ersetzen"/„Wiederherstellen" läuft jetzt live, ohne App-Neustart
+
+Zweiter Anlauf (der erste, Build 138/139, stürzte auf einem echten Gerät ab —
+siehe `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 50): neuer
+`ModelContainerController` hält den `ModelContainer` austauschbar. Jeder
+Austausch legt den Ersatz-Store an einem frischen, nie zuvor verwendeten
+Dateinamen an statt die noch offene alte Datei wiederzuverwenden — genau das
+war die Ursache des ursprünglichen Absturzes, nicht der Container-Tausch
+selbst (laut Apple-DTS offiziell unterstützt). Die verwaiste alte Datei wird
+erst beim nächsten Kaltstart aufgeräumt. Betrifft „Ersetzen durch Peer" beim
+Sync-Beitritt, „Backup wiederherstellen", „Baumelnde Referenzen bereinigen"
+sowie den automatischen Voll-Abgleich nach 30 Tagen Inaktivität
+(`RootView.vollAbgleichAusloesen`) — alle vier liefen bisher über den
+Neustart-Mechanismus aus `SyncErsetzenService`, der als Fallback (GitHub #119:
+unlesbarer Store beim Boot) unverändert bestehen bleibt.
+
 ## v0.16 (Build 305) — Sync-Aufräumen: Catch-all für verwaiste `kaeufe/`-Dateien
 
 `SyncKaeufeExportService.raeumeVerwaisteDateienAuf(context:)`: löscht täglich

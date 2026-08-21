@@ -214,6 +214,14 @@ final class Einkaufsvorgang {
     func artikelAbwaehlenOhneEventAufzeichnung(_ artikel: Artikel, context: ModelContext) -> Bool {
         guard let index = kaufEintraege.firstIndex(where: { $0.artikel == artikel }) else { return false }
         let eintrag = kaufEintraege.remove(at: index)
+        // GitHub #126: ohne Tombstone kann ein Peer, dessen periodischer
+        // Bereich-C-Export knapp vor dieser Rücknahme lief, den soeben wieder
+        // gelöschten KaufEintrag per union-by-id-Merge
+        // (`SyncSnapshotImportService.mergeKaufEintraege`) dauerhaft
+        // zurückholen — der Artikel erscheint dann gleichzeitig als "gekauft"
+        // (Phantom-KaufEintrag) und als "offen" (durch `artikelHinzufuegenOhneEventAufzeichnung`
+        // unten korrekt wieder auf die Liste gesetzt).
+        SyncTombstoneService.markiereGeloescht(art: SyncEntitaetsArt.kaufEintrag, id: eintrag.id, context: context)
         context.delete(eintrag)
         einkaufsliste?.artikelHinzufuegenOhneEventAufzeichnung(artikel, context: context)
         return true
@@ -239,6 +247,10 @@ final class Einkaufsvorgang {
     func artikelDauerhaftEntfernenOhneEventAufzeichnung(_ artikel: Artikel, context: ModelContext) -> Bool {
         guard let index = kaufEintraege.firstIndex(where: { $0.artikel == artikel }) else { return false }
         let eintrag = kaufEintraege.remove(at: index)
+        // GitHub #126: siehe Begründung an `artikelAbwaehlenOhneEventAufzeichnung`
+        // — derselbe Resurrektions-Bug betrifft jede direkte KaufEintrag-Löschung
+        // außerhalb von `KaufEintragBereinigungService` (das bereits tombstoned).
+        SyncTombstoneService.markiereGeloescht(art: SyncEntitaetsArt.kaufEintrag, id: eintrag.id, context: context)
         context.delete(eintrag)
         return true
     }
