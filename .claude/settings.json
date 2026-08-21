@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xcrun simctl list *)",
+      "Bash(git config core.hooksPath)"
+    ]
+  }
+}
