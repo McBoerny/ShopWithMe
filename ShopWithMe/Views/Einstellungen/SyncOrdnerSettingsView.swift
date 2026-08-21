@@ -11,10 +11,11 @@ import UIKit
 /// `docs/DATENSYNCHRONISATION_VERLAUF.md`.
 ///
 /// Ein erster Sync-Zyklus läuft automatisch direkt beim Verknüpfen eines
-/// Ordners (Bootstrap, GitHub #39 Phase 5) — „Jetzt synchronisieren“ danach
-/// weiterhin manuell auslösbar. Ein automatisches, periodisches Auslösen
-/// unabhängig von Nutzerinteraktion (abhängig davon, ob z.B. gerade
-/// eingekauft wird) ist erst Phase 4 des Plans („adaptives Polling“).
+/// Ordners (Bootstrap, GitHub #39 Phase 5), danach übernimmt adaptives
+/// Polling (``SyncPollingService``) periodisch und unabhängig von
+/// Nutzerinteraktion. Ein manueller Trigger existiert nur noch als
+/// „Erneut versuchen“ direkt neben einer Fehlermeldung — im Normalfall ist
+/// hier bewusst kein Button sichtbar, siehe ``jetztSynchronisieren()``.
 struct SyncOrdnerSettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var syncPollingService: SyncPollingService
@@ -33,7 +34,6 @@ struct SyncOrdnerSettingsView: View {
     /// aber nur für die kurze Dauer des Austauschs selbst, kein Neustart nötig.
     @State private var wirdErsetzt = false
     @State private var wirdSynchronisiert = false
-    @State private var letzterSyncErfolgreich = false
     /// GitHub #92 (experimentell): kurz einen Dokumenten-Picker auf den
     /// Sync-Ordner einblenden, siehe ``ICloudSyncTriggerPicker``.
     @State private var zeigeSyncTriggerPicker = false
@@ -56,28 +56,9 @@ struct SyncOrdnerSettingsView: View {
         Form {
             EigenerGeraeteNameSection()
 
-            Section {
-                LabeledContent("Sync-Ordner") {
-                    Text(ausgewaehlterOrdner?.lastPathComponent ?? "ohne")
-                        .foregroundStyle(.secondary)
-                }
-            }
-
             if ausgewaehlterOrdner != nil {
-                Section {
-                    LabeledContent("Ordner-Sync") {
-                        Text(letzterOrdnerSyncText)
-                            .foregroundStyle(.secondary)
-                    }
-                    multipeerStatusZeile
-                } header: {
-                    Text("Sync-Status")
-                } footer: {
-                    Text("Der Multipeer-Kanal beschleunigt die Übertragung zusätzlich über lokales WLAN/Bluetooth, solange gemeinsam eingekauft wird — der Ordner bleibt dabei immer die eigentliche Quelle der Wahrheit.")
-                }
+                BekannteSyncPeersSection()
             }
-
-            BekannteSyncPeersSection()
 
             if neustartAusstehend {
                 Section {
@@ -96,18 +77,25 @@ struct SyncOrdnerSettingsView: View {
             }
 
             Section {
-                Button("Ordner wählen…") {
+                Button {
                     zeigeOrdnerauswahl = true
+                } label: {
+                    LabeledContent("Sync-Ordner") {
+                        Text(ausgewaehlterOrdner?.lastPathComponent ?? "wählen…")
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .disabled(neustartAusstehend || wirdErsetzt)
-                if ausgewaehlterOrdner != nil {
-                    Button("Synchronisierung deaktivieren", role: .destructive) {
-                        deaktivierenGetappt()
+                .swipeActions(edge: .trailing) {
+                    if ausgewaehlterOrdner != nil {
+                        Button("Deaktivieren", role: .destructive) {
+                            deaktivierenGetappt()
+                        }
+                        .disabled(neustartAusstehend || wirdErsetzt)
                     }
-                    .disabled(neustartAusstehend || wirdErsetzt)
                 }
             } footer: {
-                Text("Ein geteilter Ordner (z.B. iCloud Drive oder Synology Drive), über den mehrere Geräte ihre Einkaufslisten-Änderungen austauschen. Die lokale Datenbank bleibt dabei unverändert am Standardort.")
+                Text("Ein geteilter Ordner (z.B. iCloud Drive oder Synology Drive), über den mehrere Geräte ihre Einkaufslisten-Änderungen austauschen. Die lokale Datenbank bleibt dabei unverändert am Standardort. Zum Deaktivieren nach links wischen.")
             }
 
             if !abgleichWarteschlange.isEmpty {
@@ -125,11 +113,7 @@ struct SyncOrdnerSettingsView: View {
             if let backup = SyncErsetzenService.vorhandenesBackup() {
                 Section {
                     LabeledContent("Erstellt am") {
-                        Text(backup.erstelltAm.formatted(date: .abbreviated, time: .shortened))
-                            .foregroundStyle(.secondary)
-                    }
-                    LabeledContent("Größe") {
-                        Text(ByteCountFormatter.string(fromByteCount: Int64(backup.groesseBytes), countStyle: .file))
+                        Text("\(backup.erstelltAm.formatted(date: .abbreviated, time: .shortened)) · \(ByteCountFormatter.string(fromByteCount: Int64(backup.groesseBytes), countStyle: .file))")
                             .foregroundStyle(.secondary)
                     }
                     Button("Backup wiederherstellen", role: .destructive) {
@@ -145,27 +129,12 @@ struct SyncOrdnerSettingsView: View {
 
             if ausgewaehlterOrdner != nil && !neustartAusstehend {
                 Section {
-                    Button {
-                        // GitHub #92 (experimentell): nur bei diesem
-                        // expliziten Nutzer-Tap, nicht bei den übrigen
-                        // internen Aufrufstellen von ``jetztSynchronisieren()``
-                        // (Bootstrap nach Ordnerauswahl, Beitritts-Abgleich) —
-                        // siehe Accessibility-/Review-Erwägung in #92.
-                        zeigeSyncTriggerPicker = true
-                        jetztSynchronisieren()
-                    } label: {
-                        if wirdSynchronisiert {
-                            ProgressView()
-                        } else {
-                            Text("Jetzt synchronisieren")
-                        }
+                } footer: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(letzterOrdnerSyncText)
+                        multipeerStatusZeile
                     }
-                    .disabled(wirdSynchronisiert)
-
-                    if letzterSyncErfolgreich {
-                        Label("Synchronisiert.", systemImage: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
-                    }
+                    .font(.footnote)
                 }
             }
 
@@ -173,6 +142,24 @@ struct SyncOrdnerSettingsView: View {
                 Section {
                     Label(fehlermeldung, systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.red)
+                    if ausgewaehlterOrdner != nil {
+                        Button {
+                            // GitHub #92 (experimentell): nur bei diesem
+                            // expliziten Nutzer-Tap, nicht bei den übrigen
+                            // internen Aufrufstellen von ``jetztSynchronisieren()``
+                            // (Bootstrap nach Ordnerauswahl, Beitritts-Abgleich) —
+                            // siehe Accessibility-/Review-Erwägung in #92.
+                            zeigeSyncTriggerPicker = true
+                            jetztSynchronisieren()
+                        } label: {
+                            if wirdSynchronisiert {
+                                ProgressView()
+                            } else {
+                                Text("Erneut versuchen")
+                            }
+                        }
+                        .disabled(wirdSynchronisiert)
+                    }
                 }
             }
         }
@@ -196,7 +183,7 @@ struct SyncOrdnerSettingsView: View {
                 ersetzenGetappt()
             }
             Button("Abbrechen", role: .cancel) {
-                SyncOrdnerService.ordnerEntfernen()
+                Task { await SyncOrdnerService.ordnerEntfernenUndPeersVergessen(context: modelContext) }
                 ausgewaehlterOrdner = nil
             }
         } message: {
@@ -207,7 +194,7 @@ struct SyncOrdnerSettingsView: View {
                 wiederherstellenUndDeaktivieren()
             }
             Button("Ohne Wiederherstellung deaktivieren", role: .destructive) {
-                SyncOrdnerService.ordnerEntfernen()
+                Task { await SyncOrdnerService.ordnerEntfernenUndPeersVergessen(context: modelContext) }
                 ausgewaehlterOrdner = nil
             }
             Button("Abbrechen", role: .cancel) {}
@@ -321,15 +308,12 @@ struct SyncOrdnerSettingsView: View {
     /// externer Datenträger nicht verbunden) landet dadurch als echte
     /// Fehlermeldung statt unbemerkt zu verpuffen.
     private func jetztSynchronisieren() {
-        letzterSyncErfolgreich = false
         fehlermeldung = nil
         wirdSynchronisiert = true
         Task {
             let erfolgreich = await syncPollingService.syncZyklus()
             wirdSynchronisiert = false
-            if erfolgreich {
-                letzterSyncErfolgreich = true
-            } else {
+            if !erfolgreich {
                 fehlermeldung = "Zugriff auf den Sync-Ordner fehlgeschlagen. Bitte Ordner erneut auswählen oder Berechtigung prüfen."
             }
         }
@@ -388,7 +372,7 @@ struct SyncOrdnerSettingsView: View {
         if SyncErsetzenService.vorhandenesBackup() != nil {
             zeigeAustrittsWahl = true
         } else {
-            SyncOrdnerService.ordnerEntfernen()
+            Task { await SyncOrdnerService.ordnerEntfernenUndPeersVergessen(context: modelContext) }
             ausgewaehlterOrdner = nil
         }
     }
@@ -397,7 +381,7 @@ struct SyncOrdnerSettingsView: View {
         guard let controller = ModelContainerController.aktuell else {
             do {
                 try SyncErsetzenService.planeWiederherstellenAusBackup()
-                SyncOrdnerService.ordnerEntfernen()
+                Task { await SyncOrdnerService.ordnerEntfernenUndPeersVergessen(context: modelContext) }
                 ausgewaehlterOrdner = nil
                 neustartAusstehendMachen()
             } catch {
@@ -405,7 +389,7 @@ struct SyncOrdnerSettingsView: View {
             }
             return
         }
-        SyncOrdnerService.ordnerEntfernen()
+        Task { await SyncOrdnerService.ordnerEntfernenUndPeersVergessen(context: modelContext) }
         ausgewaehlterOrdner = nil
         syncPollingService.stoppen()
         multipeerSyncService.stoppen()

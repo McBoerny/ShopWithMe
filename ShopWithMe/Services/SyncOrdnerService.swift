@@ -108,6 +108,20 @@ enum SyncOrdnerService {
         UserDefaults.standard.removeObject(forKey: bookmarkSchluessel)
     }
 
+    /// Wie ``ordnerEntfernen()``, vergisst zusätzlich alle lokal gemerkten
+    /// ``SyncPeerInfo``-Einträge — ohne aktiven Sync-Ordner sind sie ohnehin
+    /// nur noch Anzeige-Ballast und werden bei einem erneuten Beitritt vom
+    /// jeweiligen Peer selbst wieder neu gesetzt (``SyncSnapshotImportService``).
+    @MainActor
+    static func ordnerEntfernenUndPeersVergessen(context: ModelContext) async {
+        ordnerEntfernen()
+        let alle = (try? context.fetch(FetchDescriptor<SyncPeerInfo>())) ?? []
+        guard !alle.isEmpty else { return }
+        await DatabaseLeaseService.performMicroLease(context: context) {
+            for peer in alle { context.delete(peer) }
+        }
+    }
+
     /// Ob `ordner` bereits Peer-Unterordner anderer Geräte enthält (unter
     /// `peers/`, das eigene Gerät ausgenommen) — Grundlage für die
     /// „Zusammenführen"/„Ersetzen"-Abfrage beim erstmaligen Verknüpfen
