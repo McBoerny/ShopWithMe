@@ -1090,7 +1090,14 @@ enum SyncSnapshotImportService {
             guard let liste = listeZuordnung[eintrag.einkaufslisteID], let artikel = artikelZuordnung[eintrag.artikelID]
             else { continue }
             let produkt = eintrag.produktID.flatMap { produktZuordnung[$0] }
-            guard !liste.enthaelt(artikel, produkt: produkt) else { continue }
+            // ``enthaeltNamensgleich`` statt ``enthaelt`` (Namens-Backstop,
+            // siehe dortige Doku): schützt speziell dieses additive
+            // Sicherheitsnetz davor, denselben Artikel doppelt anzulegen, wenn
+            // Bereich-A (``SyncImportService/importiereNeueEvents(context:)``)
+            // im selben Zyklus bereits einen Eintrag für ein noch nicht per
+            // Alias zusammengeführtes, aber namensgleiches lokales
+            // ``Artikel``-Objekt angelegt hat.
+            guard !liste.enthaeltNamensgleich(artikel, produkt: produkt) else { continue }
             // Architektur-Review (2026-08-10, siehe ArtikelListenKauf-Typ-Doku
             // „zuletztHinzugefuegtAm"): die Meldung dieses Peers zuerst
             // DAUERHAFT als robustes, additiv gemergtes Faktum vermerken —

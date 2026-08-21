@@ -118,7 +118,24 @@ enum ArtikelListenKaufService {
             predicate: #Predicate { $0.artikel?.persistentModelID == artikelID && $0.einkaufsliste?.persistentModelID == listeID }
         )
         deskriptor.fetchLimit = 1
-        return (try? context.fetch(deskriptor))?.first
+        if let exakt = (try? context.fetch(deskriptor))?.first { return exakt }
+        return bestehenderEintragNamensgleich(artikel: artikel, einkaufsliste: einkaufsliste, context: context)
+    }
+
+    /// Namens-Backstop (siehe ``Einkaufsliste/eintragNamensgleich(fuer:produkt:)``
+    /// für die ausführliche Begründung): findet einen bestehenden Eintrag für
+    /// dieselbe Liste, dessen ``ArtikelListenKauf/artikel`` zwar ein ANDERES
+    /// lokales Objekt als `artikel` ist, aber denselben Namen trägt (case-
+    /// insensitiv) — schützt vor einer gesplitteten „bereits hinzugefügt"/
+    /// „bereits abgehakt"-Historie für dieselbe logische Position, falls
+    /// Bereich-A-Event-Anwendung und Bereich-B-„Sicherheitsnetz" im selben
+    /// Zyklus denselben Artikel auf zwei noch nicht per Alias
+    /// zusammengeführte lokale ``Artikel``-Objekte auflösen.
+    private static func bestehenderEintragNamensgleich(artikel: Artikel, einkaufsliste: Einkaufsliste, context: ModelContext) -> ArtikelListenKauf? {
+        let listeID = einkaufsliste.persistentModelID
+        let deskriptor = FetchDescriptor<ArtikelListenKauf>(predicate: #Predicate { $0.einkaufsliste?.persistentModelID == listeID })
+        guard let kandidaten = try? context.fetch(deskriptor) else { return nil }
+        return kandidaten.first { $0.artikel?.name.localizedCaseInsensitiveCompare(artikel.name) == .orderedSame }
     }
 
     /// Vermerkt dauerhaft, dass `artikel` von `einkaufsliste` abgehakt wurde —

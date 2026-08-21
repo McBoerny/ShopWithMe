@@ -144,6 +144,21 @@ enum SyncImportService {
     @discardableResult
     @MainActor
     static func importiereNeueEvents(context: ModelContext) async -> Bool {
+        // Einmal für den gesamten Aufruf geladen statt pro Event frisch per
+        // ``SyncEntitaetsAliasService/aufgeloesteID(fuer:art:context:)`` gefetcht
+        // (Architektur-Review, Vorbereitung GitHub #125): garantiert, dass
+        // JEDES Event in diesem Batch dieselbe Auflösung sieht wie
+        // ``SyncSnapshotImportService/importiereSnapshots(context:)``, das im
+        // selben Zyklus unmittelbar davor lief und ggf. neue Aliase
+        // registriert hat (``SyncEntitaetsAliasService/registriere(entitaetsArt:fremdeID:lokaleID:context:)``,
+        // in ``SyncSnapshotImportService/mergeArtikel(_:kategorieZuordnung:peerGeraeteID:aliase:context:)``
+        // u.a.) — ohne diesen einmaligen Schnappschuss könnte ein später in
+        // diesem Batch verarbeitetes Event zwar dieselbe, bereits registrierte
+        // Auflösung sehen wie der Snapshot-Import, ein früher verarbeitetes
+        // Event aber (bei mehreren Peers/Batches) potenziell nicht — ein
+        // einmaliger Schnappschuss macht die Reihenfolge irrelevant, statt sie
+        // implizit vorauszusetzen.
+        let aliase = SyncEntitaetsAliasService.alleAliaseNachArt(context: context)
         guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return true }
         let zugriffErfolgreich = syncOrdner.startAccessingSecurityScopedResource()
         SyncOrdnerZugriffsDiagnose.markiereOeffnen(aufrufstelle: "importiereNeueEvents", erfolgreich: zugriffErfolgreich)
@@ -213,7 +228,7 @@ enum SyncImportService {
                 .sorted { $0.lamportZaehler < $1.lamportZaehler }
 
             for empfangen in empfangeneEvents {
-                wendeAn(empfangen, gewinner: &gewinner, context: context)
+                wendeAn(empfangen, gewinner: &gewinner, aliase: aliase, context: context)
             }
         }
 
@@ -273,7 +288,8 @@ enum SyncImportService {
                 gewinner[schluessel] = bisheriger
             }
         }
-        wendeAn(empfangen, gewinner: &gewinner, context: context)
+        let aliase = SyncEntitaetsAliasService.alleAliaseNachArt(context: context)
+        wendeAn(empfangen, gewinner: &gewinner, aliase: aliase, context: context)
         guard context.hasChanges else { return }
         try? context.save()
     }
@@ -308,7 +324,8 @@ enum SyncImportService {
 
     @MainActor
     private static func wendeAn(
-        _ empfangen: SyncEventExportDarstellung, gewinner: inout [SyncEventService.PaarSchluessel: SyncEvent], context: ModelContext
+        _ empfangen: SyncEventExportDarstellung, gewinner: inout [SyncEventService.PaarSchluessel: SyncEvent],
+        aliase: [String: [UUID: UUID]], context: ModelContext
     ) {
         guard !SyncEventService.istBereitsBekannt(empfangen.id, context: context) else { return }
 
@@ -334,10 +351,10 @@ enum SyncImportService {
         }
 
         let materialisierungsErgebnis = materialisiere(
-            art, nutzlast: nutzlast, autorGeraeteID: empfangen.autorGeraeteID, wallClock: empfangen.wallClock, context: context
+            art, nutzlast: nutzlast, autorGeraeteID: empfangen.autorGeraeteID, wallClock: empfangen.wallClock, aliase: aliase, context: context
         )
         guard materialisierungsErgebnis == .erfolgreich else {
-            guard !referenzDauerhaftGeloescht(art: art, bezugsID: nutzlast.bezugsID, artikelID: nutzlast.artikelID, context: context) else {
+            guard !referenzDauerhaftGeloescht(art: art, bezugsID: nutzlast.bezugsID, artikelID: nutzlast.artikelID, aliase: aliase, context: context) else {
                 // Liste/Einkauf/Artikel wurde absichtlich gelöscht (Tombstone) und
                 // wird deshalb NIE mehr lokal entstehen — anders als bei einer
                 // bloß noch nicht eingetroffenen Referenz ist ein Retry hier
@@ -441,24 +458,25 @@ enum SyncImportService {
     /// alle anderen Zweige ignorieren ihn.
     @MainActor
     private static func materialisiere(
-        _ art: SyncEventArt, nutzlast: SyncEventNutzlast, autorGeraeteID: String, wallClock: Date, context: ModelContext
+        _ art: SyncEventArt, nutzlast: SyncEventNutzlast, autorGeraeteID: String, wallClock: Date,
+        aliase: [String: [UUID: UUID]], context: ModelContext
     ) -> MaterialisierungsErgebnis {
         switch art {
         case .artikelHinzugefuegt:
-            let liste = einkaufsliste(mitID: nutzlast.bezugsID, context: context)
-            let artikel = artikel(mitID: nutzlast.artikelID, context: context)
+            let liste = einkaufsliste(mitID: nutzlast.bezugsID, aliase: aliase, context: context)
+            let artikel = artikel(mitID: nutzlast.artikelID, aliase: aliase, context: context)
             guard let liste, let artikel else { return fehlendeReferenz(bezug: liste, artikel: artikel) }
             liste.artikelHinzufuegenOhneEventAufzeichnung(artikel, am: wallClock, context: context)
             return .erfolgreich
         case .artikelEntfernt:
-            let liste = einkaufsliste(mitID: nutzlast.bezugsID, context: context)
-            let artikel = artikel(mitID: nutzlast.artikelID, context: context)
+            let liste = einkaufsliste(mitID: nutzlast.bezugsID, aliase: aliase, context: context)
+            let artikel = artikel(mitID: nutzlast.artikelID, aliase: aliase, context: context)
             guard let liste, let artikel else { return fehlendeReferenz(bezug: liste, artikel: artikel) }
             liste.artikelEntfernenOhneEventAufzeichnung(artikel, context: context)
             return .erfolgreich
         case .artikelAbgehakt:
-            let vorgang = einkaufsvorgang(mitID: nutzlast.bezugsID, context: context)
-            let artikel = artikel(mitID: nutzlast.artikelID, context: context)
+            let vorgang = einkaufsvorgang(mitID: nutzlast.bezugsID, aliase: aliase, context: context)
+            let artikel = artikel(mitID: nutzlast.artikelID, aliase: aliase, context: context)
             guard let vorgang, let artikel else { return fehlendeReferenz(bezug: vorgang, artikel: artikel) }
             // ursprungsGeraeteID: autorGeraeteID (nie nil) — dieses Abhaken
             // beschreibt die Laufreihenfolge des SENDENDEN Geräts durchs
@@ -475,27 +493,27 @@ enum SyncImportService {
             // ihn korrekt in die äußere Optionalität hebt — auch ein
             // `nil`-Ergebnis (kein Geschäft ausgewählt) gilt so als expliziter
             // Override, nicht als „kein Override, self.geschaeft gilt".
-            let geschaeftUeberschreibung: Geschaeft? = nutzlast.geschaeftID.flatMap { geschaeft(mitID: $0, context: context) }
+            let geschaeftUeberschreibung: Geschaeft? = nutzlast.geschaeftID.flatMap { geschaeft(mitID: $0, aliase: aliase, context: context) }
             vorgang.artikelAbhakenOhneEventAufzeichnung(
                 artikel, context: context, ursprungsGeraeteID: autorGeraeteID, geschaeft: geschaeftUeberschreibung
             )
             return .erfolgreich
         case .artikelAbgewaehlt:
-            let vorgang = einkaufsvorgang(mitID: nutzlast.bezugsID, context: context)
-            let artikel = artikel(mitID: nutzlast.artikelID, context: context)
+            let vorgang = einkaufsvorgang(mitID: nutzlast.bezugsID, aliase: aliase, context: context)
+            let artikel = artikel(mitID: nutzlast.artikelID, aliase: aliase, context: context)
             guard let vorgang, let artikel else { return fehlendeReferenz(bezug: vorgang, artikel: artikel) }
             vorgang.artikelAbwaehlenOhneEventAufzeichnung(artikel, context: context)
             return .erfolgreich
         case .artikelDauerhaftEntfernt:
-            let vorgang = einkaufsvorgang(mitID: nutzlast.bezugsID, context: context)
-            let artikel = artikel(mitID: nutzlast.artikelID, context: context)
+            let vorgang = einkaufsvorgang(mitID: nutzlast.bezugsID, aliase: aliase, context: context)
+            let artikel = artikel(mitID: nutzlast.artikelID, aliase: aliase, context: context)
             guard let vorgang, let artikel else { return fehlendeReferenz(bezug: vorgang, artikel: artikel) }
             vorgang.artikelDauerhaftEntfernenOhneEventAufzeichnung(artikel, context: context)
             return .erfolgreich
         }
     }
 
-    /// Unterscheidet die beiden nicht-erfolgreichen Fälle von ``materialisiere(_:nutzlast:autorGeraeteID:wallClock:context:)``:
+    /// Unterscheidet die beiden nicht-erfolgreichen Fälle von ``materialisiere(_:nutzlast:autorGeraeteID:wallClock:aliase:context:)``:
     /// Referenz nur *noch nicht* lokal bekannt (retrywürdig) vs. Referenz
     /// *bewusst gelöscht* (Tombstone, siehe ``SyncTombstoneService``) und damit
     /// dauerhaft unauflösbar — ein Retry würde hier bei jedem Sync-Zyklus
@@ -505,9 +523,9 @@ enum SyncImportService {
     /// jeweils über denselben Alias-Pfad wie die zugehörige Lookup-Funktion
     /// aufgelöst).
     private static func referenzDauerhaftGeloescht(
-        art: SyncEventArt, bezugsID: UUID, artikelID: UUID, context: ModelContext
+        art: SyncEventArt, bezugsID: UUID, artikelID: UUID, aliase: [String: [UUID: UUID]], context: ModelContext
     ) -> Bool {
-        let aufgeloesteArtikelID = SyncEntitaetsAliasService.aufgeloesteID(fuer: artikelID, art: SyncEntitaetsArt.artikel, context: context)
+        let aufgeloesteArtikelID = SyncEntitaetsAliasService.aufgeloesteID(fuer: artikelID, art: SyncEntitaetsArt.artikel, in: aliase)
         if SyncTombstoneService.istGeloescht(art: SyncEntitaetsArt.artikel, id: aufgeloesteArtikelID, context: context) {
             return true
         }
@@ -519,16 +537,19 @@ enum SyncImportService {
         case .artikelAbgehakt, .artikelAbgewaehlt, .artikelDauerhaftEntfernt:
             bezugsArt = SyncEntitaetsArt.einkaufsvorgang
         }
-        let aufgeloesteBezugsID = SyncEntitaetsAliasService.aufgeloesteID(fuer: bezugsID, art: bezugsArt, context: context)
+        let aufgeloesteBezugsID = SyncEntitaetsAliasService.aufgeloesteID(fuer: bezugsID, art: bezugsArt, in: aliase)
         return SyncTombstoneService.istGeloescht(art: bezugsArt, id: aufgeloesteBezugsID, context: context)
     }
 
     /// Löst zuerst einen bekannten Alias auf (siehe ``SyncEntitaetsAlias`` —
     /// Bereich-B-Namensmatching, Phase 3/GitHub #52-Nachfolgefund, kann eine
     /// fremde Einkaufsliste mit einer anderen lokalen zusammengeführt haben),
-    /// bevor direkt per `id` gesucht wird — analog ``artikel(mitID:context:)``.
-    private static func einkaufsliste(mitID id: UUID, context: ModelContext) -> Einkaufsliste? {
-        let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(fuer: id, art: SyncEntitaetsArt.einkaufsliste, context: context)
+    /// bevor direkt per `id` gesucht wird — analog ``artikel(mitID:aliase:context:)``.
+    /// `aliase` ist ein einmalig pro Aufrufer-Batch geladener Schnappschuss
+    /// (siehe ``importiereNeueEvents(context:)``), kein Live-Fetch — garantiert
+    /// dieselbe Auflösung für alle Events desselben Batches.
+    private static func einkaufsliste(mitID id: UUID, aliase: [String: [UUID: UUID]], context: ModelContext) -> Einkaufsliste? {
+        let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(fuer: id, art: SyncEntitaetsArt.einkaufsliste, in: aliase)
         var deskriptor = FetchDescriptor<Einkaufsliste>(predicate: #Predicate { $0.id == aufgeloesteID })
         deskriptor.fetchLimit = 1
         return try? context.fetch(deskriptor).first
@@ -537,9 +558,9 @@ enum SyncImportService {
     /// Löst zuerst einen bekannten Alias auf (siehe ``SyncEntitaetsAlias`` —
     /// Bereich-B-Matching kann einen fremden Einkaufsvorgang mit einem anderen
     /// lokalen zusammengeführt haben, GitHub #52-Nachfolgefund), bevor direkt
-    /// per `id` gesucht wird — analog ``einkaufsliste(mitID:context:)``.
-    private static func einkaufsvorgang(mitID id: UUID, context: ModelContext) -> Einkaufsvorgang? {
-        let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(fuer: id, art: SyncEntitaetsArt.einkaufsvorgang, context: context)
+    /// per `id` gesucht wird — analog ``einkaufsliste(mitID:aliase:context:)``.
+    private static func einkaufsvorgang(mitID id: UUID, aliase: [String: [UUID: UUID]], context: ModelContext) -> Einkaufsvorgang? {
+        let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(fuer: id, art: SyncEntitaetsArt.einkaufsvorgang, in: aliase)
         var deskriptor = FetchDescriptor<Einkaufsvorgang>(predicate: #Predicate { $0.id == aufgeloesteID })
         deskriptor.fetchLimit = 1
         return try? context.fetch(deskriptor).first
@@ -549,8 +570,8 @@ enum SyncImportService {
     /// Bereich-B-Namensmatching, Phase 3, kann einen fremden Artikel mit einem
     /// anderen lokalen zusammengeführt haben), bevor direkt per `id` gesucht
     /// wird.
-    private static func artikel(mitID id: UUID, context: ModelContext) -> Artikel? {
-        let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(fuer: id, art: SyncEntitaetsArt.artikel, context: context)
+    private static func artikel(mitID id: UUID, aliase: [String: [UUID: UUID]], context: ModelContext) -> Artikel? {
+        let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(fuer: id, art: SyncEntitaetsArt.artikel, in: aliase)
         var deskriptor = FetchDescriptor<Artikel>(predicate: #Predicate { $0.id == aufgeloesteID })
         deskriptor.fetchLimit = 1
         return try? context.fetch(deskriptor).first
@@ -561,8 +582,8 @@ enum SyncImportService {
     /// Geschäft mit einem anderen lokalen zusammengeführt haben), bevor
     /// direkt per `id` gesucht wird — genutzt für die Geschäfts-Überschreibung
     /// beim Abhaken-Materialisieren (GitHub #66).
-    private static func geschaeft(mitID id: UUID, context: ModelContext) -> Geschaeft? {
-        let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(fuer: id, art: SyncEntitaetsArt.geschaeft, context: context)
+    private static func geschaeft(mitID id: UUID, aliase: [String: [UUID: UUID]], context: ModelContext) -> Geschaeft? {
+        let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(fuer: id, art: SyncEntitaetsArt.geschaeft, in: aliase)
         var deskriptor = FetchDescriptor<Geschaeft>(predicate: #Predicate { $0.id == aufgeloesteID })
         deskriptor.fetchLimit = 1
         return try? context.fetch(deskriptor).first

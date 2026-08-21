@@ -77,6 +77,32 @@ extension Einkaufsliste {
         eintraege.first { $0.artikel == artikel && $0.produkt == produkt }
     }
 
+    /// Wie ``enthaelt(_:produkt:)``, mit demselben Namens-Backstop wie
+    /// ``eintragNamensgleich(fuer:produkt:)`` (siehe dortige Doku).
+    func enthaeltNamensgleich(_ artikel: Artikel, produkt: Produkt? = nil) -> Bool {
+        eintragNamensgleich(fuer: artikel, produkt: produkt) != nil
+    }
+
+    /// Wie ``eintrag(fuer:produkt:)``, mit zusätzlichem Namens-Backstop: findet
+    /// auch einen bestehenden Eintrag, dessen ``EinkaufslistenEintrag/artikel``
+    /// ein ANDERES lokales Objekt als `artikel` ist, aber denselben Namen trägt
+    /// (case-insensitiv) — Schutz gegen Dubletten, wenn zwei Sync-Merge-Pfade
+    /// (Bereich-A-Event-Anwendung vs. Bereich-B-„Sicherheitsnetz" in
+    /// ``SyncSnapshotImportService/mergeEinkaufslistenEintraege(_:listeZuordnung:artikelZuordnung:produktZuordnung:context:)``)
+    /// dieselbe logische Position auf zwei unterschiedlich aufgelöste
+    /// ``Artikel``-Objekte abbilden, bevor ein ``SyncEntitaetsAlias`` beide
+    /// zusammengeführt hat (Nutzerbericht 2026-08-21: „Testliste" sprang nach
+    /// Wiederbeitritt eines Peers, dessen Sync-Ordner zuvor entfernt worden
+    /// war, von 8 auf 9 Einträge — beide bereits per ID/Alias fast-path
+    /// aufgelösten Pfade prüften nur exakte Objekt-Identität und übersahen so
+    /// den jeweils anderen Eintrag).
+    func eintragNamensgleich(fuer artikel: Artikel, produkt: Produkt? = nil) -> EinkaufslistenEintrag? {
+        if let exakt = eintrag(fuer: artikel, produkt: produkt) { return exakt }
+        return eintraege.first {
+            $0.produkt == produkt && $0.artikel?.name.localizedCaseInsensitiveCompare(artikel.name) == .orderedSame
+        }
+    }
+
     /// Alle ``EinkaufslistenEintrag``e für `artikel` auf dieser Liste — unabhängig vom
     /// gewählten Produkt. Grundlage für die Mehrfach-Produkt-Auswahl in
     /// ``ArtikelHinzufuegenView`` (GitHub #47 Erweiterung).
@@ -108,7 +134,13 @@ extension Einkaufsliste {
     @discardableResult
     func artikelHinzufuegenOhneEventAufzeichnung(_ artikel: Artikel, produkt: Produkt? = nil, am zeitpunkt: Date = Date(), context: ModelContext) -> EinkaufslistenEintrag {
         ArtikelListenKaufService.vermerkeHinzugefuegt(artikel: artikel, einkaufsliste: self, am: zeitpunkt, context: context)
-        if let bestehender = eintrag(fuer: artikel, produkt: produkt) {
+        // ``eintragNamensgleich`` statt ``eintrag(fuer:produkt:)`` (Namens-
+        // Backstop, siehe dortige Doku) — verhindert eine zweite Zeile für
+        // dieselbe logische Position, falls dieser Aufrufer (Bereich-A-Event)
+        // und das Bereich-B-„Sicherheitsnetz" denselben Artikel im selben
+        // Zyklus auf zwei noch nicht per Alias zusammengeführte lokale
+        // ``Artikel``-Objekte auflösen.
+        if let bestehender = eintragNamensgleich(fuer: artikel, produkt: produkt) {
             bestehender.menge = artikel.mengenSchritt
             bestehender.notiz = nil
             return bestehender
