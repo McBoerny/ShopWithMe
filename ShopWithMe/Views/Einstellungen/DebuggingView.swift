@@ -59,8 +59,6 @@ struct DebuggingView: View {
 
             MultipeerStatusSection()
 
-            BekannteSyncPeersSection()
-
             StatuskonsolidierungSection()
 
             AufraeumWasserstandSection()
@@ -170,55 +168,6 @@ private struct MultipeerStatusSection: View {
     }
 }
 
-/// Listet alle jemals per Sync gesehenen Peer-Geräte (``SyncPeerInfo``) mit
-/// Zuletzt-gesehen-Zeitpunkt — Gegenstück zur automatischen Altersgrenze in
-/// ``SyncSnapshotImportService/maximalesSnapshotAlter`` (GitHub #52-Nachfolgefund):
-/// Geräte, die die App nicht mehr nutzen (z.B. nach einer Neuinstallation mit
-/// neuer Geräte-ID), lassen sich hier manuell entfernen — löscht sowohl den
-/// lokalen Merkposten als auch den Peer-Ordner im Sync-Ordner selbst, damit
-/// sein letzter bekannter Stand nicht mehr zurückgespielt wird.
-private struct BekannteSyncPeersSection: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query(sort: \SyncPeerInfo.geraeteName) private var peers: [SyncPeerInfo]
-
-    var body: some View {
-        if !peers.isEmpty {
-            Section {
-                ForEach(peers) { peer in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(peer.geraeteName)
-                        Text("Zuletzt gesehen: \(peer.zuletztGesehen.formatted(date: .abbreviated, time: .shortened))")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .onDelete(perform: peerEntfernen)
-            } header: {
-                Text("Bekannte Geräte")
-            } footer: {
-                Text("Wischen zum Entfernen — für Geräte, die die App nicht mehr nutzen. Verhindert, dass ihr letzter bekannter Stand weiterhin zurückgespielt wird.")
-            }
-        }
-    }
-
-    private func peerEntfernen(at offsets: IndexSet) {
-        let entfernte = offsets.map { peers[$0] }
-        guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else {
-            Task {
-                await DatabaseLeaseService.performMicroLease(context: modelContext) {
-                    for peer in entfernte { modelContext.delete(peer) }
-                }
-            }
-            return
-        }
-        Task {
-            for peer in entfernte {
-                await SyncOrdnerService.entfernePeer(peer, in: syncOrdner, context: modelContext)
-            }
-        }
-    }
-}
-
 /// Manuelle Statuskonsolidierung für Live-Tests, bei denen die automatische
 /// Konvergenz (48h-Give-up-Frist für nicht anwendbare Events,
 /// Fingerabdruck-basiertes Skip-Verhalten des eigenen Exports, 30-Tage-
@@ -302,12 +251,14 @@ private struct StatuskonsolidierungSection: View {
 /// Akkordeon-Abschnitt, der den aktuellen dynamischen Aufbewahrungs-Wasserstand
 /// (Peer-Lebenszyklus, Baustein C) und die Anzahl der bereits bereinigbaren
 /// lokalen Einträge (Tombstones in der DB, eigene Event-Dateien im Sync-Ordner)
-/// anzeigt — rein informativ, kein Löschen.
+/// anzeigt und ein vorzeitiges Aufräumen erlaubt.
 private struct AufraeumWasserstandSection: View {
     @Environment(\.modelContext) private var modelContext
     @State private var isExpanded = false
     @State private var wirdGeladen = false
+    @State private var wirdAusgefuehrt = false
     @State private var ergebnis: Ergebnis?
+    @State private var meldung: String?
 
     private struct Ergebnis {
         let wasserstand: Date?
@@ -319,7 +270,7 @@ private struct AufraeumWasserstandSection: View {
         if SyncOrdnerService.gewaehlterOrdner() != nil {
             Section {
                 DisclosureGroup(isExpanded: $isExpanded) {
-                    if wirdGeladen {
+                    if wirdGeladen || wirdAusgefuehrt {
                         ProgressView()
                     } else if let e = ergebnis {
                         if let datum = e.wasserstand {
@@ -330,7 +281,13 @@ private struct AufraeumWasserstandSection: View {
                             Text("Kein anderer Peer bekannt oder Ordner nicht erreichbar — kein Wasserstand.")
                                 .foregroundStyle(.secondary)
                         }
+                        if let meldung {
+                            Text(meldung)
+                                .foregroundStyle(.secondary)
+                        }
                         Button("Aktualisieren") { laden() }
+                        Button("Jetzt aufräumen") { jetzt() }
+                            .disabled(ergebnis?.wasserstand == nil)
                     }
                 } label: {
                     Label("Aufräum-Wasserstand", systemImage: "drop.triangle")
@@ -338,7 +295,7 @@ private struct AufraeumWasserstandSection: View {
             } header: {
                 Text("Aufräum-Wasserstand")
             } footer: {
-                Text("Minimum aller Peer-Manifest-Zeitstempel. Tombstones und eigene Event-Dateien, die davor entstanden sind, wurden von allen bekannten Peers gesehen und könnten beim nächsten automatischen Lauf gelöscht werden.")
+                Text("Minimum aller Peer-Manifest-Zeitstempel. Tombstones und eigene Event-Dateien, die davor entstanden sind, wurden von allen bekannten Peers gesehen. Automatisch höchstens einmal täglich beim App-Start bzw. Rückkehr aus dem Hintergrund bereinigt. „Jetzt aufräumen“ übergeht die 24h-Sperre und räumt sofort auf.")
             }
             .task { laden() }
         }
@@ -346,10 +303,26 @@ private struct AufraeumWasserstandSection: View {
 
     private func laden() {
         guard !wirdGeladen else { return }
+        meldung = nil
         wirdGeladen = true
         Task {
             ergebnis = await berechne()
             wirdGeladen = false
+        }
+    }
+
+    private func jetzt() {
+        guard !wirdAusgefuehrt else { return }
+        meldung = nil
+        wirdAusgefuehrt = true
+        Task {
+            SyncExportService.letzteEventBereinigung = nil
+            SyncTombstoneService.letzteBereinigung = nil
+            await SyncExportService.raeumeAlteEigeneEventDateienAufFallsFaellig()
+            await SyncTombstoneService.raeumeAlteTombstonesAufFallsFaellig(context: modelContext)
+            ergebnis = await berechne()
+            wirdAusgefuehrt = false
+            meldung = "Aufgeräumt."
         }
     }
 

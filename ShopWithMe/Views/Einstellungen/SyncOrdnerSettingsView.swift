@@ -73,6 +73,8 @@ struct SyncOrdnerSettingsView: View {
                 }
             }
 
+            BekannteSyncPeersSection()
+
             if neustartAusstehend {
                 Section {
                     Label("Ein Neustart der App steht noch aus, um den letzten Vorgang abzuschließen. Die Synchronisierung ist bis dahin pausiert.", systemImage: "arrow.clockwise.circle")
@@ -516,11 +518,59 @@ private struct EigenerGeraeteNameSection: View {
     }
 }
 
+/// Listet alle jemals per Sync gesehenen Peer-Geräte (``SyncPeerInfo``) mit
+/// Zuletzt-gesehen-Zeitpunkt: Geräte, die die App nicht mehr nutzen (z.B. nach
+/// einer Neuinstallation mit neuer Geräte-ID), lassen sich hier manuell
+/// entfernen — löscht sowohl den lokalen Merkposten als auch den Peer-Ordner
+/// im Sync-Ordner selbst, damit sein letzter bekannter Stand nicht mehr
+/// zurückgespielt wird.
+private struct BekannteSyncPeersSection: View {
+    @Environment(\.modelContext) private var modelContext
+    @Query(sort: \SyncPeerInfo.geraeteName) private var peers: [SyncPeerInfo]
+
+    var body: some View {
+        if !peers.isEmpty {
+            Section {
+                ForEach(peers) { peer in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(peer.geraeteName)
+                        Text("Zuletzt gesehen: \(peer.zuletztGesehen.formatted(date: .abbreviated, time: .shortened))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .onDelete(perform: peerEntfernen)
+            } header: {
+                Text("Bekannte Geräte")
+            } footer: {
+                Text("Wischen zum Entfernen — für Geräte, die die App nicht mehr nutzen. Verhindert, dass ihr letzter bekannter Stand weiterhin zurückgespielt wird.")
+            }
+        }
+    }
+
+    private func peerEntfernen(at offsets: IndexSet) {
+        let entfernte = offsets.map { peers[$0] }
+        guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else {
+            Task {
+                await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                    for peer in entfernte { modelContext.delete(peer) }
+                }
+            }
+            return
+        }
+        Task {
+            for peer in entfernte {
+                await SyncOrdnerService.entfernePeer(peer, in: syncOrdner, context: modelContext)
+            }
+        }
+    }
+}
+
 #Preview {
     NavigationStack {
         SyncOrdnerSettingsView()
     }
     .environmentObject(SyncPollingService())
     .environmentObject(MultipeerSyncService())
-    .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self], inMemory: true)
+    .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self, SyncPeerInfo.self], inMemory: true)
 }
