@@ -232,22 +232,20 @@ gewählte Geschäft, oder direkt in der Geschäfts-Detailansicht — z.B. für �
 nachträglich gefundene Bons.
 
 Lokale KI erkennt Geschäft, Datum, Artikel und Preise (Foto oder aus der
-Mediathek) und trägt sie in die passenden Positionen ein. Jede Position hat zwei
-Namensfelder: **Artikel** (generische Kategorie, z.B. „Shampoo") und
-**Produktname** (konkreter Markenname, z.B. „Sebamed Urea 5%" — optional, von der
-KI vorbelegt). Der auf dem Bon gedruckte, oft abgekürzte Originaltext bleibt dabei
-separat erhalten und wird als geschäftsspezifischer Bon-Name gespeichert. Für jede
-Position versucht die App automatisch, den Bon-Text einem deiner vorhandenen
-Artikel zuzuordnen — gelingt das, zeigt das Artikel-Feld den generischen Namen
-(z.B. „Shampoo"); gelingt es nicht, ist die Position als „Neu erkannt" markiert.
-Tippst du ins Artikel-Feld, schlägt dir die App passende vorhandene Artikel zum
-Antippen vor, oder du legst über „„…" neu anlegen" direkt einen neuen Artikel an.
-Das Produktname-Feld zeigt: bei bekanntem Bon-Namen des Geschäfts den zugehörigen
-Klarname, sonst einen KI-Vorschlag aus deinen vorhandenen Produkten (oder einen
-neu formulierten Namen). Du kannst den Produktname jederzeit anpassen oder leer
-lassen — dann dient der Bon-Text als Produktname. Verschiedene Marken desselben
-Artikels (z.B. „Odol" und „Paradontol" für „Zahnpasta") erhalten dadurch von
-Anfang an getrennte Preishistorien, auch ohne vorherige manuelle Anlage. Nicht
+Mediathek) und trägt sie in die passenden Positionen ein. Jede Position zeigt
+oben einen editierbaren **Produktnamen** (konkreter Klarname, z.B. „Sebamed
+Urea 5%" — von der KI vorbelegt) und darunter einen antippe-baren
+**Artikel-Button** (generische Kategorie, z.B. „Shampoo"). Der auf dem Bon
+gedruckte, oft abgekürzte Originaltext bleibt separat erhalten und erscheint klein
+darunter, sofern er vom Produktnamen abweicht. Für jede Position versucht die App
+automatisch, den Bon-Text einem deiner vorhandenen Artikel zuzuordnen — gelingt
+das, zeigt der Artikel-Button den generischen Namen; gelingt es nicht, ist die
+Position als „Neu erkannt — Artikel zuordnen" markiert. Antippen des Artikel-Buttons
+öffnet eine durchsuchbare Liste aller Artikel — wähle einen aus oder lege mit dem
+„Neu anlegen"-Button direkt einen neuen an. Den Produktnamen kannst du jederzeit
+anpassen oder leer lassen — dann dient der Bon-Text als Produktname. Verschiedene
+Marken desselben Artikels (z.B. „Odol" und „Paradontol" für „Zahnpasta") erhalten
+dadurch von Anfang an getrennte Preishistorien, auch ohne vorherige manuelle Anlage. Nicht
 benötigte Positionen kannst du vor der Übernahme entfernen: Wischen nach links
 löscht eine Position nur für diesen Scan, Wischen nach rechts ignoriert sie
 dauerhaft für dieses Geschäft (z.B. für wiederkehrende Pfand-/Rabattzeilen).

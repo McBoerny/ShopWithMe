@@ -826,13 +826,8 @@ private struct PositionsZeile: View {
                 )
             }
         }
-        .sheet(isPresented: $zeigeArtikelAuswahl, onDismiss: {
-            if let gewaehlter = artikelFuerSheet,
-               gewaehlter.persistentModelID != position.zugeordneterArtikel?.persistentModelID {
-                artikelZuweisen(gewaehlter)
-            }
-        }) {
-            ArtikelAuswahlSheet(gewaehlterArtikel: $artikelFuerSheet)
+        .sheet(isPresented: $zeigeArtikelAuswahl) {
+            ArtikelAuswahlSheet(gewaehlterArtikel: $artikelFuerSheet, onSelect: artikelZuweisen)
         }
     }
 

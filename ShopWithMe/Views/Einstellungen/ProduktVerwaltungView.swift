@@ -170,8 +170,15 @@ private struct NeuesProduktSheet: View {
 /// und ``BelegScanView`` (GitHub #123). Zeigt bei Suchbegriffen ohne exakten Treffer
 /// einen „Neu anlegen"-Button; nach dem Sichern schließt das Sheet und übergibt den
 /// neuen Artikel an den Aufrufer.
+///
+/// `onSelect` wird direkt beim Tippen auf einen Eintrag aufgerufen, noch vor dem
+/// `dismiss()` — dadurch kommt die Zuweisung sicher an, auch wenn der Aufrufer sie
+/// via `onDismiss` lesen würde (was Timing-Probleme verursachen kann).
 struct ArtikelAuswahlSheet: View {
     @Binding var gewaehlterArtikel: Artikel?
+    /// Optionaler Callback, der synchron vor dem Dismiss aufgerufen wird.
+    /// `NeuesProduktSheet` lässt diesen leer und wertet stattdessen die Binding aus.
+    var onSelect: ((Artikel) -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \Artikel.name) private var alleArtikel: [Artikel]
     @State private var suchtext = ""
@@ -201,6 +208,7 @@ struct ArtikelAuswahlSheet: View {
                 ForEach(gefilterteArtikel) { artikel in
                     Button {
                         gewaehlterArtikel = artikel
+                        onSelect?(artikel)
                         dismiss()
                     } label: {
                         HStack {
@@ -264,6 +272,7 @@ struct ArtikelAuswahlSheet: View {
             return
         }
         gewaehlterArtikel = entwurf
+        onSelect?(entwurf)
         neuerArtikelEntwurf = nil
         sollteDismissen = true
     }
