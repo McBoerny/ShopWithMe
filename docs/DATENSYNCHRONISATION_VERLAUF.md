@@ -3945,3 +3945,42 @@ beiden Vorgänger-Anläufen dokumentiert nicht im Simulator reproduzierbar) —
 insbesondere, dass `SyncPollingService`/`MultipeerSyncService` nach einem
 Tausch nachweislich am neuen Context weiterlaufen und kein Datenverlust bei
 schneller Aufeinanderfolge mehrerer Aktionen auftritt.
+
+### Live-Fund (Build 308, echtes Gerät): `EinkaufenView` stürzte beim „Ersetzen“ ab
+
+**Symptom:** `SIGABRT` unmittelbar nach einem „Ersetzen“, Stack-Trace über
+`EinkaufenView.einkaufSicherstellen()` → `DatabaseLeaseService.performMicroLease`
+→ `NSManagedObjectContext.save()` → nicht abfangbare Objective-C-Exception
+(`objc_exception_rethrow`).
+
+**Ursache:** `ausgewaehlteListe`/`ausgewaehltesGeschaeft` sind `@State`-
+gehaltene `@Model`-Objektreferenzen. Laut Apple DTS (siehe oben) wechselt der
+per `@Environment(\.modelContext)` injizierte Context für eine BESTEHENDE
+View-Instanz automatisch mit dem `ModelContainer` — auch ohne
+`.id(generation)`-Neuaufbau, der `@State` erst mit etwas Verzögerung
+zurücksetzt. In diesem kurzen Fenster kann ein bereits reaktiver Trigger
+(hier `.onChange(of: offeneEinkaufsvorgaenge.count)`, ein `@Query` das
+ebenfalls sofort auf den neuen Context reagiert) einen neuen `Einkaufsvorgang`
+mit Relationships auf die noch alten, `@State`-gehaltenen Objekte in den
+NEUEN Context einfügen — eine store-übergreifende Relationship, die CoreData
+beim `save()` mit einer nicht per `do/catch` fangbaren Exception quittiert.
+
+**Fix:** `einkaufSicherstellen()` prüft jetzt vor dem Insert
+`ausgewaehlteListe.modelContext == modelContext` (und analog für
+`ausgewaehltesGeschaeft`) — `PersistentModel.modelContext` identifiziert den
+Context, der das Objekt aktuell verwaltet; weicht er vom aktuellen
+`@Environment`-Context ab, bricht die Funktion sauber ab, statt abzustürzen.
+Der nächste reguläre Trigger (spätestens der `.id(generation)`-Neuaufbau
+selbst) wählt dann frische, zum aktuellen Context passende Objekte.
+
+**Offener, systemischer Rest-Risiko:** Dasselbe Grundmuster (`@State`-
+gehaltene `@Model`-Referenz + `DatabaseLeaseService.performMicroLease`/
+`modelContext.insert`) kommt in mindestens acht weiteren Views vor
+(`ProduktVerwaltungView`, `ArtikelEditView`, `ArtikelListView`,
+`GeschaeftListView`, `PreispunktZuordnenSheet`, `MilkForUsImportView`,
+`ArtikelHinzufuegenView`, `BelegScanView`) — jede davon ist theoretisch
+demselben Absturzmuster ausgesetzt, sofern ein Live-Ersetzen exakt während
+einer offenen Interaktion dort passiert. Nicht einzeln durchaudited/gefixt
+(nur der tatsächlich per Crash-Log bestätigte Fund in `EinkaufenView`) — ein
+vollständiger Audit/Fix aller Fundstellen ist ein separater, bewusst noch
+nicht beauftragter Arbeitsschritt.
