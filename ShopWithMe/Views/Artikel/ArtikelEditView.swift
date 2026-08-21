@@ -213,6 +213,12 @@ struct ArtikelEditView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Sichern") {
                         if istNeu {
+                            // Live-Fund EinkaufenView (Build 308, `DatabaseLeaseService/gehoertZuAktuellemContext(_:context:)`):
+                            // bei einem bereits (fälschlich) mehrfach übergebenen
+                            // `artikel` (z.B. Sheet über Live-Ersetzen hinweg
+                            // offen gelassen) sicherstellen, dass er nicht schon
+                            // einem ANDEREN Context zugeordnet ist.
+                            guard DatabaseLeaseService.gehoertZuAktuellemContext(artikel, context: modelContext) else { return }
                             Task {
                                 await DatabaseLeaseService.performMicroLease(context: modelContext) {
                                     modelContext.insert(artikel)

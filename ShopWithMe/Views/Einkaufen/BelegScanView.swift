@@ -533,6 +533,8 @@ struct BelegScanView: View {
         bearbeitbarePositionen?.removeAll { $0.id == position.id }
         Task {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                // Live-Fund EinkaufenView (Build 308, `DatabaseLeaseService/gehoertZuAktuellemContext(_:context:)`).
+                guard DatabaseLeaseService.gehoertZuAktuellemContext(geschaeft, context: modelContext) else { return }
                 modelContext.insert(IgnorierterArtikel(erkannterName: name, geschaeft: geschaeft))
             }
         }

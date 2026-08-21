@@ -160,6 +160,45 @@ enum DatabaseLeaseService {
         await Task.detached { loescheLeaseBlocking(lockURL: lockURL) }.value
     }
 
+    // MARK: - Live-Ersetzen-Absicherung
+
+    /// Prüft, ob ein `@State`-gehaltenes `@Model`-Objekt noch zum übergebenen
+    /// `context` gehört — `nil` (nichts zu prüfen) sowie ein noch KEINEM
+    /// Context zugeordnetes, frisch für einen Insert konstruiertes Objekt
+    /// (`objekt.modelContext == nil`, z.B. `Artikel(...)` unmittelbar vor
+    /// `context.insert(...)`) gelten beide als unbedenklich — abgelehnt wird
+    /// ausschließlich ein Objekt, das bereits einem ANDEREN, nicht-`nil`
+    /// Context zugeordnet ist.
+    ///
+    /// **Hintergrund (Live-Fund `EinkaufenView`, Build 308,
+    /// `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 61):** Nach einem
+    /// Live-Ersetzen (``ModelContainerController``) wechselt der per
+    /// `@Environment(\.modelContext)` injizierte Context einer bestehenden
+    /// View-Instanz laut Apple DTS automatisch mit dem neuen
+    /// `ModelContainer` — noch bevor `.id(generation)` deren `@State`
+    /// zurücksetzt. In diesem kurzen Fenster zeigt ein `@State`-gehaltenes
+    /// `@Model`-Objekt (z.B. eine ausgewählte Liste/ein ausgewähltes
+    /// Geschäft) noch auf den VERLASSENEN Store, während `modelContext`
+    /// bereits den neuen referenziert. Ein Insert/Mutate, das ein solches
+    /// veraltetes Objekt mit dem neuen Context vermischt (z.B. als
+    /// Relationship eines neu eingefügten Objekts, oder durch direktes
+    /// Mutieren gefolgt von `context.save()`), wirft beim Speichern eine
+    /// store-übergreifende CoreData-Exception — als Objective-C-Exception
+    /// NICHT per `do/catch` abfangbar, der Prozess stürzt ab.
+    ///
+    /// **Verwendung:** vor jedem `performMicroLease`-Aufruf (oder
+    /// direktem `context.insert`/`.save()`), dessen `mutate`-Closure ein
+    /// `@State`-gehaltenes `@Model`-Objekt referenziert, per `guard`
+    /// prüfen. Schlägt die Prüfung fehl, die Aktion kommentarlos
+    /// überspringen — der nächste reguläre Trigger (spätestens der
+    /// `.id(generation)`-Neuaufbau selbst) arbeitet dann mit frischen,
+    /// zum aktuellen Context passenden Objekten weiter.
+    @MainActor
+    static func gehoertZuAktuellemContext<T: PersistentModel>(_ objekt: T?, context: ModelContext) -> Bool {
+        guard let objekt, let objektContext = objekt.modelContext else { return true }
+        return objektContext == context
+    }
+
     // MARK: - Micro-Lease
 
     /// Führt `mutate` und ein anschließendes explizites `context.save()` geschützt

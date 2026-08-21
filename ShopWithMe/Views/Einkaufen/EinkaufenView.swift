@@ -554,29 +554,22 @@ struct EinkaufenView: View {
     /// angezeigt wird. Diskrete Einzelaktion → Micro-Lease (siehe
     /// `docs/DATABASE_CONCURRENCY.md` → „Vollständiger Schreibvorgang-Katalog“).
     ///
-    /// **Live-Fund (nach Einführung von ``ModelContainerController``):** Ein
-    /// Live-Ersetzen tauscht `modelContext` für eine bestehende `EinkaufenView`-
-    /// Instanz automatisch aus (von SwiftUI/SwiftData so vorgesehen — der
-    /// injizierte Context wechselt mit dem `ModelContainer`), OHNE dass
-    /// `@State`-gehaltene Modellobjekte wie ``ausgewaehlteListe``/
-    /// ``ausgewaehltesGeschaeft`` automatisch mitziehen — die zeigen bis zum
-    /// vollständigen `.id(generation)`-Neuaufbau weiter auf den VERLASSENEN
-    /// Store. Ein `.onChange(of: offeneEinkaufsvorgaenge.count)`-Trigger
-    /// (reagiert bereits auf den NEUEN Context) kann in genau diesem kurzen
-    /// Fenster einen `Einkaufsvorgang` anlegen, dessen Relationships auf
-    /// Objekte des ALTEN Stores zeigen, während er selbst in den NEUEN
-    /// Context eingefügt wird — SwiftData/CoreData wirft dafür beim `save()`
-    /// eine nicht abfangbare Objective-C-Exception (Prozessabsturz, nicht per
-    /// `do/catch` behandelbar). Guard unten bricht in diesem Fall
-    /// stattdessen sauber ab; der nächste reguläre Trigger (spätestens der
+    /// **Live-Fund (Build 308, siehe ``DatabaseLeaseService/gehoertZuAktuellemContext(_:context:)``
+    /// für die vollständige Herleitung):** Ein Live-Ersetzen tauscht
+    /// `modelContext` für eine bestehende `EinkaufenView`-Instanz automatisch
+    /// aus, OHNE dass `@State`-gehaltene Modellobjekte wie
+    /// ``ausgewaehlteListe``/``ausgewaehltesGeschaeft`` automatisch mitziehen.
+    /// Guard unten bricht in diesem Fall sauber ab, statt einen `Einkaufsvorgang`
+    /// mit store-übergreifenden Relationships anzulegen (Prozessabsturz beim
+    /// `save()`); der nächste reguläre Trigger (spätestens der
     /// `.id(generation)`-Neuaufbau selbst, der ``listeSicherstellen()`` erneut
     /// über `.onAppear` anstößt) wählt dann frische, zum aktuellen Context
     /// passende Objekte.
     private func einkaufSicherstellen() async {
         guard let ausgewaehlteListe, aktuellerEinkauf == nil else { return }
         guard !einkaufSicherstellenLaeuft else { return }
-        guard ausgewaehlteListe.modelContext == modelContext,
-              ausgewaehltesGeschaeft == nil || ausgewaehltesGeschaeft?.modelContext == modelContext
+        guard DatabaseLeaseService.gehoertZuAktuellemContext(ausgewaehlteListe, context: modelContext),
+              DatabaseLeaseService.gehoertZuAktuellemContext(ausgewaehltesGeschaeft, context: modelContext)
         else { return }
         einkaufSicherstellenLaeuft = true
         defer { einkaufSicherstellenLaeuft = false }

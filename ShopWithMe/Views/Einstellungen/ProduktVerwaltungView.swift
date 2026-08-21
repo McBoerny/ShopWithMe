@@ -160,6 +160,10 @@ private struct NeuesProduktSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Sichern") {
                         guard let artikel = gewaehlterArtikel else { return }
+                        // Live-Fund EinkaufenView (Build 308, `DatabaseLeaseService/gehoertZuAktuellemContext(_:context:)`):
+                        // ein zwischenzeitliches Live-Ersetzen kann `artikel`
+                        // (@State) vom aktuellen `modelContext` entkoppeln.
+                        guard DatabaseLeaseService.gehoertZuAktuellemContext(artikel, context: modelContext) else { return }
                         let name = produktName.trimmingCharacters(in: .whitespacesAndNewlines)
                         let neuesProdukt = Produkt(name: name, artikel: artikel)
                         Task {

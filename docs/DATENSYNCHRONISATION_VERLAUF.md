@@ -3973,14 +3973,46 @@ Context, der das Objekt aktuell verwaltet; weicht er vom aktuellen
 Der nächste reguläre Trigger (spätestens der `.id(generation)`-Neuaufbau
 selbst) wählt dann frische, zum aktuellen Context passende Objekte.
 
-**Offener, systemischer Rest-Risiko:** Dasselbe Grundmuster (`@State`-
-gehaltene `@Model`-Referenz + `DatabaseLeaseService.performMicroLease`/
-`modelContext.insert`) kommt in mindestens acht weiteren Views vor
-(`ProduktVerwaltungView`, `ArtikelEditView`, `ArtikelListView`,
-`GeschaeftListView`, `PreispunktZuordnenSheet`, `MilkForUsImportView`,
-`ArtikelHinzufuegenView`, `BelegScanView`) — jede davon ist theoretisch
-demselben Absturzmuster ausgesetzt, sofern ein Live-Ersetzen exakt während
-einer offenen Interaktion dort passiert. Nicht einzeln durchaudited/gefixt
-(nur der tatsächlich per Crash-Log bestätigte Fund in `EinkaufenView`) — ein
-vollständiger Audit/Fix aller Fundstellen ist ein separater, bewusst noch
-nicht beauftragter Arbeitsschritt.
+**Nachtrag — Audit der übrigen acht Verdachtsstellen (noch Build 308):**
+Dasselbe Grundmuster (`@State`-gehaltene `@Model`-Referenz +
+`DatabaseLeaseService.performMicroLease`/`modelContext.insert`) kam in
+mindestens acht weiteren Views vor. Auf Nutzeranfrage systematisch geprüft:
+
+- **Bereits sicher, unverändert:** `PreispunktZuordnenSheet`,
+  `ArtikelHinzufuegenView`, der Haupt-Übernahme-Pfad in `BelegScanView`
+  (`uebernehmen()`) sowie das Löschen in `ArtikelListView`/`GeschaeftListView`
+  — alle nutzen bereits `ModelReference`/`resolved(in:)` (siehe
+  `ShopWithMe/Models/ModelReference.swift`, ursprünglich gegen eine ANDERE
+  Race eingeführt: ein nebenläufiger Sync-Zyklus kann ein Objekt zwischen
+  Lease-Erwerb und Verwendung löschen). Da `resolved(in:)` das Objekt
+  IMMER frisch aus dem übergebenen `context` neu lädt statt eine alte
+  Referenz weiterzureichen, schließt derselbe Mechanismus zufällig auch das
+  Live-Ersetzen-Problem aus — kein zusätzlicher Fix nötig.
+- **Neuer Guard ergänzt** (`DatabaseLeaseService.gehoertZuAktuellemContext(_:context:)`,
+  neu eingeführter zentraler Helfer statt Duplikat-Prüfungen je Aufrufer):
+  `ProduktVerwaltungView` (`NeuesProduktSheet`), `ArtikelEditView`/
+  `ProduktEditView` (jeweils `istNeu`-Insert-Zweig), `GeschaeftStammdatenEditView`
+  (`istNeu`-Insert-Zweig, per Sheet aus `GeschaeftListView` erreichbar),
+  `MilkForUsImportView` (`uebernehmen()`), `BelegScanView`
+  (`artikelDauerhaftIgnorieren(_:)`, ein zweiter, per `IgnorierterArtikel`
+  isolierter Insert-Pfad neben dem bereits sicheren Haupt-Übernahme-Pfad).
+  Der Helfer behandelt sowohl `nil` als auch ein noch KEINEM Context
+  zugeordnetes, frisch für einen Insert konstruiertes Objekt
+  (`objekt.modelContext == nil`) als unbedenklich — abgelehnt wird
+  ausschließlich ein Objekt, das bereits einem ANDEREN, nicht-`nil` Context
+  zugeordnet ist.
+- **`ArtikelListView`:** kein eigener Fix nötig — Neuanlage läuft über das
+  bereits abgesicherte `ArtikelEditView`.
+
+**Weiterhin bewusst NICHT geschlossen (Restrisiko, out of scope für diesen
+Durchgang):** Der neue Guard prüft nur die TOP-LEVEL-Objektreferenz selbst,
+nicht rekursiv deren Relationships. Beispiel `GeschaeftStammdatenEditView`:
+ein frisch konstruiertes, noch nicht eingefügtes `Geschaeft` hat
+`modelContext == nil` (besteht den Guard), kann aber bereits eine
+Relationship auf ein VORHER (z.B. beim Öffnen des „+"-Buttons in
+`GeschaeftListView`) über `GeschaeftTyp.mitNamen(context:)` geladenes, seither
+potenziell veraltetes `GeschaeftTyp`-Objekt enthalten. Dieses schmalere
+Zeitfenster (Sekunden bis der Nutzer ein Formular ausfüllt, statt der
+Millisekunden-Lease-Erwerbsverzögerung beim ursprünglichen `EinkaufenView`-
+Fund) wurde als unverhältnismäßig für eine vollständige rekursive
+Relationship-Validierung eingeschätzt und bewusst nicht adressiert.

@@ -142,6 +142,8 @@ struct ProduktEditView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Sichern") {
                         if istNeu {
+                            // Live-Fund EinkaufenView (Build 308, `DatabaseLeaseService/gehoertZuAktuellemContext(_:context:)`).
+                            guard DatabaseLeaseService.gehoertZuAktuellemContext(produkt, context: modelContext) else { return }
                             Task {
                                 await DatabaseLeaseService.performMicroLease(context: modelContext) {
                                     modelContext.insert(produkt)

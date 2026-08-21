@@ -100,6 +100,8 @@ struct MilkForUsImportView: View {
 
     private func uebernehmen() {
         guard let gruppen, let zielListe else { return }
+        // Live-Fund EinkaufenView (Build 308, `DatabaseLeaseService/gehoertZuAktuellemContext(_:context:)`).
+        guard DatabaseLeaseService.gehoertZuAktuellemContext(zielListe, context: modelContext) else { return }
         Task {
             await MilkForUsImportService.uebernehmen(gruppen: gruppen, in: zielListe, context: modelContext)
             dismiss()

@@ -176,6 +176,8 @@ struct GeschaeftStammdatenEditView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Sichern") {
                         if istNeu {
+                            // Live-Fund EinkaufenView (Build 308, `DatabaseLeaseService/gehoertZuAktuellemContext(_:context:)`).
+                            guard DatabaseLeaseService.gehoertZuAktuellemContext(geschaeft, context: modelContext) else { return }
                             Task {
                                 await DatabaseLeaseService.performMicroLease(context: modelContext) {
                                     modelContext.insert(geschaeft)
