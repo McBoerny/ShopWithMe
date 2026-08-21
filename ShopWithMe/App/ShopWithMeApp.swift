@@ -8,7 +8,7 @@ import SwiftData
 /// — und sät beim ersten Start die Standardkategorien via ``SeedData``.
 @main
 struct ShopWithMeApp: App {
-    let modelContainer: ModelContainer
+    @StateObject private var modelContainerController: ModelContainerController
     @StateObject private var syncPollingService = SyncPollingService()
     @StateObject private var multipeerSyncService = MultipeerSyncService()
     @Environment(\.scenePhase) private var scenePhase
@@ -20,23 +20,31 @@ struct ShopWithMeApp: App {
         // SwiftData nicht, und der persistente Store oeffnet auf dem Mac nicht zuverlaessig.
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
             do {
-                modelContainer = try ModelContainer(for: schema, configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+                let container = try ModelContainer(for: schema, configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+                _modelContainerController = StateObject(wrappedValue: ModelContainerController(modelContainer: container))
             } catch {
                 fatalError("In-Memory-ModelContainer konnte nicht erstellt werden: \(error)")
             }
             return
         }
 
-        let konfiguration = ModelConfiguration(schema: schema)
+        // Räumt Store-Dateien vergangener Live-Ersetzen-Vorgänge (siehe
+        // ``ModelContainerController``) auf — muss ganz am Anfang eines
+        // frischen Prozesses passieren, bevor irgendein ``ModelContainer``
+        // existiert (per Definition der einzige Zeitpunkt, an dem garantiert
+        // keine dieser Dateien noch offen ist).
+        ModelContainerController.raeumeVerwaisteStoreDateienAuf()
 
-        // Muss VOR dem Öffnen des Containers passieren (siehe
-        // ``SyncErsetzenService``): ein bereits laufender ModelContainer für
-        // dieselbe Datei lässt sich nicht sicher zur Laufzeit physisch
-        // ersetzen — ein erster Versuch dazu führte auf einem echten Gerät zu
-        // einem SQLite-I/O-Fehler und Absturz, weil `SyncPollingService`s
-        // Hintergrund-Timer trotz `stoppen()` noch nebenläufig lief (siehe
-        // `docs/DATABASE_CONCURRENCY.md`). Deshalb erst hier, ganz am Anfang
-        // eines frischen Prozesses, an dem garantiert noch nichts geöffnet ist.
+        let konfiguration = ModelConfiguration(schema: schema, url: ModelContainerController.aktuelleStoreURL())
+
+        // Fallback für den Fall, dass der Store selbst beim Start bereits
+        // unlesbar ist (GitHub #119, ``SyncErsetzenService/loescheUnlesbarenStoreUndPlaneWiederherstellung(url:)``)
+        // — dort existiert per Definition noch kein offener Container, ein
+        // Live-Tausch (``ModelContainerController/ersetzeLiveMitNeuemStore(befuellen:)``)
+        // ist nicht anwendbar. Der reguläre Ersetzen-/Wiederherstellen-Weg
+        // aus der laufenden App heraus läuft seit dem zweiten Live-Anlauf
+        // dagegen nicht mehr über diesen Neustart-Mechanismus (siehe
+        // ``SyncErsetzenService``).
         //
         // GitHub #119: Steht bereits eine Wiederherstellung aus (der Store
         // wurde also in einer vorherigen Sitzung verworfen, siehe
@@ -54,8 +62,9 @@ struct ShopWithMeApp: App {
         SyncErsetzenService.loescheStoreDateiFallsAusstehend(url: konfiguration.url)
 
         DatabaseDebugLogger.log(.storeOpenStart, details: konfiguration.url.path)
+        let container: ModelContainer
         do {
-            modelContainer = try Self.oeffneContainer(
+            container = try Self.oeffneContainer(
                 schema: schema, konfiguration: konfiguration, mitMigrationsplan: !wiederherstellungAusstehend
             )
         } catch {
@@ -66,8 +75,9 @@ struct ShopWithMeApp: App {
             fatalError("ModelContainer konnte nicht erstellt werden: \(error)")
         }
         DatabaseDebugLogger.log(.storeOpenSuccess, details: konfiguration.url.path)
+        _modelContainerController = StateObject(wrappedValue: ModelContainerController(modelContainer: container))
 
-        let context = modelContainer.mainContext
+        let context = container.mainContext
         // Autosave aus: alle Schreibzugriffe laufen ab jetzt über explizite,
         // Lease-geschützte `save()`-Aufrufe (siehe `docs/DATABASE_CONCURRENCY.md` →
         // „Voraussetzung: explizite Speicherpunkte statt implizitem Autosave“).
@@ -137,25 +147,35 @@ struct ShopWithMeApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                .id(modelContainerController.generation)
                 .environmentObject(syncPollingService)
                 .environmentObject(multipeerSyncService)
-                .task {
+                // `.task(id:)` statt `.task {}` — ein `.task` ohne explizite
+                // `id:` ist nicht zuverlässig an die Identität eines vorher in
+                // derselben Kette angewandten `.id(_:)` gebunden. Nach einem
+                // Live-Ersetzen (``ModelContainerController``) liefen sonst
+                // `syncPollingService`/`multipeerSyncService` still am
+                // verlassenen alten Context weiter (Live-Fund, dank
+                // ``ModelContainerController/vergangeneContainer`` ohne
+                // sofortigen Absturz, aber falsch), bis ein zufälliger
+                // `scenePhase`-Wechsel sie neu verdrahtete.
+                .task(id: modelContainerController.generation) {
                     // Nach einem Neustart wegen ``SyncErsetzenService`` steht
                     // hier ein frisch geöffneter, gerade eben (siehe `init()`)
                     // physisch geleerter Store — jetzt aus Peer-Snapshot oder
                     // lokalem Backup befüllen, bevor das normale Polling
                     // beginnt. Ohne Wirkung, falls nichts aussteht.
-                    await SyncErsetzenService.fuehreAusstehendeAktionAus(context: modelContainer.mainContext)
-                    syncPollingService.starten(context: modelContainer.mainContext)
-                    multipeerSyncService.starten(context: modelContainer.mainContext)
+                    await SyncErsetzenService.fuehreAusstehendeAktionAus(context: modelContainerController.modelContainer.mainContext)
+                    syncPollingService.starten(context: modelContainerController.modelContainer.mainContext)
+                    multipeerSyncService.starten(context: modelContainerController.modelContainer.mainContext)
                 }
         }
-        .modelContainer(modelContainer)
+        .modelContainer(modelContainerController.modelContainer)
         .onChange(of: scenePhase) { _, neuePhase in
             switch neuePhase {
             case .active:
-                syncPollingService.starten(context: modelContainer.mainContext)
-                multipeerSyncService.starten(context: modelContainer.mainContext)
+                syncPollingService.starten(context: modelContainerController.modelContainer.mainContext)
+                multipeerSyncService.starten(context: modelContainerController.modelContainer.mainContext)
             default:
                 syncPollingService.stoppen()
                 multipeerSyncService.stoppen()

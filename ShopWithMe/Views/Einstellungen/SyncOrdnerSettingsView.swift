@@ -28,6 +28,10 @@ struct SyncOrdnerSettingsView: View {
     /// übersteht dadurch auch ein Verlassen/erneutes Öffnen dieser View, ohne
     /// dass zwischenzeitlich neu gestartet wurde. Siehe ``planeUndZeigeNeustartHinweis(_:)``.
     @State private var neustartAusstehend = SyncErsetzenService.ausstehendeAktion != nil
+    /// `true` während ein Live-Austausch (``ModelContainerController/ersetzeLiveMitNeuemStore(befuellen:)``)
+    /// läuft — deaktiviert dieselben Bedienelemente wie ``neustartAusstehend``,
+    /// aber nur für die kurze Dauer des Austauschs selbst, kein Neustart nötig.
+    @State private var wirdErsetzt = false
     @State private var wirdSynchronisiert = false
     @State private var letzterSyncErfolgreich = false
     /// GitHub #92 (experimentell): kurz einen Dokumenten-Picker auf den
@@ -81,17 +85,26 @@ struct SyncOrdnerSettingsView: View {
                         .foregroundStyle(.orange)
                 }
             }
+            if wirdErsetzt {
+                Section {
+                    Label {
+                        Text("Datenbestand wird ersetzt…")
+                    } icon: {
+                        ProgressView()
+                    }
+                }
+            }
 
             Section {
                 Button("Ordner wählen…") {
                     zeigeOrdnerauswahl = true
                 }
-                .disabled(neustartAusstehend)
+                .disabled(neustartAusstehend || wirdErsetzt)
                 if ausgewaehlterOrdner != nil {
                     Button("Synchronisierung deaktivieren", role: .destructive) {
                         deaktivierenGetappt()
                     }
-                    .disabled(neustartAusstehend)
+                    .disabled(neustartAusstehend || wirdErsetzt)
                 }
             } footer: {
                 Text("Ein geteilter Ordner (z.B. iCloud Drive oder Synology Drive), über den mehrere Geräte ihre Einkaufslisten-Änderungen austauschen. Die lokale Datenbank bleibt dabei unverändert am Standardort.")
@@ -122,6 +135,7 @@ struct SyncOrdnerSettingsView: View {
                     Button("Backup wiederherstellen", role: .destructive) {
                         zeigeBackupWiederherstellenBestaetigung = true
                     }
+                    .disabled(wirdErsetzt)
                 } header: {
                     Text("Lokales Backup")
                 } footer: {
@@ -186,7 +200,7 @@ struct SyncOrdnerSettingsView: View {
                 ausgewaehlterOrdner = nil
             }
         } message: {
-            Text("In diesem Ordner sind bereits Daten anderer Geräte vorhanden. „Ersetzen“ sichert deine lokalen Daten (wiederherstellbar bei Austritt) und übernimmt danach ausschließlich den Stand der anderen Geräte — dafür muss die App danach einmal neu gestartet werden.")
+            Text("In diesem Ordner sind bereits Daten anderer Geräte vorhanden. „Ersetzen“ sichert deine lokalen Daten (wiederherstellbar bei Austritt) und übernimmt danach ausschließlich den Stand der anderen Geräte.")
         }
         .confirmationDialog("Synchronisierung deaktivieren", isPresented: $zeigeAustrittsWahl) {
             Button("Vorherigen Stand wiederherstellen") {
@@ -198,7 +212,7 @@ struct SyncOrdnerSettingsView: View {
             }
             Button("Abbrechen", role: .cancel) {}
         } message: {
-            Text("Es ist ein lokales Backup von vor dem letzten Beitritt/Ersetzen vorhanden. Möchtest du deinen damaligen Stand wiederherstellen? Dafür muss die App danach einmal neu gestartet werden.")
+            Text("Es ist ein lokales Backup von vor dem letzten Beitritt/Ersetzen vorhanden. Möchtest du deinen damaligen Stand wiederherstellen?")
         }
         .confirmationDialog("Backup wiederherstellen", isPresented: $zeigeBackupWiederherstellenBestaetigung) {
             Button("Wiederherstellen", role: .destructive) {
@@ -206,7 +220,7 @@ struct SyncOrdnerSettingsView: View {
             }
             Button("Abbrechen", role: .cancel) {}
         } message: {
-            Text("Der aktuelle Datenbestand wird durch das lokale Backup ersetzt. Dafür muss die App danach einmal neu gestartet werden.")
+            Text("Der aktuelle Datenbestand wird durch das lokale Backup ersetzt.")
         }
         .alert("Neustart nötig", isPresented: $zeigeNeustartHinweis) {
             Button("OK") {}
@@ -321,11 +335,40 @@ struct SyncOrdnerSettingsView: View {
         }
     }
 
-    /// Sichert den aktuellen Stand und merkt „Ersetzen" nur für den nächsten
-    /// App-Start vor (siehe Typ-Doku von ``SyncErsetzenService``, warum ein
-    /// sofortiger Austausch zur Laufzeit auf einem echten Gerät abstürzte) —
-    /// verändert selbst noch nichts am Datenbestand.
+    /// Ersetzt den lokalen Datenbestand SOFORT durch den Stand des Peers —
+    /// kein Neustart mehr nötig (zweiter Live-Anlauf, siehe
+    /// ``ModelContainerController``). Stoppt den Hintergrund-Sync (Polling-
+    /// Loop inkl. iCloud-Beobachter sowie Multipeer-Kanal) VOR dem Austausch,
+    /// damit kein Zyklus mehr mit dem gleich verlassenen Context arbeitet —
+    /// `.task(id:)` in `ShopWithMeApp` startet ihn nach dem Umhängen auf dem
+    /// neuen Context automatisch neu.
+    ///
+    /// Fällt auf den alten Neustart-Mechanismus zurück, falls
+    /// ``ModelContainerController/aktuell`` `nil` ist (sollte im laufenden
+    /// Betrieb nicht vorkommen — nur zur Absicherung, z.B. exotische
+    /// Test-Konfigurationen ohne echten `ModelContainerController`).
     private func ersetzenGetappt() {
+        guard let controller = ModelContainerController.aktuell else {
+            planeErsetzenDurchPeerFallback()
+            return
+        }
+        syncPollingService.stoppen()
+        multipeerSyncService.stoppen()
+        wirdErsetzt = true
+        Task {
+            do {
+                try await SyncErsetzenService.fuehreErsetzenDurchPeerLive(controller: controller)
+            } catch {
+                fehlermeldung = error.localizedDescription
+            }
+            wirdErsetzt = false
+        }
+    }
+
+    /// Fallback: sichert den aktuellen Stand und merkt „Ersetzen" nur für den
+    /// nächsten App-Start vor — nur falls kein ``ModelContainerController``
+    /// verfügbar ist, siehe ``ersetzenGetappt()``.
+    private func planeErsetzenDurchPeerFallback() {
         do {
             try SyncErsetzenService.planeErsetzenDurchPeer(context: modelContext)
             neustartAusstehendMachen()
@@ -334,22 +377,6 @@ struct SyncOrdnerSettingsView: View {
         }
     }
 
-    /// Stoppt den Hintergrund-Sync (Polling-Loop inkl. iCloud-Beobachter
-    /// sowie den Multipeer-Kanal) SOFORT, sobald eine Ersetzen-/
-    /// Wiederherstellen-Aktion vorgemerkt ist — nicht erst beim Neustart.
-    ///
-    /// **Warum nötig, obwohl der eigentliche Datenaustausch ohnehin erst beim
-    /// nächsten Prozessstart passiert** (siehe Typ-Doku ``SyncErsetzenService``):
-    /// der neue Sync-Ordner-Pfad selbst (`UserDefaults`-Bookmark) ist schon
-    /// beim Verknüpfen aktiv, während der In-Memory-Datenbestand
-    /// (``ModelContainer``) bis zum Neustart unverändert der ALTE bleibt.
-    /// Ohne diesen Stopp würde ``SyncPollingService`` in dieser Lücke
-    /// weiterhin periodisch (5s/60s) und reaktiv (``SyncICloudAenderungsBeobachter``)
-    /// den neuen Ordner mit dem alten, gleich zu verwerfenden Bestand
-    /// bedienen — je länger der Neustart auf sich warten lässt, desto mehr
-    /// Zyklen laufen unnötig. Die drei UI-Buttons unten (``zeigeOrdnerauswahl``-
-    /// Formular) werden zusätzlich deaktiviert, damit auch ein manuelles
-    /// „Jetzt synchronisieren" in der Zwischenzeit nicht mehr möglich ist.
     private func neustartAusstehendMachen() {
         syncPollingService.stoppen()
         multipeerSyncService.stoppen()
@@ -367,13 +394,29 @@ struct SyncOrdnerSettingsView: View {
     }
 
     private func wiederherstellenUndDeaktivieren() {
-        do {
-            try SyncErsetzenService.planeWiederherstellenAusBackup()
-            SyncOrdnerService.ordnerEntfernen()
-            ausgewaehlterOrdner = nil
-            neustartAusstehendMachen()
-        } catch {
-            fehlermeldung = error.localizedDescription
+        guard let controller = ModelContainerController.aktuell else {
+            do {
+                try SyncErsetzenService.planeWiederherstellenAusBackup()
+                SyncOrdnerService.ordnerEntfernen()
+                ausgewaehlterOrdner = nil
+                neustartAusstehendMachen()
+            } catch {
+                fehlermeldung = error.localizedDescription
+            }
+            return
+        }
+        SyncOrdnerService.ordnerEntfernen()
+        ausgewaehlterOrdner = nil
+        syncPollingService.stoppen()
+        multipeerSyncService.stoppen()
+        wirdErsetzt = true
+        Task {
+            do {
+                try await SyncErsetzenService.fuehreWiederherstellenAusBackupLive(controller: controller)
+            } catch {
+                fehlermeldung = error.localizedDescription
+            }
+            wirdErsetzt = false
         }
     }
 
@@ -381,11 +424,25 @@ struct SyncOrdnerSettingsView: View {
     /// — z.B. für die Korruptions-Recovery-Verwendung von ``SyncErsetzenService``,
     /// bei der der Sync-Ordner weiterhin verknüpft bleiben soll.
     private func backupWiederherstellenGetappt() {
-        do {
-            try SyncErsetzenService.planeWiederherstellenAusBackup()
-            neustartAusstehendMachen()
-        } catch {
-            fehlermeldung = error.localizedDescription
+        guard let controller = ModelContainerController.aktuell else {
+            do {
+                try SyncErsetzenService.planeWiederherstellenAusBackup()
+                neustartAusstehendMachen()
+            } catch {
+                fehlermeldung = error.localizedDescription
+            }
+            return
+        }
+        syncPollingService.stoppen()
+        multipeerSyncService.stoppen()
+        wirdErsetzt = true
+        Task {
+            do {
+                try await SyncErsetzenService.fuehreWiederherstellenAusBackupLive(controller: controller)
+            } catch {
+                fehlermeldung = error.localizedDescription
+            }
+            wirdErsetzt = false
         }
     }
 }

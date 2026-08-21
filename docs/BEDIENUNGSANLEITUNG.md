@@ -304,9 +304,9 @@ werden ausgetauscht.
   Verknüpfen nach Bestätigung für „Ersetzen": dein bisheriger lokaler Bestand
   wird zuerst lokal gesichert (wiederherstellbar über „Backup
   wiederherstellen", solange die Synchronisierung aktiv bleibt) und danach
-  vollständig durch den Stand der anderen Geräte ersetzt — dafür muss die App
-  einmal neu gestartet werden. „Abbrechen" verwirft die Ordnerauswahl wieder,
-  ohne etwas zu ändern.
+  sofort — ohne App-Neustart — vollständig durch den Stand der anderen Geräte
+  ersetzt. „Abbrechen" verwirft die Ordnerauswahl wieder, ohne etwas zu
+  ändern.
 - **Läuft automatisch,** solange die App im Vordergrund ist — kein manueller
   Sync-Tap nötig. Für den seltenen Fall, dass du sofort statt in ein paar
   Sekunden abgleichen möchtest, gibt es zwei gleichwertige manuelle Auslöser:
@@ -318,14 +318,13 @@ werden ausgetauscht.
   Versuch, den Systemabgleich zusätzlich anzustoßen, keine Fehlfunktion.
 - **Nur im Vordergrund:** Bei gesperrtem Gerät oder geschlossener App pausiert
   der automatische Abgleich — er läuft beim nächsten Öffnen sofort weiter.
-- **„Neustart steht noch aus":** Nach Aktionen, die einen kompletten
-  Neuaufbau des Datenbestands vormerken (z.B. „Ersetzen" beim Verknüpfen
-  eines bereits von anderen Geräten genutzten Ordners, Wiederherstellen aus
-  einem Backup), pausiert die Synchronisierung automatisch bis zum
-  angeforderten Neustart — „Ordner wählen…", „Synchronisierung
-  deaktivieren" und „Jetzt synchronisieren" sind währenddessen ausgeblendet
-  bzw. deaktiviert, ein Hinweis-Banner erinnert an den ausstehenden
-  Neustart.
+- **„Datenbestand wird ersetzt…":** Während eine Aktion, die einen
+  kompletten Neuaufbau des Datenbestands auslöst (z.B. „Ersetzen" beim
+  Verknüpfen eines bereits von anderen Geräten genutzten Ordners,
+  Wiederherstellen aus einem Backup), gerade läuft, sind „Ordner wählen…",
+  „Synchronisierung deaktivieren" und „Backup wiederherstellen" kurz
+  deaktiviert und ein Fortschritts-Hinweis erscheint — kein Neustart nötig,
+  der Austausch ist normalerweise binnen weniger Sekunden abgeschlossen.
 - **Schnellerer Abgleich in der Nähe:** Öffnest du gemeinsam mit einer anderen
   Person, die dieselbe Liste eingerichtet hat, gleichzeitig den
   Einkaufen-Bildschirm, tauscht die App Häkchen/neue Artikel zusätzlich direkt

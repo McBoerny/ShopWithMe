@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.16 (Build 306) — Sync „Ersetzen"/„Wiederherstellen" läuft jetzt live, ohne App-Neustart
+## v0.16 (Build 308) — Sync „Ersetzen"/„Wiederherstellen" läuft jetzt live, ohne App-Neustart
 
 Zweiter Anlauf (der erste, Build 138/139, stürzte auf einem echten Gerät ab —
 siehe `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 50): neuer
@@ -15,6 +15,16 @@ sowie den automatischen Voll-Abgleich nach 30 Tagen Inaktivität
 (`RootView.vollAbgleichAusloesen`) — alle vier liefen bisher über den
 Neustart-Mechanismus aus `SyncErsetzenService`, der als Fallback (GitHub #119:
 unlesbarer Store beim Boot) unverändert bestehen bleibt.
+
+## v0.16 (Build 307) — Tombstone bei artikelAbwaehlen/-dauerhaftEntfernen verhindert Phantom-Käufe
+
+`KaufEintrag` wurde beim Rückgängig-Machen eines Abhakens gelöscht, ohne
+einen `SyncTombstone` anzulegen. Lief bei einem Peer der periodische
+Bereich-C-Export zufällig in dem kurzen Fenster vor der Rücknahme, holte ein
+anderes Gerät den längst zurückgenommenen Kauf per Union-by-ID-Merge
+dauerhaft zurück — der Artikel erschien gleichzeitig als gekauft und
+weiterhin offen auf der Liste (GitHub #126, Live-Vorfall mit 3 Geräten per
+Multipeer-Sync).
 
 ## v0.16 (Build 305) — Sync-Aufräumen: Catch-all für verwaiste `kaeufe/`-Dateien
 

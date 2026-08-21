@@ -457,7 +457,7 @@ private struct DatenintegritaetSection: View {
             }
             Button("Abbrechen", role: .cancel) {}
         } message: {
-            Text("Sichert den aktuellen Bestand lokal und merkt den Neuaufbau aus einem erreichbaren Sync-Gerät für den nächsten App-Start vor — dafür muss die App danach einmal neu gestartet werden. Nicht rückgängig zu machen, außer über die Wiederherstellung bei „Synchronisierung deaktivieren“.")
+            Text("Sichert den aktuellen Bestand lokal und baut ihn sofort aus einem erreichbaren Sync-Gerät neu auf. Nicht rückgängig zu machen, außer über die Wiederherstellung bei „Synchronisierung deaktivieren“.")
         }
         .confirmationDialog("Baumelnde Referenzen bereinigen", isPresented: $zeigeBereinigungBestaetigung, titleVisibility: .visible) {
             Button("Bereinigen und neu aufbauen", role: .destructive) {
@@ -465,7 +465,7 @@ private struct DatenintegritaetSection: View {
             }
             Button("Abbrechen", role: .cancel) {}
         } message: {
-            Text("Erstellt jetzt einen frischen Snapshot des eigenen Bestands und baut die Datenbank ausschließlich daraus neu auf — dafür muss die App danach einmal neu gestartet werden. Funktioniert ohne Sync-Gerät. Alle gültigen Daten bleiben erhalten, nur baumelnde Bezüge (siehe Bericht oben) werden dabei automatisch aufgelöst statt übernommen.")
+            Text("Erstellt jetzt einen frischen Snapshot des eigenen Bestands und baut die Datenbank sofort ausschließlich daraus neu auf. Funktioniert ohne Sync-Gerät. Alle gültigen Daten bleiben erhalten, nur baumelnde Bezüge (siehe Bericht oben) werden dabei automatisch aufgelöst statt übernommen.")
         }
         .alert("Neustart nötig", isPresented: $zeigeNeustartHinweis) {
             Button("OK") {}
@@ -474,39 +474,62 @@ private struct DatenintegritaetSection: View {
         }
     }
 
-    /// Merkt den Neuaufbau nur für den nächsten App-Start vor (siehe Typ-Doku
-    /// von ``SyncErsetzenService``, warum ein sofortiger Austausch zur
-    /// Laufzeit auf einem echten Gerät abstürzte) — verändert selbst noch
-    /// nichts am Datenbestand.
+    /// Baut den Bestand SOFORT aus einem erreichbaren Sync-Gerät neu auf —
+    /// kein Neustart mehr nötig (siehe ``ModelContainerController``). Fällt
+    /// auf den alten Neustart-Mechanismus zurück, falls kein
+    /// ``ModelContainerController`` verfügbar ist.
     private func zuruecksetzen() {
         resetFehlermeldung = nil
-        do {
-            try SyncErsetzenService.planeErsetzenDurchPeer(context: modelContext)
-            neustartAusstehendMachen()
-        } catch {
-            resetFehlermeldung = error.localizedDescription
+        guard let controller = ModelContainerController.aktuell else {
+            do {
+                try SyncErsetzenService.planeErsetzenDurchPeer(context: modelContext)
+                neustartAusstehendMachen()
+            } catch {
+                resetFehlermeldung = error.localizedDescription
+            }
+            return
+        }
+        syncPollingService.stoppen()
+        multipeerSyncService.stoppen()
+        Task {
+            do {
+                try await SyncErsetzenService.fuehreErsetzenDurchPeerLive(controller: controller)
+            } catch {
+                resetFehlermeldung = error.localizedDescription
+            }
         }
     }
 
-    /// Stoppt den Hintergrund-Sync sofort statt erst beim Neustart — siehe
-    /// ``SyncOrdnerSettingsView/neustartAusstehendMachen()`` für die
-    /// ausführliche Begründung (gleiche Race Condition, gleicher Mechanismus).
+    /// Fallback-Neustart-Hinweis, nur falls kein ``ModelContainerController``
+    /// verfügbar ist — siehe ``zuruecksetzen()``/``bereinigen()``.
     private func neustartAusstehendMachen() {
         syncPollingService.stoppen()
         multipeerSyncService.stoppen()
         zeigeNeustartHinweis = true
     }
 
-    /// Merkt den Neuaufbau aus einem JETZT erstellten Snapshot des eigenen
-    /// Bestands vor (siehe ``SyncErsetzenService/planeBereinigungBaumelnderReferenzen(context:)``)
-    /// — verändert selbst noch nichts am Datenbestand.
+    /// Baut den Bestand SOFORT aus einem jetzt erstellten Snapshot des
+    /// eigenen Bestands neu auf (siehe ``SyncErsetzenService/fuehreBereinigungBaumelnderReferenzenLive(controller:)``)
+    /// — kein Neustart mehr nötig.
     private func bereinigen() {
         resetFehlermeldung = nil
-        do {
-            try SyncErsetzenService.planeBereinigungBaumelnderReferenzen(context: modelContext)
-            neustartAusstehendMachen()
-        } catch {
-            resetFehlermeldung = error.localizedDescription
+        guard let controller = ModelContainerController.aktuell else {
+            do {
+                try SyncErsetzenService.planeBereinigungBaumelnderReferenzen(context: modelContext)
+                neustartAusstehendMachen()
+            } catch {
+                resetFehlermeldung = error.localizedDescription
+            }
+            return
+        }
+        syncPollingService.stoppen()
+        multipeerSyncService.stoppen()
+        Task {
+            do {
+                try await SyncErsetzenService.fuehreBereinigungBaumelnderReferenzenLive(controller: controller)
+            } catch {
+                resetFehlermeldung = error.localizedDescription
+            }
         }
     }
 }

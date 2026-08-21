@@ -3856,3 +3856,92 @@ Zähler, gewichteter Zuwachs-seit-zuletzt-gesehen für
 
 **Verifiziert:** volle Suite (390 Tests, 46 Suiten) grün, inkl. drei neuer/
 angepasster Regressionstests für diesen Abschnitt.
+
+## 61. Live-Ersetzen statt Neustart-Aufforderung (zweiter Anlauf, Build 308)
+
+**Vorgeschichte:** Ein erster Versuch, den lokalen Store-Austausch
+(„Ersetzen durch Peer", „Backup wiederherstellen", „Baumelnde Referenzen
+bereinigen") zur Laufzeit statt per Neustart-Aufforderung durchzuführen
+(Build 138, `ModelContainerController`), stürzte auf einem echten Gerät ab
+(`BUG IN CLIENT OF libsqlite3.dylib: vnode unlinked while in use`, Build 139,
+Commit `6af943c`) und wurde durch den seitdem gültigen Neustart-Mechanismus
+ersetzt (siehe Abschnitt 13a, `SyncErsetzenService`). Ein zweiter,
+funktionierender Anlauf entstand kurz darauf (Anfang August, Commits
+`e691d03`/`2729eab`), landete aber nie auf `main` — der Branch wurde vor dem
+Merge zurückgesetzt, ohne dass ein Bug dokumentiert wurde. Dieser Abschnitt
+beschreibt die Wiedereinführung desselben Mechanismus, neu aufgesetzt gegen
+den seither divergierten Stand (`SyncConnector`-Abstraktion, `v0.15`;
+`SyncImportService`-Re-Entranz-Sperre, `v0.14`).
+
+**Root-Cause-Korrektur ggü. dem ersten Versuch:** nicht der
+`ModelContainer`-Tausch selbst war die Ursache des Absturzes — laut Apple-DTS
+(Developer-Forum-Thread 806191) offiziell unterstützt: der `ModelContext` der
+View-Hierarchie wechselt beim Umhängen von `.modelContainer(_:)` automatisch
+mit. Die tatsächliche Ursache war die **Wiederverwendung derselben, kurz
+zuvor noch offenen Store-Datei**: SwiftData legt den zugrundeliegenden
+`NSPersistentStoreCoordinator` nie öffentlich frei, ein sauberes
+`removePersistentStore`/`destroyPersistentStore` VOR dem physischen Löschen
+ist über die SwiftData-API nicht möglich — auch ein bloßes ARC-Deallozieren
+der letzten `ModelContainer`-Referenz ist keine Garantie, dass SwiftData/
+CoreData intern bereits fertig ist.
+
+**Mechanismus (`ModelContainerController`, `ShopWithMe/App/ModelContainerController.swift`):**
+- Jeder Austausch legt den Ersatz-Store an einer **neuen, nie zuvor
+  dagewesenen Datei-URL** an (`ersetzt-<UUID>.store`) statt die alte Datei
+  wiederzuverwenden — ein vorheriges Löschen entfällt dadurch strukturell.
+- Die jetzt verwaiste alte Datei wird nur vorgemerkt und erst am Anfang des
+  nächsten Kaltstarts (`ModelContainerController.raeumeVerwaisteStoreDateienAuf()`,
+  vor jedem `ModelContainer`-Öffnen in `ShopWithMeApp.init()`) physisch
+  gelöscht — dem einzigen Zeitpunkt, an dem garantiert kein Prozess sie noch
+  offen hat.
+- `@Published var modelContainer` + `@Published var generation` ersetzen das
+  bisherige `let modelContainer` in `ShopWithMeApp`; `RootView().id(generation)`
+  erzwingt einen kompletten View-Baum-Neuaufbau (fängt tief verschachtelte
+  `@State`-Modellobjekte aus dem verlassenen Store ab), `.task(id: generation)`
+  statt `.task {}` bindet den Neustart von `SyncPollingService`/
+  `MultipeerSyncService` zuverlässig an jeden Tausch (ein `.task` ohne
+  explizite `id:` ist nicht zuverlässig an ein vorher angewandtes `.id(_:)`
+  gekoppelt — Live-Fund aus dem zweiten Anlauf, `2729eab`).
+- `vergangeneContainer: [ModelContainer]` hält jeden verlassenen Container
+  für den Rest der Prozesslaufzeit am Leben — `ModelContext` hält seinen
+  erzeugenden `ModelContainer` nicht stark; ohne das crasht ein zum
+  Umhäng-Zeitpunkt noch laufender Sync-Zyklus mit dem alten Context.
+- `wirdErsetzt`-Sperre gegen überlappende `ersetzeLiveMitNeuemStore`-Aufrufe
+  (z.B. „Wiederherstellen" direkt gefolgt von erneutem „Ersetzen", beides
+  live ohne Neustart dazwischen) — ebenfalls Live-Fund aus dem zweiten
+  Anlauf.
+
+**`SyncErsetzenService`:** die bisherigen `plane…()`-Funktionen (nur
+Vormerken für den nächsten Start) bleiben als Fallback bestehen — für den
+seltenen Fall, dass kein `ModelContainerController` verfügbar ist. Neue,
+sofort ausführende Gegenstücke `fuehreErsetzenDurchPeerLive(controller:)`/
+`fuehreWiederherstellenAusBackupLive(controller:)`/
+`fuehreBereinigungBaumelnderReferenzenLive(controller:)` nehmen den
+`ModelContainerController` explizit als Parameter entgegen (statt intern über
+eine `weak static`-Referenz zu greifen, wie im zweiten Anlauf) — dadurch in
+Unit-Tests ohne globalen Zustand/Test-Serialisierung nutzbar. Der
+Neustart-Mechanismus (`ausstehendeAktion`, `loescheStoreDateiFallsAusstehend`)
+bleibt unverändert exklusiv für GitHub #119 (Store beim Boot bereits
+unlesbar — dort existiert per Definition noch kein offener Container, ein
+Live-Tausch ist nicht anwendbar).
+
+**Aufrufer umgestellt:** `SyncOrdnerSettingsView` (Ersetzen/Wiederherstellen/
+Backup-Wiederherstellen), `DebuggingView` (Gerät zurücksetzen/Baumelnde
+Referenzen bereinigen), `RootView.vollAbgleichAusloesen()` (automatischer
+Voll-Abgleich nach 30 Tagen Inaktivität) — alle vier liefen bisher über den
+Neustart-Mechanismus. Jeder Aufrufer fällt auf den alten Neustart-Pfad
+zurück, falls `ModelContainerController.aktuell` `nil` ist.
+
+**Getestet (`SyncErsetzenServiceTests.swift`):** anders als beim ersten
+Anlauf (siehe Suite-Kopfkommentar dort) ist der Live-Pfad innerhalb eines
+einzelnen Testprozesses sicher testbar — er löscht nie eine im selben
+Prozess noch offene Datei, sondern legt immer eine neue an. Abgedeckt: voller
+Ersetzen-/Bereinigen-Rundlauf inkl. „alter Context bleibt unberührt lesbar",
+neue Datei statt Wiederverwendung, sowie die `wirdErsetzt`-Sperre bei
+künstlich erzwungener Überlappung zweier Aufrufe.
+
+**Noch ausstehend:** manuelle Verifikation auf einem echten Gerät (wie bei
+beiden Vorgänger-Anläufen dokumentiert nicht im Simulator reproduzierbar) —
+insbesondere, dass `SyncPollingService`/`MultipeerSyncService` nach einem
+Tausch nachweislich am neuen Context weiterlaufen und kein Datenverlust bei
+schneller Aufeinanderfolge mehrerer Aktionen auftritt.

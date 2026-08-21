@@ -155,11 +155,17 @@ enum SyncErsetzenService {
         letzterNeuaufbauAutomatischZurueckgerollt = false
     }
 
-    // MARK: - Planen (aktueller Sitzung, vor dem Neustart)
+    // MARK: - Planen (aktueller Sitzung, vor dem Neustart — Fallback)
 
     /// Sichert den aktuellen Datenbestand und merkt „Ersetzen durch Peer" für
     /// den nächsten App-Start vor. Verändert den Datenbestand selbst noch
     /// nicht — dafür muss die App neu gestartet werden.
+    ///
+    /// **Nur noch Fallback:** der reguläre Weg aus der laufenden App heraus
+    /// ist seit dem zweiten Live-Anlauf ``fuehreErsetzenDurchPeerLive()``
+    /// (kein Neustart nötig). Diese Methode bleibt für den Fall, dass
+    /// ``ModelContainerController/aktuell`` `nil` ist (z.B. In-Memory-Store
+    /// in Unit-Tests ohne echten `ModelContainerController`).
     @MainActor
     static func planeErsetzenDurchPeer(context: ModelContext) throws {
         try erstelleBackup(context: context)
@@ -167,7 +173,8 @@ enum SyncErsetzenService {
     }
 
     /// Merkt „Wiederherstellen aus dem lokalen Backup" für den nächsten
-    /// App-Start vor. Wirft, falls kein Backup existiert.
+    /// App-Start vor. Wirft, falls kein Backup existiert. Nur noch Fallback,
+    /// siehe ``planeErsetzenDurchPeer(context:)``.
     static func planeWiederherstellenAusBackup() throws {
         guard vorhandenesBackup() != nil else {
             throw SyncErsetzenFehler.keinBackupVorhanden
@@ -197,6 +204,65 @@ enum SyncErsetzenService {
     static func planeBereinigungBaumelnderReferenzen(context: ModelContext) throws {
         try erstelleBackup(context: context)
         ausstehendeAktion = .wiederherstellenAusBackup
+    }
+
+    // MARK: - Live ausführen (ohne Neustart, zweiter Anlauf)
+
+    /// Ersetzt den lokalen Datenbestand SOFORT durch den Stand eines Peers —
+    /// ohne App-Neustart. Sichert vorher den aktuellen Stand (für die
+    /// Vorher-/Nachher-Zusammenfassung und einen möglichen Härtungs-Rollback,
+    /// siehe ``fuehreLiveAus(context:befuellen:)``).
+    @MainActor
+    static func fuehreErsetzenDurchPeerLive(controller: ModelContainerController) async throws {
+        let vorherKontext = controller.modelContainer.mainContext
+        try erstelleBackup(context: vorherKontext)
+        try await fuehreLiveAus(controller: controller) { neuerContext in
+            await fuehreErsetzenDurchPeerAus(context: neuerContext)
+        }
+    }
+
+    /// Stellt SOFORT den zuletzt gesicherten lokalen Stand wieder her — ohne
+    /// App-Neustart. Wirft, falls kein Backup existiert.
+    @MainActor
+    static func fuehreWiederherstellenAusBackupLive(controller: ModelContainerController) async throws {
+        guard vorhandenesBackup() != nil else {
+            throw SyncErsetzenFehler.keinBackupVorhanden
+        }
+        try await fuehreLiveAus(controller: controller) { neuerContext in
+            fuehreWiederherstellenAusBackupAus(context: neuerContext)
+        }
+    }
+
+    /// Live-Variante von ``planeBereinigungBaumelnderReferenzen(context:)``:
+    /// erstellt jetzt einen frischen (bereits „reparierten", siehe Doku dort)
+    /// Snapshot des aktuellen Bestands und baut den Store sofort daraus neu
+    /// auf.
+    @MainActor
+    static func fuehreBereinigungBaumelnderReferenzenLive(controller: ModelContainerController) async throws {
+        try erstelleBackup(context: controller.modelContainer.mainContext)
+        try await fuehreLiveAus(controller: controller) { neuerContext in
+            fuehreWiederherstellenAusBackupAus(context: neuerContext)
+        }
+    }
+
+    /// Gemeinsame Klammer für alle drei Live-Pfade oben: ruft
+    /// ``ModelContainerController/ersetzeLiveMitNeuemStore(befuellen:)`` auf
+    /// und startet Hintergrund-Sync/Multipeer über `ausfuehren` auf dem neuen
+    /// Context neu — Aufrufer (``SyncOrdnerSettingsView``) muss den
+    /// Hintergrund-Sync NICHT mehr vorher stoppen: das Umhängen von
+    /// `.modelContainer(_:)` und der `.task(id: generation)`-Neustart in
+    /// `ShopWithMeApp` übernehmen das strukturell — der alte Context wird nach
+    /// dem Umhängen von keinem neuen Sync-Zyklus mehr verwendet, ein zum
+    /// Umhäng-Zeitpunkt bereits laufender Zyklus läuft dank
+    /// ``ModelContainerController/vergangeneContainer`` gefahrlos auf dem
+    /// alten Context zu Ende (schreibt in die jetzt verwaiste, aber weiterhin
+    /// gültige alte Datei).
+    @MainActor
+    private static func fuehreLiveAus(controller: ModelContainerController, ausfuehren: @MainActor @escaping (ModelContext) async -> Void) async throws {
+        try await controller.ersetzeLiveMitNeuemStore { neuerContext in
+            neuerContext.autosaveEnabled = false
+            await ausfuehren(neuerContext)
+        }
     }
 
     // MARK: - Ausführen (nächster App-Start)
@@ -269,80 +335,98 @@ enum SyncErsetzenService {
 
         switch aktion {
         case .ersetzenDurchPeer:
-            // Vorher-Stand aus dem ohnehin vor dem Neuaufbau erstellten
-            // Backup lesen (noch vorhanden, ``fuehreAusstehendeAktionAus``
-            // löscht es hier bewusst nicht) — Grundlage für die
-            // Vorher-/Nachher-Zusammenfassung unten, den Härtungs-Rollback
-            // UND die SyncEvent-Wiederherstellung (GitHub #80, siehe unten).
-            let vorherBackup = ladeBackup()
-            let ordnerZugriffErfolgreich = await SyncSnapshotImportService.importiereSnapshots(context: context)
-            if let vorherBackup {
-                let vorherSnapshot = vorherBackup.snapshot
-                let nachherSnapshot = SyncSnapshotExportService.erstelleSnapshot(context: context)
-                let vorherZaehler = BereichsZaehler(snapshot: vorherSnapshot)
-                let nachherZaehler = BereichsZaehler(snapshot: nachherSnapshot)
-                letzteNeuaufbauZusammenfassung = NeuaufbauZusammenfassung(
-                    zeitpunkt: Date(), vorher: vorherZaehler, nachher: nachherZaehler
-                )
-
-                // Härtung (Kategorie-3-Review): ein Neuaufbau, der eindeutig
-                // fehlgeschlagen ist — Ordnerzugriff gescheitert, oder ein
-                // vorher nicht leerer Bestand ist danach komplett leer (kein
-                // erreichbarer Peer hatte irgendetwas) — wird nicht mehr nur
-                // in der Vorher-/Nachher-Anzeige gemeldet und dem Nutzer
-                // überlassen, sondern automatisch auf den Vorher-Stand
-                // zurückgerollt. Ein bloßer TEILWEISER Rückgang (manche
-                // Bereiche kleiner, andere unverändert) bleibt bewusst NUR
-                // informativ — der kann legitim sein (z.B. echte, vom Peer
-                // bereits verarbeitete Löschungen), ein eindeutiger
-                // Totalverlust dagegen nie.
-                // `nachherZaehler.gesamt == 0` bedeutet: der frische Context
-                // ist tatsächlich noch komplett leer (Summe aller Bereiche
-                // ist nur dann 0, wenn jeder einzelne Bereich 0 ist) — der
-                // Neuaufbau hat buchstäblich nichts eingefügt. Kein
-                // zusätzliches Löschen nötig, bevor das Backup importiert wird.
-                let eindeutigFehlgeschlagen = !ordnerZugriffErfolgreich || (vorherZaehler.gesamt > 0 && nachherZaehler.gesamt == 0)
-                if eindeutigFehlgeschlagen {
-                    SyncSnapshotImportService.importiereEinzelnenSnapshot(
-                        vorherSnapshot, peerGeraeteID: "lokales-backup", context: context
-                    )
-                    letzterNeuaufbauAutomatischZurueckgerollt = true
-                }
-
-                // GitHub #80: unabhängig davon, ob der Peer-Import geklappt
-                // hat oder zurückgerollt wurde — dieses Gerät kannte VOR dem
-                // Wipe bereits bestimmte Events, das bleibt so, egal welcher
-                // Datenbestand jetzt aktiv ist.
-                stelleSyncEventsWiederHer(vorherBackup.bekannteSyncEvents, context: context)
-                // Analog zu den SyncEvents oben: rein gerätelokal, nie Teil
-                // des Peer-``SyncSnapshot`` — ohne diese Wiederherstellung
-                // bot der ``GeschaeftVorschlagBanner`` bereits ignorierte
-                // Vorschläge nach jedem „Ersetzen" erneut an (Korrektur,
-                // vorher nur im ``.wiederherstellenAusBackup``-Zweig unten
-                // behandelt).
-                stelleIgnorierteGeschaeftsVorschlaegeWiederHer(vorherBackup.ignorierteGeschaeftsVorschlaege, context: context)
-                try? context.save()
-            }
+            await fuehreErsetzenDurchPeerAus(context: context)
         case .wiederherstellenAusBackup:
-            guard let daten = try? Data(contentsOf: backupURL),
-                  let backup = try? JSONDecoder().decode(SyncErsetzenBackup.self, from: daten)
-            else { return }
-            // Sentinel-Geräte-ID statt der eigenen: verhindert einen
-            // Phantom-``SyncPeerInfo``-Eintrag und Kollisionen mit echter
-            // Peer-Zähler-Buchhaltung (``SyncPeerZaehlerStand``).
-            SyncSnapshotImportService.importiereEinzelnenSnapshot(backup.snapshot, peerGeraeteID: "lokales-backup", context: context)
-            stelleIgnorierteGeschaeftsVorschlaegeWiederHer(backup.ignorierteGeschaeftsVorschlaege, context: context)
-            stelleSyncEventsWiederHer(backup.bekannteSyncEvents, context: context)
-            // Das eigene Backup kann einen zum Sicherungszeitpunkt noch
-            // offenen Einkaufsvorgang enthalten — bei weiterhin verknüpftem
-            // Sync-Ordner (``SyncOrdnerSettingsView/backupWiederherstellenGetappt()``,
-            // Korruptions-Recovery ohne Austritt) würde der sonst vom
-            // nächsten Sync-Zyklus blind mit einem tatsächlich aktiven
-            // Vorgang eines Peers zusammengeführt (siehe
-            // ``EinkaufsvorgangAbschlussService/schliesseAlleOffenenEinkaufsvorgaenge(context:)``).
-            EinkaufsvorgangAbschlussService.schliesseAlleOffenenEinkaufsvorgaenge(context: context)
+            fuehreWiederherstellenAusBackupAus(context: context)
+        }
+    }
+
+    /// Kern von „Ersetzen durch Peer" — gemeinsam genutzt vom Neustart-
+    /// Fallback (``fuehreAusstehendeAktionAus(context:)``) und dem Live-Pfad
+    /// (``fuehreErsetzenDurchPeerLive(controller:)``). `context` ist in
+    /// beiden Fällen ein frischer, leerer Context (nach `loescheStoreDateiFallsAusstehend`
+    /// bzw. nach ``ModelContainerController/ersetzeLiveMitNeuemStore(befuellen:)``).
+    @MainActor
+    private static func fuehreErsetzenDurchPeerAus(context: ModelContext) async {
+        // Vorher-Stand aus dem ohnehin vor dem Neuaufbau erstellten
+        // Backup lesen (noch vorhanden, wird hier bewusst nicht gelöscht) —
+        // Grundlage für die Vorher-/Nachher-Zusammenfassung unten, den
+        // Härtungs-Rollback UND die SyncEvent-Wiederherstellung (GitHub #80,
+        // siehe unten).
+        let vorherBackup = ladeBackup()
+        let ordnerZugriffErfolgreich = await SyncSnapshotImportService.importiereSnapshots(context: context)
+        if let vorherBackup {
+            let vorherSnapshot = vorherBackup.snapshot
+            let nachherSnapshot = SyncSnapshotExportService.erstelleSnapshot(context: context)
+            let vorherZaehler = BereichsZaehler(snapshot: vorherSnapshot)
+            let nachherZaehler = BereichsZaehler(snapshot: nachherSnapshot)
+            letzteNeuaufbauZusammenfassung = NeuaufbauZusammenfassung(
+                zeitpunkt: Date(), vorher: vorherZaehler, nachher: nachherZaehler
+            )
+
+            // Härtung (Kategorie-3-Review): ein Neuaufbau, der eindeutig
+            // fehlgeschlagen ist — Ordnerzugriff gescheitert, oder ein
+            // vorher nicht leerer Bestand ist danach komplett leer (kein
+            // erreichbarer Peer hatte irgendetwas) — wird nicht mehr nur
+            // in der Vorher-/Nachher-Anzeige gemeldet und dem Nutzer
+            // überlassen, sondern automatisch auf den Vorher-Stand
+            // zurückgerollt. Ein bloßer TEILWEISER Rückgang (manche
+            // Bereiche kleiner, andere unverändert) bleibt bewusst NUR
+            // informativ — der kann legitim sein (z.B. echte, vom Peer
+            // bereits verarbeitete Löschungen), ein eindeutiger
+            // Totalverlust dagegen nie.
+            // `nachherZaehler.gesamt == 0` bedeutet: der frische Context
+            // ist tatsächlich noch komplett leer (Summe aller Bereiche
+            // ist nur dann 0, wenn jeder einzelne Bereich 0 ist) — der
+            // Neuaufbau hat buchstäblich nichts eingefügt. Kein
+            // zusätzliches Löschen nötig, bevor das Backup importiert wird.
+            let eindeutigFehlgeschlagen = !ordnerZugriffErfolgreich || (vorherZaehler.gesamt > 0 && nachherZaehler.gesamt == 0)
+            if eindeutigFehlgeschlagen {
+                SyncSnapshotImportService.importiereEinzelnenSnapshot(
+                    vorherSnapshot, peerGeraeteID: "lokales-backup", context: context
+                )
+                letzterNeuaufbauAutomatischZurueckgerollt = true
+            }
+
+            // GitHub #80: unabhängig davon, ob der Peer-Import geklappt
+            // hat oder zurückgerollt wurde — dieses Gerät kannte VOR dem
+            // Wipe bereits bestimmte Events, das bleibt so, egal welcher
+            // Datenbestand jetzt aktiv ist.
+            stelleSyncEventsWiederHer(vorherBackup.bekannteSyncEvents, context: context)
+            // Analog zu den SyncEvents oben: rein gerätelokal, nie Teil
+            // des Peer-``SyncSnapshot`` — ohne diese Wiederherstellung
+            // bot der ``GeschaeftVorschlagBanner`` bereits ignorierte
+            // Vorschläge nach jedem „Ersetzen" erneut an (Korrektur,
+            // vorher nur im ``.wiederherstellenAusBackup``-Zweig unten
+            // behandelt).
+            stelleIgnorierteGeschaeftsVorschlaegeWiederHer(vorherBackup.ignorierteGeschaeftsVorschlaege, context: context)
             try? context.save()
         }
+    }
+
+    /// Kern von „Wiederherstellen aus dem lokalen Backup" — gemeinsam genutzt
+    /// vom Neustart-Fallback und dem Live-Pfad (``fuehreWiederherstellenAusBackupLive(controller:)``,
+    /// ``fuehreBereinigungBaumelnderReferenzenLive(controller:)``).
+    @MainActor
+    private static func fuehreWiederherstellenAusBackupAus(context: ModelContext) {
+        guard let daten = try? Data(contentsOf: backupURL),
+              let backup = try? JSONDecoder().decode(SyncErsetzenBackup.self, from: daten)
+        else { return }
+        // Sentinel-Geräte-ID statt der eigenen: verhindert einen
+        // Phantom-``SyncPeerInfo``-Eintrag und Kollisionen mit echter
+        // Peer-Zähler-Buchhaltung (``SyncPeerZaehlerStand``).
+        SyncSnapshotImportService.importiereEinzelnenSnapshot(backup.snapshot, peerGeraeteID: "lokales-backup", context: context)
+        stelleIgnorierteGeschaeftsVorschlaegeWiederHer(backup.ignorierteGeschaeftsVorschlaege, context: context)
+        stelleSyncEventsWiederHer(backup.bekannteSyncEvents, context: context)
+        // Das eigene Backup kann einen zum Sicherungszeitpunkt noch
+        // offenen Einkaufsvorgang enthalten — bei weiterhin verknüpftem
+        // Sync-Ordner (``SyncOrdnerSettingsView/backupWiederherstellenGetappt()``,
+        // Korruptions-Recovery ohne Austritt) würde der sonst vom
+        // nächsten Sync-Zyklus blind mit einem tatsächlich aktiven
+        // Vorgang eines Peers zusammengeführt (siehe
+        // ``EinkaufsvorgangAbschlussService/schliesseAlleOffenenEinkaufsvorgaenge(context:)``).
+        EinkaufsvorgangAbschlussService.schliesseAlleOffenenEinkaufsvorgaenge(context: context)
+        try? context.save()
     }
 
     /// Stellt die zum Zeitpunkt des Backups lokal bekannten ``SyncEvent``s

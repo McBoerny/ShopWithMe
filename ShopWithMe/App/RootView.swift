@@ -156,33 +156,44 @@ struct RootView: View {
 
     /// Sichert zuerst per einem echten Sync-Zyklus die eigenen, noch nicht
     /// hochgeladenen Änderungen (kritische Voraussetzung, siehe
-    /// ``SyncAktualitaetsService``-Typ-Doku), plant dann „Ersetzen durch
-    /// Peer" für den nächsten Start. Schlägt der Export fehl (z.B. kein
-    /// Ordnerzugriff), wird NICHTS geplant — die Prüfung greift beim
+    /// ``SyncAktualitaetsService``-Typ-Doku), ersetzt den Bestand danach
+    /// SOFORT durch „Ersetzen durch Peer" — kein Neustart mehr nötig (siehe
+    /// ``ModelContainerController``). Schlägt der Export fehl (z.B. kein
+    /// Ordnerzugriff), wird NICHTS ersetzt — die Prüfung greift beim
     /// nächsten Vordergrund-Wechsel einfach erneut, statt eigene Änderungen
     /// zu riskieren.
     private func vollAbgleichAusloesen() {
         Task {
             let exportErfolgreich = await syncPollingService.syncZyklus()
             guard exportErfolgreich else { return }
+            guard let controller = ModelContainerController.aktuell else {
+                // Fallback: kein ``ModelContainerController`` verfügbar
+                // (sollte im laufenden Betrieb nicht vorkommen).
+                do {
+                    try SyncErsetzenService.planeErsetzenDurchPeer(context: modelContext)
+                    syncPollingService.stoppen()
+                    multipeerSyncService.stoppen()
+                    zeigeNeustartHinweisNachVollAbgleich = true
+                } catch {}
+                return
+            }
+            // Sofort stoppen, nicht erst nach dem Austausch — sonst würde der
+            // weiterlaufende Hintergrund-Sync bis zum Umhängen mit dem alten,
+            // gleich zu verwerfenden Bestand weiterarbeiten.
+            syncPollingService.stoppen()
+            multipeerSyncService.stoppen()
             do {
-                try SyncErsetzenService.planeErsetzenDurchPeer(context: modelContext)
+                try await SyncErsetzenService.fuehreErsetzenDurchPeerLive(controller: controller)
                 if SyncDebugLogger.istAktiv {
                     SyncDebugLogger.log(.vollAbgleichEingeleitet, details: "")
                 }
-                // Sofort stoppen statt erst beim Neustart (siehe
-                // ``SyncOrdnerSettingsView/neustartAusstehendMachen()``) —
-                // sonst würde der weiterlaufende Hintergrund-Sync bis zum
-                // Neustart mit dem alten, gleich zu verwerfenden Bestand
-                // weiterarbeiten.
-                syncPollingService.stoppen()
-                multipeerSyncService.stoppen()
-                zeigeNeustartHinweisNachVollAbgleich = true
             } catch {
                 // Seltener Fehlerfall (z.B. eigener Snapshot-Export
                 // schlägt lokal fehl) — beim nächsten Vordergrund-Wechsel
                 // erneut versucht, kein stiller Datenverlust möglich, da
-                // noch nichts geplant wurde.
+                // noch nichts ersetzt wurde. `.task(id:)` in `ShopWithMeApp`
+                // startet den gestoppten Hintergrund-Sync beim nächsten
+                // `scenePhase`-Wechsel automatisch wieder.
             }
         }
     }

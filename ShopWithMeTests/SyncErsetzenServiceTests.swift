@@ -260,6 +260,154 @@ struct SyncErsetzenServiceTests {
         #expect(try context.fetchCount(FetchDescriptor<Geschaeft>()) == 1)
     }
 
+    // MARK: - Live ersetzen (``ModelContainerController``, zweiter Anlauf)
+
+    /// Datei-basierter Container in einem isolierten Temp-Verzeichnis — im
+    /// Unterschied zu ``machtLeerenContainer()`` (In-Memory) nötig, weil
+    /// ``ModelContainerController/ersetzeLiveMitNeuemStore(befuellen:)`` den
+    /// Ersatz-Store als Geschwisterdatei im selben Verzeichnis anlegt (siehe
+    /// dortige Typ-Doku). Eigenes, pro Aufruf frisches Verzeichnis statt des
+    /// echten SwiftData-Standardpfads — berührt dadurch nie echte App-Daten.
+    private func machtDateibasiertenContainerController() throws -> (controller: ModelContainerController, ordner: URL) {
+        let ordner = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: ordner, withIntermediateDirectories: true)
+        let konfiguration = ModelConfiguration(schema: SchemaDefinition.schema, url: ordner.appendingPathComponent("default.store"))
+        let container = try ModelContainer(for: SchemaDefinition.schema, configurations: [konfiguration])
+        return (ModelContainerController(modelContainer: container), ordner)
+    }
+
+    @Test
+    func fuehreWiederherstellenAusBackupLiveWirftOhneBackup() async throws {
+        SyncErsetzenService.loescheBackup()
+        let (controller, _) = try machtDateibasiertenContainerController()
+        await #expect(throws: SyncErsetzenFehler.self) {
+            try await SyncErsetzenService.fuehreWiederherstellenAusBackupLive(controller: controller)
+        }
+    }
+
+    /// Regressionstest für die ursprüngliche Neustart-Race (siehe Typ-Doku
+    /// ``ModelContainerController``): der ALTE Container/Context bleibt nach
+    /// dem Live-Ersetzen unverändert gültig und lesbar (seine Datei wird
+    /// NICHT gelöscht) — nur ``ModelContainerController/modelContainer``
+    /// zeigt danach auf den neuen, befüllten Store.
+    @Test
+    func fuehreErsetzenDurchPeerLiveErsetztOhneDenAltenContainerZuBeruehren() async throws {
+        // Bewusst KEIN `defer { removeItem(at: ordner) }`: das würde exakt die
+        // Race nachstellen, die ``ModelContainerController``s Typ-Doku als
+        // Ursache des ursprünglichen Absturzes beschreibt — eine Store-Datei
+        // löschen, deren `ModelContainer` derselbe Prozess Sekundenbruchteile
+        // zuvor noch selbst offen hatte. `temporaryDirectory` ist ohnehin
+        // OS-verwaltetes Scratch-Verzeichnis.
+        let (controller, _) = try machtDateibasiertenContainerController()
+        defer { SyncErsetzenService.loescheBackup() }
+        let alterContext = controller.modelContainer.mainContext
+        alterContext.insert(Geschaeft(name: "Rewe", typen: []))
+        try alterContext.save()
+
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+        var snapshot = leererSnapshot(geraeteID: "peer-a")
+        snapshot.geschaefte = [leerenGeschaeftSnapshot(name: "Edeka")]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "peer-a", in: syncOrdner)
+
+        let alteGeneration = controller.generation
+        try await SyncErsetzenService.fuehreErsetzenDurchPeerLive(controller: controller)
+
+        #expect(controller.generation != alteGeneration)
+        #expect(try controller.modelContainer.mainContext.fetch(FetchDescriptor<Geschaeft>()).map(\.name) == ["Edeka"])
+        // Der alte Context/Container bleibt unverändert gültig und lesbar —
+        // genau das, was beim ursprünglichen Absturz nicht der Fall war.
+        #expect(try alterContext.fetch(FetchDescriptor<Geschaeft>()).map(\.name) == ["Rewe"])
+        #expect(SyncErsetzenService.vorhandenesBackup() != nil)
+        // Der Live-Pfad berührt ``ausstehendeAktion`` nicht — das bleibt
+        // exklusiv dem Boot-Zeit-Mechanismus (GitHub #119) vorbehalten.
+        #expect(SyncErsetzenService.ausstehendeAktion == nil)
+    }
+
+    /// Analog ``fuehreErsetzenDurchPeerLiveErsetztOhneDenAltenContainerZuBeruehren``,
+    /// nur für den Bereinigungs-Pfad (frischer Snapshot des eigenen Bestands
+    /// statt eines Peer-Snapshots).
+    @Test
+    func fuehreBereinigungBaumelnderReferenzenLiveErsetztAusFrischemSnapshot() async throws {
+        let (controller, _) = try machtDateibasiertenContainerController()
+        defer { SyncErsetzenService.loescheBackup() }
+        let alterContext = controller.modelContainer.mainContext
+        alterContext.insert(Geschaeft(name: "Rewe", typen: []))
+        try alterContext.save()
+
+        let alteGeneration = controller.generation
+        try await SyncErsetzenService.fuehreBereinigungBaumelnderReferenzenLive(controller: controller)
+
+        #expect(controller.generation != alteGeneration)
+        #expect(try controller.modelContainer.mainContext.fetch(FetchDescriptor<Geschaeft>()).map(\.name) == ["Rewe"])
+        #expect(SyncErsetzenService.vorhandenesBackup() != nil)
+    }
+
+    /// ``ModelContainerController/ersetzeLiveMitNeuemStore(befuellen:)``
+    /// direkt: der Ersatz-Store entsteht an einem neuen, noch nie dagewesenen
+    /// Dateinamen im selben Verzeichnis, nicht an der ursprünglichen URL —
+    /// genau die Eigenschaft, die den ursprünglichen Absturz (Löschen einer
+    /// noch offenen Datei) strukturell ausschließt.
+    @Test
+    func ersetzeLiveMitNeuemStoreLegtNeueDateiAnUndRuftBefuellenAuf() async throws {
+        let (controller, _) = try machtDateibasiertenContainerController()
+        let urspruenglicheURL = controller.modelContainer.configurations.first?.url
+
+        var befuellt = false
+        try await controller.ersetzeLiveMitNeuemStore { context in
+            context.insert(Geschaeft(name: "Aldi", typen: []))
+            try? context.save()
+            befuellt = true
+        }
+
+        #expect(befuellt)
+        #expect(controller.modelContainer.configurations.first?.url != urspruenglicheURL)
+        #expect(controller.modelContainer.configurations.first?.url.lastPathComponent.hasPrefix("ersetzt-") == true)
+        #expect(FileManager.default.fileExists(atPath: (urspruenglicheURL?.path ?? "")))
+        #expect(try controller.modelContainer.mainContext.fetch(FetchDescriptor<Geschaeft>()).map(\.name) == ["Aldi"])
+    }
+
+    /// Live-Test-Nachtrag (analog `2729eab`): zwei ÜBERLAPPENDE Aufrufe von
+    /// ``ModelContainerController/ersetzeLiveMitNeuemStore(befuellen:)``
+    /// (z.B. „Vorherigen Stand wiederherstellen" gefolgt von schnellem
+    /// erneuten Ordner-Beitritt mit „Ersetzen", beides live ohne Neustart
+    /// dazwischen) dürfen sich nicht gegenseitig überschreiben — ohne die
+    /// `wirdErsetzt`-Sperre lesen beide denselben `alteURL`-Ausgangswert und
+    /// der zuletzt committende überschreibt den anderen. Erzwingt echte
+    /// Überlappung über eine künstliche Verzögerung im ersten `befuellen`.
+    @Test
+    func ersetzeLiveMitNeuemStoreIgnoriertUeberlappendenZweitenAufruf() async throws {
+        let (controller, _) = try machtDateibasiertenContainerController()
+
+        async let ersterAufruf: Void = controller.ersetzeLiveMitNeuemStore { context in
+            try? await Task.sleep(for: .milliseconds(100))
+            context.insert(Geschaeft(name: "Aldi", typen: []))
+            try? context.save()
+        }
+        async let zweiterAufruf: Void = controller.ersetzeLiveMitNeuemStore { context in
+            context.insert(Geschaeft(name: "Edeka", typen: []))
+            try? context.save()
+        }
+        _ = try await (ersterAufruf, zweiterAufruf)
+
+        // Der zweite, überlappende Aufruf wird ohne Wirkung übersprungen
+        // (siehe ``ModelContainerController/ersetzeLiveMitNeuemStore(befuellen:)``-Doku)
+        // — der Endzustand zeigt sauber genau den ersten Datenbestand.
+        let geschaefte = try controller.modelContainer.mainContext.fetch(FetchDescriptor<Geschaeft>())
+        #expect(geschaefte.map(\.name) == ["Aldi"])
+    }
+
+    @Test
+    func raeumeVerwaisteStoreDateienAufLeertDieListe() {
+        UserDefaults.standard.set(["ersetzt-\(UUID().uuidString).store"], forKey: "syncErsetzenVerwaisteStoreDateinamen")
+        defer { UserDefaults.standard.removeObject(forKey: "syncErsetzenVerwaisteStoreDateinamen") }
+
+        ModelContainerController.raeumeVerwaisteStoreDateienAuf()
+
+        #expect(UserDefaults.standard.stringArray(forKey: "syncErsetzenVerwaisteStoreDateinamen") == nil)
+    }
+
     // MARK: - Store-Datei löschen (ohne ModelContainer, siehe Typ-Doku)
 
     @Test
