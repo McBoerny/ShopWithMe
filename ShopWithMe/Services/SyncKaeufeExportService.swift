@@ -103,6 +103,52 @@ enum SyncKaeufeExportService {
         return true
     }
 
+    /// Löscht eigene `kaeufe/`-Dateien, deren UUID keinem lokalen ``KaufEintrag``
+    /// mehr entspricht und die älter als
+    /// ``KaufEintragBereinigungService/karenzzeit`` sind — Catch-all für den
+    /// Fall, dass ``entferneDateien(fuerKaufEintragIDs:)`` beim regulären
+    /// Bereinigungslauf fehlschlug. Aufgerufen täglich aus
+    /// ``KaufEintragBereinigungService/automatischBereinigenFallsFaellig(context:)``,
+    /// das denselben Timer bereits besitzt. Best-effort, ohne Fehler nach außen
+    /// zu melden. Ohne hinterlegten Sync-Ordner ohne Wirkung.
+    @MainActor
+    static func raeumeVerwaisteDateienAuf(context: ModelContext) async {
+        guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return }
+
+        let lokaleIDs = Set(
+            ((try? context.fetch(FetchDescriptor<KaufEintrag>())) ?? [])
+                .map { "\($0.id.uuidString).json" }
+        )
+        let grenze = Date().addingTimeInterval(-KaufEintragBereinigungService.karenzzeit)
+
+        let zugriffErfolgreich = syncOrdner.startAccessingSecurityScopedResource()
+        SyncOrdnerZugriffsDiagnose.markiereOeffnen(aufrufstelle: "raeumeVerwaisteDateienAuf", erfolgreich: zugriffErfolgreich)
+        guard zugriffErfolgreich else { return }
+        defer {
+            syncOrdner.stopAccessingSecurityScopedResource()
+            SyncOrdnerZugriffsDiagnose.markiereSchliessen(aufrufstelle: "raeumeVerwaisteDateienAuf")
+        }
+
+        let ordner = SyncSnapshotExportService.eigenerKaeufeOrdner(in: syncOrdner)
+        let anzahl = await Task.detached(priority: .utility) {
+            guard let dateien = SyncDateiZugriff.listeKoordiniert(ordner) else { return 0 }
+            let verwaiste = dateien.filter { url in
+                guard !lokaleIDs.contains(url.lastPathComponent) else { return false }
+                guard let attr = try? FileManager.default.attributesOfItem(atPath: url.path),
+                      let modDatum = attr[.modificationDate] as? Date else { return false }
+                return modDatum < grenze
+            }
+            for url in verwaiste {
+                SyncDateiZugriff.loescheKoordiniert(url)
+            }
+            return verwaiste.count
+        }.value
+
+        if anzahl > 0, SyncDebugLogger.istAktiv {
+            SyncDebugLogger.log(.kaeufeVerwaisteBereinigt, details: "anzahl=\(anzahl)")
+        }
+    }
+
     /// Löscht die `kaeufe/`-Dateien mehrerer `KaufEintrag`e im EIGENEN
     /// Peer-Ordner in einem einzigen Zugriff, falls vorhanden — aufgerufen,
     /// sobald die lokalen Einträge selbst gelöscht werden

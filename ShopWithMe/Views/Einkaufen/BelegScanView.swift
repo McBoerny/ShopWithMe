@@ -832,8 +832,15 @@ private struct PositionsZeile: View {
     }
 
     private func artikelZuweisen(_ artikel: Artikel) {
-        position.artikelName = artikel.name
-        position.zugeordneterArtikel = artikel
-        position.zuordnungsQuelle = nil
+        // Single GET→SET to avoid stale-capture race: the custom Binding's
+        // get closure captures bearbeitbarePositionen by value, so separate
+        // property writes each read the same stale snapshot and overwrite
+        // each other. Reading once and writing the fully-modified struct
+        // atomically avoids this.
+        var updated = position
+        updated.artikelName = artikel.name
+        updated.zugeordneterArtikel = artikel
+        updated.zuordnungsQuelle = nil
+        position = updated
     }
 }

@@ -65,8 +65,6 @@ struct DebuggingView: View {
 
             DatenintegritaetSection()
 
-            ModellIDDuplikatSection()
-
             #if DEBUG
             SuchradiusUeberschreibungSection()
             #endif
@@ -443,7 +441,7 @@ private struct DatenintegritaetSection: View {
         } header: {
             Text("Datenintegrität")
         } footer: {
-            Text("Zeigt bei jedem App-Start erkannte baumelnde Referenzen auf bereits gelöschte Objekte sowie Einkaufsvorgänge ohne Einkaufsliste, die dadurch für die App unerreichbar sind (z.B. nach einer fehlerhaften Synchronisation) — rein informativ, ohne selbst etwas zu reparieren. Das vollständige Protokoll lässt sich über „Protokoll teilen…“ exportieren. „Gerät zurücksetzen“ sichert den aktuellen Bestand lokal und baut die Datenbank anschließend ausschließlich aus dem Stand eines erreichbaren Sync-Geräts neu auf — setzt eine aktive Datensynchronisation mit mindestens einem erreichbaren Gerät voraus. Schlägt der Neuaufbau eindeutig fehl (kein Ordnerzugriff oder komplett leeres Ergebnis), wird automatisch auf den vorherigen, gesicherten Stand zurückgesetzt, statt einen leeren Bestand zu übernehmen. „Baumelnde Referenzen bereinigen“ macht dasselbe ohne Sync-Gerät, aus einem frisch erstellten Snapshot des eigenen Bestands.")
+            Text("Zeigt bei jedem App-Start erkannte baumelnde Referenzen auf bereits gelöschte Objekte sowie Einkaufsvorgänge ohne Einkaufsliste (z.B. nach einer fehlerhaften Synchronisation). Das vollständige Protokoll lässt sich über „Protokoll teilen…” exportieren. „Gerät zurücksetzen” sichert den aktuellen Bestand lokal und baut die Datenbank anschließend ausschließlich aus dem Stand eines erreichbaren Sync-Geräts neu auf — setzt eine aktive Datensynchronisation mit mindestens einem erreichbaren Gerät voraus. Schlägt der Neuaufbau eindeutig fehl (kein Ordnerzugriff oder komplett leeres Ergebnis), wird automatisch auf den vorherigen, gesicherten Stand zurückgesetzt, statt einen leeren Bestand zu übernehmen. „Baumelnde Referenzen bereinigen” erstellt einen frischen Snapshot und baut die Datenbank daraus neu auf — alle gültigen Daten bleiben erhalten, nur baumelnde Bezüge werden aufgelöst. Funktioniert ohne Sync-Gerät.")
         }
         .sheet(isPresented: $zeigeTeilen) {
             DebugLogTeilenView(urls: DatenintegritaetsLogger.exportURLs)
@@ -513,41 +511,6 @@ private struct DatenintegritaetSection: View {
     }
 }
 
-/// Manuell auslösbare Diagnose für GitHub #102: prüft, ob bereits doppelte
-/// `id`-Werte innerhalb eines `@Model`-Typs existieren — Voraussetzung dafür,
-/// `@Attribute(.unique)` auf den app-eigenen `id`-Feldern sicher einführen zu
-/// können (eine Unique-Constraint-Migration würde bei bestehenden Duplikaten
-/// fehlschlagen). Zeigt bewusst nur Typname und Anzahl, nie die betroffenen
-/// IDs oder Inhalte selbst (siehe ``ModellIDDuplikatService``).
-private struct ModellIDDuplikatSection: View {
-    @Environment(\.modelContext) private var modelContext
-    @State private var wurdeGeprueft = false
-    @State private var befunde: [ModellIDDuplikatService.Befund] = []
-
-    var body: some View {
-        Section {
-            if wurdeGeprueft {
-                if befunde.isEmpty {
-                    Text("Keine doppelten IDs gefunden.")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(befunde) { befund in
-                        Text(befund.beschreibung)
-                            .font(.caption)
-                    }
-                }
-            }
-            Button("Auf doppelte Modell-IDs prüfen") {
-                befunde = ModellIDDuplikatService.pruefe(context: modelContext)
-                wurdeGeprueft = true
-            }
-        } header: {
-            Text("Modell-ID-Duplikate (GitHub #102)")
-        } footer: {
-            Text("Prüft, ob innerhalb eines Datentyps (Artikel, Geschäft, …) bereits dieselbe ID mehrfach vergeben wurde — Voraussetzung, um künftig eindeutige IDs technisch zu erzwingen. Zeigt nur Typname und Anzahl, keine Inhalte.")
-        }
-    }
-}
 
 /// Vorher-/Nachher-Mengenvergleich eines „Ersetzen durch Peer"-Neuaufbaus
 /// (``SyncErsetzenService/NeuaufbauZusammenfassung``, Abschnitt 21) — zeigt

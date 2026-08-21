@@ -138,6 +138,7 @@ enum KaufEintragBereinigungService {
             return
         }
         await bereinigen(context: context)
+        await SyncKaeufeExportService.raeumeVerwaisteDateienAuf(context: context)
         letzteBereinigung = Date()
     }
 }

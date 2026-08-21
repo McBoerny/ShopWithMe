@@ -73,6 +73,12 @@ enum SyncDebugLogger {
         /// hat Tombstones gelöscht, die älter als der aktuelle dynamische
         /// Aufbewahrungs-Wasserstand waren. Details: `anzahl=N`.
         case tombstonesBereinigt = "sync_tombstones_bereinigt"
+        /// ``SyncKaeufeExportService/raeumeVerwaisteDateienAuf(context:)`` hat
+        /// eigene `kaeufe/`-Dateien gelöscht, die keinem lokalen `KaufEintrag`
+        /// mehr entsprechen und älter als
+        /// ``KaufEintragBereinigungService/karenzzeit`` sind — Catch-all für
+        /// fehlgeschlagene ``entferneDateien``-Aufrufe. Details: `anzahl=N`.
+        case kaeufeVerwaisteBereinigt = "sync_kaeufe_verwaiste_bereinigt"
         /// GitHub #89: ``SyncAktualitaetsService/istAusDerZeitGefallen(context:)``
         /// hat zugeschlagen — ein bereits etabliertes Gerät war länger als
         /// ``SyncAktualitaetsService/veraltungsSchwelle`` nicht erfolgreich
@@ -152,7 +158,8 @@ enum SyncDebugLogger {
                  .peerVerworfenAltersgrenze, .eventAufgegeben, .debugModeEnabled, .debugModeDisabled,
                  .einkaufsvorgangAbschlussNichtUebernommen, .einkaufsvorgangAbschlussUebernommen,
                  .einkaufsvorgangEintragUebersprungen, .einkaufslistenEintragSicherheitsnetzUebersprungen,
-                 .eventDateienBereinigt, .tombstonesBereinigt, .kaufEintragMergeListenEintragEntfernt,
+                 .eventDateienBereinigt, .tombstonesBereinigt, .kaeufeVerwaisteBereinigt,
+                 .kaufEintragMergeListenEintragEntfernt,
                  .ausDerZeitGefallenErkannt, .vollAbgleichEingeleitet, .multipeerGruppenIDNichtAufloesbar:
                 return .fehler
             case .zyklusStart, .zyklusEnde, .eventEmpfangen, .snapshotEmpfangen, .einkaufslistenStand,

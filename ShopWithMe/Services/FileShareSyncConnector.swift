@@ -34,7 +34,7 @@ final class FileShareSyncConnector: SyncConnector {
     func beendeZugriff() {
         guard let ordner = offenerSyncOrdner else { return }
         ordner.stopAccessingSecurityScopedResource()
-        SyncOrdnerZugriffsDiagnose.markiereSchliessen(aufrufstelle: "FileShareSyncConnector.beendeZugriff")
+        SyncOrdnerZugriffsDiagnose.markiereSchliessen(aufrufstelle: "FileShareSyncConnector.beginneZugriff")
         offenerSyncOrdner = nil
     }
 
