@@ -121,7 +121,8 @@ struct ProduktEditView: View {
                 if !istNeu && !preisHistorie.isEmpty {
                     Section("Preishistorie") {
                         ForEach(preisHistorie) { eintrag in
-                            PreisHistorieZeile(eintrag: eintrag, zeigeArtikel: false)
+                            PreisHistorieZeile(eintrag: eintrag, zeigeArtikel: false,
+                                               loeschen: { modelContext.delete(eintrag) })
                         }
                     }
                 }
