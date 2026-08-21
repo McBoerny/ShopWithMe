@@ -365,6 +365,7 @@ struct ProduktnameSnapshot: Codable {
     var name: String
     var produktID: UUID?
     var geschaeftID: UUID?
+    var barcode: String?
 }
 
 // MARK: - Paket-Format für den laufenden Peer-Sync-Zyklus (GitHub #82)

@@ -389,11 +389,17 @@ werden ausgetauscht.
 - **Produkte** — durchsuchbare Übersicht aller Produkte artikelübergreifend
   (z.B. um schnell „Paradontol" zu finden, ohne vorher zu wissen, dass es unter
   „Zahnpasta" hängt). Zeigt zu jedem Produkt den zugehörigen Artikel und
-  navigiert zur Bearbeitungsansicht (Name, Artikel-Zuordnung, Produktnamen je
-  Geschäft, Preishistorie). In der Detailansicht kann der zugehörige Artikel
-  neu zugeordnet werden — Antippen der Artikel-Zeile öffnet das Auswahlsheet.
+  navigiert zur Bearbeitungsansicht. In der Detailansicht:
+  - **Artikel** neu zuordnen — Antippen der Artikel-Zeile öffnet das Auswahlsheet.
+  - **Bekannte Namen** (Akkordeon) — zeigt alle je Geschäft bekannten Bon-Namen,
+    jeweils mit zugehörigem Geschäft und, falls vorhanden, Barcode. Der
+    Akkordeon-Titel nennt die Anzahl der bekannten Geschäfte. Nach links wischen
+    entfernt einen Namen.
+  - **Preishistorie** — ein Liniendiagramm zeigt die Preisentwicklung; der Button
+    „Datenpunkte" öffnet eine vollständige Liste aller gespeicherten Preise, in
+    der einzelne Einträge durch Wischen nach links gelöscht werden können.
   Mit „+" oben rechts ein neues Produkt anlegen. Wischen nach links in der
-  Liste löscht ein Produkt direkt.
+  Übersichtsliste löscht ein Produkt direkt.
 - **Geschäftstypen** — legt je Geschäftstyp (Lebensmittel, Drogerie, …) fest,
   welche Abteilungen als Standard gelten und dadurch automatisch in
   jedem Geschäft dieses Typs verfügbar sind (siehe „Geschäfte" oben). Name,

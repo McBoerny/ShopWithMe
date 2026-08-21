@@ -975,6 +975,7 @@ enum SyncSnapshotImportService {
             }) else { continue }
             let neuer = Produktname(name: eintrag.name, produkt: produkt, geschaeft: geschaeft)
             neuer.id = eintrag.id
+            neuer.barcode = eintrag.barcode
             context.insert(neuer)
             alleLokalen.append(neuer)
         }

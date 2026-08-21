@@ -213,7 +213,8 @@ enum SyncSnapshotExportService {
                 id: $0.id,
                 name: $0.name,
                 produktID: sichereID($0.produkt, gueltigeIDs: gueltigeProduktIDs),
-                geschaeftID: sichereID($0.geschaeft, gueltigeIDs: gueltigeGeschaeftIDs)
+                geschaeftID: sichereID($0.geschaeft, gueltigeIDs: gueltigeGeschaeftIDs),
+                barcode: $0.barcode
             )
         }
 

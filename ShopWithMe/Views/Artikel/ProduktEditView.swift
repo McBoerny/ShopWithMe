@@ -1,29 +1,26 @@
 import SwiftUI
 import SwiftData
+import Charts
 
 /// Anlegen/Bearbeiten eines ``Produkt``s (GitHub #47, Schritt 4/5) — analog
 /// ``ArtikelEditView``.
 ///
 /// Bei einem neuen Produkt (`istNeu == true`) wird es erst beim Sichern in den
-/// Model-Context eingefügt (Abbrechen verwirft es folgenlos). Verwaltet
-/// zusätzlich die geschäftsabhängigen ``Produktname``n dieses Produkts sowie
-/// dessen eigene Preishistorie. Rekursion (``Produkt/unterProdukte``, z.B.
-/// Packungsgrößen) hat bewusst noch keine UI, siehe
-/// `docs/ARTIKEL_PRODUKT_MODELL.md`.
+/// Model-Context eingefügt (Abbrechen verwirft es folgenlos). Die bekannten
+/// Produktnamen je Geschäft werden als Akkordeon angezeigt; die Preishistorie
+/// enthält einen Verlaufsgraphen und einen „Datapunkte“-Button für die
+/// Detailliste mit Einzellöschung.
 struct ProduktEditView: View {
     @Bindable var produkt: Produkt
     let istNeu: Bool
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @Query(sort: \Geschaeft.name) private var alleGeschaefte: [Geschaeft]
     @Query private var produktnamen: [Produktname]
     @Query private var preisHistorie: [Preispunkt]
 
-    @State private var neuerProduktnameText = ""
-    @State private var neuerProduktnameGeschaeft: Geschaeft?
-    @State private var produktnameFehlermeldung: String?
     @State private var zeigeArtikelAuswahl = false
+    @State private var zeigeDatenpunkte = false
 
     init(produkt: Produkt, istNeu: Bool) {
         self.produkt = produkt
@@ -65,7 +62,7 @@ struct ProduktEditView: View {
                                 Text("Artikel")
                                     .foregroundStyle(.primary)
                                 Spacer()
-                                Text(produkt.artikel?.name ?? "Bitte w\u{00E4}hlen")
+                                Text(produkt.artikel?.name ?? "Bitte w\u{00e4}hlen")
                                     .foregroundStyle(.secondary)
                                 Image(systemName: "chevron.right")
                                     .font(.caption)
@@ -75,54 +72,63 @@ struct ProduktEditView: View {
                         .buttonStyle(.plain)
                     }
                 } footer: {
-                    Text("Menschenlesbarer Klarname des Produkts, z.B. \"Paradontol Zahncreme\" — unabhängig vom geschäftsspezifischen Bon-Text.")
+                    Text("Menschenlesbarer Klarname des Produkts, z.\u{202f}B. \u{201e}Paradontol Zahncreme\u{201c} — unabhängig vom geschäftsspezifischen Bon-Text.")
                 }
 
-                if !istNeu {
+                if !istNeu && !produktnamen.isEmpty {
+                    let geschaefteAnzahl = Set(produktnamen.compactMap { $0.geschaeft?.id }).count
                     Section {
-                        ForEach(produktnamen) { eintrag in
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(eintrag.name)
-                                Text(eintrag.geschaeft?.name ?? "Unbekanntes Geschäft")
+                        DisclosureGroup {
+                            ForEach(produktnamen) { eintrag in
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(eintrag.name)
+                                    Text(eintrag.geschaeft?.name ?? "Unbekanntes Gesch\u{00e4}ft")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    if let barcode = eintrag.barcode, !barcode.isEmpty {
+                                        Label(barcode, systemImage: "barcode")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                .padding(.vertical, 2)
+                            }
+                            .onDelete(perform: produktnameEntfernen)
+                        } label: {
+                            HStack {
+                                Text("Bekannte Namen")
+                                Spacer()
+                                Text("\(geschaefteAnzahl)\u{00a0}Gesch\u{00e4}ft\(geschaefteAnzahl == 1 ? "" : "e")")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
                         }
-                        .onDelete(perform: produktnameEntfernen)
-
-                        Picker("Geschäft", selection: $neuerProduktnameGeschaeft) {
-                            Text("Bitte wählen").tag(nil as Geschaeft?)
-                            ForEach(alleGeschaefte) { geschaeft in
-                                Text(geschaeft.name).tag(geschaeft as Geschaeft?)
-                            }
-                        }
-                        HStack {
-                            TextField("Name in diesem Geschäft, z.B. \"Parad Zahncr\"", text: $neuerProduktnameText)
-                                .onSubmit(produktnameHinzufuegen)
-                            Button("Hinzufügen", action: produktnameHinzufuegen)
-                                .disabled(
-                                    neuerProduktnameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                        || neuerProduktnameGeschaeft == nil
-                                )
-                        }
-
-                        if let produktnameFehlermeldung {
-                            Text(produktnameFehlermeldung)
-                                .font(.footnote)
-                                .foregroundStyle(.red)
-                        }
-                    } header: {
-                        Text("Produktnamen je Geschäft")
                     } footer: {
-                        Text("Der auf Kassenbons gedruckte, oft abgekürzte Name — kann je Geschäft unterschiedlich lauten (z.B. \"Parad Zahncr\" vs. \"Paradontol Zahn\"). Wird beim Belegscan automatisch mit diesem Produkt verknüpft.")
+                        Text("Gedruckter Name auf Kassenbons, je Gesch\u{00e4}ft unterschiedlich. Nach links wischen zum Entfernen.")
                     }
                 }
 
                 if !istNeu && !preisHistorie.isEmpty {
                     Section("Preishistorie") {
-                        ForEach(preisHistorie) { eintrag in
-                            PreisHistorieZeile(eintrag: eintrag, zeigeArtikel: false,
-                                               loeschen: { modelContext.delete(eintrag) })
+                        if preisPunkte.count >= 2 {
+                            Chart(preisPunkte) { punkt in
+                                LineMark(
+                                    x: .value("Datum", punkt.datum),
+                                    y: .value("Preis", punkt.preisAlsDouble)
+                                )
+                                PointMark(
+                                    x: .value("Datum", punkt.datum),
+                                    y: .value("Preis", punkt.preisAlsDouble)
+                                )
+                            }
+                            .frame(height: 160)
+                            .padding(.vertical, 8)
+                            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                        }
+                        Button {
+                            zeigeDatenpunkte = true
+                        } label: {
+                            Label("Datenpunkte (\(preisHistorie.count))", systemImage: "list.bullet")
                         }
                     }
                 }
@@ -152,30 +158,16 @@ struct ProduktEditView: View {
             .sheet(isPresented: $zeigeArtikelAuswahl) {
                 ArtikelAuswahlSheet(gewaehlterArtikel: $produkt.artikel)
             }
+            .sheet(isPresented: $zeigeDatenpunkte) {
+                ProduktDatenpunkteSheet(produkt: produkt)
+            }
         }
     }
 
-    /// Legt einen neuen ``Produktname`` für ``produkt`` an — verhindert nur
-    /// exakte Duplikate (dasselbe Geschäft, derselbe Name), keine
-    /// Kollisionsprüfung über Produkte hinweg nötig (anders als
-    /// ``ArtikelAlias/manuellHinzufuegen(name:zu:alle:context:)``): ein
-    /// Produktname ist bereits durch ``produkt``+``Produktname/geschaeft``
-    /// eindeutig gescoped.
-    private func produktnameHinzufuegen() {
-        produktnameFehlermeldung = nil
-        guard let geschaeft = neuerProduktnameGeschaeft else { return }
-        let name = neuerProduktnameText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { return }
-        guard !produktnamen.contains(where: {
-            $0.geschaeft == geschaeft && $0.name.localizedCaseInsensitiveCompare(name) == .orderedSame
-        }) else {
-            produktnameFehlermeldung = "„\(name)“ ist für \(geschaeft.name) bereits hinterlegt."
-            return
-        }
-        let neuer = Produktname(name: name, produkt: produkt, geschaeft: geschaeft)
-        modelContext.insert(neuer)
-        neuerProduktnameText = ""
-        neuerProduktnameGeschaeft = nil
+    private var preisPunkte: [PreisVerlaufPunkt] {
+        preisHistorie
+            .map { PreisVerlaufPunkt(id: $0.persistentModelID, datum: $0.datum, preis: $0.preis) }
+            .sorted { $0.datum < $1.datum }
     }
 
     private func produktnameEntfernen(at indexSet: IndexSet) {
@@ -183,6 +175,65 @@ struct ProduktEditView: View {
             modelContext.delete(produktnamen[index])
         }
     }
+}
+
+/// Zeigt alle gespeicherten ``Preispunkt``e eines ``Produkt``s — einzelne
+/// Punkte lassen sich per Wischgeste dauerhaft löschen.
+private struct ProduktDatenpunkteSheet: View {
+    let produkt: Produkt
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+    @Query private var preisHistorie: [Preispunkt]
+
+    init(produkt: Produkt) {
+        self.produkt = produkt
+        let produktID = produkt.persistentModelID
+        _preisHistorie = Query(
+            filter: #Predicate<Preispunkt> { $0.produkt?.persistentModelID == produktID },
+            sort: [SortDescriptor(\.datum, order: .reverse)]
+        )
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(preisHistorie) { eintrag in
+                    PreisHistorieZeile(eintrag: eintrag, zeigeArtikel: false,
+                                       loeschen: { eintragLoeschen(eintrag) })
+                }
+            }
+            .overlay {
+                if preisHistorie.isEmpty {
+                    ContentUnavailableView("Keine Datenpunkte", systemImage: "chart.line.downtrend.xyaxis")
+                }
+            }
+            .navigationTitle("Datenpunkte")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Fertig") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func eintragLoeschen(_ eintrag: Preispunkt) {
+        Task {
+            await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                SyncTombstoneService.markiereGeloescht(
+                    art: SyncEntitaetsArt.preispunkt, id: eintrag.id, context: modelContext
+                )
+                modelContext.delete(eintrag)
+            }
+        }
+    }
+}
+
+private struct PreisVerlaufPunkt: Identifiable {
+    let id: PersistentIdentifier
+    let datum: Date
+    let preis: Decimal
+    var preisAlsDouble: Double { NSDecimalNumber(decimal: preis).doubleValue }
 }
 
 #Preview {
