@@ -187,6 +187,29 @@ final class ModelContainerController: ObservableObject {
         UserDefaults.standard.set(verwaist, forKey: Self.verwaisteDateinamenSchluessel)
         UserDefaults.standard.set(neueURL.lastPathComponent, forKey: Self.aktiverSlotSchluessel)
         DatabaseLeaseService.storeURL = neueURL
+
+        // Live-Fund (Build 308+, „Kreislauf" zurück zur Ordnerauswahl): direkt
+        // nach einem „Ersetzen durch Peer" (frischer Beitritt zu einer neuen
+        // Gruppe) existiert der EIGENE Peer-Ordner im geteilten Verzeichnis
+        // noch nicht — der wird erst vom ersten `syncZyklus()` nach diesem
+        // Live-Ersetzen angelegt (Export-Schritt). `.task(id: generation)`
+        // (``ShopWithMeApp``) ruft `SyncPollingService.starten(context:)`
+        // direkt nach diesem Umhängen erneut auf — dessen Rückkehrer-
+        // Erkennung (``SyncPollingService/binIchNochMitglied()`` via
+        // Connector) sähe den fehlenden eigenen Ordner sonst fälschlich als
+        // „aus der Gruppe entfernt", triggert automatisch Backup +
+        // `SyncOrdnerService.ordnerEntfernen()` und zeigt „Erneut beitreten"
+        // — ein Kreislauf zurück zur Ordnerauswahl. Bisher (Neustart-
+        // basierter Weg) schützte `ShopWithMeApp.init()`s `wiederherstellungAusstehend`-
+        // Flag genau davor; der Live-Pfad hatte dieses Gegenstück noch
+        // nicht. Genau EINMAL, unmittelbar vor dem Umhängen gesetzt (nicht
+        // schon am Anfang der Funktion): schlägt `befuellen` fehl oder wird
+        // dieser Aufruf durch ``wirdErsetzt`` übersprungen, bumpt `generation`
+        // nicht und `.task(id:)` feuert nicht erneut — ein hier vorzeitig
+        // gesetztes Flag bliebe sonst für den nächsten, unabhängigen
+        // regulären Start fälschlich hängen.
+        SyncPollingService.ueberspringeRueckkehrerErkennungBeimNaechstenStart = true
+
         // VOR dem Umhängen in die Rückhalteliste — siehe ``vergangeneContainer``-Doku:
         // sonst dealloziert ARC den alten Container in genau diesem Moment.
         vergangeneContainer.append(modelContainer)

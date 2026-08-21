@@ -4016,3 +4016,37 @@ Zeitfenster (Sekunden bis der Nutzer ein Formular ausfüllt, statt der
 Millisekunden-Lease-Erwerbsverzögerung beim ursprünglichen `EinkaufenView`-
 Fund) wurde als unverhältnismäßig für eine vollständige rekursive
 Relationship-Validierung eingeschätzt und bewusst nicht adressiert.
+
+### Live-Fund (Build 308+, echtes Gerät): Kreislauf zurück zur Ordnerauswahl nach „Ersetzen"
+
+**Symptom:** Nach „Ersetzen durch Peer" beim Verknüpfen eines Sync-Ordners
+läuft der Live-Tausch sichtbar korrekt durch (Fortschrittsanzeige, danach
+aktualisierte Einkaufsliste) — kurz danach erscheint aber „Aus der Sync-
+Gruppe entfernt" mit „Erneut beitreten", was zurück zur Ordnerauswahl führt.
+Erneutes Einrichten löst denselben Ablauf wieder aus — Endlos-Kreislauf.
+
+**Ursache:** `.task(id: modelContainerController.generation)` in
+`ShopWithMeApp` ruft nach jedem Live-Tausch `SyncPollingService.starten(context:)`
+erneut auf. Dessen Rückkehrer-Erkennung (Peer-Lebenszyklus,
+`connector.binIchNochMitglied()`) prüft dabei, ob der EIGENE Peer-Ordner im
+geteilten Verzeichnis existiert — direkt nach einem frischen „Ersetzen durch
+Peer"-Beitritt existiert er aber noch nicht, der wird erst vom nächsten
+`syncZyklus()` (Export-Schritt) angelegt. Die Prüfung interpretiert das
+fälschlich als „von der Gruppe entfernt" und löst automatisch Backup +
+`SyncOrdnerService.ordnerEntfernen()` aus.
+
+Der bereits bestehende Schutzmechanismus dagegen
+(`SyncPollingService.ueberspringeRueckkehrerErkennungBeimNaechstenStart`,
+race-frei in `ShopWithMeApp.init()` für den NEUSTART-basierten Weg gesetzt)
+hatte für den neuen LIVE-Pfad noch kein Gegenstück — dort gibt es kein
+`init()`, das vor `.task(id:)` läuft.
+
+**Fix:** `ModelContainerController.ersetzeLiveMitNeuemStore(befuellen:)`
+setzt dasselbe Flag jetzt selbst, unmittelbar vor dem eigentlichen Umhängen
+(`generation = UUID()`) — nicht früher, damit ein fehlgeschlagener oder
+per `wirdErsetzt` übersprungener Aufruf (kein `generation`-Bump, `.task(id:)`
+feuert nicht erneut) das Flag nicht fälschlich für den nächsten,
+unabhängigen regulären Start stehen lässt. Gilt einheitlich für alle drei
+Live-Pfade (Ersetzen/Wiederherstellen/Bereinigen) — dieselbe Großzügigkeit,
+die der alte Neustart-Mechanismus bereits für jede beliebige
+`ausstehendeAktion` gewährte.
