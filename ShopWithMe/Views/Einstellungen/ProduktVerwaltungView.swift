@@ -12,9 +12,10 @@ import SwiftData
 /// (``Produkt/istStandard``) sind ausgeblendet, da sie kein vom Nutzer benanntes,
 /// echtes Produkt darstellen.
 ///
-/// Kein SessionLeaseGate auf Listenebene — die Liste ist rein lesend; das Lease
-/// übernimmt ProduktEditView beim Öffnen als Sheet selbst.
+/// Kein SessionLeaseGate auf Listenebene — Lösch-Aktionen nutzen Micro-Leases;
+/// das Session-Lease übernimmt ProduktEditView beim Öffnen als Sheet selbst.
 struct ProduktVerwaltungView: View {
+    @Environment(\.modelContext) private var modelContext
     @Query private var alleProdukte: [Produkt]
     @State private var suchtext = ""
     @State private var bearbeitetesProdukt: Produkt?
@@ -38,6 +39,13 @@ struct ProduktVerwaltungView: View {
                 sektionSchwelle: suchtext.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 50 : .max
             ) { produkt in
                 produktZeile(produkt)
+                    .swipeActions(edge: .trailing) {
+                        Button(role: .destructive) {
+                            loeschen(produkt)
+                        } label: {
+                            Label("L\u{00F6}schen", systemImage: "trash")
+                        }
+                    }
             }
         }
         .searchable(text: $suchtext, prompt: "Produkt suchen")
@@ -96,6 +104,14 @@ struct ProduktVerwaltungView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    private func loeschen(_ produkt: Produkt) {
+        Task {
+            await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                modelContext.delete(produkt)
+            }
+        }
     }
 }
 

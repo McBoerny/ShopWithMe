@@ -23,6 +23,7 @@ struct ProduktEditView: View {
     @State private var neuerProduktnameText = ""
     @State private var neuerProduktnameGeschaeft: Geschaeft?
     @State private var produktnameFehlermeldung: String?
+    @State private var zeigeArtikelAuswahl = false
 
     init(produkt: Produkt, istNeu: Bool) {
         self.produkt = produkt
@@ -52,8 +53,26 @@ struct ProduktEditView: View {
                 Section {
                     TextField("Name", text: $produkt.name)
                         .font(.title3)
-                    if let artikelName = produkt.artikel?.name {
-                        LabeledContent("Artikel", value: artikelName)
+                    if istNeu {
+                        if let artikelName = produkt.artikel?.name {
+                            LabeledContent("Artikel", value: artikelName)
+                        }
+                    } else {
+                        Button {
+                            zeigeArtikelAuswahl = true
+                        } label: {
+                            HStack {
+                                Text("Artikel")
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                Text(produkt.artikel?.name ?? "Bitte w\u{00E4}hlen")
+                                    .foregroundStyle(.secondary)
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                        .buttonStyle(.plain)
                     }
                 } footer: {
                     Text("Menschenlesbarer Klarname des Produkts, z.B. \"Paradontol Zahncreme\" — unabhängig vom geschäftsspezifischen Bon-Text.")
@@ -128,6 +147,9 @@ struct ProduktEditView: View {
                     }
                     .disabled(produkt.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
+            }
+            .sheet(isPresented: $zeigeArtikelAuswahl) {
+                ArtikelAuswahlSheet(gewaehlterArtikel: $produkt.artikel)
             }
         }
     }
