@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.16 (Build 327) — Fix (eigentliche Ursache): AuswahlSheet schloss sich beim allerersten Öffnen sofort wieder
+
+Der vorherige Fix (siehe unten, „AuswahlSheet flackerten auf/zu") behob eine
+reale Nebenwirkung, war aber nicht die eigentliche Ursache — der genauere
+Live-Fund: `AbteilungHinzufuegenSheet` öffnete sich und schloss sich beim
+**allerersten** Mal sofort wieder, ab dem zweiten Öffnen blieb es stabil
+offen. Ursache: ``AuswahlSheet``s Suchfeld hing bislang bedingt an der
+Eintragsanzahl (`.searchable(...)` nur ab 8 Einträgen). Startet das
+zugrunde liegende `@Query` beim allerersten Öffnen eines frischen Sheets
+kurzzeitig leer (0 Einträge, kein Suchfeld) und befüllt sich dann
+innerhalb der ersten Renderdurchläufe auf die tatsächliche Anzahl, kippt
+diese Bedingung mitten in der ersten Darstellung — ein `.searchable(...)`
+strukturell dynamisch an-/abzuhängen ist eine bekannte SwiftUI-Stolperfalle
+für genau solche Navigationsartefakte (das ganze präsentierte Sheet wirkt
+dann wie geschlossen). Fix: Suchfeld ist jetzt immer eingeblendet,
+unabhängig von der Eintragsanzahl.
+
 ## v0.16 (Build 326) — Fix: Abteilung/Artikel hinzufügen-Sheets flackerten auf/zu
 
 Live-Fund direkt nach der #130-Umstellung: `AbteilungHinzufuegenSheet`,

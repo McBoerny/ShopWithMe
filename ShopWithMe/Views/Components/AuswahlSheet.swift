@@ -5,8 +5,15 @@ import SwiftUI
 /// domänenspezifische Zusatzlogik (Geocoding, Duplikat-Sonderfälle etc.)
 /// brauchen. Deckt ab:
 /// - Ganze Zeile auswählbar (nicht nur der Text).
-/// - Suchfeld (``suchAbAnzahl``, Default: ab 8 Einträgen automatisch
-///   eingeblendet — bei kleineren Listen unnötig).
+/// - Suchfeld, immer eingeblendet — bewusst NICHT abhängig von der
+///   Eintragsanzahl. Ein bedingtes `.searchable(...)`, dessen An-/Abwesenheit
+///   von einem live per `@Query` befüllten Zähler abhing, hat dazu geführt,
+///   dass sich das ganze Sheet beim allerersten Öffnen (leeres `@Query` beim
+///   ersten Rendern, kurz danach befüllt → Bedingung kippt mitten in der
+///   ersten Darstellung) sofort wieder schloss (Live-Fund,
+///   `AbteilungHinzufuegenSheet`). `.searchable` strukturell dynamisch an-/
+///   abzuhängen gilt allgemein als SwiftUI-Stolperfalle für genau solche
+///   Navigationsartefakte.
 /// - Schnellnavigation an der rechten Kante analog der `UITableView`-
 ///   Sektions-Indexleiste (SwiftUI bietet dafür kein natives Äquivalent),
 ///   automatisch ab ``schnellnavigationAbAnzahl`` Einträgen (Default 100).
@@ -40,9 +47,6 @@ struct AuswahlSheet<Item: Identifiable & Hashable, NeuAnlegenContent: View>: Vie
     let name: (Item) -> String
     let modus: Auswahlmodus
     var suchPrompt: String = "Suchen"
-    /// Ab dieser Eintragsanzahl wird das Suchfeld eingeblendet — bei
-    /// kürzeren Listen unnötiger Aufwand für den Anwender.
-    var suchAbAnzahl: Int = 8
     /// Ab dieser Eintragsanzahl erscheint die alphabetische
     /// Schnellnavigation an der rechten Kante (Issue-Vorgabe: „größer 100
     /// Einträgen").
@@ -170,7 +174,7 @@ struct AuswahlSheet<Item: Identifiable & Hashable, NeuAnlegenContent: View>: Vie
             }
             .navigationTitle(titel)
             .navigationBarTitleDisplayMode(.inline)
-            .modifier(SucheFallsBenoetigt(suchtext: $suchtext, prompt: suchPrompt, aktiv: items.count >= suchAbAnzahl))
+            .searchable(text: $suchtext, prompt: suchPrompt)
             .toolbar {
                 if zeigeAbbrechen {
                     ToolbarItem(placement: .cancellationAction) {
@@ -258,22 +262,5 @@ struct AuswahlSheet<Item: Identifiable & Hashable, NeuAnlegenContent: View>: Vie
         }
         .frame(width: 20)
         .padding(.trailing, 2)
-    }
-}
-
-/// `.searchable` lässt sich nicht bedingt anwenden, ohne den View-Typ zu
-/// verzweigen — dieser Modifier kapselt die Bedingung
-/// (``AuswahlSheet/suchAbAnzahl``) an einer Stelle.
-private struct SucheFallsBenoetigt: ViewModifier {
-    @Binding var suchtext: String
-    let prompt: String
-    let aktiv: Bool
-
-    func body(content: Content) -> some View {
-        if aktiv {
-            content.searchable(text: $suchtext, prompt: prompt)
-        } else {
-            content
-        }
     }
 }
