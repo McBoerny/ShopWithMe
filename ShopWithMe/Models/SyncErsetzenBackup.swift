@@ -6,9 +6,11 @@ import Foundation
 /// (z.B. ``IgnorierterGeschaeftsVorschlag``), damit ein Restore aus dem
 /// eigenen Backup wirklich vollständig ist statt diese stillschweigend zu
 /// verlieren. Das Peer-Wire-Format (``SyncSnapshot/formatVersion``) bleibt
-/// dadurch unangetastet.
+/// dadurch unangetastet. Mehrere Backups dieses Formats können gleichzeitig
+/// als eigene Dateien im Backups-Verzeichnis liegen (siehe
+/// ``SyncErsetzenService/alleBackups()``).
 struct SyncErsetzenBackup: Codable {
-    static let aktuelleFormatVersion = 2
+    static let aktuelleFormatVersion = 3
 
     var formatVersion: Int
     var erstelltAm: Date
@@ -23,6 +25,11 @@ struct SyncErsetzenBackup: Codable {
     /// wie eine leere Liste behandelt statt den Restore abzubrechen (siehe
     /// ``SyncErsetzenService/stelleSyncEventsWiederHer(_:context:)``).
     var bekannteSyncEvents: [SyncEventBackupEintrag]?
+    /// Kurze, für den Anwender sichtbare Herkunftsbezeichnung (z.B. "Manuell",
+    /// "Vor Ersetzen durch Peer", "Importiert") — seit Formatversion 3, `nil`
+    /// bei älteren Backups. Rein informativ für die Backup-Liste in
+    /// ``SyncOrdnerSettingsView``, ohne Einfluss auf den Restore-Ablauf.
+    var grund: String?
 }
 
 struct IgnorierterGeschaeftsVorschlagSnapshot: Codable {

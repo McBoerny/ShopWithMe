@@ -104,6 +104,7 @@ struct SyncErsetzenServiceTests {
     /// `UserDefaults` und übersteht damit einzelne Testläufe.
     private func raeumeAusstehendeAktionAuf() {
         UserDefaults.standard.removeObject(forKey: "syncErsetzenAusstehendeAktion")
+        UserDefaults.standard.removeObject(forKey: "syncErsetzenAusstehendeAktionBackupDateiname")
     }
 
     private func setzeAusstehendeAktion(_ aktion: SyncErsetzenService.AusstehendeAktion) {
@@ -182,8 +183,11 @@ struct SyncErsetzenServiceTests {
         #expect(backup.snapshot.geschaefte.map(\.name) == ["Rewe"])
     }
 
+    /// Mehrere Backup-Versionen (statt wie früher genau eine, überschrieben
+    /// bei jedem Aufruf): jeder Aufruf legt eine zusätzliche Datei an, ältere
+    /// Backups bleiben unverändert lesbar.
     @Test
-    func erneutesBackupUeberschreibtDasVorherige() throws {
+    func erneutesBackupLegtZusaetzlicheVersionAn() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
         defer { SyncErsetzenService.loescheBackup() }
@@ -196,10 +200,83 @@ struct SyncErsetzenServiceTests {
         try context.save()
         let zweiteBackupURL = try SyncErsetzenService.erstelleBackup(context: context)
 
-        #expect(ersteBackupURL == zweiteBackupURL)
-        let daten = try Data(contentsOf: zweiteBackupURL)
+        #expect(ersteBackupURL != zweiteBackupURL)
+        #expect(SyncErsetzenService.alleBackups().count == 2)
+
+        let ersteDaten = try Data(contentsOf: ersteBackupURL)
+        let ersteBackup = try JSONDecoder().decode(SyncErsetzenBackup.self, from: ersteDaten)
+        #expect(ersteBackup.snapshot.geschaefte.map(\.name) == ["Rewe"])
+
+        let zweiteDaten = try Data(contentsOf: zweiteBackupURL)
+        let zweiteBackup = try JSONDecoder().decode(SyncErsetzenBackup.self, from: zweiteDaten)
+        #expect(Set(zweiteBackup.snapshot.geschaefte.map(\.name)) == Set(["Rewe", "Edeka"]))
+    }
+
+    /// Übersteigt die Anzahl Backups das Limit (aktuell 10), wird automatisch
+    /// das älteste entfernt — verhindert unbegrenztes Anwachsen bei
+    /// wiederholtem manuellem/automatischem Backup.
+    @Test
+    func aufbewahrungsLimitEntferntAeltestesBackup() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        defer { SyncErsetzenService.loescheBackup() }
+
+        var urls: [URL] = []
+        for _ in 0..<11 {
+            urls.append(try SyncErsetzenService.erstelleBackup(context: context))
+        }
+
+        let backups = SyncErsetzenService.alleBackups()
+        #expect(backups.count == 10)
+        #expect(!backups.contains { $0.url == urls.first })
+        #expect(backups.contains { $0.url == urls.last })
+    }
+
+    /// `importiereBackup(von:)` übernimmt eine extern gewählte Backup-Datei
+    /// als zusätzliches, eigenständiges Backup — nach erfolgreichem Import
+    /// unabhängig von der ursprünglichen Quelldatei lesbar.
+    @Test
+    func importiertesBackupWirdZusaetzlicheVersion() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        defer { SyncErsetzenService.loescheBackup() }
+
+        context.insert(Geschaeft(name: "Rewe", typen: []))
+        try context.save()
+        let quelle = try SyncErsetzenService.erstelleBackup(context: context)
+
+        let externesVerzeichnis = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: externesVerzeichnis, withIntermediateDirectories: true)
+        let externeDatei = externesVerzeichnis.appendingPathComponent("extern.json")
+        try Data(contentsOf: quelle).write(to: externeDatei)
+        defer { try? FileManager.default.removeItem(at: externesVerzeichnis) }
+
+        let importierteURL = try SyncErsetzenService.importiereBackup(von: externeDatei)
+
+        #expect(importierteURL != quelle)
+        #expect(SyncErsetzenService.alleBackups().count == 2)
+        let daten = try Data(contentsOf: importierteURL)
         let backup = try JSONDecoder().decode(SyncErsetzenBackup.self, from: daten)
-        #expect(Set(backup.snapshot.geschaefte.map(\.name)) == Set(["Rewe", "Edeka"]))
+        #expect(backup.grund?.hasPrefix("Importiert") == true)
+        #expect(backup.snapshot.geschaefte.map(\.name) == ["Rewe"])
+    }
+
+    /// `loescheBackup(url:)` entfernt gezielt eine einzelne Version, ohne die
+    /// übrigen zu berühren.
+    @Test
+    func loescheBackupMitURLEntferntNurDieseVersion() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        defer { SyncErsetzenService.loescheBackup() }
+
+        let ersteBackupURL = try SyncErsetzenService.erstelleBackup(context: context)
+        let zweiteBackupURL = try SyncErsetzenService.erstelleBackup(context: context)
+
+        SyncErsetzenService.loescheBackup(url: ersteBackupURL)
+
+        let verbleibende = SyncErsetzenService.alleBackups()
+        #expect(verbleibende.count == 1)
+        #expect(verbleibende.first?.url == zweiteBackupURL)
     }
 
     // MARK: - Planen

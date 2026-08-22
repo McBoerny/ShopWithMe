@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.16 (Build 322) — Mehrere Backup-Versionen, Löschen, Export/Import ins Dateisystem
+
+Backup-Funktion erweitert (Nutzerwunsch): statt eines einzigen, bei jedem
+„Ersetzen" überschriebenen Backups verwaltet die App jetzt bis zu 10
+gleichzeitige Backup-Versionen (Einstellungen → „Synchronisation" →
+„Backups"). Jeder Eintrag zeigt Datum, Größe und Anlass; antippen stellt ihn
+wieder her, nach links wischen löscht ihn, nach rechts wischen exportiert ihn
+als Datei in die Dateien-App/iCloud Drive. Neu: „Backup jetzt erstellen"
+(manuell, jederzeit) und „Backup importieren…" (übernimmt eine zuvor
+exportierte Backup-Datei, z.B. von einem anderen Gerät). Details siehe
+`docs/DATENSYNCHRONISATION_VERLAUF.md`, Abschnitt 62.
+
 ## v0.16 (Build 318) — Solo-Peer-Aufräumen (Kaeufe-Dateien sofort, Events/Tombstones per Bestätigung)
 
 GitHub-Bug-Report: auf einem Gerät, das aktuell der einzige Peer im Sync-Ordner

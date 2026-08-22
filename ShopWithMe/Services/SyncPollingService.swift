@@ -136,7 +136,7 @@ final class SyncPollingService: ObservableObject {
             if !ueberspringeRueckkehrerErkennung,
                let selbst = self,
                await selbst.connector.binIchNochMitglied() == false {
-                _ = try? SyncErsetzenService.erstelleBackup(context: context)
+                _ = try? SyncErsetzenService.erstelleBackup(context: context, grund: "Vor Gruppen-Ausschluss")
                 SyncOrdnerService.ordnerEntfernen()
                 self?.wurdeAusGruppeEntfernt = true
                 return

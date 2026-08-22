@@ -41,7 +41,20 @@ struct SyncOrdnerSettingsView: View {
     @State private var zeigeBeitrittsWahl = false
     @State private var zeigeAustrittsWahl = false
     @State private var zeigeNeustartHinweis = false
-    @State private var zeigeBackupWiederherstellenBestaetigung = false
+    /// Backup, das nach Bestätigung wiederhergestellt werden soll — anders
+    /// als früher (ein Bool für den einzigen Backup-Slot) jetzt konkret, da
+    /// mehrere Backup-Versionen zur Auswahl stehen (Section „Backups" in
+    /// ``body``).
+    @State private var zuWiederherstellendesBackup: SyncErsetzenService.BackupInfo?
+    @State private var zuLoeschendesBackup: SyncErsetzenService.BackupInfo?
+    @State private var exportDokument: BackupExportDocument?
+    @State private var exportDateiname = "backup.json"
+    @State private var zeigeBackupExport = false
+    @State private var zeigeBackupImport = false
+    /// Nur zum erneuten Auslösen von ``body`` nach Backup-Erstellung/-Löschung/
+    /// -Import — ``SyncErsetzenService/alleBackups()`` liest bei jedem Aufruf
+    /// direkt von der Platte, ohne eigenes zwischengespeichertes State.
+    @State private var backupListeVersion = 0
 
     /// Nutzer-Einstellung für den Multipeer-Kanal (GitHub #127) — separat von
     /// ``MultipeerSyncService/aktiv`` (View-Sichtbarkeits-Flag von
@@ -130,21 +143,51 @@ struct SyncOrdnerSettingsView: View {
                 }
             }
 
-            if let backup = SyncErsetzenService.vorhandenesBackup() {
-                Section {
-                    LabeledContent("Erstellt am") {
-                        Text("\(backup.erstelltAm.formatted(date: .abbreviated, time: .shortened)) · \(ByteCountFormatter.string(fromByteCount: Int64(backup.groesseBytes), countStyle: .file))")
-                            .foregroundStyle(.secondary)
-                    }
-                    Button("Backup wiederherstellen", role: .destructive) {
-                        zeigeBackupWiederherstellenBestaetigung = true
+            Section {
+                let _ = backupListeVersion
+                let backups = SyncErsetzenService.alleBackups()
+                ForEach(backups) { backup in
+                    Button {
+                        zuWiederherstellendesBackup = backup
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(backup.grund)
+                                    .foregroundStyle(.primary)
+                                Text("\(backup.erstelltAm.formatted(date: .abbreviated, time: .shortened)) · \(ByteCountFormatter.string(fromByteCount: Int64(backup.groesseBytes), countStyle: .file))")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "arrow.uturn.backward.circle")
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     .disabled(wirdErsetzt)
-                } header: {
-                    Text("Lokales Backup")
-                } footer: {
-                    Text("Ein lokales Backup deines Datenbestands von vor dem letzten „Ersetzen“ beim Sync-Beitritt. Wiederherstellen überschreibt den aktuellen Datenbestand mit diesem Stand.")
+                    .swipeActions(edge: .trailing) {
+                        Button("Löschen", role: .destructive) {
+                            zuLoeschendesBackup = backup
+                        }
+                    }
+                    .swipeActions(edge: .leading) {
+                        Button("Exportieren", systemImage: "square.and.arrow.up") {
+                            backupExportieren(backup)
+                        }
+                        .tint(.blue)
+                    }
                 }
+                Button("Backup jetzt erstellen") {
+                    backupErstellenGetappt()
+                }
+                .disabled(wirdErsetzt)
+                Button("Backup importieren…") {
+                    zeigeBackupImport = true
+                }
+                .disabled(wirdErsetzt)
+            } header: {
+                Text("Backups")
+            } footer: {
+                Text("Lokale Sicherungen deines Datenbestands — u.a. automatisch vor jedem „Ersetzen“ beim Sync-Beitritt. Tippen stellt einen Stand wieder her (überschreibt den aktuellen Datenbestand), nach links wischen löscht, nach rechts wischen exportiert in die Dateien-App/iCloud Drive. Es werden höchstens die letzten 10 Backups aufbewahrt.")
             }
 
             if ausgewaehlterOrdner != nil && !neustartAusstehend {
@@ -221,13 +264,38 @@ struct SyncOrdnerSettingsView: View {
         } message: {
             Text("Es ist ein lokales Backup von vor dem letzten Beitritt/Ersetzen vorhanden. Möchtest du deinen damaligen Stand wiederherstellen?")
         }
-        .confirmationDialog("Backup wiederherstellen", isPresented: $zeigeBackupWiederherstellenBestaetigung) {
+        .confirmationDialog(
+            "Backup wiederherstellen", isPresented: Binding(get: { zuWiederherstellendesBackup != nil }, set: { if !$0 { zuWiederherstellendesBackup = nil } }),
+            presenting: zuWiederherstellendesBackup
+        ) { backup in
             Button("Wiederherstellen", role: .destructive) {
-                backupWiederherstellenGetappt()
+                backupWiederherstellenGetappt(url: backup.url)
+                zuWiederherstellendesBackup = nil
             }
-            Button("Abbrechen", role: .cancel) {}
-        } message: {
-            Text("Der aktuelle Datenbestand wird durch das lokale Backup ersetzt.")
+            Button("Abbrechen", role: .cancel) { zuWiederherstellendesBackup = nil }
+        } message: { backup in
+            Text("Der aktuelle Datenbestand wird durch das Backup vom \(backup.erstelltAm.formatted(date: .abbreviated, time: .shortened)) ersetzt.")
+        }
+        .confirmationDialog(
+            "Backup löschen", isPresented: Binding(get: { zuLoeschendesBackup != nil }, set: { if !$0 { zuLoeschendesBackup = nil } }),
+            presenting: zuLoeschendesBackup
+        ) { backup in
+            Button("Löschen", role: .destructive) {
+                SyncErsetzenService.loescheBackup(url: backup.url)
+                backupListeVersion += 1
+                zuLoeschendesBackup = nil
+            }
+            Button("Abbrechen", role: .cancel) { zuLoeschendesBackup = nil }
+        } message: { backup in
+            Text("Das Backup vom \(backup.erstelltAm.formatted(date: .abbreviated, time: .shortened)) wird endgültig gelöscht.")
+        }
+        .fileExporter(isPresented: $zeigeBackupExport, document: exportDokument, contentType: .json, defaultFilename: exportDateiname) { ergebnis in
+            if case .failure(let error) = ergebnis {
+                fehlermeldung = error.localizedDescription
+            }
+        }
+        .fileImporter(isPresented: $zeigeBackupImport, allowedContentTypes: [.json]) { ergebnis in
+            backupImportieren(ergebnis)
         }
         .alert("Neustart nötig", isPresented: $zeigeNeustartHinweis) {
             Button("OK") {}
@@ -426,11 +494,13 @@ struct SyncOrdnerSettingsView: View {
 
     /// Eigenständige Wiederherstellung ohne Sync-Ordner-Austritt (GitHub #63)
     /// — z.B. für die Korruptions-Recovery-Verwendung von ``SyncErsetzenService``,
-    /// bei der der Sync-Ordner weiterhin verknüpft bleiben soll.
-    private func backupWiederherstellenGetappt() {
+    /// bei der der Sync-Ordner weiterhin verknüpft bleiben soll. `url` wählt
+    /// eine bestimmte Version aus der Backup-Liste (mehrere Backups
+    /// gleichzeitig verfügbar, statt wie früher nur eines).
+    private func backupWiederherstellenGetappt(url: URL) {
         guard let controller = ModelContainerController.aktuell else {
             do {
-                try SyncErsetzenService.planeWiederherstellenAusBackup()
+                try SyncErsetzenService.planeWiederherstellenAusBackup(url: url)
                 neustartAusstehendMachen()
             } catch {
                 fehlermeldung = error.localizedDescription
@@ -442,12 +512,84 @@ struct SyncOrdnerSettingsView: View {
         wirdErsetzt = true
         Task {
             do {
-                try await SyncErsetzenService.fuehreWiederherstellenAusBackupLive(controller: controller)
+                try await SyncErsetzenService.fuehreWiederherstellenAusBackupLive(controller: controller, url: url)
             } catch {
                 fehlermeldung = error.localizedDescription
             }
             wirdErsetzt = false
         }
+    }
+
+    /// Manuell vom Anwender ausgelöstes Backup (im Unterschied zu den
+    /// automatisch vor „Ersetzen"/Bereinigung erstellten) — landet als
+    /// weiterer Eintrag in derselben Liste (``SyncErsetzenService/alleBackups()``).
+    private func backupErstellenGetappt() {
+        do {
+            try SyncErsetzenService.erstelleBackup(context: modelContext)
+            backupListeVersion += 1
+        } catch {
+            fehlermeldung = error.localizedDescription
+        }
+    }
+
+    /// Öffnet den System-Exportdialog für `backup` — liest die Datei direkt
+    /// von der Platte, da ``SyncErsetzenService`` Backups nur als Datei-URL
+    /// verwaltet, nicht als im Speicher gehaltene Werte.
+    private func backupExportieren(_ backup: SyncErsetzenService.BackupInfo) {
+        guard let daten = try? Data(contentsOf: backup.url) else {
+            fehlermeldung = "Backup konnte nicht gelesen werden."
+            return
+        }
+        exportDokument = BackupExportDocument(daten: daten)
+        let formatierer = DateFormatter()
+        formatierer.dateFormat = "yyyyMMdd-HHmmss"
+        exportDateiname = "ShopWithMe-Backup-\(formatierer.string(from: backup.erstelltAm))"
+        zeigeBackupExport = true
+    }
+
+    /// Übernimmt eine extern gewählte Backup-Datei (Dateien-App, iCloud
+    /// Drive, ein anderes Gerät, …) als zusätzliches Backup — validiert dabei
+    /// über ``SyncErsetzenService/importiereBackup(von:)``, dass es sich
+    /// wirklich um ein dekodierbares Backup handelt.
+    private func backupImportieren(_ ergebnis: Result<URL, Error>) {
+        switch ergebnis {
+        case .failure(let error):
+            fehlermeldung = error.localizedDescription
+        case .success(let quelle):
+            // Sicherheitsbereich (`fileImporter` liefert eine
+            // security-scoped URL außerhalb des eigenen Sandbox-Bereichs) —
+            // ohne das schlägt der Lesezugriff in ``importiereBackup(von:)``
+            // stumm fehl.
+            let zugriffErlaubt = quelle.startAccessingSecurityScopedResource()
+            defer { if zugriffErlaubt { quelle.stopAccessingSecurityScopedResource() } }
+            do {
+                try SyncErsetzenService.importiereBackup(von: quelle)
+                backupListeVersion += 1
+            } catch {
+                fehlermeldung = "Datei ist kein gültiges Backup."
+            }
+        }
+    }
+}
+
+/// `FileDocument`-Wrapper für den Export einer bereits vorhandenen
+/// Backup-JSON-Datei über `.fileExporter` — reicht die Rohdaten unverändert
+/// durch, da ``SyncErsetzenService`` bereits gültiges JSON schreibt.
+struct BackupExportDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.json] }
+
+    var daten: Data
+
+    init(daten: Data) {
+        self.daten = daten
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        daten = configuration.file.regularFileContents ?? Data()
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: daten)
     }
 }
 

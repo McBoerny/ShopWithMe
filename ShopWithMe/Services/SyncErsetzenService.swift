@@ -54,12 +54,25 @@ enum SyncErsetzenService {
     }
 
     private static let ausstehendeAktionSchluessel = "syncErsetzenAusstehendeAktion"
-    private static let backupDateiName = "ersetzen-backup.json"
+    private static let ausstehendeAktionBackupDateinameSchluessel = "syncErsetzenAusstehendeAktionBackupDateiname"
 
-    private static var backupURL: URL {
+    /// Obergrenze gleichzeitig aufbewahrter Backups (Nutzer-Entscheidung) —
+    /// beim Überschreiten wird nach jedem ``erstelleBackup(context:grund:)``
+    /// automatisch das älteste entfernt (siehe ``wendeAufbewahrungsLimitAn()``).
+    private static let maximaleAnzahlBackups = 10
+
+    private static var backupsVerzeichnis: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Backups", isDirectory: true)
-            .appendingPathComponent(backupDateiName)
+    }
+
+    /// Dateiname für ein neu zu erstellendes Backup — Zeitstempel (für
+    /// chronologische Sortierbarkeit schon am Dateinamen) plus kurzer
+    /// UUID-Suffix, damit zwei Backups in derselben Sekunde nie kollidieren.
+    private static func neueBackupURL() -> URL {
+        let zeitstempel = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
+        let suffix = UUID().uuidString.prefix(8)
+        return backupsVerzeichnis.appendingPathComponent("backup-\(zeitstempel)-\(suffix).json")
     }
 
     /// Die beim nächsten App-Start auszuführende Aktion, `nil` im
@@ -70,9 +83,25 @@ enum SyncErsetzenService {
         set { UserDefaults.standard.set(newValue?.rawValue, forKey: ausstehendeAktionSchluessel) }
     }
 
-    struct BackupInfo {
+    /// Dateiname (nicht vollständige URL, da ``backupsVerzeichnis`` sich
+    /// zwischen App-Starts nicht ändert) des Backups, auf das sich
+    /// ``ausstehendeAktion`` bezieht — bei `.ersetzenDurchPeer` das direkt
+    /// zuvor als Sicherheitsnetz erstellte Backup (für die Vorher-/
+    /// Nachher-Zusammenfassung), bei `.wiederherstellenAusBackup` das
+    /// tatsächlich wiederherzustellende Backup. Übersteht den Neustart
+    /// genau wie ``ausstehendeAktion`` selbst.
+    private(set) static var ausstehendeAktionBackupDateiname: String? {
+        get { UserDefaults.standard.string(forKey: ausstehendeAktionBackupDateinameSchluessel) }
+        set { UserDefaults.standard.set(newValue, forKey: ausstehendeAktionBackupDateinameSchluessel) }
+    }
+
+    struct BackupInfo: Identifiable {
+        var url: URL
         var erstelltAm: Date
         var groesseBytes: Int
+        var grund: String
+
+        var id: URL { url }
     }
 
     /// Vorher-/Nachher-Mengenvergleich eines „Ersetzen durch Peer"-Neuaufbaus
@@ -168,17 +197,25 @@ enum SyncErsetzenService {
     /// in Unit-Tests ohne echten `ModelContainerController`).
     @MainActor
     static func planeErsetzenDurchPeer(context: ModelContext) throws {
-        try erstelleBackup(context: context)
+        let url = try erstelleBackup(context: context, grund: "Vor Ersetzen durch Peer")
+        ausstehendeAktionBackupDateiname = url.lastPathComponent
         ausstehendeAktion = .ersetzenDurchPeer
     }
 
     /// Merkt „Wiederherstellen aus dem lokalen Backup" für den nächsten
-    /// App-Start vor. Wirft, falls kein Backup existiert. Nur noch Fallback,
-    /// siehe ``planeErsetzenDurchPeer(context:)``.
-    static func planeWiederherstellenAusBackup() throws {
-        guard vorhandenesBackup() != nil else {
+    /// App-Start vor. `url` wählt ein bestimmtes Backup aus der Liste
+    /// (``alleBackups()``); `nil` (Vorgabe) wählt das zuletzt erstellte —
+    /// deckt den alten Einzel-Backup-Aufrufstil ab. Wirft, falls das
+    /// gewählte bzw. (bei `nil`) irgendein Backup existiert. Nur noch
+    /// Fallback, siehe ``planeErsetzenDurchPeer(context:)``.
+    static func planeWiederherstellenAusBackup(url: URL? = nil) throws {
+        guard let ziel = url ?? alleBackups().first?.url else {
             throw SyncErsetzenFehler.keinBackupVorhanden
         }
+        guard FileManager.default.fileExists(atPath: ziel.path) else {
+            throw SyncErsetzenFehler.keinBackupVorhanden
+        }
+        ausstehendeAktionBackupDateiname = ziel.lastPathComponent
         ausstehendeAktion = .wiederherstellenAusBackup
     }
 
@@ -202,7 +239,8 @@ enum SyncErsetzenService {
     /// nur mit einem eben erst (nicht irgendwann früher) erstellten Snapshot.
     @MainActor
     static func planeBereinigungBaumelnderReferenzen(context: ModelContext) throws {
-        try erstelleBackup(context: context)
+        let url = try erstelleBackup(context: context, grund: "Bereinigung baumelnder Referenzen")
+        ausstehendeAktionBackupDateiname = url.lastPathComponent
         ausstehendeAktion = .wiederherstellenAusBackup
     }
 
@@ -215,21 +253,23 @@ enum SyncErsetzenService {
     @MainActor
     static func fuehreErsetzenDurchPeerLive(controller: ModelContainerController) async throws {
         let vorherKontext = controller.modelContainer.mainContext
-        try erstelleBackup(context: vorherKontext)
+        let vorherBackupURL = try erstelleBackup(context: vorherKontext, grund: "Vor Ersetzen durch Peer")
         try await fuehreLiveAus(controller: controller) { neuerContext in
-            await fuehreErsetzenDurchPeerAus(context: neuerContext)
+            await fuehreErsetzenDurchPeerAus(context: neuerContext, vorherBackupURL: vorherBackupURL)
         }
     }
 
-    /// Stellt SOFORT den zuletzt gesicherten lokalen Stand wieder her — ohne
-    /// App-Neustart. Wirft, falls kein Backup existiert.
+    /// Stellt SOFORT den gewählten lokalen Stand wieder her — ohne
+    /// App-Neustart. `url` wählt ein bestimmtes Backup aus der Liste
+    /// (``alleBackups()``); `nil` (Vorgabe) wählt das zuletzt erstellte.
+    /// Wirft, falls das gewählte bzw. (bei `nil`) irgendein Backup existiert.
     @MainActor
-    static func fuehreWiederherstellenAusBackupLive(controller: ModelContainerController) async throws {
-        guard vorhandenesBackup() != nil else {
+    static func fuehreWiederherstellenAusBackupLive(controller: ModelContainerController, url: URL? = nil) async throws {
+        guard let ziel = url ?? alleBackups().first?.url, FileManager.default.fileExists(atPath: ziel.path) else {
             throw SyncErsetzenFehler.keinBackupVorhanden
         }
         try await fuehreLiveAus(controller: controller) { neuerContext in
-            fuehreWiederherstellenAusBackupAus(context: neuerContext)
+            fuehreWiederherstellenAusBackupAus(context: neuerContext, url: ziel)
         }
     }
 
@@ -239,9 +279,9 @@ enum SyncErsetzenService {
     /// auf.
     @MainActor
     static func fuehreBereinigungBaumelnderReferenzenLive(controller: ModelContainerController) async throws {
-        try erstelleBackup(context: controller.modelContainer.mainContext)
+        let url = try erstelleBackup(context: controller.modelContainer.mainContext, grund: "Bereinigung baumelnder Referenzen")
         try await fuehreLiveAus(controller: controller) { neuerContext in
-            fuehreWiederherstellenAusBackupAus(context: neuerContext)
+            fuehreWiederherstellenAusBackupAus(context: neuerContext, url: url)
         }
     }
 
@@ -332,12 +372,18 @@ enum SyncErsetzenService {
     static func fuehreAusstehendeAktionAus(context: ModelContext) async {
         guard let aktion = ausstehendeAktion else { return }
         ausstehendeAktion = nil
+        // Fällt auf das zuletzt erstellte Backup zurück, falls kein
+        // Dateiname hinterlegt ist (defensiv — sollte bei jedem Aufrufer
+        // oben stets gesetzt sein).
+        let backupURL = ausstehendeAktionBackupDateiname.map { backupsVerzeichnis.appendingPathComponent($0) } ?? alleBackups().first?.url
+        ausstehendeAktionBackupDateiname = nil
 
         switch aktion {
         case .ersetzenDurchPeer:
-            await fuehreErsetzenDurchPeerAus(context: context)
+            await fuehreErsetzenDurchPeerAus(context: context, vorherBackupURL: backupURL)
         case .wiederherstellenAusBackup:
-            fuehreWiederherstellenAusBackupAus(context: context)
+            guard let backupURL else { return }
+            fuehreWiederherstellenAusBackupAus(context: context, url: backupURL)
         }
     }
 
@@ -347,13 +393,13 @@ enum SyncErsetzenService {
     /// beiden Fällen ein frischer, leerer Context (nach `loescheStoreDateiFallsAusstehend`
     /// bzw. nach ``ModelContainerController/ersetzeLiveMitNeuemStore(befuellen:)``).
     @MainActor
-    private static func fuehreErsetzenDurchPeerAus(context: ModelContext) async {
+    private static func fuehreErsetzenDurchPeerAus(context: ModelContext, vorherBackupURL: URL?) async {
         // Vorher-Stand aus dem ohnehin vor dem Neuaufbau erstellten
         // Backup lesen (noch vorhanden, wird hier bewusst nicht gelöscht) —
         // Grundlage für die Vorher-/Nachher-Zusammenfassung unten, den
         // Härtungs-Rollback UND die SyncEvent-Wiederherstellung (GitHub #80,
         // siehe unten).
-        let vorherBackup = ladeBackup()
+        let vorherBackup = vorherBackupURL.flatMap(ladeBackup(url:))
         let ordnerZugriffErfolgreich = await SyncSnapshotImportService.importiereSnapshots(context: context)
         if let vorherBackup {
             let vorherSnapshot = vorherBackup.snapshot
@@ -408,10 +454,8 @@ enum SyncErsetzenService {
     /// vom Neustart-Fallback und dem Live-Pfad (``fuehreWiederherstellenAusBackupLive(controller:)``,
     /// ``fuehreBereinigungBaumelnderReferenzenLive(controller:)``).
     @MainActor
-    private static func fuehreWiederherstellenAusBackupAus(context: ModelContext) {
-        guard let daten = try? Data(contentsOf: backupURL),
-              let backup = try? JSONDecoder().decode(SyncErsetzenBackup.self, from: daten)
-        else { return }
+    private static func fuehreWiederherstellenAusBackupAus(context: ModelContext, url: URL) {
+        guard let backup = ladeBackup(url: url) else { return }
         // Sentinel-Geräte-ID statt der eigenen: verhindert einen
         // Phantom-``SyncPeerInfo``-Eintrag und Kollisionen mit echter
         // Peer-Zähler-Buchhaltung (``SyncPeerZaehlerStand``).
@@ -474,14 +518,16 @@ enum SyncErsetzenService {
 
     // MARK: - Backup
 
-    /// Sichert den aktuellen Datenbestand als lokales, nicht geteiltes Backup
-    /// — wiederverwendet ``SyncSnapshotExportService/erstelleSnapshot(context:)``
-    /// für den Hauptinhalt. Genau eine Backup-Datei, ein erneuter Aufruf
-    /// überschreibt die vorherige (siehe Typ-Doku für die Begründung dieser
-    /// Aufbewahrungs-Entscheidung).
+    /// Sichert den aktuellen Datenbestand als eine neue, lokale, nicht
+    /// geteilte Backup-Datei — wiederverwendet
+    /// ``SyncSnapshotExportService/erstelleSnapshot(context:)`` für den
+    /// Hauptinhalt. Jeder Aufruf legt eine zusätzliche Datei an (siehe
+    /// ``alleBackups()``); überschreitet die Gesamtzahl danach
+    /// ``maximaleAnzahlBackups``, wird automatisch das älteste Backup
+    /// entfernt (``wendeAufbewahrungsLimitAn()``).
     @discardableResult
     @MainActor
-    static func erstelleBackup(context: ModelContext) throws -> URL {
+    static func erstelleBackup(context: ModelContext, grund: String = "Manuell") throws -> URL {
         let snapshot = SyncSnapshotExportService.erstelleSnapshot(context: context)
         let ignorierteVorschlaege = ((try? context.fetch(FetchDescriptor<IgnorierterGeschaeftsVorschlag>())) ?? []).map {
             IgnorierterGeschaeftsVorschlagSnapshot(
@@ -500,36 +546,88 @@ enum SyncErsetzenService {
             erstelltAm: Date(),
             snapshot: snapshot,
             ignorierteGeschaeftsVorschlaege: ignorierteVorschlaege,
-            bekannteSyncEvents: bekannteSyncEvents
+            bekannteSyncEvents: bekannteSyncEvents,
+            grund: grund
         )
         let daten = try JSONEncoder().encode(backup)
-        let url = backupURL
+        let url = neueBackupURL()
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try daten.write(to: url, options: .atomic)
+        wendeAufbewahrungsLimitAn()
         return url
     }
 
-    /// Metadaten des vorhandenen Backups für die UI (Datum, Größe) — `nil`,
-    /// falls keins existiert oder es nicht lesbar ist.
-    static func vorhandenesBackup() -> BackupInfo? {
-        let url = backupURL
-        guard let attribute = try? FileManager.default.attributesOfItem(atPath: url.path),
-              let groesse = attribute[.size] as? Int,
-              let backup = ladeBackup()
-        else { return nil }
-        return BackupInfo(erstelltAm: backup.erstelltAm, groesseBytes: groesse)
+    /// Entfernt überzählige Backups (älteste zuerst), bis höchstens
+    /// ``maximaleAnzahlBackups`` übrig sind — nach jedem
+    /// ``erstelleBackup(context:grund:)`` aufgerufen. Das Backup, auf das
+    /// sich eine noch ausstehende Aktion bezieht (``ausstehendeAktionBackupDateiname``),
+    /// wird dabei nie entfernt, auch nicht wenn es zufällig das älteste ist.
+    private static func wendeAufbewahrungsLimitAn() {
+        let backups = alleBackups()
+        guard backups.count > maximaleAnzahlBackups else { return }
+        let geschuetzterDateiname = ausstehendeAktionBackupDateiname
+        for veraltet in backups.dropFirst(maximaleAnzahlBackups) where veraltet.url.lastPathComponent != geschuetzterDateiname {
+            try? FileManager.default.removeItem(at: veraltet.url)
+        }
     }
 
-    /// Lädt und dekodiert das vorhandene Backup, `nil` falls keins existiert
-    /// oder es nicht lesbar ist — gemeinsam genutzt von ``vorhandenesBackup()``
-    /// und der Vorher-/Nachher-Zusammenfassung in
-    /// ``fuehreAusstehendeAktionAus(context:)``.
-    private static func ladeBackup() -> SyncErsetzenBackup? {
-        guard let daten = try? Data(contentsOf: backupURL) else { return nil }
+    /// Metadaten des zuletzt erstellten Backups, `nil` falls keins existiert
+    /// — Convenience für Aufrufer, die (wie der alte Einzel-Backup-Ablauf)
+    /// nur wissen wollen, ob überhaupt eines existiert. Für die vollständige
+    /// Liste siehe ``alleBackups()``.
+    static func vorhandenesBackup() -> BackupInfo? {
+        alleBackups().first
+    }
+
+    /// Alle vorhandenen Backups, neuestes zuerst — Grundlage für die
+    /// Backup-Liste in ``SyncOrdnerSettingsView``.
+    static func alleBackups() -> [BackupInfo] {
+        guard let dateien = try? FileManager.default.contentsOfDirectory(at: backupsVerzeichnis, includingPropertiesForKeys: nil)
+        else { return [] }
+        return dateien
+            .filter { $0.pathExtension == "json" }
+            .compactMap { url -> BackupInfo? in
+                guard let groesse = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int,
+                      let backup = ladeBackup(url: url)
+                else { return nil }
+                return BackupInfo(url: url, erstelltAm: backup.erstelltAm, groesseBytes: groesse, grund: backup.grund ?? "Backup")
+            }
+            .sorted { $0.erstelltAm > $1.erstelltAm }
+    }
+
+    /// Lädt und dekodiert ein Backup an `url`, `nil` falls es nicht existiert
+    /// oder nicht lesbar ist.
+    private static func ladeBackup(url: URL) -> SyncErsetzenBackup? {
+        guard let daten = try? Data(contentsOf: url) else { return nil }
         return try? JSONDecoder().decode(SyncErsetzenBackup.self, from: daten)
     }
 
+    /// Löscht ein bestimmtes Backup.
+    static func loescheBackup(url: URL) {
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    /// Löscht alle vorhandenen Backups (Test-Aufräumen, siehe
+    /// `SyncErsetzenServiceTests`).
     static func loescheBackup() {
-        try? FileManager.default.removeItem(at: backupURL)
+        for backup in alleBackups() {
+            loescheBackup(url: backup.url)
+        }
+    }
+
+    /// Importiert eine extern gewählte Backup-Datei (Dateien-App, iCloud
+    /// Drive, …) als zusätzliches Backup in ``backupsVerzeichnis`` — validiert
+    /// dabei, dass es sich tatsächlich um ein dekodierbares
+    /// ``SyncErsetzenBackup`` handelt, statt eine beliebige Datei blind zu
+    /// kopieren. Wirft, falls die Datei nicht lesbar/dekodierbar ist.
+    static func importiereBackup(von quelle: URL) throws -> URL {
+        var backup = try JSONDecoder().decode(SyncErsetzenBackup.self, from: try Data(contentsOf: quelle))
+        backup.grund = "Importiert (\(backup.grund ?? "Backup"))"
+        let daten = try JSONEncoder().encode(backup)
+        let ziel = neueBackupURL()
+        try FileManager.default.createDirectory(at: ziel.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try daten.write(to: ziel, options: .atomic)
+        wendeAufbewahrungsLimitAn()
+        return ziel
     }
 }

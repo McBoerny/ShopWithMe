@@ -4098,4 +4098,75 @@ sofort selbst auf (verhindert das Entstehen neuer Waisen, statt auf den
 täglichen Catch-all zu warten); der manuelle Debug-Button ruft zusätzlich
 `raeumeVerwaisteDateienAuf` auf, um bereits vorhandene Altlasten
 mitzunehmen.
+
+## 62. Mehrere Backup-Versionen statt Einzel-Slot, Löschen, Export/Import ins Dateisystem (2026-08-23)
+
+**Vorherige Design-Entscheidung (Abschnitt 13) aufgehoben:** „Genau ein
+Backup, wird bei jedem Ersetzen/Beitritt überschrieben" war bewusst gewählt,
+um die Frage „welches Backup beim Austritt" durch Konstruktion auszuschließen
+(es gab nur eins). Auf Nutzerwunsch erweitert: mehrere gleichzeitig
+vorhandene Backup-Versionen, mit Löschen einzelner Versionen sowie Export/
+Import als eigenständige Datei außerhalb der App-Sandbox (Dateien-App/
+iCloud Drive).
+
+**Umsetzung:**
+- `SyncErsetzenService` legt bei jedem `erstelleBackup(context:grund:)` eine
+  NEUE Datei an (`Backups/backup-<ISO8601-Zeitstempel>-<UUID-Suffix>.json`)
+  statt die einzige feste `ersetzen-backup.json` zu überschreiben.
+  `alleBackups()` listet alle vorhandenen Backups (neuestes zuerst),
+  `vorhandenesBackup()` bleibt als Convenience für „existiert überhaupt eins"
+  (= das neueste) erhalten, um den alten Einzel-Backup-Aufrufstil an mehreren
+  Stellen unverändert zu lassen.
+- Automatische Obergrenze `maximaleAnzahlBackups = 10` (Nutzerentscheidung):
+  nach jedem `erstelleBackup`/`importiereBackup` wird das älteste Backup
+  entfernt, falls die Grenze überschritten ist — außer es ist gerade das
+  Ziel einer noch ausstehenden Aktion (`ausstehendeAktionBackupDateiname`,
+  siehe unten).
+- **Neustart-Fallback-Pfad musste auf ein konkretes Backup zeigen können:**
+  Der bestehende Mechanismus (`plane…()` merkt eine Aktion in `UserDefaults`
+  vor, `fuehreAusstehendeAktionAus(context:)` führt sie beim nächsten
+  App-Start aus) kannte bisher implizit „das eine" Backup. Mit mehreren
+  Versionen reicht das nicht mehr — ergänzt um
+  `ausstehendeAktionBackupDateiname` (ebenfalls `UserDefaults`, übersteht den
+  Neustart genau wie `ausstehendeAktion` selbst), das den Dateinamen des
+  gemeinten Backups festhält. Bei `.ersetzenDurchPeer` ist das weiterhin das
+  direkt zuvor als Sicherheitsnetz erstellte Backup (für die Vorher-/
+  Nachher-Zusammenfassung), bei `.wiederherstellenAusBackup` das tatsächlich
+  gewählte. Fällt defensiv auf das neueste Backup zurück, falls kein
+  Dateiname hinterlegt ist.
+- Der automatische Sicherheits-Backup vor „Ersetzen durch Peer" (bereits
+  bestehender Mechanismus, `SyncPollingService` beim Gruppen-Ausschluss
+  eingeschlossen) ist jetzt bewusst Teil derselben Liste — kein separater
+  Slot mehr, sondern ein Eintrag mit sprechendem `grund` („Vor Ersetzen durch
+  Peer", „Bereinigung baumelnder Referenzen", „Vor Gruppen-Ausschluss",
+  „Manuell", „Importiert (…)"). Nutzerentscheidung: vereinfacht das Modell
+  auf eine einzige Liste, statt Sonderfälle für „das automatische" vs. „die
+  manuellen" Backups zu pflegen. Nebenwirkung: `wiederherstellenUndDeaktivieren()`
+  in `SyncOrdnerSettingsView` (Austritt mit „vorherigen Stand wiederherstellen")
+  nutzt weiterhin `vorhandenesBackup()` (= neuestes Backup insgesamt) — falls
+  zwischen Beitritt und Austritt zusätzliche manuelle Backups erstellt
+  wurden, ist das nicht mehr zwingend exakt der Vor-Beitritt-Stand. Bewusst in
+  Kauf genommen, da die Alternative (separater Slot) genau die Vereinheit-
+  lichung wieder aufgehoben hätte, die hier gewünscht war.
+- `SyncErsetzenBackup.grund: String?` (neu, Formatversion 3) trägt die
+  Herkunftsbezeichnung im Backup selbst mit — rein informativ für die Liste,
+  ohne Einfluss auf den Restore-Ablauf, `nil`-sicher für ältere Backups.
+- `importiereBackup(von:)` validiert durch Decodieren als `SyncErsetzenBackup`
+  (keine blinde Datei-Kopie einer beliebigen JSON-Datei), markiert den
+  `grund` als „Importiert (…)" und legt die Datei als zusätzliches Backup in
+  `Backups/` ab — unterliegt danach denselben Regeln (Liste, Limit, Löschen)
+  wie jedes andere Backup.
+- `SyncOrdnerSettingsView`: die bisherige Einzel-Backup-Section (nur
+  „Erstellt am" + „Backup wiederherstellen") ersetzt durch eine Liste aller
+  Backups (Datum, Größe, Grund), je Eintrag Tippen = Wiederherstellen
+  (Bestätigungsdialog), nach links wischen = Löschen (Bestätigungsdialog),
+  nach rechts wischen = Export über `.fileExporter` (System-Dateiauswahl,
+  z.B. Dateien-App/iCloud Drive). Zusätzlich „Backup jetzt erstellen" (manuell,
+  ohne Ersetzen-Anlass) und „Backup importieren…" über `.fileImporter`.
+  Export nutzt einen minimalen `FileDocument`-Wrapper (`BackupExportDocument`),
+  der die bereits auf der Platte vorhandenen JSON-Rohdaten unverändert
+  durchreicht; Import setzt `startAccessingSecurityScopedResource()` um den
+  Lesezugriff auf die vom System gelieferte, außerhalb der eigenen Sandbox
+  liegende URL, da `fileImporter` sonst je nach Quelle stumm fehlschlagen
+  kann.
 `ausstehendeAktion` gewährte.

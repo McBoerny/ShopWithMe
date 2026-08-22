@@ -309,11 +309,22 @@ werden ausgetauscht.
   startet direkt der erste Abgleich. Enthält er bereits Daten anderer Geräte
   (z.B. weil ein Mitnutzer schon eingerichtet hat), fragt die App vor dem
   Verknüpfen nach Bestätigung für „Ersetzen": dein bisheriger lokaler Bestand
-  wird zuerst lokal gesichert (wiederherstellbar über „Backup
-  wiederherstellen", solange die Synchronisierung aktiv bleibt) und danach
+  wird zuerst lokal gesichert (über den „Backups"-Abschnitt wiederherstellbar,
+  solange die Synchronisierung aktiv bleibt) und danach
   sofort — ohne App-Neustart — vollständig durch den Stand der anderen Geräte
   ersetzt. „Abbrechen" verwirft die Ordnerauswahl wieder, ohne etwas zu
   ändern.
+- **Backups (Einstellungen → „Synchronisation" → „Backups"):** zeigt alle
+  lokal gespeicherten Sicherungen deines Datenbestands (Datum, Größe, Anlass —
+  z.B. „Vor Ersetzen durch Peer" oder „Manuell"), neueste zuerst. Ein Eintrag
+  antippen stellt diesen Stand wieder her (Bestätigung nötig, überschreibt den
+  aktuellen Datenbestand); nach links wischen löscht ihn endgültig; nach
+  rechts wischen exportiert ihn als Datei in die Dateien-App/iCloud Drive.
+  „Backup jetzt erstellen" legt jederzeit manuell eine zusätzliche Sicherung
+  an, „Backup importieren…" übernimmt eine zuvor exportierte Backup-Datei
+  (z.B. von einem anderen Gerät) wieder in diese Liste. Es werden höchstens
+  die letzten 10 Backups aufbewahrt — ältere werden beim Anlegen eines neuen
+  automatisch entfernt.
 - **Läuft automatisch,** solange die App im Vordergrund ist — kein manueller
   Sync-Tap nötig. Für den seltenen Fall, dass du sofort statt in ein paar
   Sekunden abgleichen möchtest, gibt es zwei gleichwertige manuelle Auslöser:
@@ -329,8 +340,8 @@ werden ausgetauscht.
   kompletten Neuaufbau des Datenbestands auslöst (z.B. „Ersetzen" beim
   Verknüpfen eines bereits von anderen Geräten genutzten Ordners,
   Wiederherstellen aus einem Backup), gerade läuft, sind „Ordner wählen…",
-  „Synchronisierung deaktivieren" und „Backup wiederherstellen" kurz
-  deaktiviert und ein Fortschritts-Hinweis erscheint — kein Neustart nötig,
+  „Synchronisierung deaktivieren" und die Backup-Liste kurz deaktiviert und
+  ein Fortschritts-Hinweis erscheint — kein Neustart nötig,
   der Austausch ist normalerweise binnen weniger Sekunden abgeschlossen.
 - **Schnellerer Abgleich in der Nähe:** Öffnest du gemeinsam mit einer anderen
   Person, die dieselbe Liste eingerichtet hat, gleichzeitig den
