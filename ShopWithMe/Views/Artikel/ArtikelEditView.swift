@@ -349,6 +349,10 @@ private struct KategorieHinzufuegenSheet: View {
     @Bindable var artikel: Artikel
 
     @Query(sort: \ArtikelKategorie.sortIndex) private var alleKategorien: [ArtikelKategorie]
+    /// Die eigentliche Zuordnung passiert verzögert über ``onChange(of:)``
+    /// statt direkt im Binding-Setter — siehe ausführliche Begründung in
+    /// ``AbteilungHinzufuegenSheet`` (Live-Fund: Sheet flackerte auf/zu).
+    @State private var geradeAusgewaehlt: Set<ArtikelKategorie.ID> = []
 
     private var nichtZugeordneteKategorien: [ArtikelKategorie] {
         alleKategorien.filter { !artikel.kategorien.contains($0) }
@@ -359,16 +363,7 @@ private struct KategorieHinzufuegenSheet: View {
             titel: "Abteilung hinzufügen",
             items: nichtZugeordneteKategorien,
             name: \.name,
-            modus: .mehrfach(Binding(
-                get: { [] },
-                set: { neu in
-                    for id in neu {
-                        if let kategorie = nichtZugeordneteKategorien.first(where: { $0.id == id }) {
-                            artikel.kategorien.append(kategorie)
-                        }
-                    }
-                }
-            )),
+            modus: .mehrfach($geradeAusgewaehlt),
             suchPrompt: "Abteilung suchen",
             symbol: \.standardSymbol,
             neuAnlegenTitel: { _ in "Neue Abteilung anlegen" },
@@ -380,6 +375,15 @@ private struct KategorieHinzufuegenSheet: View {
                 }
             }
         )
+        .onChange(of: geradeAusgewaehlt) { _, neu in
+            guard !neu.isEmpty else { return }
+            for id in neu {
+                if let kategorie = nichtZugeordneteKategorien.first(where: { $0.id == id }) {
+                    artikel.kategorien.append(kategorie)
+                }
+            }
+            geradeAusgewaehlt = []
+        }
     }
 }
 

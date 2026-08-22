@@ -150,6 +150,10 @@ private struct ArtikelZuAbteilungHinzufuegenSheet: View {
     let kategorie: ArtikelKategorie
 
     @Query(sort: \Artikel.name) private var alleArtikel: [Artikel]
+    /// Die eigentliche Zuordnung passiert verzögert über ``onChange(of:)``
+    /// statt direkt im Binding-Setter — siehe ausführliche Begründung in
+    /// ``AbteilungHinzufuegenSheet`` (Live-Fund: Sheet flackerte auf/zu).
+    @State private var geradeAusgewaehlt: Set<Artikel.ID> = []
 
     private var nichtZugeordneteArtikel: [Artikel] {
         alleArtikel.filter { !$0.kategorien.contains(kategorie) }
@@ -160,22 +164,22 @@ private struct ArtikelZuAbteilungHinzufuegenSheet: View {
             titel: "Artikel hinzufügen",
             items: nichtZugeordneteArtikel,
             name: \.name,
-            modus: .mehrfach(Binding(
-                get: { [] },
-                set: { neu in
-                    for id in neu {
-                        if let artikel = nichtZugeordneteArtikel.first(where: { $0.id == id }) {
-                            zuordnen(artikel)
-                        }
-                    }
-                }
-            )),
+            modus: .mehrfach($geradeAusgewaehlt),
             suchPrompt: "Artikel suchen",
             neuAnlegenInhalt: { (_: String, _: @escaping (Artikel) -> Void) in EmptyView() },
             leerTitel: "Keine weiteren Artikel",
             leerBeschreibung: Text("Alle Artikel sind dieser Abteilung bereits zugeordnet."),
             leerSymbolName: "carrot.fill"
         )
+        .onChange(of: geradeAusgewaehlt) { _, neu in
+            guard !neu.isEmpty else { return }
+            for id in neu {
+                if let artikel = nichtZugeordneteArtikel.first(where: { $0.id == id }) {
+                    zuordnen(artikel)
+                }
+            }
+            geradeAusgewaehlt = []
+        }
     }
 
     private func zuordnen(_ artikel: Artikel) {

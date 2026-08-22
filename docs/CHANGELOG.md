@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.16 (Build 326) — Fix: Abteilung/Artikel hinzufügen-Sheets flackerten auf/zu
+
+Live-Fund direkt nach der #130-Umstellung: `AbteilungHinzufuegenSheet`,
+`KategorieHinzufuegenSheet` und `ArtikelZuAbteilungHinzufuegenSheet`
+verarbeiteten die SwiftData-Modellzuordnung bislang synchron im Setter des
+an ``AuswahlSheet`` übergebenen Mehrfachauswahl-Bindings — führte dazu, dass
+das Sheet beim Antippen eines Eintrags wiederholt auf- und zuflackerte
+(vermutlich re-entrante Zustandsänderung mitten in der SwiftUI-Transaktion).
+Die Zuordnung läuft jetzt stattdessen verzögert über `.onChange(of:)` auf
+echtem `@State`, danach wird die Auswahlmenge sofort zurückgesetzt.
+
 ## v0.16 (Build 325) — AuswahlSheet auf drei weitere Abteilungs-/Artikel-Zuordnungssheets ausgeweitet
 
 GitHub #130 (Folgeschritt): `AbteilungHinzufuegenSheet` (Geschäft →
