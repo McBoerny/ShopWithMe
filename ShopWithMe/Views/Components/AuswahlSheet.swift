@@ -47,6 +47,9 @@ struct AuswahlSheet<Item: Identifiable & Hashable, NeuAnlegenContent: View>: Vie
     /// Schnellnavigation an der rechten Kante (Issue-Vorgabe: „größer 100
     /// Einträgen").
     var schnellnavigationAbAnzahl: Int = 100
+    /// Optionales SF-Symbol je Eintrag (z.B. `ArtikelKategorie/standardSymbol`)
+    /// — `nil` (Default) zeigt reinen Text ohne Icon.
+    var symbol: ((Item) -> String?)? = nil
     /// Zusätzliche, kleinere Sekundärzeile je Eintrag (z.B. Kurzadresse) —
     /// optional, Default keine.
     var zusatzZeile: ((Item) -> String?)? = nil
@@ -54,10 +57,20 @@ struct AuswahlSheet<Item: Identifiable & Hashable, NeuAnlegenContent: View>: Vie
     /// Label für die „+"-Neuanlage-Zeile, erhält den getrimmten Suchtext.
     /// `nil` blendet die Zeile grundsätzlich aus.
     var neuAnlegenTitel: ((String) -> String)? = nil
+    /// Ob die „+"-Neuanlage-Zeile nur bei nicht-leerer Suche ohne exakten
+    /// Treffer erscheint (Default, wie ``ArtikelAuswahlSheet``) oder immer
+    /// sichtbar ist (z.B. für die Abteilungs-Zuordnungs-Sheets, deren „Neue
+    /// Abteilung anlegen"-Zeile unabhängig vom Suchtext immer angeboten wird).
+    var neuAnlegenNurBeiFehlendemTreffer = true
     /// Baut die Neuanlage-Ansicht für den getrimmten Suchtext. Die Ansicht
     /// ruft den übergebenen Callback mit dem fertig gesicherten Eintrag auf
     /// — das Sheet übernimmt danach Auswahl + Dismiss selbst.
     @ViewBuilder var neuAnlegenInhalt: (String, @escaping (Item) -> Void) -> NeuAnlegenContent
+    /// Überschrift im Leerzustand (kein Eintrag, keine Neuanlage-Option
+    /// sichtbar) — `nil` verwendet den generischen Standardtext.
+    var leerTitel: String? = nil
+    var leerBeschreibung: Text? = nil
+    var leerSymbolName = "list.bullet"
 
     @Environment(\.dismiss) private var dismiss
     @State private var suchtext = ""
@@ -74,7 +87,9 @@ struct AuswahlSheet<Item: Identifiable & Hashable, NeuAnlegenContent: View>: Vie
     }
 
     private var zeigtNeuAnlegenOption: Bool {
-        guard neuAnlegenTitel != nil, !getrimmterSuchtext.isEmpty else { return false }
+        guard neuAnlegenTitel != nil else { return false }
+        guard neuAnlegenNurBeiFehlendemTreffer else { return true }
+        guard !getrimmterSuchtext.isEmpty else { return false }
         return !items.contains { name($0).localizedCaseInsensitiveCompare(getrimmterSuchtext) == .orderedSame }
     }
 
@@ -142,9 +157,9 @@ struct AuswahlSheet<Item: Identifiable & Hashable, NeuAnlegenContent: View>: Vie
                     .overlay {
                         if gefilterteItems.isEmpty && !zeigtNeuAnlegenOption {
                             ContentUnavailableView(
-                                suchtext.isEmpty ? "Keine Einträge" : "Keine Treffer",
-                                systemImage: "list.bullet",
-                                description: suchtext.isEmpty ? nil : Text("Nichts passt zu \u{201E}\(suchtext)\u{201C}")
+                                leerTitel ?? (suchtext.isEmpty ? "Keine Einträge" : "Keine Treffer"),
+                                systemImage: leerSymbolName,
+                                description: leerBeschreibung ?? (suchtext.isEmpty ? nil : Text("Nichts passt zu \u{201E}\(suchtext)\u{201C}"))
                             )
                         }
                     }
@@ -188,8 +203,13 @@ struct AuswahlSheet<Item: Identifiable & Hashable, NeuAnlegenContent: View>: Vie
         } label: {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(name(item))
-                        .foregroundStyle(.primary)
+                    if let symbolName = symbol?(item) {
+                        Label(name(item), systemImage: symbolName)
+                            .foregroundStyle(.primary)
+                    } else {
+                        Text(name(item))
+                            .foregroundStyle(.primary)
+                    }
                     if let zusatz = zusatzZeile?(item) {
                         Text(zusatz)
                             .font(.caption)

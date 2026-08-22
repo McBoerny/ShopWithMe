@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.16 (Build 325) — AuswahlSheet auf drei weitere Abteilungs-/Artikel-Zuordnungssheets ausgeweitet
+
+GitHub #130 (Folgeschritt): `AbteilungHinzufuegenSheet` (Geschäft →
+Abteilung), `KategorieHinzufuegenSheet` (Artikel → Abteilung, in
+`ArtikelEditView.swift`) und `ArtikelZuAbteilungHinzufuegenSheet` (Abteilung
+→ Artikel, in `AbteilungenVerwaltungView.swift`) nutzen jetzt ebenfalls
+``AuswahlSheet`` statt eigener Listen-Implementierung. Alle drei folgen dem
+„sofortige Mehrfachzuordnung"-Muster (Tippen ordnet sofort zu, Eintrag
+verschwindet aus der Liste, Haken-Button oben rechts schließt) — dafür neue
+``AuswahlSheet``-Optionen: optionales Icon je Zeile, eine „+"-Neuanlage-Zeile
+unabhängig vom Suchtext (`neuAnlegenNurBeiFehlendemTreffer`), sowie
+anpassbarer Leerzustand-Text. `AbteilungHinzufuegenSheet` hat dadurch neu
+auch ein Suchfeld (vorher keins). Verhalten für Anwender ansonsten
+unverändert.
+
 ## v0.16 (Build 324) — Generisches AuswahlSheet für reine Listenauswahl-Sheets
 
 GitHub #130: neue, wiederverwendbare Komponente ``AuswahlSheet`` (`Views/Components/AuswahlSheet.swift`)

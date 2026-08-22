@@ -343,53 +343,43 @@ struct ArtikelEditView: View {
 /// ``ArtikelZuAbteilungHinzufuegenSheet`` (dort umgekehrte Richtung: Artikel zu
 /// einer Kategorie zuordnen). Tippen auf eine Abteilung ordnet sie sofort zu
 /// (kein zusätzlicher Bestätigungsschritt), das Sheet bleibt offen, um mehrere
-/// Abteilungen nacheinander hinzufügen zu können.
+/// Abteilungen nacheinander hinzufügen zu können — nutzt die generische
+/// ``AuswahlSheet`` (GitHub #130) analog ``AbteilungHinzufuegenSheet``.
 private struct KategorieHinzufuegenSheet: View {
     @Bindable var artikel: Artikel
 
-    @Environment(\.dismiss) private var dismiss
     @Query(sort: \ArtikelKategorie.sortIndex) private var alleKategorien: [ArtikelKategorie]
-    @State private var suchtext = ""
-    @State private var zeigeNeueAbteilung = false
 
     private var nichtZugeordneteKategorien: [ArtikelKategorie] {
-        let uebrige = alleKategorien.filter { !artikel.kategorien.contains($0) }
-        guard !suchtext.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return uebrige }
-        return uebrige.filter { $0.name.localizedCaseInsensitiveContains(suchtext) }
+        alleKategorien.filter { !artikel.kategorien.contains($0) }
     }
 
     var body: some View {
-        NavigationStack {
-            List {
-                ForEach(nichtZugeordneteKategorien) { kategorie in
-                    Button {
-                        artikel.kategorien.append(kategorie)
-                    } label: {
-                        Label(kategorie.name, systemImage: kategorie.standardSymbol)
-                            .foregroundStyle(.primary)
+        AuswahlSheet(
+            titel: "Abteilung hinzufügen",
+            items: nichtZugeordneteKategorien,
+            name: \.name,
+            modus: .mehrfach(Binding(
+                get: { [] },
+                set: { neu in
+                    for id in neu {
+                        if let kategorie = nichtZugeordneteKategorien.first(where: { $0.id == id }) {
+                            artikel.kategorien.append(kategorie)
+                        }
                     }
                 }
-
-                Button {
-                    zeigeNeueAbteilung = true
-                } label: {
-                    Label("Neue Abteilung anlegen", systemImage: "plus")
-                }
-            }
-            .searchable(text: $suchtext, prompt: "Abteilung suchen")
-            .navigationTitle("Abteilung hinzufügen")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Fertig") { dismiss() }
-                }
-            }
-            .sheet(isPresented: $zeigeNeueAbteilung) {
+            )),
+            suchPrompt: "Abteilung suchen",
+            symbol: \.standardSymbol,
+            neuAnlegenTitel: { _ in "Neue Abteilung anlegen" },
+            neuAnlegenNurBeiFehlendemTreffer: false,
+            neuAnlegenInhalt: { _, gesichert in
                 NeueAbteilungSheet(naechsterSortIndex: (alleKategorien.map(\.sortIndex).max() ?? -1) + 1) { kategorie in
                     artikel.kategorien.append(kategorie)
+                    gesichert(kategorie)
                 }
             }
-        }
+        )
     }
 }
 

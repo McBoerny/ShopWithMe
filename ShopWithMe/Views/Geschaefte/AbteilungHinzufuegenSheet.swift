@@ -5,13 +5,16 @@ import SwiftData
 /// aus ``GeschaeftAbteilungenSektion``.
 ///
 /// Eine Kategorie wird beim Antippen direkt diesem Geschäft zugeordnet
-/// (``Geschaeft/kategorien``) und damit sofort verfügbar.
+/// (``Geschaeft/kategorien``) und damit sofort verfügbar — nutzt die generische
+/// ``AuswahlSheet`` (GitHub #130) im Mehrfachauswahl-Modus mit einer stets
+/// leeren Auswahlmenge: jede „Auswahl" wird sofort als Seiteneffekt verarbeitet
+/// (``kategorieHinzufuegen(_:)``) statt in einem sichtbaren Auswahlzustand
+/// gehalten zu werden — der Eintrag verschwindet dadurch einfach aus der Liste
+/// (``nichtVerfuegbareKategorien``), kein Haken nötig.
 struct AbteilungHinzufuegenSheet: View {
     let geschaeft: Geschaeft
 
-    @Environment(\.dismiss) private var dismiss
     @Query(sort: \ArtikelKategorie.sortIndex) private var alleKategorien: [ArtikelKategorie]
-    @State private var zeigeNeueKategorie = false
 
     /// Kategorien, die in diesem Geschäft noch nicht verfügbar sind — Kategorien,
     /// die bereits über den Geschäftstyp automatisch verfügbar sind (siehe
@@ -23,46 +26,35 @@ struct AbteilungHinzufuegenSheet: View {
     }
 
     var body: some View {
-        SessionLeaseGate { navigationInhalt }
+        SessionLeaseGate { auswahlSheet }
     }
 
-    private var navigationInhalt: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    ForEach(nichtVerfuegbareKategorien) { kategorie in
-                        Button {
+    private var auswahlSheet: some View {
+        AuswahlSheet(
+            titel: "Abteilung hinzufügen",
+            items: nichtVerfuegbareKategorien,
+            name: \.name,
+            modus: .mehrfach(Binding(
+                get: { [] },
+                set: { neu in
+                    for id in neu {
+                        if let kategorie = nichtVerfuegbareKategorien.first(where: { $0.id == id }) {
                             kategorieHinzufuegen(kategorie)
-                        } label: {
-                            Label(kategorie.name, systemImage: kategorie.standardSymbol)
-                                .foregroundStyle(.primary)
                         }
                     }
-
-                    Button {
-                        zeigeNeueKategorie = true
-                    } label: {
-                        Label("Neue Abteilung anlegen", systemImage: "plus")
-                    }
-                } header: {
-                    Text("Verfügbare Abteilungen")
-                } footer: {
-                    Text("Bereits in diesem Geschäft verfügbare Abteilungen werden hier nicht angeboten.")
                 }
-            }
-            .navigationTitle("Abteilung hinzufügen")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Fertig") { dismiss() }
-                }
-            }
-            .sheet(isPresented: $zeigeNeueKategorie) {
+            )),
+            suchPrompt: "Abteilung suchen",
+            symbol: \.standardSymbol,
+            neuAnlegenTitel: { _ in "Neue Abteilung anlegen" },
+            neuAnlegenNurBeiFehlendemTreffer: false,
+            neuAnlegenInhalt: { _, gesichert in
                 NeueAbteilungSheet(naechsterSortIndex: (alleKategorien.map(\.sortIndex).max() ?? -1) + 1) { kategorie in
                     kategorieHinzufuegen(kategorie)
+                    gesichert(kategorie)
                 }
             }
-        }
+        )
     }
 
     private func kategorieHinzufuegen(_ kategorie: ArtikelKategorie) {

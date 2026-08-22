@@ -142,49 +142,40 @@ private struct AbteilungBearbeitenView: View {
 /// Sheet zum Zuordnen bestehender ``Artikel`` zu ``kategorie`` — aufrufbar aus
 /// ``AbteilungBearbeitenView``. Tippen auf einen Artikel ordnet ihn sofort zu
 /// (kein zusätzlicher Bestätigungsschritt, analog ``AbteilungHinzufuegenSheet``).
+/// Nutzt die generische ``AuswahlSheet`` (GitHub #130) analog
+/// ``AbteilungHinzufuegenSheet``/``KategorieHinzufuegenSheet`` — hier ohne
+/// Neuanlage-Option, da jeder Artikel bereits vorher über die
+/// Artikel-Verwaltung angelegt werden muss.
 private struct ArtikelZuAbteilungHinzufuegenSheet: View {
     let kategorie: ArtikelKategorie
 
-    @Environment(\.dismiss) private var dismiss
     @Query(sort: \Artikel.name) private var alleArtikel: [Artikel]
-    @State private var suchtext = ""
 
     private var nichtZugeordneteArtikel: [Artikel] {
-        let uebrige = alleArtikel.filter { !$0.kategorien.contains(kategorie) }
-        guard !suchtext.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return uebrige }
-        return uebrige.filter { $0.name.localizedCaseInsensitiveContains(suchtext) }
+        alleArtikel.filter { !$0.kategorien.contains(kategorie) }
     }
 
     var body: some View {
-        NavigationStack {
-            List {
-                ForEach(nichtZugeordneteArtikel) { artikel in
-                    Button {
-                        zuordnen(artikel)
-                    } label: {
-                        Text(artikel.name)
-                            .foregroundStyle(.primary)
+        AuswahlSheet(
+            titel: "Artikel hinzufügen",
+            items: nichtZugeordneteArtikel,
+            name: \.name,
+            modus: .mehrfach(Binding(
+                get: { [] },
+                set: { neu in
+                    for id in neu {
+                        if let artikel = nichtZugeordneteArtikel.first(where: { $0.id == id }) {
+                            zuordnen(artikel)
+                        }
                     }
                 }
-            }
-            .searchable(text: $suchtext, prompt: "Artikel suchen")
-            .overlay {
-                if nichtZugeordneteArtikel.isEmpty {
-                    ContentUnavailableView(
-                        "Keine weiteren Artikel",
-                        systemImage: "carrot.fill",
-                        description: Text("Alle Artikel sind dieser Abteilung bereits zugeordnet.")
-                    )
-                }
-            }
-            .navigationTitle("Artikel hinzufügen")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Fertig") { dismiss() }
-                }
-            }
-        }
+            )),
+            suchPrompt: "Artikel suchen",
+            neuAnlegenInhalt: { (_: String, _: @escaping (Artikel) -> Void) in EmptyView() },
+            leerTitel: "Keine weiteren Artikel",
+            leerBeschreibung: Text("Alle Artikel sind dieser Abteilung bereits zugeordnet."),
+            leerSymbolName: "carrot.fill"
+        )
     }
 
     private func zuordnen(_ artikel: Artikel) {
