@@ -1868,7 +1868,7 @@ struct MengenNotizSheet: View {
 
 #Preview {
     EinkaufenView()
-        .modelContainer(for: SchemaV3.models, inMemory: true)
+        .modelContainer(for: SchemaV1.models, inMemory: true)
         .environmentObject(SyncPollingService())
         .environmentObject(MultipeerSyncService())
 }

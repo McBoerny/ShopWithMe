@@ -468,7 +468,7 @@ Debug-Menü öffnet):
    `SyncSnapshotExportService` für jeden betroffenen Modelltyp ein
    `Set<PersistentIdentifier>` gültiger Objekte und **erkennt** jede baumelnde
    Referenz: `KaufEintrag.artikel`/`.geschaeft`/`.kategorie`/`.einkaufsvorgang`,
-   `Preispunkt.artikel`/`.geschaeft`, `Einkaufsvorgang.geschaeft`/`.einkaufsliste`,
+   `Preispunkt.produkt`/`.geschaeft`, `Einkaufsvorgang.geschaeft`/`.einkaufsliste`,
    `EinkaufslistenEintrag.artikel`/`.einkaufsliste` (Nutzerbericht 2026-08-10 —
    trotz `@Relationship(deleteRule: .cascade, inverse:)` auf beiden Seiten über
    normale App-Operationen nicht mehr neu entstehbar, aber auf einem Altbestand

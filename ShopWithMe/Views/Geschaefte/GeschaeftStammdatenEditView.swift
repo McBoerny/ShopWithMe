@@ -169,6 +169,10 @@ struct GeschaeftStammdatenEditView: View {
             }
             .navigationTitle(istNeu ? "Neues Geschäft" : "Geschäft bearbeiten")
             .navigationBarTitleDisplayMode(.inline)
+            .onChange(of: geschaeft.name) { _, _ in
+                guard !istNeu else { return }
+                geschaeft.markiereGeaendert()
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Abbrechen") { dismiss() }

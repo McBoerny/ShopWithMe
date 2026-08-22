@@ -80,6 +80,7 @@ enum DatenintegritaetsService {
     static func pruefe(context: ModelContext) -> [Befund] {
         let gueltigeGeschaeftIDs = Set(((try? context.fetch(FetchDescriptor<Geschaeft>())) ?? []).map(\.persistentModelID))
         let gueltigeArtikelIDs = Set(((try? context.fetch(FetchDescriptor<Artikel>())) ?? []).map(\.persistentModelID))
+        let gueltigeProduktIDs = Set(((try? context.fetch(FetchDescriptor<Produkt>())) ?? []).map(\.persistentModelID))
         let gueltigeKategorieIDs = Set(((try? context.fetch(FetchDescriptor<ArtikelKategorie>())) ?? []).map(\.persistentModelID))
         let gueltigeEinkaufslistenIDs = Set(((try? context.fetch(FetchDescriptor<Einkaufsliste>())) ?? []).map(\.persistentModelID))
         let gueltigeEinkaufsvorgangIDs = Set(((try? context.fetch(FetchDescriptor<Einkaufsvorgang>())) ?? []).map(\.persistentModelID))
@@ -109,12 +110,18 @@ enum DatenintegritaetsService {
 
         for punkt in (try? context.fetch(FetchDescriptor<Preispunkt>())) ?? [] {
             var betroffeneFelder: [String] = []
-            if istBaumelnd(punkt.artikel, gueltigeIDs: gueltigeArtikelIDs) { betroffeneFelder.append("Artikel") }
+            // Bewusst `punkt.produkt` statt der abgeleiteten `punkt.artikel`
+            // geprüft — Letztere läse im Zweifel selbst wieder eine gerade
+            // als baumelnd erkannte `produkt`-Referenz (siehe Kommentar unten).
+            if istBaumelnd(punkt.produkt, gueltigeIDs: gueltigeProduktIDs) { betroffeneFelder.append("Produkt") }
             if istBaumelnd(punkt.geschaeft, gueltigeIDs: gueltigeGeschaeftIDs) { betroffeneFelder.append("Geschäft") }
             guard !betroffeneFelder.isEmpty else { continue }
+            // Bewusst `produktName`/`geschaeftNameSnapshot` statt
+            // `anzeigeName`/`punkt.produkt?.name` — Letztere lesen im Zweifel
+            // selbst wieder eine gerade als baumelnd erkannte Referenz.
             let datum = punkt.datum.formatted(date: .abbreviated, time: .omitted)
             befunde.append(Befund(
-                beschreibung: "Preispunkt vom \(datum) (Schnappschuss: „\(punkt.artikelNameSnapshot)“ bei \(punkt.geschaeftNameSnapshot)): Bezug zu \(betroffeneFelder.joined(separator: ", ")) zeigt auf nicht mehr Existierendes"
+                beschreibung: "Preispunkt vom \(datum) (Schnappschuss: „\(punkt.produktName ?? "unbekannt")“ bei \(punkt.geschaeftNameSnapshot)): Bezug zu \(betroffeneFelder.joined(separator: ", ")) zeigt auf nicht mehr Existierendes"
             ))
         }
 

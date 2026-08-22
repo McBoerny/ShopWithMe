@@ -10,9 +10,12 @@ import PhotosUI
 /// Anders als ``BelegScanView`` gibt es hier nur eine einzelne Position ohne
 /// Mengenangabe (ein Preisschild zeigt keine Stückzahl) und kein vom Beleg
 /// erkanntes Datum — das Erfassungsdatum ist immer der Scan-Zeitpunkt. Die
-/// Mitlern-Logik (``ArtikelAlias/passend(fuerErkannterName:in:)``,
-/// ``ArtikelAlias/alternativerName``) entspricht ansonsten dem Belegscan, siehe
-/// `docs/PREISSCHILD_SCAN.md`.
+/// Mitlern-Logik (``Produktname/passend(fuerErkannterName:bevorzugtesGeschaeft:in:)``)
+/// lernt geschäftsspezifisch statt geschäftsunabhängig (diese Ansicht hat immer
+/// ein festes ``Geschaeft``) — nutzt bewusst weiterhin nicht
+/// ``ArtikelZuordnungsService`` (eigene, parallele Zuordnungslogik, siehe
+/// `docs/ARTIKEL_PRODUKT_MODELL.md`), ansonsten entspricht sie dem Belegscan,
+/// siehe `docs/PREISSCHILD_SCAN.md`.
 ///
 /// Funktioniert immer direkt für ein feststehendes ``Geschaeft`` (aus
 /// ``GeschaeftDetailView`` oder ``EinkaufenView`` bei bereits gewähltem Geschäft) —
@@ -103,25 +106,25 @@ struct PreisschildScanView: View {
             defer { laeuft = false }
             do {
                 let ergebnis = try await scanner.auswerten(bild: bild)
-                let bekannteAliase = (try? modelContext.fetch(FetchDescriptor<ArtikelAlias>())) ?? []
-                let gelernt = ArtikelAlias.passend(
-                    fuerErkannterName: ergebnis.artikelName,
-                    in: bekannteAliase
+                let bekannteProduktnamen = (try? modelContext.fetch(FetchDescriptor<Produktname>())) ?? []
+                let gelernt = Produktname.passend(
+                    fuerErkannterName: ergebnis.artikelName, bevorzugtesGeschaeft: geschaeft, in: bekannteProduktnamen
                 )
                 // Tages-Kollisionsprüfung (GitHub #76-Folgearbeit), siehe
                 // ``BelegScanView`` für dasselbe Muster.
                 var bestehenderPreisHeute: Decimal?
-                if let artikel = gelernt?.artikel {
+                if let produkt = gelernt?.produkt {
                     bestehenderPreisHeute = PreispunktService.vorhandenerPunktHeute(
-                        artikel: artikel, geschaeft: geschaeft, amDatum: .now, context: modelContext
+                        produkt: produkt, geschaeft: geschaeft, amDatum: .now, context: modelContext
                     )?.preis
                     if bestehenderPreisHeute == ergebnis.preis { bestehenderPreisHeute = nil }
                 }
                 bearbeitbarePosition = BearbeitbarePreisschildPosition(
                     erkannterName: ergebnis.artikelName,
-                    artikelName: gelernt?.alias ?? ergebnis.artikelName,
+                    artikelName: gelernt?.produkt?.name ?? ergebnis.artikelName,
                     preisText: "\(ergebnis.preis.aufCentGerundet)",
-                    gelernterArtikel: gelernt?.artikel,
+                    gelernterArtikel: gelernt?.produkt?.artikel,
+                    gelerntesProdukt: gelernt?.produkt,
                     bestehenderPreisHeute: bestehenderPreisHeute
                 )
             } catch {
@@ -149,6 +152,7 @@ struct PreisschildScanView: View {
         // Tombstone eines Peers) gelöscht haben.
         let geschaeftReferenz = ModelReference(geschaeft)
         let gelernterArtikelReferenz = ModelReference(bearbeitbarePosition.gelernterArtikel)
+        let gelerntesProduktReferenz = ModelReference(bearbeitbarePosition.gelerntesProdukt)
         Task {
             let name = bearbeitbarePosition.artikelName.trimmingCharacters(in: .whitespacesAndNewlines)
             let erkannterName = bearbeitbarePosition.erkannterName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -163,24 +167,38 @@ struct PreisschildScanView: View {
                 // dem sich diese Position sinnvoll zuordnen ließe.
                 guard let geschaeftFrisch = geschaeftReferenz.resolved(in: modelContext) else { return }
                 let artikel = gelernterArtikelReferenz?.resolved(in: modelContext) ?? passendesArtikel(fuer: name)
+                // Produkt-Pflicht (siehe ``Preispunkt``-Typ-Doku): ohne Artikel-
+                // Zuordnung entsteht kein Produkt, also auch kein Preispunkt —
+                // die Position wird stillschweigend nicht übernommen, statt einen
+                // produktlosen Freitext-Eintrag anzulegen.
+                guard let artikel else { return }
+                let produkt = gelerntesProduktReferenz?.resolved(in: modelContext) ?? Produkt.standardProdukt(fuer: artikel, context: modelContext)
                 let produktName: String? = erkannterName.isEmpty ? nil : erkannterName
                 let alternativerName = leiteAlternativenNamenAb(eingegeben: name, erkannt: erkannterName)
+
+                // Lernt den Rohtext geschäftsspezifisch für künftige
+                // Preisschild-Scans — Nachfolge von `ArtikelAlias.lernen(...)`
+                // (GitHub #128).
+                if !erkannterName.isEmpty, !produkt.produktnamen.contains(where: {
+                    $0.geschaeft == geschaeftFrisch && $0.name.localizedCaseInsensitiveCompare(erkannterName) == .orderedSame
+                }) {
+                    modelContext.insert(Produktname(name: erkannterName, produkt: produkt, geschaeft: geschaeftFrisch))
+                }
 
                 let behalteBestehenden = bearbeitbarePosition.bestehenderPreisHeute != nil
                     && bearbeitbarePosition.behalteBestehendenPreisHeute
                 if bearbeitbarePosition.bestehenderPreisHeute != nil, !behalteBestehenden,
                    let vorhandenerPunkt = PreispunktService.vorhandenerPunktHeute(
-                       artikel: artikel, geschaeft: geschaeftFrisch, amDatum: .now, context: modelContext
+                       produkt: produkt, geschaeft: geschaeftFrisch, amDatum: .now, context: modelContext
                    ) {
                     PreispunktService.ersetzeVorhandenenPunkt(vorhandenerPunkt, context: modelContext)
                 }
                 if !behalteBestehenden {
                     PreispunktService.erfassen(
-                        preis: preis, artikel: artikel, geschaeft: geschaeftFrisch, datum: .now,
-                        produktName: produktName, alternativerName: alternativerName, nameFallback: name, context: modelContext
+                        preis: preis, produkt: produkt, geschaeft: geschaeftFrisch, datum: .now,
+                        produktName: produktName, alternativerName: alternativerName, context: modelContext
                     )
                 }
-                ArtikelAlias.lernen(erkannterName: erkannterName, alternativerName: alternativerName, artikel: artikel, context: modelContext)
             }
             dismiss()
         }
@@ -212,6 +230,10 @@ private struct BearbeitbarePreisschildPosition {
     var artikelName: String
     var preisText: String
     var gelernterArtikel: Artikel?
+    /// Bereits über ``Produktname/passend(fuerErkannterName:bevorzugtesGeschaeft:in:)``
+    /// bekanntes Produkt, falls vorhanden — vermeidet eine doppelte Auflösung
+    /// in ``PreisschildScanView/uebernehmen()``.
+    var gelerntesProdukt: Produkt?
     /// Siehe ``BearbeitbarePosition/bestehenderPreisHeute`` in ``BelegScanView``.
     var bestehenderPreisHeute: Decimal? = nil
     /// Siehe ``BearbeitbarePosition/behalteBestehendenPreisHeute`` in ``BelegScanView``.

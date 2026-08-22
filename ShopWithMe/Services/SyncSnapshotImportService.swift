@@ -208,7 +208,7 @@ enum SyncSnapshotImportService {
                 SyncStammSnapshot.self, von: SyncSnapshotExportService.stammURL(fuerPeer: peerName, in: syncOrdner)
             ) ?? SyncStammSnapshot(
                 geschaeftsTypen: [], artikelKategorien: [], geschaefte: [], artikel: [],
-                einkaufslisten: [], artikelAliase: [], produkte: [], produktnamen: []
+                einkaufslisten: [], produkte: [], produktnamen: []
             )
             // GitHub #85: aus `stamm.json` herausgelöst — `nil`/leer bedeutet
             // hier zusätzlich „Peer schreibt noch die alte, kombinierte
@@ -472,11 +472,10 @@ enum SyncSnapshotImportService {
             geschaeftZuordnung: geschaeftZuordnung, kategorieZuordnung: kategorieZuordnung, peerGeraeteID: peerGeraeteID, context: context
         )
         mergePreispunkte(
-            preise.preispunkte, artikelZuordnung: artikelZuordnung, produktZuordnung: produktZuordnung,
+            preise.preispunkte, produktZuordnung: produktZuordnung,
             geschaeftZuordnung: geschaeftZuordnung, context: context
         )
         mergeProduktnamen(stamm.produktnamen, produktZuordnung: produktZuordnung, geschaeftZuordnung: geschaeftZuordnung, context: context)
-        mergeArtikelAliase(stamm.artikelAliase, artikelZuordnung: artikelZuordnung, context: context)
         mergeWarengruppenDistanzen(
             lernen.warengruppenDistanzen, geschaeftZuordnung: geschaeftZuordnung, kategorieZuordnung: kategorieZuordnung,
             peerGeraeteID: peerGeraeteID, context: context
@@ -529,11 +528,10 @@ enum SyncSnapshotImportService {
             geschaeftZuordnung: geschaeftZuordnung, kategorieZuordnung: kategorieZuordnung, peerGeraeteID: peerGeraeteID, context: context
         )
         mergePreispunkte(
-            snapshot.preispunkte, artikelZuordnung: artikelZuordnung, produktZuordnung: produktZuordnung,
+            snapshot.preispunkte, produktZuordnung: produktZuordnung,
             geschaeftZuordnung: geschaeftZuordnung, context: context
         )
         mergeProduktnamen(snapshot.produktnamen, produktZuordnung: produktZuordnung, geschaeftZuordnung: geschaeftZuordnung, context: context)
-        mergeArtikelAliase(snapshot.artikelAliase, artikelZuordnung: artikelZuordnung, context: context)
         mergeWarengruppenDistanzen(
             snapshot.warengruppenDistanzen, geschaeftZuordnung: geschaeftZuordnung, kategorieZuordnung: kategorieZuordnung,
             peerGeraeteID: peerGeraeteID, context: context
@@ -648,11 +646,41 @@ enum SyncSnapshotImportService {
 
     // MARK: - GeschaeftTyp
 
+    /// Matcht wie ``GeschaeftTyp/mitNamen(_:symbolName:context:)`` (Name ist
+    /// das eindeutige Merkmal), aber inline statt darüber delegiert — sonst
+    /// wäre ``GeschaeftTypSnapshot/farbeHex`` beim Merge nicht erreichbar
+    /// (``mitNamen`` kennt nur `symbolName`, keinen `farbeHex`-Parameter,
+    /// Live-Fund: ein neu über Sync empfangener Geschäftstyp bekam bisher
+    /// immer die neutrale Standardfarbe statt der vom Absender gewählten).
     @MainActor
     private static func mergeGeschaeftsTypen(_ remote: [GeschaeftTypSnapshot], context: ModelContext) -> [UUID: GeschaeftTyp] {
         var zuordnung: [UUID: GeschaeftTyp] = [:]
+        var cache = LokalerBestandCache<GeschaeftTyp>(context: context)
         for eintrag in remote {
-            zuordnung[eintrag.id] = GeschaeftTyp.mitNamen(eintrag.name, symbolName: eintrag.symbolName, context: context)
+            let lokal: GeschaeftTyp
+            if let namensTreffer = cache.alle.first(where: { $0.name.localizedCaseInsensitiveCompare(eintrag.name) == .orderedSame }) {
+                lokal = namensTreffer
+                // Ersetzend statt additiv, siehe ``GeschaeftTyp/lamportZaehler``:
+                // nur wenn der Absender einen echten, neueren Stand mitbringt.
+                if eintrag.lamportZaehler > lokal.lamportZaehler {
+                    lokal.name = eintrag.name
+                    lokal.symbolName = eintrag.symbolName
+                    lokal.farbeHex = eintrag.farbeHex
+                    lokal.uebernehmeLamportZaehler(eintrag.lamportZaehler)
+                }
+            } else {
+                let naechsterIndex = (cache.alle.map(\.sortIndex).max() ?? -1) + 1
+                lokal = GeschaeftTyp(name: eintrag.name, symbolName: eintrag.symbolName, farbeHex: eintrag.farbeHex, sortIndex: naechsterIndex)
+                // Zählerstand des Absenders direkt übernehmen, nicht bei `0`
+                // belassen — sonst „gewinnt" ein später eintreffender, aber
+                // tatsächlich älterer Stand eines dritten Peers fälschlich
+                // gegen diese frisch angelegte Kopie.
+                lokal.uebernehmeLamportZaehler(eintrag.lamportZaehler)
+                context.insert(lokal)
+                cache.nachfuehren(lokal)
+            }
+            LamportClock.beiEmpfang(fremderZaehler: eintrag.lamportZaehler)
+            zuordnung[eintrag.id] = lokal
         }
         return zuordnung
     }
@@ -730,10 +758,21 @@ enum SyncSnapshotImportService {
                     standardFarbeHex: eintrag.standardFarbeHex, sortIndex: naechsterIndex
                 )
                 lokal.id = eintrag.id
+                // Zählerstand direkt übernehmen, siehe
+                // ``mergeGeschaeftsTypen(_:context:)`` für die Begründung.
+                lokal.uebernehmeLamportZaehler(eintrag.lamportZaehler)
                 context.insert(lokal)
                 cache.nachfuehren(lokal)
             }
             vereinigeGeordnetFallsNoetig(&lokal.geschaeftsTypen, mit: eintrag.geschaeftsTypIDs.compactMap { typZuordnung[$0] })
+            // Ersetzend statt additiv, siehe ``ArtikelKategorie/lamportZaehler``.
+            if eintrag.lamportZaehler > lokal.lamportZaehler {
+                lokal.name = eintrag.name
+                lokal.standardSymbol = eintrag.standardSymbol
+                lokal.standardFarbeHex = eintrag.standardFarbeHex
+                lokal.uebernehmeLamportZaehler(eintrag.lamportZaehler)
+            }
+            LamportClock.beiEmpfang(fremderZaehler: eintrag.lamportZaehler)
             zuordnung[eintrag.id] = lokal
         }
         return zuordnung
@@ -807,6 +846,9 @@ enum SyncSnapshotImportService {
                 }
                 lokal = Geschaeft(name: eintrag.name, typen: [], adresse: nil)
                 lokal.id = eintrag.id
+                // Zählerstand direkt übernehmen, siehe
+                // ``mergeGeschaeftsTypen(_:context:)`` für die Begründung.
+                lokal.uebernehmeLamportZaehler(eintrag.lamportZaehler)
                 context.insert(lokal)
                 cache.nachfuehren(lokal)
             }
@@ -842,6 +884,13 @@ enum SyncSnapshotImportService {
             lokal.umbauVerdacht = lokal.umbauVerdacht || eintrag.umbauVerdacht
             // unauffaelligeEinkaeufeInFolge bewusst NICHT gemergt — Streak-Zähler,
             // siehe Abschnitt 4.2a.
+
+            // Ersetzend statt additiv, siehe ``Geschaeft/lamportZaehler``.
+            if eintrag.lamportZaehler > lokal.lamportZaehler {
+                lokal.name = eintrag.name
+                lokal.uebernehmeLamportZaehler(eintrag.lamportZaehler)
+            }
+            LamportClock.beiEmpfang(fremderZaehler: eintrag.lamportZaehler)
 
             zuordnung[eintrag.id] = lokal
         }
@@ -905,6 +954,11 @@ enum SyncSnapshotImportService {
                 notiz: eintrag.notiz, einheit: Einheit(rawValue: eintrag.einheit) ?? .stueck, mengenSchritt: eintrag.mengenSchritt
             )
             neuer.id = eintrag.id
+            neuer.alternativeNamen = eintrag.alternativeNamen
+            // Zählerstand direkt übernehmen, siehe
+            // ``mergeGeschaeftsTypen(_:context:)`` für die Begründung.
+            neuer.uebernehmeLamportZaehler(eintrag.lamportZaehler)
+            LamportClock.beiEmpfang(fremderZaehler: eintrag.lamportZaehler)
             context.insert(neuer)
             cache.nachfuehren(neuer)
             zuordnung[eintrag.id] = neuer
@@ -917,6 +971,17 @@ enum SyncSnapshotImportService {
     ) {
         vereinigeGeordnetFallsNoetig(&lokal.kategorien, mit: eintrag.kategorieIDs.compactMap { kategorieZuordnung[$0] })
         if lokal.notiz == nil { lokal.notiz = eintrag.notiz }
+        for name in eintrag.alternativeNamen {
+            lokal.alternativenNamenLernen(name)
+        }
+        // Ersetzend statt additiv, siehe ``Artikel/lamportZaehler``.
+        if eintrag.lamportZaehler > lokal.lamportZaehler {
+            lokal.name = eintrag.name
+            if let einheit = Einheit(rawValue: eintrag.einheit) { lokal.einheit = einheit }
+            lokal.mengenSchritt = eintrag.mengenSchritt
+            lokal.uebernehmeLamportZaehler(eintrag.lamportZaehler)
+        }
+        LamportClock.beiEmpfang(fremderZaehler: eintrag.lamportZaehler)
     }
 
     // MARK: - Produkt (Bereich B, GitHub #47 Schritt 2/5)
@@ -952,6 +1017,13 @@ enum SyncSnapshotImportService {
             guard let artikel = eintrag.artikelID.flatMap({ artikelZuordnung[$0] }) else { continue }
             let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(fuer: eintrag.id, art: SyncEntitaetsArt.produkt, in: aliase)
             if let bekanntes = cache[aufgeloesteID] {
+                for name in eintrag.alternativeKlarnamen { bekanntes.alternativenKlarnamenLernen(name) }
+                // Ersetzend statt additiv, siehe ``Produkt/lamportZaehler``.
+                if eintrag.lamportZaehler > bekanntes.lamportZaehler {
+                    bekanntes.name = eintrag.name
+                    bekanntes.uebernehmeLamportZaehler(eintrag.lamportZaehler)
+                }
+                LamportClock.beiEmpfang(fremderZaehler: eintrag.lamportZaehler)
                 zuordnung[eintrag.id] = bekanntes
                 continue
             }
@@ -961,12 +1033,22 @@ enum SyncSnapshotImportService {
                 SyncEntitaetsAliasService.registriere(
                     entitaetsArt: SyncEntitaetsArt.produkt, fremdeID: eintrag.id, lokaleID: namensTreffer.id, context: context
                 )
+                for name in eintrag.alternativeKlarnamen { namensTreffer.alternativenKlarnamenLernen(name) }
+                if eintrag.lamportZaehler > namensTreffer.lamportZaehler {
+                    namensTreffer.uebernehmeLamportZaehler(eintrag.lamportZaehler)
+                }
+                LamportClock.beiEmpfang(fremderZaehler: eintrag.lamportZaehler)
                 zuordnung[eintrag.id] = namensTreffer
                 continue
             }
             guard !geloeschteIDs.contains(aufgeloesteID) else { continue }
             let neues = Produkt(name: eintrag.name, artikel: artikel, istStandard: eintrag.istStandard)
             neues.id = eintrag.id
+            neues.alternativeKlarnamen = eintrag.alternativeKlarnamen
+            // Zählerstand direkt übernehmen, siehe
+            // ``mergeGeschaeftsTypen(_:context:)`` für die Begründung.
+            neues.uebernehmeLamportZaehler(eintrag.lamportZaehler)
+            LamportClock.beiEmpfang(fremderZaehler: eintrag.lamportZaehler)
             context.insert(neues)
             cache.nachfuehren(neues)
             zuordnung[eintrag.id] = neues
@@ -980,11 +1062,10 @@ enum SyncSnapshotImportService {
 
     // MARK: - Produktname (Bereich B, GitHub #47 Schritt 2/5)
 
-    /// Analog ``mergeArtikelAliase(_:artikelZuordnung:context:)`` — nie
-    /// destruktiv, Union nach (``Produkt``, ``Geschaeft``, Name). Kein
-    /// ``SyncEntitaetsAlias``/Tombstone nötig (dieselbe Begründung wie bei
-    /// ``ArtikelAlias``, siehe ``SyncEntitaetsArt``): ein Produktname ohne
-    /// gültige Produkt-/Geschäfts-Auflösung wird übersprungen.
+    /// Nie destruktiv, Union nach (``Produkt``, ``Geschaeft``, Name). Kein
+    /// ``SyncEntitaetsAlias``/Tombstone nötig (siehe ``SyncEntitaetsArt``):
+    /// ein Produktname ohne gültige Produkt-/Geschäfts-Auflösung wird
+    /// übersprungen.
     @MainActor
     private static func mergeProduktnamen(
         _ remote: [ProduktnameSnapshot], produktZuordnung: [UUID: Produkt], geschaeftZuordnung: [UUID: Geschaeft], context: ModelContext
@@ -1798,7 +1879,7 @@ enum SyncSnapshotImportService {
     /// wird nie verändert, ein fehlender einfach übernommen.
     @MainActor
     private static func mergePreispunkte(
-        _ remote: [PreispunktSnapshot], artikelZuordnung: [UUID: Artikel], produktZuordnung: [UUID: Produkt],
+        _ remote: [PreispunktSnapshot], produktZuordnung: [UUID: Produkt],
         geschaeftZuordnung: [UUID: Geschaeft], context: ModelContext
     ) {
         let geloeschteIDs = SyncTombstoneService.geloeschteIDs(art: SyncEntitaetsArt.preispunkt, context: context)
@@ -1808,51 +1889,31 @@ enum SyncSnapshotImportService {
         for eintrag in remote {
             guard !bekannteIDs.contains(eintrag.id) else { continue }
             guard !geloeschteIDs.contains(eintrag.id) else { continue }
-            let artikel = eintrag.artikelID.flatMap { artikelZuordnung[$0] }
-            // Bevorzugt das über ``mergeProdukte`` real synchronisierte
-            // Produkt; Fallback auf das Platzhalter-Produkt des Artikels
-            // (GitHub #47, Schritt 1/5), falls der sendende Peer noch keine
-            // Produkt-Synchronisation kennt oder `produktID` fehlt.
-            let produkt = eintrag.produktID.flatMap { produktZuordnung[$0] } ?? artikel.map { Produkt.standardProdukt(fuer: $0, context: context) }
+            // Produkt-Pflicht (siehe ``Preispunkt``-Typ-Doku): ohne auflösbares
+            // Produkt gibt es keinen sinnvollen lokalen Preispunkt — der
+            // sendende Peer hätte diesen Fall bereits selbst nicht mehr
+            // anlegen dürfen, ein älterer/fremder Export ohne `produktID` wird
+            // hier trotzdem defensiv übersprungen statt einen produktlosen
+            // Preispunkt neu zu erzeugen.
+            guard let produkt = eintrag.produktID.flatMap({ produktZuordnung[$0] }) else { continue }
+            // Geschäfts-Pflicht bei ``Preispunkt`` (GitHub #128): verweist der
+            // sendende Peer auf ein hier nicht auflösbares Geschäft (unbekannt/
+            // bereits gelöscht), Fallback auf das Pseudo-Geschäft statt den
+            // Preispunkt zu verwerfen — ``geschaeftNameSnapshot`` unten bewahrt
+            // trotzdem den ursprünglichen Namen (siehe
+            // ``Geschaeft/unbekanntesGeschaeft(context:)``).
+            let geschaeft = eintrag.geschaeftID.flatMap { geschaeftZuordnung[$0] } ?? Geschaeft.unbekanntesGeschaeft(context: context)
             let neuer = Preispunkt(
-                artikel: artikel,
                 produkt: produkt,
-                geschaeft: eintrag.geschaeftID.flatMap { geschaeftZuordnung[$0] },
+                geschaeft: geschaeft,
                 preis: eintrag.preis,
                 datum: eintrag.datum,
                 produktName: eintrag.produktName,
                 alternativerName: eintrag.alternativerName
             )
             neuer.id = eintrag.id
-            neuer.artikelNameSnapshot = eintrag.artikelNameSnapshot
             neuer.geschaeftNameSnapshot = eintrag.geschaeftNameSnapshot
             context.insert(neuer)
-        }
-    }
-
-    // MARK: - ArtikelAlias (Bereich B, GitHub #76)
-
-    /// **Nie destruktiv, analog allen Bereich-B-Regeln:** ein bereits lokal
-    /// vorhandener Alias für denselben ``ArtikelAlias/erkannterName`` (case-
-    /// insensitiv) wird nie durch den Remote-Wert überschrieben — nur ein
-    /// bislang unbekannter Rohname wird ergänzt.
-    @MainActor
-    private static func mergeArtikelAliase(_ remote: [ArtikelAliasSnapshot], artikelZuordnung: [UUID: Artikel], context: ModelContext) {
-        var alleLokalen = (try? context.fetch(FetchDescriptor<ArtikelAlias>())) ?? []
-        for eintrag in remote {
-            guard eintrag.alternativerName != nil || eintrag.artikelID != nil else { continue }
-            guard !alleLokalen.contains(where: { $0.erkannterName.localizedCaseInsensitiveCompare(eintrag.erkannterName) == .orderedSame })
-            else { continue }
-            let neuer = ArtikelAlias(
-                erkannterName: eintrag.erkannterName, alternativerName: eintrag.alternativerName,
-                artikel: eintrag.artikelID.flatMap { artikelZuordnung[$0] }
-            )
-            neuer.id = eintrag.id
-            context.insert(neuer)
-            // Sofort nachführen (siehe ``mergeEinkaufsvorgaenge``) — sonst
-            // erzeugt ein zweiter Remote-Eintrag mit demselben `erkannterName`
-            // im selben Batch eine Dublette statt übersprungen zu werden.
-            alleLokalen.append(neuer)
         }
     }
 

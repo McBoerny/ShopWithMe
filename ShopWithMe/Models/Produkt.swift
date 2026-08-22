@@ -3,8 +3,7 @@ import SwiftData
 
 /// Ein konkretes, kaufbares Produkt unter einem übergreifenden ``Artikel`` —
 /// trägt den Preis, im Unterschied zum generischen Artikel selbst (GitHub
-/// #47). Siehe `docs/ARTIKEL_PRODUKT_MODELL.md` für das vollständige Konzept
-/// inkl. Abgrenzung zu ``ArtikelAlias``.
+/// #47). Siehe `docs/ARTIKEL_PRODUKT_MODELL.md` für das vollständige Konzept.
 ///
 /// Rekursiv selbstreferenzierend über ``elternProdukt``/``unterProdukte``
 /// (z.B. für Packungsgrößen-Varianten desselben Produkts) — hat ein Produkt
@@ -31,11 +30,24 @@ final class Produkt {
     @Relationship(deleteRule: .cascade, inverse: \Produktname.produkt)
     var produktnamen: [Produktname] = []
     /// Preishistorie dieses Produkts — inverse zu ``Preispunkt/produkt``.
-    /// Nullify, dieselbe Begründung wie ``Artikel/preispunkte``
-    /// (``Preispunkt/artikelNameSnapshot``/`produktNameSnapshot` halten den
-    /// Namen dauerhaft fest).
-    @Relationship(deleteRule: .nullify, inverse: \Preispunkt.produkt)
+    /// Kaskadierend: ein ``Preispunkt`` ist ohne sein Produkt fachlich
+    /// bedeutungslos (Produkt-Pflicht, siehe ``Preispunkt``-Typ-Doku) — anders
+    /// als früher (Nullify) überlebt die Preishistorie eine Produktlöschung
+    /// deshalb bewusst nicht mehr.
+    @Relationship(deleteRule: .cascade, inverse: \Preispunkt.produkt)
     var preispunkte: [Preispunkt] = []
+    /// Rohwert für ``alternativeKlarnamen`` — durch `\n` getrennt gespeichert.
+    /// Additiv-optional, analog ``Geschaeft/alternativeNamenRaw``.
+    private var alternativeKlarnamenRaw: String?
+    /// Vom Nutzer frei vergebene, zusätzliche Anzeigenamen dieses Produkts
+    /// (z.B. „Andechser Vollmilch fett" für „Andechser Milch 3,5%") —
+    /// geschäftsunabhängig, im Unterschied zu ``Produktname`` (Nachfolge von
+    /// `ArtikelAlias.alternativerName`, aber auf Produkt- statt Artikel-Ebene,
+    /// siehe `docs/ARTIKEL_PRODUKT_MODELL.md`).
+    var alternativeKlarnamen: [String] {
+        get { (alternativeKlarnamenRaw ?? "").split(separator: "\n").map(String.init) }
+        set { alternativeKlarnamenRaw = newValue.isEmpty ? nil : newValue.joined(separator: "\n") }
+    }
     /// Markiert ein automatisch angelegtes Platzhalter-Produkt (siehe
     /// ``standardProdukt(fuer:context:)``) — entsteht, solange der Nutzer für
     /// einen Artikel noch kein eigenes, benanntes Produkt angelegt hat (kein
@@ -43,6 +55,16 @@ final class Produkt {
     /// Produkt zuverlässig von einem später vom Nutzer angelegten, echten
     /// Produkt mit zufällig demselben Namen wie der Artikel.
     var istStandard: Bool
+    /// Rohspeicher für ``lamportZaehler`` — additiv optional, siehe
+    /// ``GeschaeftTyp/lamportZaehler``.
+    private var lamportZaehlerRaw: UInt64?
+    /// Logischer Zeitstempel der letzten Änderung an ``name`` — Grundlage
+    /// dafür, dass eine Umbenennung auch bereits synchronisierte Geräte
+    /// erreicht (`SyncSnapshotImportService.mergeProdukte``); ``istStandard``
+    /// hat aktuell keinen Bearbeitungs-Pfad für bestehende Produkte und bleibt
+    /// deshalb bewusst außen vor. Siehe ``GeschaeftTyp/lamportZaehler`` für
+    /// die volle Begründung.
+    var lamportZaehler: UInt64 { lamportZaehlerRaw ?? 0 }
 
     init(name: String, artikel: Artikel?, elternProdukt: Produkt? = nil, istStandard: Bool = false) {
         self.id = UUID()
@@ -51,9 +73,37 @@ final class Produkt {
         self.elternProdukt = elternProdukt
         self.istStandard = istStandard
     }
+
+    /// Aufgerufen, wenn der Anwender ``name`` dieses bereits bestehenden
+    /// Produkts ändert (siehe `ProduktEditView`) — nie bei bloßer Neuanlage,
+    /// siehe ``GeschaeftTyp/markiereGeaendert()``.
+    func markiereGeaendert() {
+        lamportZaehlerRaw = LamportClock.naechsterZaehler()
+    }
+
+    /// Übernimmt beim Sync-Merge einen tatsächlich neueren Zählerstand, siehe
+    /// ``GeschaeftTyp/uebernehmeLamportZaehler(_:)``.
+    func uebernehmeLamportZaehler(_ fremderZaehler: UInt64) {
+        lamportZaehlerRaw = fremderZaehler
+    }
 }
 
 extension Produkt {
+    /// Merkt sich `name` als zusätzlichen ``alternativeKlarnamen``-Eintrag
+    /// dieses Produkts, falls er weder dem eigentlichen ``name`` noch einem
+    /// bereits bekannten alternativen Klarnamen entspricht — analog
+    /// ``Artikel/alternativenNamenLernen(_:)``. Genutzt für den additiven
+    /// Sync-Merge (``SyncSnapshotImportService``, GitHub #128).
+    func alternativenKlarnamenLernen(_ name: String) {
+        let getrimmt = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !getrimmt.isEmpty,
+              getrimmt.localizedCaseInsensitiveCompare(self.name) != .orderedSame,
+              !alternativeKlarnamen.contains(where: { $0.localizedCaseInsensitiveCompare(getrimmt) == .orderedSame })
+        else { return }
+        alternativeKlarnamen.append(getrimmt)
+    }
+
+
     /// Findet das Platzhalter-Produkt (``istStandard``) für `artikel` oder legt
     /// es an, falls es noch nicht existiert — Grundlage dafür, dass jeder
     /// ``Preispunkt``/``EinkaufslistenEintrag`` einem ``Produkt`` zugeordnet

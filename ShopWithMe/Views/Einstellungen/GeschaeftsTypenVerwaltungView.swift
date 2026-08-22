@@ -153,6 +153,9 @@ private struct GeschaeftsTypKategorienView: View {
         }
         .navigationTitle(typ.name)
         .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: typ.name) { _, _ in typ.markiereGeaendert() }
+        .onChange(of: typ.symbolName) { _, _ in typ.markiereGeaendert() }
+        .onChange(of: typ.farbeHex) { _, _ in typ.markiereGeaendert() }
         .sheet(isPresented: $zeigeNeueKategorie) {
             NeueAbteilungSheet(naechsterSortIndex: (alleKategorien.map(\.sortIndex).max() ?? -1) + 1) { kategorie in
                 kategorie.geschaeftsTypen = kategorie.geschaeftsTypen + [typ]

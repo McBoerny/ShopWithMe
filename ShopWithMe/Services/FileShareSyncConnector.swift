@@ -147,7 +147,7 @@ final class FileShareSyncConnector: SyncConnector {
             von: SyncSnapshotExportService.stammURL(fuerPeer: peer, in: syncOrdner)
         ) ?? SyncStammSnapshot(
             geschaeftsTypen: [], artikelKategorien: [], geschaefte: [], artikel: [],
-            einkaufslisten: [], artikelAliase: [], produkte: [], produktnamen: []
+            einkaufslisten: [], produkte: [], produktnamen: []
         )
         let listen = await ladeTeil(
             SyncListenSnapshot.self,

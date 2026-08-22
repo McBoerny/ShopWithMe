@@ -11,8 +11,9 @@ struct SyncSnapshotExportServiceTests {
             Artikel.self, ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self,
             Einkaufsvorgang.self, KaufEintrag.self, WarengruppenDistanz.self,
             Einkaufsliste.self, EinkaufslistenEintrag.self, IgnorierterArtikel.self, SyncEvent.self,
-            SyncPeerZaehlerStand.self, Preispunkt.self, ArtikelAlias.self,
+            SyncPeerZaehlerStand.self, Preispunkt.self,
             ArtikelGeschaeftVerfuegbarkeit.self, GeschaeftBesuch.self,
+            Produkt.self, Produktname.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
@@ -43,6 +44,7 @@ struct SyncSnapshotExportServiceTests {
         let ignoriert = IgnorierterArtikel(erkannterName: "Pfand", geschaeft: geschaeft)
         context.insert(ignoriert)
         let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [kategorie])
+        apfel.alternativeNamen = ["Bio-Apfel"]
         context.insert(apfel)
         let liste = Einkaufsliste(name: "Wocheneinkauf")
         context.insert(liste)
@@ -51,10 +53,10 @@ struct SyncSnapshotExportServiceTests {
         let eintrag = KaufEintrag(artikel: apfel, geschaeft: geschaeft, kategorie: kategorie)
         context.insert(eintrag)
         eintrag.einkaufsvorgang = laufenderEinkauf
-        let preispunkt = Preispunkt(artikel: apfel, geschaeft: geschaeft, preis: 1.99)
+        let apfelProdukt = Produkt(name: "Apfel", artikel: apfel)
+        context.insert(apfelProdukt)
+        let preispunkt = Preispunkt(produkt: apfelProdukt, geschaeft: geschaeft, preis: 1.99)
         context.insert(preispunkt)
-        let alias = ArtikelAlias(erkannterName: "APF-BIO", alternativerName: "Bio-Apfel", artikel: apfel)
-        context.insert(alias)
         let kategorie2 = ArtikelKategorie(name: "Milchprodukte", standardSymbol: "drop", standardFarbeHex: "#007AFF")
         context.insert(kategorie2)
         let distanz = WarengruppenDistanz(geschaeft: geschaeft, kategorieA: kategorie, kategorieB: kategorie2, distanz: 0.3)
@@ -82,6 +84,7 @@ struct SyncSnapshotExportServiceTests {
 
         let artikelSnapshot = try #require(snapshot.artikel.first { $0.id == apfel.id })
         #expect(artikelSnapshot.kategorieIDs == [kategorie.id])
+        #expect(artikelSnapshot.alternativeNamen == ["Bio-Apfel"])
 
         #expect(snapshot.einkaufslisten.map(\.id) == [liste.id])
 
@@ -95,13 +98,8 @@ struct SyncSnapshotExportServiceTests {
         #expect(kaufEintragSnapshot.einkaufsvorgangID == laufenderEinkauf.id)
 
         let preispunktSnapshot = try #require(snapshot.preispunkte.first { $0.id == preispunkt.id })
-        #expect(preispunktSnapshot.artikelID == apfel.id)
+        #expect(preispunktSnapshot.produktID == apfelProdukt.id)
         #expect(preispunktSnapshot.preis == 1.99)
-
-        let aliasSnapshot = try #require(snapshot.artikelAliase.first { $0.id == alias.id })
-        #expect(aliasSnapshot.erkannterName == "APF-BIO")
-        #expect(aliasSnapshot.alternativerName == "Bio-Apfel")
-        #expect(aliasSnapshot.artikelID == apfel.id)
 
         let distanzSnapshot = try #require(snapshot.warengruppenDistanzen.first { $0.id == distanz.id })
         #expect(distanzSnapshot.kategorieAID == kategorie.id)
@@ -219,7 +217,7 @@ struct SyncSnapshotExportServiceTests {
         let text = try String(contentsOf: SyncSnapshotExportService.eigeneStammURL(in: syncOrdner), encoding: .utf8)
 
         let topLevelSchluessel = [
-            "artikel", "artikelAliase", "artikelKategorien", "einkaufslisten",
+            "artikel", "artikelKategorien", "einkaufslisten",
             "geschaefte", "geschaeftsTypen",
         ]
         let gefundenInReihenfolge = try topLevelSchluessel
@@ -393,7 +391,7 @@ struct SyncSnapshotExportServiceTests {
                         umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
                     ),
                 ],
-                artikel: [], einkaufslisten: [], artikelAliase: []
+                artikel: [], einkaufslisten: []
             )
         }
 

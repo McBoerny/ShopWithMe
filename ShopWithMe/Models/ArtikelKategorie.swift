@@ -84,12 +84,36 @@ final class ArtikelKategorie {
         set { geschaeftsTypModelle = newValue }
     }
 
+    /// Rohspeicher für ``lamportZaehler`` — additiv optional, siehe
+    /// ``GeschaeftTyp/lamportZaehler``.
+    private var lamportZaehlerRaw: UInt64?
+    /// Logischer Zeitstempel der letzten Änderung an ``name``/``standardSymbol``/
+    /// ``standardFarbeHex`` — Grundlage dafür, dass eine Umbenennung/
+    /// Farbänderung auch bereits synchronisierte Geräte erreicht
+    /// (`SyncSnapshotImportService.mergeArtikelKategorien`), siehe
+    /// ``GeschaeftTyp/lamportZaehler`` für die volle Begründung.
+    var lamportZaehler: UInt64 { lamportZaehlerRaw ?? 0 }
+
     init(name: String, standardSymbol: String, standardFarbeHex: String, sortIndex: Int = 0) {
         self.id = UUID()
         self.name = name
         self.standardSymbol = standardSymbol
         self.standardFarbeHex = standardFarbeHex
         self.sortIndex = sortIndex
+    }
+
+    /// Aufgerufen, wenn der Anwender ``name``/``standardSymbol``/
+    /// ``standardFarbeHex`` dieser bereits bestehenden Kategorie ändert
+    /// (siehe `AbteilungenVerwaltungView`) — nie bei bloßer Neuanlage, siehe
+    /// ``GeschaeftTyp/markiereGeaendert()``.
+    func markiereGeaendert() {
+        lamportZaehlerRaw = LamportClock.naechsterZaehler()
+    }
+
+    /// Übernimmt beim Sync-Merge einen tatsächlich neueren Zählerstand, siehe
+    /// ``GeschaeftTyp/uebernehmeLamportZaehler(_:)``.
+    func uebernehmeLamportZaehler(_ fremderZaehler: UInt64) {
+        lamportZaehlerRaw = fremderZaehler
     }
 }
 

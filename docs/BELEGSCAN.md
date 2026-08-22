@@ -18,8 +18,11 @@ Belegscans hinweg.
   feststehendes Geschäft, **ohne** den automatischen Geschäfts-Abgleich unten.
 - `ShopWithMe/Models/Preispunkt.swift` — persistentes Preishistorie-Ziel-Model
   (GitHub #76, vormals Teil von `KaufEintrag`), `anzeigeName`.
-- `ShopWithMe/Models/ArtikelAlias.swift` — gelernte Beleg-/Preisschild-Aliase
-  (GitHub #76, vormals `KaufEintrag.gelernteZuordnung`), `passend(fuerErkannterName:in:)`.
+- `ShopWithMe/Models/Produktname.swift` — geschäftsspezifische/-unabhängige
+  Rohnamen eines Produkts, `passend(fuerErkannterName:bevorzugtesGeschaeft:in:)`
+  (GitHub #128, vormals `ArtikelAlias.passend`, siehe
+  `docs/ARTIKEL_PRODUKT_MODELL.md`). `Artikel/alternativeNamen` deckt
+  ergänzend generische, produktunabhängige Synonyme ab.
 - `ShopWithMe/Services/PreispunktService.swift` — zentrale Schreiblogik: legt nur bei
   tatsächlicher Preisänderung einen neuen `Preispunkt` an; `vorhandenerPunktHeute(...)`/
   `ersetzeVorhandenenPunkt(...)` für die Tages-Kollisionsabfrage (siehe
@@ -100,7 +103,7 @@ Belegscans hinweg.
    verschwindet komplett, siehe „Dauerhaft ignorierte Artikel pro Geschäft” unten),
    sonst dreistufig (GitHub #123): (a) Text-Abgleich mit OCR-Text (Stufe 1+2,
    `ArtikelZuordnungsService.textBasierteZuordnung(...)`), (b) Klarname-Ableitung —
-   bei Treffer aus Produkt-/Aliasname, sonst KI-Vorschlag
+   bei Treffer aus dem Produktnamen, sonst KI-Vorschlag
    (`AISuggestionService.produktKlarname`), (c) KI-Artikel-Match
    (`AISuggestionService.artikelMatch`) auf Basis des Klarnamens statt des OCR-Texts
    (nur wenn Stufen 1+2 ohne Treffer). Zusätzlich ermittelt
@@ -136,9 +139,10 @@ Belegscans hinweg.
      unten) — verhält sich sonst wie `.geschaeft`, nur dass das Geschäft erst nach
      dem Scan feststeht (`erkanntesGeschaeft` statt eines fest übergebenen Werts).
    - In allen Fällen: weicht `produktKlarname` vom rohen `erkannterName` ab, wird er
-     als `alternativerName` auf dem `Preispunkt` übernommen (`leiteAlternativenNamenAb`)
-     und als `ArtikelAlias` gelernt — das ist die Quelle für das Mitlernen beim
-     nächsten Scan (siehe „Mitlernen zwischen Belegscans” unten).
+     als `alternativerName` auf dem `Preispunkt` übernommen (`leiteAlternativenNamenAb`).
+     Zusätzlich legt `Produkt.aufgeloestesOderNeuesProdukt(...)` bei Bedarf einen
+     `Produktname` an (sofern noch kein `Produkt` vorlag) — das ist die Quelle für
+     das Mitlernen beim nächsten Scan (siehe „Mitlernen zwischen Belegscans” unten).
    - Existiert für Artikel+Geschäft bereits **heute** ein `Preispunkt` mit
      abweichendem Preis, zeigt die Prüf-Ansicht dafür einen Hinweis mit
      Umschalt-Button („wird ersetzt” ↔ „Bisherigen behalten”) — siehe
@@ -221,8 +225,14 @@ Nur beim Belegscan relevant (siehe `docs/PREISSCHILD_SCAN.md` → „Kein
 geschäftsloser Einstieg“ für die bewusste Abgrenzung zum Preisschild-Scan). Wird ein
 Beleg nachträglich gescannt — z.B. zuhause, ohne vorher ein Geschäft auszuwählen —,
 steht zum Scan-Zeitpunkt noch kein `Geschaeft` fest. `BelegScanKontext.unbekannt`
-sowie ein `.einkaufsvorgang` ohne gewähltes Geschäft (Picker-Option „Kein Geschäft“
-in `EinkaufenView`) decken diesen Fall ab:
+sowie ein `.einkaufsvorgang` ohne gewähltes Geschäft decken diesen Fall ab.
+
+**Geschäfts-Pflicht (GitHub #128):** Seit der Geschäfts-Pflicht bei `Preispunkt`
+lässt sich „Preise übernehmen" nicht mehr betätigen, solange kein Geschäft
+feststeht (`ErgebnisListe`-Button `.disabled(erkanntesGeschaeft == nil)`,
+zusätzlicher Guard in `uebernehmen()`). Es gibt keine „Kein Geschäft"-Option
+mehr — der Anwender muss ein bestehendes Geschäft wählen oder eines neu
+anlegen (siehe Schritt 3 unten).
 
 1. **Erkennung**: `ReceiptScanService` liefert zusätzlich zu den Positionen einen
    rohen `geschaeftName: String` sowie eine rohe `geschaeftAdresse: String` (beide
@@ -232,7 +242,8 @@ in `EinkaufenView`) decken diesen Fall ab:
    allen vorhandenen Geschäften nach einem Treffer — sowohl gegen `Geschaeft.name`
    als auch gegen dessen gelernte `alternativeNamen` (beidseitiger
    `localizedCaseInsensitiveContains`-Abgleich, analog
-   `ArtikelAlias.passend(fuerErkannterName:in:)`). **Mehrere namensgleiche Geschäfte** (z.B. zwei
+   `Produktname.passend(fuerErkannterName:bevorzugtesGeschaeft:in:)`).
+   **Mehrere namensgleiche Geschäfte** (z.B. zwei
    „Rewe“-Filialen): die erkannte Adresse dient als automatischer Tie-Breaker
    (gleicher Abgleich gegen `Geschaeft.adresse`) — **ohne Rückfrage**. Bleibt danach
    mehr als ein Kandidat übrig oder wurde keine/keine passende Adresse erkannt,
@@ -240,9 +251,7 @@ in `EinkaufenView`) decken diesen Fall ab:
    Erweiterung), statt den Anwender zu unterbrechen.
 3. **Kein Treffer → Anwenderauswahl** (`GeschaeftWahlSheet`): öffnet sich
    automatisch, sobald kein Treffer gefunden wurde. Bietet Suche unter
-   bestehenden Geschäften, „Kein Geschäft“ (bewusstes Überspringen — die
-   entstehenden `Preispunkt`e bleiben dann ohne `geschaeft`, wie bisher) sowie
-   „„<Suchtext>“ neu anlegen“ (öffnet `GeschaeftStammdatenEditView`, vorausgefüllt
+   bestehenden Geschäften sowie „„<Suchtext>“ neu anlegen“ (öffnet `GeschaeftStammdatenEditView`, vorausgefüllt
    mit dem erkannten Namen **und** der erkannten Adresse). Die Adresse wird dabei
    sofort über `GeschaeftErkennungService.koordinaten(fuerAdresse:)` geocodiert und
    die ermittelten Koordinaten am Entwurf gesetzt — bewusst **nicht** der aktuelle
@@ -297,10 +306,12 @@ Händlers (oft abgekürzt, z.B. „COL-ZAH“) — er wird konsistent über alle
 `BelegScanKontext`e (vorher inkonsistent, siehe unten) beim Einlesen einem
 bestehenden, generischen `Artikel` zugeordnet, dreistufig:
 
-1. **Gelernter Alias**: `ArtikelAlias.passend(fuerErkannterName:in:)`
-   (siehe „Mitlernen zwischen Belegscans“ unten).
+1. **Gelernter Produktname**: `Produktname.passend(fuerErkannterName:bevorzugtesGeschaeft:in:)`
+   (siehe „Mitlernen zwischen Belegscans“ unten) — sucht zuerst geschäftsspezifisch,
+   dann geschäftsunabhängig.
 2. **Teilstring-Abgleich**: einfacher, beidseitiger
-   `localizedCaseInsensitiveContains`-Vergleich gegen alle vorhandenen `Artikel`.
+   `localizedCaseInsensitiveContains`-Vergleich gegen alle vorhandenen `Artikel`
+   (sowohl `Artikel.name` als auch dessen `alternativeNamen`).
 3. **KI-Best-Match** — nur falls Stufe 1+2 erfolglos **und** lokale KI verfügbar
    (`AISuggestionService.istVerfuegbar`): `AISuggestionService.artikelMatch(fuerName:bekannteArtikel:)`
    (`@Generable ArtikelMatchVorschlag`, exaktes Vorbild
@@ -312,8 +323,9 @@ bestehenden, generischen `Artikel` zugeordnet, dreistufig:
 Liefert nur der Artikel einen Treffer (Stufe 2/3, oder eine manuelle
 Zuweisung/Neuanlage in der Prüf-Ansicht), ohne dass bereits ein passender
 ``Produktname`` bekannt ist, legt `BelegScanView.uebernehmen()` automatisch ein
-neues, eigenständiges ``Produkt`` an (Ausnahme: Stufe 1, Alias-Treffer, bleibt
-bewusst beim Standard-Produkt des Artikels) — siehe
+neues, eigenständiges ``Produkt`` an (ein Stufe-1-Treffer bringt dagegen schon
+ein ``Produkt`` mit — meist das Standard-Produkt des Artikels, sofern der
+gelernte `Produktname` selbst darauf zeigt) — siehe
 `docs/ARTIKEL_PRODUKT_MODELL.md` → „Automatische Neuanlage beim Belegscan“ für
 die Namensfindung und Duplikat-Vermeidung.
 
@@ -329,7 +341,7 @@ bekam bislang gar keine Katalog-Zuordnung.
 **Anzeige/Korrektur (`PositionsZeile`, GitHub #123):** Zwei Elemente pro Position:
 
 - **Produktname-Feld** (`produktKlarname`, dominant): das primäre Textfeld, von der
-  KI vorbelegt (aus Produkt-/Aliasname oder neu generiert), direkt editierbar. Weicht
+  KI vorbelegt (aus einem bekannten Produktnamen oder neu generiert), direkt editierbar. Weicht
   der Klarname vom rohen `erkannterName` ab oder ist er leer, erscheint darunter
   „Erkannt auf Bon: „<Text>”” in kleiner Schrift.
 - **Artikel-Button** (`artikelName`): tappbarer Button darunter — zeigt
@@ -378,21 +390,34 @@ Grund für die Trennung: die beiden Rollen wuchsen unterschiedlich (jeder Kauf v
 echte Preisänderungen) und ein Preisschild-Scan hat ohnehin nie einen
 Einkaufsvorgang — siehe `docs/ROADMAP.md`/Issue #76 für die volle Herleitung.
 
+**Produkt-Pflicht:** ein `Preispunkt` hängt nie direkt an einem `Artikel`, sondern
+immer an einem konkreten `Produkt` — `artikel` ist nur noch eine abgeleitete,
+read-only Computed-Property (`produkt?.artikel`), kein eigenes gespeichertes Feld
+mehr. Ohne auflösbares `Produkt` (z.B. Scan-Position ohne Artikel-Treffer) entsteht
+seither gar kein `Preispunkt` mehr — der frühere Freitext-Fall „Ohne
+Artikel-Zuordnung" (siehe unten) entfällt.
+
 | Feld | Bedeutung |
 | --- | --- |
-| `artikel: Artikel?` | Verknüpfter, übergreifender Artikel — gesetzt aus einer gelernten Zuordnung, per Namensabgleich, oder manuell über `PreispunktZuordnenSheet`. `nil`, solange keine Zuordnung existiert oder der Artikel später gelöscht wurde. |
-| `artikelNameSnapshot: String` | Name zum Beobachtungszeitpunkt, dauerhaft — Fallback, falls `artikel` fehlt/gelöscht ist. |
-| `produktName: String?` | Genauer, vom Kassenbon/Preisschild erkannter Marken-/Produktname, falls er vom (ggf. generischen) `artikel` abweicht (z.B. „COL-ZAH“ bei `artikel.name == "Zahnpasta"`). Bleibt beim Umbenennen zwecks Zuordnung erhalten, damit unterschiedliche Marken desselben generischen Artikels in der Preishistorie unterscheidbar bleiben. |
-| `alternativerName: String?` | Alias für **genau diesen einen Preispunkt** (z.B. „Colgate“) — vom Nutzer vergeben (`PreispunktZuordnenSheet`) oder beim Scan aus einem korrigierten Namensfeld übernommen. Verändert `artikelNameSnapshot`/`produktName` nicht. |
+| `produkt: Produkt?` | Der eigentliche Preisträger — gesetzt aus einer gelernten Zuordnung, per Namensabgleich, oder manuell über `PreispunktZuordnenSheet`. Fachlich verpflichtend (Service-Ebene erzwingt ein aufgelöstes `Produkt`), im Modell technisch weiter optional (SwiftData-Relationships sind auf Storage-Ebene immer nullable). |
+| `produktName: String?` | Genauer, vom Kassenbon/Preisschild erkannter Marken-/Produktname, falls er vom (ggf. generischen) `artikel` abweicht (z.B. „COL-ZAH“ bei `artikel?.name == "Zahnpasta"`). Bleibt beim Umbenennen zwecks Zuordnung erhalten, damit unterschiedliche Marken desselben generischen Artikels in der Preishistorie unterscheidbar bleiben. |
+| `alternativerName: String?` | Alias für **genau diesen einen Preispunkt** (z.B. „Colgate“) — vom Nutzer vergeben (`PreispunktZuordnenSheet`) oder beim Scan aus einem korrigierten Namensfeld übernommen. Verändert `produktName` nicht. |
 | `preis: Decimal` | Beobachteter Einzelpreis — nicht optional, ein `Preispunkt` entsteht nur, wenn tatsächlich ein Preis erfasst wurde. |
 | `datum: Date` | Beobachtungsdatum, aus dem Beleg erkannt oder manuell gesetzt. |
 
 Nur bei tatsächlicher Preisänderung entsteht ein neuer `Preispunkt`
 (`PreispunktService.erfassen(...)`, Slowly-Changing-Dimension-Muster): ist der
-Preis gegenüber dem zuletzt bekannten `Preispunkt` desselben (`artikel`,
+Preis gegenüber dem zuletzt bekannten `Preispunkt` desselben (`produkt`,
 `geschaeft`)-Paars unverändert, wird nur dessen `datum` aktualisiert statt ein
 Duplikat anzulegen. Reines Abhaken auf der Einkaufsliste ohne Beleg erzeugt gar
 keinen `Preispunkt`.
+
+`Produkt → Preispunkt` ist kaskadierend: wird ein Produkt gelöscht, verschwindet
+auch seine Preishistorie (anders als früher, wo sie über `artikelNameSnapshot`
+erhalten blieb) — `Artikel → Produkt` kaskadiert bereits seit GitHub #47, die
+Kette ist damit durchgängig konsistent. `Preispunkt.geschaeftNameSnapshot` bleibt
+dagegen unverändert bestehen, siehe `docs/DATENSYNCHRONISATION.md` §4.5 für den
+strukturellen (nicht durch Löschreihenfolge behebbaren) Grund im Peer-Sync.
 
 ## Anzeige: `Preispunkt.anzeigeName`
 
@@ -404,19 +429,19 @@ var anzeigeName: String {
     if let alternativerName, !alternativerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
         return alternativerName
     }
-    let name = produktName ?? artikelNameSicher
+    let name = produktName ?? produktNameSicher
     return name.isEmpty ? "Unbekannter Artikel" : name
 }
 ```
 
 Priorität: **`alternativerName`** (Alias, falls gesetzt) → `produktName` (Original vom
-Kassenbon) → `artikel?.name` (sofern noch existent) → `artikelNameSnapshot`.
+Kassenbon) → `produkt?.name` (sofern noch existent, sonst `produktName`-Fallback über
+`produktNameSicher`).
 
 Verwendet in `PreisHistorieZeile`, angezeigt in:
 
-- `GeschaeftPreisUebersichtView` — sowohl in der „Preisübersicht“ (aggregiert pro
-  Artikel, siehe unten) als auch im Drill-down `ArtikelPreisVerlaufView` und im
-  Abschnitt „Ohne Artikel-Zuordnung“ (`zeigeArtikel: true`)
+- `GeschaeftPreisUebersichtView` — der „Preisübersicht“ (aggregiert pro Artikel,
+  siehe unten) sowie im Drill-down `ArtikelPreisVerlaufView`
 - `ArtikelEditView` (Preishistorie-Sektion eines Artikels, `zeigeArtikel: false` — zeigt
   dort den Geschäftsnamen statt des Artikelnamens; `alternativerName` bleibt trotzdem
   am `Preispunkt` gesetzt, ist dort nur nicht die sichtbare Spalte)
@@ -426,21 +451,24 @@ Verwendet in `PreisHistorieZeile`, angezeigt in:
 `PreisHistorieZeile` bietet überall eine Wisch-Aktion „Zuordnen“ (führende Kante,
 Tag-Symbol), die `PreispunktZuordnenSheet` öffnet:
 
-- **Alias-Textfeld**, vorbelegt mit `eintrag.alternativerName`. Leeres Feld beim
-  Speichern → `alternativerName = nil` (fällt auf `produktName`/`artikel?.name`/
-  `artikelNameSnapshot` zurück).
-- **Artikel-Auswahl**: „Keine Zuordnung“, durchsuchbare Liste aller `Artikel` (analog
+- **Anzeigename-Textfeld**, vorbelegt mit `eintrag.alternativerName`. Leeres Feld beim
+  Speichern → `alternativerName = nil` (fällt auf `produktName`/`produktNameSicher`
+  zurück).
+- **Artikel-Auswahl**: durchsuchbare Liste aller `Artikel` (analog
   `ArtikelHinzufuegenView`), oder „„<Suchtext>“ neu anlegen“, falls kein exakter Treffer
   existiert — öffnet `ArtikelEditView(artikel:istNeu:true)` und übernimmt den neu
   gesicherten Artikel automatisch als Auswahl (gleiches Muster wie
-  `ArtikelHinzufuegenView.nachNeuanlageAufraeumen`).
-- **Speichern** setzt `alternativerName`/`artikel` auf dem `Preispunkt`, geschützt
+  `ArtikelHinzufuegenView.nachNeuanlageAufraeumen`). Seit der Produkt-Pflicht keine
+  „Keine Zuordnung“-Option mehr — „Speichern“ ist deaktiviert, solange kein Artikel
+  gewählt ist.
+- **Speichern** setzt `alternativerName`/`produkt` auf dem `Preispunkt`, geschützt
   durch `DatabaseLeaseService.performMicroLease` (explizite Speicherung, da
   `ModelContext.autosaveEnabled == false`, siehe `docs/DATABASE_CONCURRENCY.md`), und
-  lernt zusätzlich einen `ArtikelAlias` (`erkannterName` des Preispunkts →
-  `alternativerName`/`artikel`) für künftige Scans.
+  löst über `Produkt.aufgeloestesOderNeuesProdukt(klarname:erkannterName:artikel:geschaeft:context:)`
+  das `Produkt`/einen `Produktname` auf/legt sie an (GitHub #128, ersetzt das
+  frühere separate `ArtikelAlias.lernen(...)`) — Lerngrundlage für künftige Scans.
 
-Jede so gesetzte Alias-/Artikel-Kombination ist die Lerngrundlage für künftige
+Jede so gesetzte Anzeigename-/Artikel-Kombination ist die Lerngrundlage für künftige
 Belegscans desselben Produkts (Schritt 4 oben).
 
 ## Preisübersicht eines Geschäfts: `ArtikelPreisSpanne`
@@ -472,47 +500,57 @@ Antippen (Info-/Drill-down-Funktion über `NavigationLink`) öffnet
 dauerhaft entfernen — z.B. bei einer offensichtlich falsch erfassten Position, die die
 Preisspanne verzerrt.
 
-**Ohne Artikel-Zuordnung**: `Preispunkt`e ohne `artikel` (z.B. weil beim Scan kein
-Namensabgleich griff und noch keine manuelle Zuordnung erfolgte) erscheinen weiterhin
-sichtbar in einem eigenen Abschnitt darunter, mit der bestehenden Wisch-Aktion
-„Zuordnen“ zum Nachholen der Verknüpfung.
+**Ohne Artikel-Zuordnung (entfallen):** früher erschienen `Preispunkt`e ohne
+`artikel` (z.B. weil beim Scan kein Namensabgleich griff) in einem eigenen
+Abschnitt darunter. Seit der Produkt-Pflicht entsteht ein solcher Preispunkt gar
+nicht mehr — findet Beleg- oder Preisschildscan keine Artikel-Zuordnung, wird die
+betroffene Position übersprungen statt als freitextiger Preispunkt gespeichert.
+`PreispunktZuordnenSheet`/die Wisch-Aktion „Zuordnen“ dienen seither nur noch der
+nachträglichen Korrektur einer bereits bestehenden Zuordnung.
 
 ## Mitlernen zwischen Belegscans
 
-**Seit GitHub #76** ein dediziertes, kleines `ArtikelAlias`-Modell (ein Eintrag pro
-`erkannterName`, per Upsert aktuell gehalten) statt einer Suche über die komplette
-Kaufhistorie. `ArtikelAlias.passend(fuerErkannterName:in:)` ist die zentrale, reine
-(UI-unabhängige) Lookup-Funktion:
+**Seit GitHub #128** übernimmt `Produktname` (geschäftsspezifisch oder bei
+`geschaeft == nil` geschäftsunabhängig) diese Rolle — vormals ein eigenes,
+dediziertes `ArtikelAlias`-Modell (GitHub #76, siehe `docs/ARTIKEL_PRODUKT_MODELL.md`
+für die Herleitung des Umbaus). `Produktname.passend(fuerErkannterName:bevorzugtesGeschaeft:in:)`
+ist die zentrale, reine (UI-unabhängige) Lookup-Funktion:
 
 ```swift
 static func passend(
     fuerErkannterName erkannterName: String,
-    in alle: [ArtikelAlias]
-) -> (alias: String?, artikel: Artikel?)?
+    bevorzugtesGeschaeft: Geschaeft?,
+    in alle: [Produktname]
+) -> Produktname?
 ```
 
-Sucht zuerst einen exakten (case-insensitiven) Treffer für `erkannterName`, sonst
-einen beidseitigen `localizedCaseInsensitiveContains`-Abgleich. `ArtikelAlias.lernen(
-erkannterName:alternativerName:artikel:context:)` legt bei Bedarf einen neuen Eintrag
-an oder aktualisiert den bestehenden — aufgerufen sowohl aus
+Sucht zuerst einen exakten (case-insensitiven) Treffer mit `geschaeft == bevorzugtesGeschaeft`,
+dann mit `geschaeft == nil` (die frühere `ArtikelAlias`-Rolle) — jeweils vor einem
+beidseitigen `localizedCaseInsensitiveContains`-Abgleich. Das eigentliche Lernen
+läuft nicht mehr über einen expliziten `lernen(...)`-Aufruf, sondern automatisch
+über `Produkt.aufgeloestesOderNeuesProdukt(klarname:erkannterName:artikel:geschaeft:context:)`
+(`Models/Produkt.swift`, siehe `docs/ARTIKEL_PRODUKT_MODELL.md` → „Automatische
+Neuanlage beim Belegscan“) — aufgerufen sowohl aus
 `BelegScanView.uebernehmen()`/`PreisschildScanView.uebernehmen()` (automatisches
 Lernen aus einer geänderten Namenszuordnung) als auch aus
 `PreispunktZuordnenSheet.speichern()` (manuelle Korrektur).
 
 `BelegScanView.verarbeite(bild:)`/`PreisschildScanView.verarbeite(bild:)` rufen
-`ArtikelAlias.passend(...)` für jede frisch erkannte Position auf und übernehmen
-Alias (als Vorbelegung des Namensfelds) und `Artikel` (als `gelernterArtikel`) in die
-jeweilige `Bearbeitbare...Position`. Damit schließt sich der Kreis: Eine einmal
-gesetzte Alias-/Artikel-Kombination wird beim nächsten Scan desselben Produkts
-automatisch vorgeschlagen und verknüpft, ohne dass der Nutzer erneut zuordnen muss.
+`Produktname.passend(...)` (bzw. `ArtikelZuordnungsService.textBasierteZuordnung(...)`,
+das dieselbe Funktion intern nutzt) für jede frisch erkannte Position auf und
+übernehmen den gefundenen Produktnamen (als Vorbelegung des Namensfelds) und
+`Artikel` (als `gelernterArtikel`) in die jeweilige `Bearbeitbare...Position`.
+Damit schließt sich der Kreis: Eine einmal gesetzte Namens-/Artikel-Kombination
+wird beim nächsten Scan desselben Produkts automatisch vorgeschlagen und
+verknüpft, ohne dass der Nutzer erneut zuordnen muss.
+
+Für generische, produktunabhängige Synonyme (z.B. „Zahncreme“ für „Zahnpasta“,
+ohne Bezug zu einer bestimmten Marke) gibt es zusätzlich `Artikel.alternativeNamen`
+— frei gepflegt über `ArtikelEditView`, fließt in die Artikel-Substring-Matchstufe
+von `ArtikelZuordnungsService` ein (siehe „Automatische Artikel-Zuordnung“ oben).
 
 ## Bewusst nicht umgesetzt
 
-- **Kein Alias auf `Artikel`-Ebene**: Alias und Artikel-Zuordnung hängen am
-  `erkannterName` (`ArtikelAlias`), nicht am übergreifenden `Artikel` selbst. Das
-  erlaubt weiterhin, dass verschiedene Marken/Varianten (verschiedene erkannte Namen)
-  demselben generischen `Artikel` zugeordnet sind, ohne dass ein Alias für eine
-  bestimmte Marke versehentlich alle anderen überschreibt.
 - **Kein Fuzzy-Vorschlag für die Artikel-Auswahl** in `PreispunktZuordnenSheet` über
   den bereits erkannten Namen hinaus — die Suche ist bewusst eine einfache
   Teilstring-Suche wie in `ArtikelHinzufuegenView`, kein KI-Vorschlag.

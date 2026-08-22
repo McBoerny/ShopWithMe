@@ -108,8 +108,12 @@ die übrige Doku aktualisiert wird): `docs/BUILD_WORKFLOW.md`.
   bekommen (z.B. „Zahncreme“ für „Zahnpasta“), unter denen ihn die
   Artikelsuche beim Einkaufen ebenfalls findet. Bleibt derselbe Artikel,
   kein eigenes Produkt/kein eigener Preis — Abgrenzung zu Artikel → Produkt
-  → Produktname (v0.14, siehe unten). Wiederverwendet das bereits vorhandene
-  `ArtikelAlias`-Modell (bisher nur Bon-Scan-Erkennung) statt eines neuen Typs.
+  → Produktname (v0.14, siehe unten). Wiederverwendet das damals bereits
+  vorhandene `ArtikelAlias`-Modell (bisher nur Bon-Scan-Erkennung) statt
+  eines neuen Typs. **Nachträglich abgelöst:** [Issue #128](https://github.com/McBoerny/ShopWithMe/issues/128)
+  entfernt `ArtikelAlias` wieder zugunsten von `Artikel/alternativeNamen`
+  (diese Rolle) und `Produktname` (Bon-Scan-Erkennung), siehe
+  `docs/ARTIKEL_PRODUKT_MODELL.md`.
 - [x] **v0.14** — [Issue #47](https://github.com/McBoerny/ShopWithMe/issues/47):
   Artikel → Produkt → Produktname — ein Artikel kann mehrere konkrete
   Produkte mit eigenem Preis haben (z.B. „Odol“/„Paradontol“/„Sebamed“ für

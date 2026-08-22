@@ -45,7 +45,7 @@ enum SyncEntitaetsArt {
     static let preispunkt = "Preispunkt"
     /// Seit GitHub #47, Schritt 2/5 — namensbasiert gematcht wie Artikel/
     /// Geschäft, daher alias-/tombstone-pflichtig (anders als ``Produktname``,
-    /// das analog ``ArtikelAlias`` keinen eigenen Fall bekommt).
+    /// das keinen eigenen Fall bekommt).
     static let produkt = "Produkt"
 
     /// Echtes, `RawRepresentable`-Enum NUR für Dispatch-Stellen (`switch`),

@@ -8,7 +8,7 @@ struct PreispunktVerdichtungServiceTests {
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {
         let schema = Schema([
             Artikel.self, ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self,
-            Preispunkt.self, ArtikelAlias.self, SyncTombstone.self,
+            Preispunkt.self, SyncTombstone.self, Produkt.self, Produktname.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
@@ -29,16 +29,16 @@ struct PreispunktVerdichtungServiceTests {
     func taeglicheVerdichtungBehaeltNurDenJuengstenVergangenerTage() async throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
-        let (artikel, geschaeft) = artikelUndGeschaeft(context)
+        let (_, geschaeft) = artikelUndGeschaeft(context)
         let jetzt = Date()
         // Bewusst relativ zum Start des Vortags verankert (nicht relativ zu `jetzt`
         // selbst) — sonst könnte je nach Tageszeit des Testlaufs einer der drei
         // Zeitpunkte über Mitternacht auf einen anderen Kalendertag rutschen.
         let startVortag = Calendar.current.startOfDay(for: jetzt.addingTimeInterval(-1 * 86400))
 
-        let morgens = Preispunkt(artikel: artikel, geschaeft: geschaeft, preis: 1.19, datum: startVortag.addingTimeInterval(3600 * 8))
-        let mittags = Preispunkt(artikel: artikel, geschaeft: geschaeft, preis: 1.29, datum: startVortag.addingTimeInterval(3600 * 12))
-        let abends = Preispunkt(artikel: artikel, geschaeft: geschaeft, preis: 1.09, datum: startVortag.addingTimeInterval(3600 * 18))
+        let morgens = Preispunkt(produkt: nil, geschaeft: geschaeft, preis: 1.19, datum: startVortag.addingTimeInterval(3600 * 8))
+        let mittags = Preispunkt(produkt: nil, geschaeft: geschaeft, preis: 1.29, datum: startVortag.addingTimeInterval(3600 * 12))
+        let abends = Preispunkt(produkt: nil, geschaeft: geschaeft, preis: 1.09, datum: startVortag.addingTimeInterval(3600 * 18))
         context.insert(morgens)
         context.insert(mittags)
         context.insert(abends)
@@ -59,15 +59,15 @@ struct PreispunktVerdichtungServiceTests {
     func taeglicheVerdichtungLaesstHeutigenTagUnangetastet() async throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
-        let (artikel, geschaeft) = artikelUndGeschaeft(context)
+        let (_, geschaeft) = artikelUndGeschaeft(context)
         let jetzt = Date()
         // Relativ zum Start des heutigen Tages verankert (nicht relativ zu `jetzt`
         // selbst) — sonst könnte je nach Tageszeit des Testlaufs ein Punkt
         // fälschlich auf den Vortag rutschen.
         let heute = Calendar.current.startOfDay(for: jetzt)
 
-        let morgens = Preispunkt(artikel: artikel, geschaeft: geschaeft, preis: 1.19, datum: heute.addingTimeInterval(3600 * 4))
-        let mittags = Preispunkt(artikel: artikel, geschaeft: geschaeft, preis: 1.29, datum: heute.addingTimeInterval(3600 * 8))
+        let morgens = Preispunkt(produkt: nil, geschaeft: geschaeft, preis: 1.19, datum: heute.addingTimeInterval(3600 * 4))
+        let mittags = Preispunkt(produkt: nil, geschaeft: geschaeft, preis: 1.29, datum: heute.addingTimeInterval(3600 * 8))
         context.insert(morgens)
         context.insert(mittags)
         try context.save()
@@ -84,7 +84,7 @@ struct PreispunktVerdichtungServiceTests {
     func wochenverdichtungBehaeltHoechstenPreisMitEchtemDatum() async throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
-        let (artikel, geschaeft) = artikelUndGeschaeft(context)
+        let (_, geschaeft) = artikelUndGeschaeft(context)
         let jetzt = Date()
         let kalender = Calendar.current
         // Bewusst an den Start einer vollen Kalenderwoche verankert (nicht an
@@ -102,8 +102,8 @@ struct PreispunktVerdichtungServiceTests {
         let montag = kalender.date(byAdding: .weekOfYear, value: -2, to: wochenStart)!
         let mittwoch = kalender.date(byAdding: .day, value: 2, to: montag)!
 
-        let niedriger = Preispunkt(artikel: artikel, geschaeft: geschaeft, preis: 1.19, datum: montag)
-        let hoeher = Preispunkt(artikel: artikel, geschaeft: geschaeft, preis: 1.49, datum: mittwoch)
+        let niedriger = Preispunkt(produkt: nil, geschaeft: geschaeft, preis: 1.19, datum: montag)
+        let hoeher = Preispunkt(produkt: nil, geschaeft: geschaeft, preis: 1.49, datum: mittwoch)
         context.insert(niedriger)
         context.insert(hoeher)
         try context.save()
@@ -129,7 +129,7 @@ struct PreispunktVerdichtungServiceTests {
     func monatsverdichtungReduziertBereitsWochenverdichtetePunkte() async throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
-        let (artikel, geschaeft) = artikelUndGeschaeft(context)
+        let (_, geschaeft) = artikelUndGeschaeft(context)
         let jetzt = Date()
         let kalender = Calendar.current
 
@@ -144,8 +144,8 @@ struct PreispunktVerdichtungServiceTests {
             kalender.component(.month, from: anfangDesMonats) == kalender.component(.month, from: spaeterImMonat)
         )
 
-        let niedriger = Preispunkt(artikel: artikel, geschaeft: geschaeft, preis: 1.19, datum: anfangDesMonats)
-        let hoeher = Preispunkt(artikel: artikel, geschaeft: geschaeft, preis: 1.59, datum: spaeterImMonat)
+        let niedriger = Preispunkt(produkt: nil, geschaeft: geschaeft, preis: 1.19, datum: anfangDesMonats)
+        let hoeher = Preispunkt(produkt: nil, geschaeft: geschaeft, preis: 1.59, datum: spaeterImMonat)
         context.insert(niedriger)
         context.insert(hoeher)
         try context.save()
@@ -164,14 +164,14 @@ struct PreispunktVerdichtungServiceTests {
     func verdichtenHinterlaesstTombstoneFuerGeloeschtePunkte() async throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
-        let (artikel, geschaeft) = artikelUndGeschaeft(context)
+        let (_, geschaeft) = artikelUndGeschaeft(context)
         let jetzt = Date()
         // Relativ zum Start des Vortags verankert, siehe Begründung in
         // ``taeglicheVerdichtungBehaeltNurDenJuengstenVergangenerTage``.
         let startVortag = Calendar.current.startOfDay(for: jetzt.addingTimeInterval(-1 * 86400))
 
-        let aelter = Preispunkt(artikel: artikel, geschaeft: geschaeft, preis: 1.19, datum: startVortag.addingTimeInterval(3600 * 8))
-        let juenger = Preispunkt(artikel: artikel, geschaeft: geschaeft, preis: 1.29, datum: startVortag.addingTimeInterval(3600 * 12))
+        let aelter = Preispunkt(produkt: nil, geschaeft: geschaeft, preis: 1.19, datum: startVortag.addingTimeInterval(3600 * 8))
+        let juenger = Preispunkt(produkt: nil, geschaeft: geschaeft, preis: 1.29, datum: startVortag.addingTimeInterval(3600 * 12))
         context.insert(aelter)
         context.insert(juenger)
         let aelterID = aelter.id

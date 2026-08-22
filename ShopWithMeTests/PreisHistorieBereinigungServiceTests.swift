@@ -8,7 +8,7 @@ struct PreisHistorieBereinigungServiceTests {
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {
         let schema = Schema([
             Artikel.self, ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self,
-            Einkaufsvorgang.self, KaufEintrag.self, Preispunkt.self, ArtikelAlias.self,
+            Einkaufsvorgang.self, KaufEintrag.self, Preispunkt.self,
             Einkaufsliste.self, EinkaufslistenEintrag.self, SyncEvent.self, SyncTombstone.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -22,8 +22,10 @@ struct PreisHistorieBereinigungServiceTests {
         _ = container
 
         let jetzt = Date()
-        let alterPunkt = Preispunkt(artikel: nil, geschaeft: nil, preis: 1.99, datum: jetzt.addingTimeInterval(-400 * 86400))
-        let neuerPunkt = Preispunkt(artikel: nil, geschaeft: nil, preis: 2.49, datum: jetzt.addingTimeInterval(-1 * 86400))
+        let geschaeft = Geschaeft(name: "Rewe", typen: [])
+        context.insert(geschaeft)
+        let alterPunkt = Preispunkt(produkt: nil, geschaeft: geschaeft, preis: 1.99, datum: jetzt.addingTimeInterval(-400 * 86400))
+        let neuerPunkt = Preispunkt(produkt: nil, geschaeft: geschaeft, preis: 2.49, datum: jetzt.addingTimeInterval(-1 * 86400))
         context.insert(alterPunkt)
         context.insert(neuerPunkt)
         try context.save()
@@ -41,7 +43,9 @@ struct PreisHistorieBereinigungServiceTests {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
-        let alterPunkt = Preispunkt(artikel: nil, geschaeft: nil, preis: 1.99, datum: Date.distantPast)
+        let geschaeft = Geschaeft(name: "Rewe", typen: [])
+        context.insert(geschaeft)
+        let alterPunkt = Preispunkt(produkt: nil, geschaeft: geschaeft, preis: 1.99, datum: Date.distantPast)
         context.insert(alterPunkt)
         try context.save()
 
@@ -57,8 +61,10 @@ struct PreisHistorieBereinigungServiceTests {
         _ = container
 
         let jetzt = Date()
-        let punktAelterAlsZehnTage = Preispunkt(artikel: nil, geschaeft: nil, preis: 1.0, datum: jetzt.addingTimeInterval(-15 * 86400))
-        let punktJuengerAlsZehnTage = Preispunkt(artikel: nil, geschaeft: nil, preis: 2.0, datum: jetzt.addingTimeInterval(-5 * 86400))
+        let geschaeft = Geschaeft(name: "Rewe", typen: [])
+        context.insert(geschaeft)
+        let punktAelterAlsZehnTage = Preispunkt(produkt: nil, geschaeft: geschaeft, preis: 1.0, datum: jetzt.addingTimeInterval(-15 * 86400))
+        let punktJuengerAlsZehnTage = Preispunkt(produkt: nil, geschaeft: geschaeft, preis: 2.0, datum: jetzt.addingTimeInterval(-5 * 86400))
         context.insert(punktAelterAlsZehnTage)
         context.insert(punktJuengerAlsZehnTage)
         try context.save()
@@ -76,7 +82,9 @@ struct PreisHistorieBereinigungServiceTests {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
-        let alterPunkt = Preispunkt(artikel: nil, geschaeft: nil, preis: 1.99, datum: Date.distantPast)
+        let geschaeft = Geschaeft(name: "Rewe", typen: [])
+        context.insert(geschaeft)
+        let alterPunkt = Preispunkt(produkt: nil, geschaeft: geschaeft, preis: 1.99, datum: Date.distantPast)
         context.insert(alterPunkt)
         let punktID = alterPunkt.id
         try context.save()

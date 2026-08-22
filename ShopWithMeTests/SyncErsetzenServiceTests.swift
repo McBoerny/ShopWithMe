@@ -48,7 +48,7 @@ struct SyncErsetzenServiceTests {
             formatVersion: SyncSnapshot.aktuelleFormatVersion, erzeugtAm: Date(), geraeteID: geraeteID, geraeteName: geraeteName,
             geschaeftsTypen: [], artikelKategorien: [], geschaefte: [], artikel: [],
             einkaufslisten: [], einkaufslistenEintraege: [], einkaufsvorgaenge: [], kaufEintraege: [],
-            preispunkte: [], artikelAliase: [],
+            preispunkte: [],
             warengruppenDistanzen: [], tombstones: []
         )
     }
@@ -67,8 +67,7 @@ struct SyncErsetzenServiceTests {
         )
         let stamm = SyncStammSnapshot(
             geschaeftsTypen: snapshot.geschaeftsTypen, artikelKategorien: snapshot.artikelKategorien,
-            geschaefte: snapshot.geschaefte, artikel: snapshot.artikel, einkaufslisten: snapshot.einkaufslisten,
-            artikelAliase: snapshot.artikelAliase
+            geschaefte: snapshot.geschaefte, artikel: snapshot.artikel, einkaufslisten: snapshot.einkaufslisten
         )
         let listen = SyncListenSnapshot(einkaufslistenEintraege: snapshot.einkaufslistenEintraege)
         let lernen = SyncLernenSnapshot(warengruppenDistanzen: snapshot.warengruppenDistanzen)

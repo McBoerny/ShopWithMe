@@ -32,6 +32,22 @@ final class GeschaeftTyp {
         get { farbeHexRaw ?? "#8E8E93" }
         set { farbeHexRaw = newValue }
     }
+    /// Rohspeicher für ``lamportZaehler`` — additiv optional, damit vor diesem
+    /// Feature angelegte Geschäftstypen ohne Migration bei `0` starten (siehe
+    /// ``markiereGeaendert()``).
+    private var lamportZaehlerRaw: UInt64?
+    /// Logischer Zeitstempel der letzten Änderung an ``name``/``symbolName``/
+    /// ``farbeHex`` (nicht an ``standardKategorien``/``geschaefte`` — diese
+    /// bleiben additiv gemergt). Grundlage dafür, dass eine Umbenennung/
+    /// Farbänderung auf einem Gerät auch bereits synchronisierte Geräte
+    /// erreicht (`SyncSnapshotImportService.mergeGeschaeftsTypen`) — ohne
+    /// diesen Zähler wären diese Felder nach der Erstanlage für immer
+    /// eingefroren (siehe `docs/DATENSYNCHRONISATION.md` §4.1-Nachtrag).
+    /// Denselben globalen ``LamportClock`` wie Bereich A wiederverwendet,
+    /// nicht domänenspezifisch — vergleichbar ist der Wert ohnehin nur
+    /// innerhalb desselben Objekts (`lokal.lamportZaehler` vs.
+    /// `eintrag.lamportZaehler`), nie geräte- oder typübergreifend.
+    var lamportZaehler: UInt64 { lamportZaehlerRaw ?? 0 }
 
     init(name: String, symbolName: String, farbeHex: String? = nil, sortIndex: Int = 0) {
         self.id = UUID()
@@ -39,6 +55,26 @@ final class GeschaeftTyp {
         self.symbolName = symbolName
         self.farbeHexRaw = farbeHex
         self.sortIndex = sortIndex
+    }
+
+    /// Aufgerufen, wenn der Anwender ``name``/``symbolName``/``farbeHex``
+    /// dieses bereits bestehenden Geschäftstyps ändert (siehe
+    /// `GeschaeftsTypenVerwaltungView`) — nie bei bloßer Neuanlage (dort
+    /// startet der Zähler bewusst bei `0`, ein frisch angelegter, noch nie
+    /// synchronisierter Typ soll keinen anderswo bereits bekannten,
+    /// gleichnamigen Typ überschreiben können).
+    func markiereGeaendert() {
+        lamportZaehlerRaw = LamportClock.naechsterZaehler()
+    }
+
+    /// Übernimmt beim Sync-Merge einen vom sendenden Peer mitgebrachten,
+    /// tatsächlich neueren Zählerstand (siehe `SyncSnapshotImportService.mergeGeschaeftsTypen`)
+    /// — im Unterschied zu ``markiereGeaendert()`` kein neuer eigener Tick,
+    /// sondern die Übernahme des bereits vom Absender vergebenen Werts, damit
+    /// dieses Gerät bei einem künftigen Merge korrekt erkennt, dass es diesen
+    /// Stand bereits kennt.
+    func uebernehmeLamportZaehler(_ fremderZaehler: UInt64) {
+        lamportZaehlerRaw = fremderZaehler
     }
 }
 

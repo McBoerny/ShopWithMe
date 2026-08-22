@@ -12,7 +12,7 @@ struct SyncSnapshotImportServiceTests {
             Einkaufsvorgang.self, KaufEintrag.self, WarengruppenDistanz.self, WarengruppenDistanzPeerZaehlerStand.self,
             Einkaufsliste.self, EinkaufslistenEintrag.self, IgnorierterArtikel.self,
             SyncEvent.self, SyncEntitaetsAlias.self, SyncPeerZaehlerStand.self, SyncPeerInfo.self,
-            SyncTombstone.self, Preispunkt.self, ArtikelAlias.self, SyncAbgleichKandidat.self,
+            SyncTombstone.self, Preispunkt.self, SyncAbgleichKandidat.self,
             ArtikelGeschaeftVerfuegbarkeit.self, GeschaeftBesuch.self, ArtikelListenKauf.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -31,7 +31,7 @@ struct SyncSnapshotImportServiceTests {
             formatVersion: SyncSnapshot.aktuelleFormatVersion, erzeugtAm: Date(), geraeteID: geraeteID, geraeteName: geraeteName,
             geschaeftsTypen: [], artikelKategorien: [], geschaefte: [], artikel: [],
             einkaufslisten: [], einkaufslistenEintraege: [], einkaufsvorgaenge: [], kaufEintraege: [],
-            preispunkte: [], artikelAliase: [],
+            preispunkte: [],
             warengruppenDistanzen: [], tombstones: []
         )
     }
@@ -51,7 +51,7 @@ struct SyncSnapshotImportServiceTests {
         let stamm = SyncStammSnapshot(
             geschaeftsTypen: snapshot.geschaeftsTypen, artikelKategorien: snapshot.artikelKategorien,
             geschaefte: snapshot.geschaefte, artikel: snapshot.artikel, einkaufslisten: snapshot.einkaufslisten,
-            artikelAliase: snapshot.artikelAliase
+            produkte: snapshot.produkte, produktnamen: snapshot.produktnamen
         )
         let listen = SyncListenSnapshot(einkaufslistenEintraege: snapshot.einkaufslistenEintraege)
         let lernen = SyncLernenSnapshot(
@@ -542,30 +542,6 @@ struct SyncSnapshotImportServiceTests {
         await SyncSnapshotImportService.importiereSnapshots(context: context)
 
         #expect(try context.fetch(FetchDescriptor<Artikel>()).count == 1)
-    }
-
-    /// Stale-Lookup-Nachfolgefund (Session 2026-08-04): derselbe Bug wie bei
-    /// ``mergeArtikel`` — zwei Remote-Aliase mit demselben `erkannterName` im
-    /// selben Batch erzeugten vor dem Fix zwei lokale Dubletten statt dass
-    /// der zweite als bereits bekannt übersprungen wurde.
-    @Test
-    func artikelAliasMitGleichemErkanntenNamenImSelbenBatchWirdNichtDupliziert() async throws {
-        let (container, context) = try machtLeerenContainer()
-        _ = container
-        let syncOrdner = macheTempSyncOrdner()
-        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
-        defer { SyncOrdnerService.ordnerEntfernen() }
-
-        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
-        snapshot.artikelAliase = [
-            ArtikelAliasSnapshot(id: UUID(), erkannterName: "Vollmilch 3.5%", alternativerName: "Milch", artikelID: nil),
-            ArtikelAliasSnapshot(id: UUID(), erkannterName: "Vollmilch 3.5%", alternativerName: "Milch", artikelID: nil),
-        ]
-        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
-
-        await SyncSnapshotImportService.importiereSnapshots(context: context)
-
-        #expect(try context.fetch(FetchDescriptor<ArtikelAlias>()).count == 1)
     }
 
     @Test
@@ -2028,11 +2004,19 @@ struct SyncSnapshotImportServiceTests {
                 kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
             ),
         ]
+        // Produkt-Pflicht (GitHub #131): ``SyncSnapshotImportService`` legt einen
+        // empfangenen ``Preispunkt`` nur an, wenn seine `produktID` auf ein im
+        // selben Snapshot enthaltenes ``Produkt`` auflösbar ist — siehe
+        // Doku-Kommentar an `mergePreispunkte`.
+        let produktID = UUID()
+        snapshot.produkte = [
+            ProduktSnapshot(id: produktID, name: "Apfel", artikelID: apfel.id, elternProduktID: nil, istStandard: true),
+        ]
         let preispunktID = UUID()
         snapshot.preispunkte = [
             PreispunktSnapshot(
-                id: preispunktID, artikelID: apfel.id, geschaeftID: nil, preis: 1.49, datum: Date(),
-                produktName: nil, alternativerName: nil, artikelNameSnapshot: "Apfel", geschaeftNameSnapshot: ""
+                id: preispunktID, geschaeftID: nil, preis: 1.49, datum: Date(),
+                produktName: nil, alternativerName: nil, geschaeftNameSnapshot: "", produktID: produktID
             ),
         ]
         try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
@@ -2607,10 +2591,12 @@ struct SyncSnapshotImportServiceTests {
 
         let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759")
         context.insert(apfel)
+        let geschaeft = Geschaeft(name: "Rewe", typen: [])
+        context.insert(geschaeft)
 
         var bekannteIDs: [UUID] = []
         for _ in 0..<20 {
-            let punkt = Preispunkt(artikel: apfel, geschaeft: nil, preis: 1.49)
+            let punkt = Preispunkt(produkt: nil, geschaeft: geschaeft, preis: 1.49)
             context.insert(punkt)
             bekannteIDs.append(punkt.id)
         }
@@ -2623,16 +2609,22 @@ struct SyncSnapshotImportServiceTests {
                 kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
             ),
         ]
+        // Produkt-Pflicht (GitHub #131), siehe Begründung in
+        // ``preispunktWirdAlsUnveraenderlicheHistorieUebernommenOhneDuplikat``.
+        let produktID = UUID()
+        snapshot.produkte = [
+            ProduktSnapshot(id: produktID, name: "Apfel", artikelID: apfel.id, elternProduktID: nil, istStandard: true),
+        ]
         let neueID = UUID()
         snapshot.preispunkte = (bekannteIDs.map {
             PreispunktSnapshot(
-                id: $0, artikelID: apfel.id, geschaeftID: nil, preis: 9.99, datum: Date(),
-                produktName: nil, alternativerName: nil, artikelNameSnapshot: "Apfel", geschaeftNameSnapshot: ""
+                id: $0, geschaeftID: nil, preis: 9.99, datum: Date(),
+                produktName: nil, alternativerName: nil, geschaeftNameSnapshot: "", produktID: produktID
             )
         }) + [
             PreispunktSnapshot(
-                id: neueID, artikelID: apfel.id, geschaeftID: nil, preis: 1.49, datum: Date(),
-                produktName: nil, alternativerName: nil, artikelNameSnapshot: "Apfel", geschaeftNameSnapshot: ""
+                id: neueID, geschaeftID: nil, preis: 1.49, datum: Date(),
+                produktName: nil, alternativerName: nil, geschaeftNameSnapshot: "", produktID: produktID
             ),
         ]
         try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)

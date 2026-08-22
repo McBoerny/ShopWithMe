@@ -8,7 +8,7 @@ import SwiftData
 ///
 /// Drei Stufen, in dieser Reihenfolge angewendet (jede baut auf dem Ergebnis der
 /// vorherigen auf):
-/// 1. **Täglich** (``maxPunkteProTag``, Standard 1): pro (``Artikel``, ``Geschaeft``,
+/// 1. **Täglich** (``maxPunkteProTag``, Standard 1): pro (``Produkt``, ``Geschaeft``,
 ///    Kalendertag) höchstens so viele Punkte — bei Überschuss bleiben nur die
 ///    zuletzt beobachteten. Der **heutige** Tag ist davon ausgenommen — das fängt
 ///    hauptsächlich rückwirkend bereits bestehende Mehrfach-Punkte ab (z.B. aus der
@@ -17,11 +17,11 @@ import SwiftData
 ///    `PreisschildScanView`, `PreispunktService/vorhandenerPunktHeute(...)`) die
 ///    meisten Kollisionen direkt.
 /// 2. **Wöchentlich** (``tageBisWochenVerdichtung``, Standard 7 Tage): Punkte, die
-///    älter als diese Frist sind, werden pro (Artikel, Geschäft, Kalenderwoche) auf
+///    älter als diese Frist sind, werden pro (Produkt, Geschäft, Kalenderwoche) auf
 ///    einen einzigen reduziert — der mit dem höchsten Preis.
 /// 3. **Monatlich** (``tageBisMonatsVerdichtung``, Standard 365 Tage): die bereits
 ///    wochenverdichteten Punkte, die zusätzlich älter als diese Frist sind, werden
-///    pro (Artikel, Geschäft, Kalendermonat) noch einmal auf einen einzigen
+///    pro (Produkt, Geschäft, Kalendermonat) noch einmal auf einen einzigen
 ///    reduziert — wieder der mit dem höchsten Preis.
 ///
 /// Der jeweils überlebende Punkt behält sein **echtes Beobachtungsdatum** (der Tag,
@@ -138,7 +138,7 @@ enum PreispunktVerdichtungService {
 
         let gruppiert = Dictionary(grouping: alle) { punkt in
             GruppenSchluessel(
-                artikelID: punkt.artikel?.persistentModelID, geschaeftID: punkt.geschaeft?.persistentModelID,
+                produktID: punkt.produkt?.persistentModelID, geschaeftID: punkt.geschaeft?.persistentModelID,
                 periode: kalender.dateComponents([.year, .month, .day], from: punkt.datum)
             )
         }
@@ -165,7 +165,7 @@ enum PreispunktVerdichtungService {
 
         let gruppiert = Dictionary(grouping: kandidaten) { punkt in
             GruppenSchluessel(
-                artikelID: punkt.artikel?.persistentModelID, geschaeftID: punkt.geschaeft?.persistentModelID,
+                produktID: punkt.produkt?.persistentModelID, geschaeftID: punkt.geschaeft?.persistentModelID,
                 periode: kalender.dateComponents(periodenKomponenten, from: punkt.datum)
             )
         }
@@ -202,7 +202,7 @@ enum PreispunktVerdichtungService {
     }
 
     private struct GruppenSchluessel: Hashable {
-        let artikelID: PersistentIdentifier?
+        let produktID: PersistentIdentifier?
         let geschaeftID: PersistentIdentifier?
         let periode: DateComponents
     }

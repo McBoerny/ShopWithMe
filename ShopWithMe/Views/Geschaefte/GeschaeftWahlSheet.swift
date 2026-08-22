@@ -21,7 +21,11 @@ struct GeschaeftWahlSheet: View {
     /// Die auf dem Beleg erkannte Geschäftsadresse, falls vorhanden — Vorbelegung
     /// für „neu anlegen“ (siehe ``neuesGeschaeftAnlegen()``).
     let erkannteAdresse: String
-    let onAuswahl: (Geschaeft?) -> Void
+    /// Geschäfts-Pflicht (siehe `docs/ARTIKEL_PRODUKT_MODELL.md`): non-optional
+    /// statt vormals `Geschaeft?` — dieses Sheet bietet seit der Geschäfts-Pflicht
+    /// keine „Kein Geschäft"-Option mehr an, jeder Aufruf von `onAuswahl` liefert
+    /// ein tatsächliches Geschäft (bestehend oder neu angelegt).
+    let onAuswahl: (Geschaeft) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -30,7 +34,7 @@ struct GeschaeftWahlSheet: View {
     @State private var neuesGeschaeftEntwurf: Geschaeft?
     @State private var erstelleGeschaeft = false
 
-    init(erkannterName: String, erkannteAdresse: String = "", onAuswahl: @escaping (Geschaeft?) -> Void) {
+    init(erkannterName: String, erkannteAdresse: String = "", onAuswahl: @escaping (Geschaeft) -> Void) {
         self.erkannterName = erkannterName
         self.erkannteAdresse = erkannteAdresse
         self.onAuswahl = onAuswahl
@@ -89,15 +93,6 @@ struct GeschaeftWahlSheet: View {
                 }
 
                 Section {
-                    Button {
-                        onAuswahl(nil)
-                        dismiss()
-                    } label: {
-                        Text("Kein Geschäft")
-                            .foregroundStyle(.primary)
-                    }
-                    .buttonStyle(.plain)
-
                     if !getrimmterSuchtext.isEmpty && (!existiertGenau || zweiteFilialeMoeglich) {
                         Button {
                             neuesGeschaeftAnlegen()
@@ -177,6 +172,6 @@ struct GeschaeftWahlSheet: View {
 }
 
 #Preview {
-    GeschaeftWahlSheet(erkannterName: "REWE Center Musterstadt") { _ in }
+    GeschaeftWahlSheet(erkannterName: "REWE Center Musterstadt") { (_: Geschaeft) in }
         .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self], inMemory: true)
 }

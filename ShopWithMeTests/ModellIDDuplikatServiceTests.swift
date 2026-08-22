@@ -13,7 +13,7 @@ struct ModellIDDuplikatServiceTests {
         Einkaufsvorgang.self, KaufEintrag.self, WarengruppenDistanz.self,
         Einkaufsliste.self, EinkaufslistenEintrag.self, IgnorierterArtikel.self,
         SyncEvent.self, ArtikelGeschaeftVerfuegbarkeit.self, GeschaeftBesuch.self, ArtikelListenKauf.self,
-        ArtikelAlias.self, SyncAbgleichKandidat.self, SyncEntitaetsAlias.self, SyncPeerInfo.self,
+        SyncAbgleichKandidat.self, SyncEntitaetsAlias.self, SyncPeerInfo.self,
         SyncPeerZaehlerStand.self, SyncTombstone.self, WarengruppenDistanzPeerZaehlerStand.self, Preispunkt.self,
     ])
 
@@ -36,23 +36,23 @@ struct ModellIDDuplikatServiceTests {
         #expect(ModellIDDuplikatService.pruefe(context: context).isEmpty)
     }
 
-    /// Erzeugt Duplikate bewusst auf ``ArtikelAlias`` statt auf einem der
-    /// ``ModellIDDuplikatService``-typen mit `@Attribute(.unique)`
-    /// (`Artikel`, `Geschaeft`, `Einkaufsliste`, `Einkaufsvorgang`,
-    /// `KaufEintrag`, GitHub #102) — SwiftData dedupliziert dort bereits beim
-    /// `save()` selbst (Upsert-Verhalten der Unique-Constraint, kein
-    /// harter Fehler), ein künstlich erzeugtes Duplikat käme also nie bis zur
-    /// Prüfung durch. Die Zähllogik selbst ist typ-unabhängig, ein
-    /// nicht-eindeutiger Typ genügt zur Verifikation.
+    /// Erzeugt Duplikate bewusst auf ``ArtikelGeschaeftVerfuegbarkeit`` statt
+    /// auf einem der ``ModellIDDuplikatService``-typen mit
+    /// `@Attribute(.unique)` (`Artikel`, `Geschaeft`, `Einkaufsliste`,
+    /// `Einkaufsvorgang`, `KaufEintrag`, GitHub #102) — SwiftData
+    /// dedupliziert dort bereits beim `save()` selbst (Upsert-Verhalten der
+    /// Unique-Constraint, kein harter Fehler), ein künstlich erzeugtes
+    /// Duplikat käme also nie bis zur Prüfung durch. Die Zähllogik selbst ist
+    /// typ-unabhängig, ein nicht-eindeutiger Typ genügt zur Verifikation.
     @Test
     func erkenntDoppelteIDInnerhalbEinesTyps() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
         let gemeinsameID = UUID()
-        let eins = ArtikelAlias(erkannterName: "Milch", alternativerName: nil, artikel: nil)
+        let eins = ArtikelGeschaeftVerfuegbarkeit(artikel: nil, geschaeft: nil)
         eins.id = gemeinsameID
-        let zwei = ArtikelAlias(erkannterName: "Butter", alternativerName: nil, artikel: nil)
+        let zwei = ArtikelGeschaeftVerfuegbarkeit(artikel: nil, geschaeft: nil)
         zwei.id = gemeinsameID
         context.insert(eins)
         context.insert(zwei)
@@ -61,7 +61,7 @@ struct ModellIDDuplikatServiceTests {
         let befunde = ModellIDDuplikatService.pruefe(context: context)
 
         #expect(befunde.count == 1)
-        #expect(befunde.first?.typName == "ArtikelAlias")
+        #expect(befunde.first?.typName == "ArtikelGeschaeftVerfuegbarkeit")
         #expect(befunde.first?.anzahlBetroffeneIDs == 1)
         #expect(befunde.first?.anzahlUeberzaehligeZeilen == 1)
     }
@@ -73,19 +73,19 @@ struct ModellIDDuplikatServiceTests {
 
         let idA = UUID()
         for _ in 0..<3 {
-            let alias = ArtikelAlias(erkannterName: "Milch", alternativerName: nil, artikel: nil)
-            alias.id = idA
-            context.insert(alias)
+            let eintrag = ArtikelGeschaeftVerfuegbarkeit(artikel: nil, geschaeft: nil)
+            eintrag.id = idA
+            context.insert(eintrag)
         }
         let idB = UUID()
         for _ in 0..<2 {
-            let alias = ArtikelAlias(erkannterName: "Butter", alternativerName: nil, artikel: nil)
-            alias.id = idB
-            context.insert(alias)
+            let eintrag = ArtikelGeschaeftVerfuegbarkeit(artikel: nil, geschaeft: nil)
+            eintrag.id = idB
+            context.insert(eintrag)
         }
         try context.save()
 
-        let befund = ModellIDDuplikatService.pruefe(context: context).first { $0.typName == "ArtikelAlias" }
+        let befund = ModellIDDuplikatService.pruefe(context: context).first { $0.typName == "ArtikelGeschaeftVerfuegbarkeit" }
 
         #expect(befund?.anzahlBetroffeneIDs == 2)
         #expect(befund?.anzahlUeberzaehligeZeilen == 3)
@@ -97,11 +97,11 @@ struct ModellIDDuplikatServiceTests {
         _ = container
 
         let geteilteID = UUID()
-        let alias = ArtikelAlias(erkannterName: "Milch", alternativerName: nil, artikel: nil)
-        alias.id = geteilteID
+        let eintrag = ArtikelGeschaeftVerfuegbarkeit(artikel: nil, geschaeft: nil)
+        eintrag.id = geteilteID
         let geschaeft = Geschaeft(name: "Rewe", typen: [])
         geschaeft.id = geteilteID
-        context.insert(alias)
+        context.insert(eintrag)
         context.insert(geschaeft)
         try context.save()
 

@@ -9,7 +9,7 @@ struct KaufEintragBereinigungServiceTests {
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {
         let schema = Schema([
             Artikel.self, ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self,
-            Einkaufsvorgang.self, KaufEintrag.self, Preispunkt.self, ArtikelAlias.self,
+            Einkaufsvorgang.self, KaufEintrag.self, Preispunkt.self,
             Einkaufsliste.self, EinkaufslistenEintrag.self, SyncEvent.self, SyncTombstone.self, ArtikelListenKauf.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)

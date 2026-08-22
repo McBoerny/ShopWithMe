@@ -65,7 +65,10 @@ enum SyncSnapshotExportService {
         let alleGeschaeftsTypen = (try? context.fetch(FetchDescriptor<GeschaeftTyp>())) ?? []
         let gueltigeGeschaeftsTypIDs = Set(alleGeschaeftsTypen.map(\.persistentModelID))
         let geschaeftsTypen = alleGeschaeftsTypen.map {
-            GeschaeftTypSnapshot(id: $0.id, name: $0.name, symbolName: $0.symbolName, farbeHex: $0.farbeHex, sortIndex: $0.sortIndex)
+            GeschaeftTypSnapshot(
+                id: $0.id, name: $0.name, symbolName: $0.symbolName, farbeHex: $0.farbeHex, sortIndex: $0.sortIndex,
+                lamportZaehler: $0.lamportZaehler
+            )
         }
 
         let alleArtikelKategorien = (try? context.fetch(FetchDescriptor<ArtikelKategorie>())) ?? []
@@ -77,7 +80,8 @@ enum SyncSnapshotExportService {
                 standardSymbol: $0.standardSymbol,
                 standardFarbeHex: $0.standardFarbeHex,
                 sortIndex: $0.sortIndex,
-                geschaeftsTypIDs: sichereIDs($0.geschaeftsTypen, gueltigeIDs: gueltigeGeschaeftsTypIDs)
+                geschaeftsTypIDs: sichereIDs($0.geschaeftsTypen, gueltigeIDs: gueltigeGeschaeftsTypIDs),
+                lamportZaehler: $0.lamportZaehler
             )
         }
 
@@ -99,7 +103,8 @@ enum SyncSnapshotExportService {
                 ignorierteArtikelNamen: geschaeft.ignorierteArtikel.map(\.erkannterName),
                 eigeneAnzahlEinkaufsvorgaenge: geschaeft.eigeneAnzahlEinkaufsvorgaenge,
                 umbauVerdacht: geschaeft.umbauVerdacht,
-                unauffaelligeEinkaeufeInFolge: geschaeft.unauffaelligeEinkaeufeInFolge
+                unauffaelligeEinkaeufeInFolge: geschaeft.unauffaelligeEinkaeufeInFolge,
+                lamportZaehler: geschaeft.lamportZaehler
             )
         }
 
@@ -118,7 +123,9 @@ enum SyncSnapshotExportService {
                 notiz: artikel.notiz,
                 einheit: artikel.einheit.rawValue,
                 mengenSchritt: artikel.mengenSchritt,
-                erstelltAm: artikel.erstelltAm
+                erstelltAm: artikel.erstelltAm,
+                alternativeNamen: artikel.alternativeNamen,
+                lamportZaehler: artikel.lamportZaehler
             )
         }
 
@@ -130,7 +137,9 @@ enum SyncSnapshotExportService {
                 name: $0.name,
                 artikelID: sichereID($0.artikel, gueltigeIDs: gueltigeArtikelIDs),
                 elternProduktID: sichereID($0.elternProdukt, gueltigeIDs: gueltigeProduktIDs),
-                istStandard: $0.istStandard
+                istStandard: $0.istStandard,
+                alternativeKlarnamen: $0.alternativeKlarnamen,
+                lamportZaehler: $0.lamportZaehler
             )
         }
 
@@ -187,24 +196,13 @@ enum SyncSnapshotExportService {
         let preispunkte = ((try? context.fetch(FetchDescriptor<Preispunkt>())) ?? []).map {
             PreispunktSnapshot(
                 id: $0.id,
-                artikelID: sichereID($0.artikel, gueltigeIDs: gueltigeArtikelIDs),
                 geschaeftID: sichereID($0.geschaeft, gueltigeIDs: gueltigeGeschaeftIDs),
                 preis: $0.preis,
                 datum: $0.datum,
                 produktName: $0.produktName,
                 alternativerName: $0.alternativerName,
-                artikelNameSnapshot: $0.artikelNameSnapshot,
                 geschaeftNameSnapshot: $0.geschaeftNameSnapshot,
                 produktID: sichereID($0.produkt, gueltigeIDs: gueltigeProduktIDs)
-            )
-        }
-
-        let artikelAliase = ((try? context.fetch(FetchDescriptor<ArtikelAlias>())) ?? []).map {
-            ArtikelAliasSnapshot(
-                id: $0.id,
-                erkannterName: $0.erkannterName,
-                alternativerName: $0.alternativerName,
-                artikelID: sichereID($0.artikel, gueltigeIDs: gueltigeArtikelIDs)
             )
         }
 
@@ -277,7 +275,6 @@ enum SyncSnapshotExportService {
             einkaufsvorgaenge: einkaufsvorgaenge,
             kaufEintraege: kaufEintraege,
             preispunkte: preispunkte,
-            artikelAliase: artikelAliase,
             warengruppenDistanzen: warengruppenDistanzen,
             artikelGeschaeftVerfuegbarkeiten: artikelGeschaeftVerfuegbarkeiten,
             geschaeftBesuche: geschaeftBesuche,
@@ -568,11 +565,16 @@ enum SyncSnapshotExportService {
         stamm.artikel = stamm.artikel.map { artikel in
             var artikel = artikel
             artikel.kategorieIDs.sort { $0.uuidString < $1.uuidString }
+            artikel.alternativeNamen.sort()
             return artikel
         }
         stamm.artikel.sort { $0.id.uuidString < $1.id.uuidString }
         stamm.einkaufslisten.sort { $0.id.uuidString < $1.id.uuidString }
-        stamm.artikelAliase.sort { $0.id.uuidString < $1.id.uuidString }
+        stamm.produkte = stamm.produkte.map { produkt in
+            var produkt = produkt
+            produkt.alternativeKlarnamen.sort()
+            return produkt
+        }
         stamm.produkte.sort { $0.id.uuidString < $1.id.uuidString }
         stamm.produktnamen.sort { $0.id.uuidString < $1.id.uuidString }
         return stamm
@@ -641,7 +643,7 @@ enum SyncSnapshotExportService {
         let stamm = SyncStammSnapshot(
             geschaeftsTypen: snapshot.geschaeftsTypen, artikelKategorien: snapshot.artikelKategorien,
             geschaefte: snapshot.geschaefte, artikel: snapshot.artikel, einkaufslisten: snapshot.einkaufslisten,
-            artikelAliase: snapshot.artikelAliase, produkte: snapshot.produkte, produktnamen: snapshot.produktnamen
+            produkte: snapshot.produkte, produktnamen: snapshot.produktnamen
         )
         let listen = SyncListenSnapshot(einkaufslistenEintraege: snapshot.einkaufslistenEintraege)
         let lernen = SyncLernenSnapshot(

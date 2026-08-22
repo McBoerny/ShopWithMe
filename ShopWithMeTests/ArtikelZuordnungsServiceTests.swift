@@ -7,32 +7,47 @@ import Testing
 /// bewusst nicht unit-getestet, da sie echtes FoundationModels braucht.
 struct ArtikelZuordnungsServiceTests {
     @Test
-    func textBasierteZuordnungFindetGelerntenAliasZuerst() {
+    func textBasierteZuordnungFindetGeschaeftsunabhaengigenProduktnameZuerst() {
         let zahnpasta = Artikel(name: "Zahnpasta", symbolName: "sparkles", farbeHex: "#AF52DE")
-        let alias = ArtikelAlias(erkannterName: "COL-ZAH", alternativerName: "Colgate", artikel: zahnpasta)
+        let produkt = Produkt(name: "Colgate", artikel: zahnpasta)
+        let produktname = Produktname(name: "COL-ZAH", produkt: produkt, geschaeft: nil)
 
         let ergebnis = ArtikelZuordnungsService.textBasierteZuordnung(
             erkannterName: "COL-ZAH",
-            bekannteAliase: [alias],
-            alleArtikel: [zahnpasta]
+            alleArtikel: [zahnpasta],
+            bekannteProduktnamen: [produktname]
         )
 
-        #expect(ergebnis?.alias == "Colgate")
+        #expect(ergebnis?.produkt === produkt)
         #expect(ergebnis?.artikel === zahnpasta)
+        #expect(ergebnis?.quelle == .produktname)
     }
 
     @Test
-    func textBasierteZuordnungFindetTeilstringTrefferOhneGelerntenAlias() {
+    func textBasierteZuordnungFindetTeilstringTrefferOhneProduktname() {
         let milch = Artikel(name: "Vollmilch", symbolName: "refrigerator.fill", farbeHex: "#5AC8FA")
 
         let ergebnis = ArtikelZuordnungsService.textBasierteZuordnung(
             erkannterName: "Bio Vollmilch 3,5%",
-            bekannteAliase: [],
             alleArtikel: [milch]
         )
 
-        #expect(ergebnis?.alias == nil)
+        #expect(ergebnis?.produkt == nil)
         #expect(ergebnis?.artikel === milch)
+        #expect(ergebnis?.quelle == .artikelSubstring)
+    }
+
+    @Test
+    func textBasierteZuordnungFindetTreffserUeberArtikelAlternativeNamen() {
+        let zahnpasta = Artikel(name: "Zahnpasta", symbolName: "sparkles", farbeHex: "#AF52DE")
+        zahnpasta.alternativeNamen = ["Zahncreme"]
+
+        let ergebnis = ArtikelZuordnungsService.textBasierteZuordnung(
+            erkannterName: "Zahncreme",
+            alleArtikel: [zahnpasta]
+        )
+
+        #expect(ergebnis?.artikel === zahnpasta)
         #expect(ergebnis?.quelle == .artikelSubstring)
     }
 
@@ -40,17 +55,15 @@ struct ArtikelZuordnungsServiceTests {
     // Produkt-Neuanlage in `BelegScanView` nur bei Substring-/KI-Treffer)
 
     @Test
-    func textBasierteZuordnungMarkiertAliasTrefferAlsQuelleAlias() {
+    func textBasierteZuordnungMarkiertSubstringTrefferAlsQuelleArtikelSubstring() {
         let zahnpasta = Artikel(name: "Zahnpasta", symbolName: "sparkles", farbeHex: "#AF52DE")
-        let alias = ArtikelAlias(erkannterName: "COL-ZAH", alternativerName: "Colgate", artikel: zahnpasta)
 
         let ergebnis = ArtikelZuordnungsService.textBasierteZuordnung(
-            erkannterName: "COL-ZAH",
-            bekannteAliase: [alias],
+            erkannterName: "Zahnpasta extra frisch",
             alleArtikel: [zahnpasta]
         )
 
-        #expect(ergebnis?.quelle == .alias)
+        #expect(ergebnis?.quelle == .artikelSubstring)
     }
 
     @Test
@@ -62,7 +75,6 @@ struct ArtikelZuordnungsServiceTests {
 
         let ergebnis = ArtikelZuordnungsService.textBasierteZuordnung(
             erkannterName: "PARAD ZAHNCR 75ML",
-            bekannteAliase: [],
             alleArtikel: [zahnpasta],
             geschaeft: rewe,
             bekannteProduktnamen: [produktname]
@@ -77,14 +89,13 @@ struct ArtikelZuordnungsServiceTests {
 
         let ergebnis = ArtikelZuordnungsService.textBasierteZuordnung(
             erkannterName: "Schokolade",
-            bekannteAliase: [],
             alleArtikel: [milch]
         )
 
         #expect(ergebnis == nil)
     }
 
-    // MARK: - Produktname-Matching (GitHub #47, Schritt 5/5)
+    // MARK: - Produktname-Matching (GitHub #47, Schritt 5/5; GitHub #128)
 
     @Test
     func textBasierteZuordnungFindetProduktnameInnerhalbGeschaeft() {
@@ -95,7 +106,6 @@ struct ArtikelZuordnungsServiceTests {
 
         let ergebnis = ArtikelZuordnungsService.textBasierteZuordnung(
             erkannterName: "PARAD ZAHNCR 75ML",
-            bekannteAliase: [],
             alleArtikel: [zahnpasta],
             geschaeft: rewe,
             bekannteProduktnamen: [produktname]
@@ -113,13 +123,13 @@ struct ArtikelZuordnungsServiceTests {
         let aldi = Geschaeft(name: "Aldi", typen: [])
         let produktname = Produktname(name: "Parad Zahncr", produkt: paradontol, geschaeft: rewe)
 
-        // Gescannt bei Aldi, Produktname aber nur für Rewe hinterlegt — kein
-        // Produkt-Treffer, fällt auf reinen Artikel-Teilstring-Abgleich zurück
-        // (hier ohne Treffer, da "Parad Zahncr" keinen Teilstring von
-        // "Zahnpasta" bildet und umgekehrt).
+        // Gescannt bei Aldi, Produktname aber nur für Rewe hinterlegt (nicht
+        // geschäftsunabhängig, also `geschaeft != nil`) — kein Produkt-Treffer,
+        // fällt auf reinen Artikel-Teilstring-Abgleich zurück (hier ohne
+        // Treffer, da "Parad Zahncr" keinen Teilstring von "Zahnpasta" bildet
+        // und umgekehrt).
         let ergebnis = ArtikelZuordnungsService.textBasierteZuordnung(
             erkannterName: "PARAD ZAHNCR 75ML",
-            bekannteAliase: [],
             alleArtikel: [zahnpasta],
             geschaeft: aldi,
             bekannteProduktnamen: [produktname]
@@ -129,27 +139,26 @@ struct ArtikelZuordnungsServiceTests {
     }
 
     @Test
-    func textBasierteZuordnungBevorzugtGelerntenAliasVorProduktname() {
+    func textBasierteZuordnungBevorzugtGeschaeftsspezifischenProduktnameVorGeschaeftsunabhaengigem() {
         let zahnpasta = Artikel(name: "Zahnpasta", symbolName: "sparkles", farbeHex: "#AF52DE")
-        let alias = ArtikelAlias(erkannterName: "PARAD ZAHNCR 75ML", alternativerName: "Paradontol (Alias)", artikel: zahnpasta)
+        let generisch = Produkt(name: "Zahnpasta (generisch)", artikel: zahnpasta)
         let paradontol = Produkt(name: "Paradontol Zahncreme", artikel: zahnpasta)
         let rewe = Geschaeft(name: "Rewe", typen: [])
-        let produktname = Produktname(name: "Parad Zahncr", produkt: paradontol, geschaeft: rewe)
+        let geschaeftsunabhaengig = Produktname(name: "PARAD ZAHNCR 75ML", produkt: generisch, geschaeft: nil)
+        let geschaeftsspezifisch = Produktname(name: "PARAD ZAHNCR 75ML", produkt: paradontol, geschaeft: rewe)
 
         let ergebnis = ArtikelZuordnungsService.textBasierteZuordnung(
             erkannterName: "PARAD ZAHNCR 75ML",
-            bekannteAliase: [alias],
             alleArtikel: [zahnpasta],
             geschaeft: rewe,
-            bekannteProduktnamen: [produktname]
+            bekannteProduktnamen: [geschaeftsunabhaengig, geschaeftsspezifisch]
         )
 
-        #expect(ergebnis?.alias == "Paradontol (Alias)")
-        #expect(ergebnis?.produkt == nil)
+        #expect(ergebnis?.produkt === paradontol)
     }
 
     @Test
-    func textBasierteZuordnungOhneGeschaeftUeberspringtProduktnameStufe() {
+    func textBasierteZuordnungOhneGeschaeftFindetNurGeschaeftsunabhaengigenProduktname() {
         let zahnpasta = Artikel(name: "Zahnpasta", symbolName: "sparkles", farbeHex: "#AF52DE")
         let paradontol = Produkt(name: "Paradontol Zahncreme", artikel: zahnpasta)
         let rewe = Geschaeft(name: "Rewe", typen: [])
@@ -157,7 +166,6 @@ struct ArtikelZuordnungsServiceTests {
 
         let ergebnis = ArtikelZuordnungsService.textBasierteZuordnung(
             erkannterName: "PARAD ZAHNCR 75ML",
-            bekannteAliase: [],
             alleArtikel: [zahnpasta],
             bekannteProduktnamen: [produktname]
         )

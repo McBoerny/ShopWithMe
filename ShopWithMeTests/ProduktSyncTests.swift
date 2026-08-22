@@ -17,7 +17,7 @@ struct ProduktSyncTests {
             Artikel.self, ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self,
             Einkaufsvorgang.self, KaufEintrag.self, Einkaufsliste.self, EinkaufslistenEintrag.self,
             SyncEvent.self, SyncEntitaetsAlias.self, SyncPeerInfo.self, SyncTombstone.self,
-            Preispunkt.self, ArtikelAlias.self, SyncAbgleichKandidat.self, Produkt.self, Produktname.self,
+            Preispunkt.self, SyncAbgleichKandidat.self, Produkt.self, Produktname.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
@@ -35,7 +35,7 @@ struct ProduktSyncTests {
             formatVersion: SyncSnapshot.aktuelleFormatVersion, erzeugtAm: Date(), geraeteID: geraeteID, geraeteName: geraeteName,
             geschaeftsTypen: [], artikelKategorien: [], geschaefte: [], artikel: [],
             einkaufslisten: [], einkaufslistenEintraege: [], einkaufsvorgaenge: [], kaufEintraege: [],
-            preispunkte: [], artikelAliase: [],
+            preispunkte: [],
             warengruppenDistanzen: [], tombstones: []
         )
     }
@@ -51,7 +51,7 @@ struct ProduktSyncTests {
         let stamm = SyncStammSnapshot(
             geschaeftsTypen: snapshot.geschaeftsTypen, artikelKategorien: snapshot.artikelKategorien,
             geschaefte: snapshot.geschaefte, artikel: snapshot.artikel, einkaufslisten: snapshot.einkaufslisten,
-            artikelAliase: snapshot.artikelAliase, produkte: snapshot.produkte, produktnamen: snapshot.produktnamen
+            produkte: snapshot.produkte, produktnamen: snapshot.produktnamen
         )
         let listen = SyncListenSnapshot(einkaufslistenEintraege: snapshot.einkaufslistenEintraege)
         let lernen = SyncLernenSnapshot(warengruppenDistanzen: snapshot.warengruppenDistanzen)
@@ -253,8 +253,8 @@ struct ProduktSyncTests {
         ]
         snapshot.preispunkte = [
             PreispunktSnapshot(
-                id: UUID(), artikelID: zahnpasta.id, geschaeftID: nil, preis: 2.49, datum: Date(),
-                produktName: nil, alternativerName: nil, artikelNameSnapshot: "Zahnpasta", geschaeftNameSnapshot: "",
+                id: UUID(), geschaeftID: nil, preis: 2.49, datum: Date(),
+                produktName: nil, alternativerName: nil, geschaeftNameSnapshot: "",
                 produktID: fremdeProduktID
             ),
         ]
@@ -267,8 +267,15 @@ struct ProduktSyncTests {
         #expect(punkt.produkt?.istStandard == false)
     }
 
+    /// Seit der Produkt-Pflicht (GitHub #131) gibt es keinen Fallback auf ein
+    /// Standardprodukt mehr — ``SyncSnapshotImportService`` überspringt einen
+    /// empfangenen ``Preispunkt`` ohne auflösbare `produktID` defensiv, statt
+    /// selbst ein Produkt zu erzeugen (siehe Doku-Kommentar an
+    /// `SyncSnapshotImportService.mergePreispunkte`): ein sendender Peer auf
+    /// aktuellem Code hätte diesen Fall bereits vor dem Export selbst nicht
+    /// mehr anlegen dürfen.
     @Test
-    func preispunktOhneProduktIDFaelltAufStandardProduktDesArtikelsZurueck() async throws {
+    func preispunktOhneProduktIDWirdBeimImportUebersprungen() async throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
         let syncOrdner = macheTempSyncOrdner()
@@ -288,8 +295,8 @@ struct ProduktSyncTests {
         ]
         snapshot.preispunkte = [
             PreispunktSnapshot(
-                id: UUID(), artikelID: zahnpasta.id, geschaeftID: nil, preis: 2.49, datum: Date(),
-                produktName: nil, alternativerName: nil, artikelNameSnapshot: "Zahnpasta", geschaeftNameSnapshot: "",
+                id: UUID(), geschaeftID: nil, preis: 2.49, datum: Date(),
+                produktName: nil, alternativerName: nil, geschaeftNameSnapshot: "",
                 produktID: nil
             ),
         ]
@@ -297,8 +304,6 @@ struct ProduktSyncTests {
 
         await SyncSnapshotImportService.importiereSnapshots(context: context)
 
-        let punkt = try #require(try context.fetch(FetchDescriptor<Preispunkt>()).first)
-        #expect(punkt.produkt?.istStandard == true)
-        #expect(punkt.produkt?.name == "Zahnpasta")
+        #expect(try context.fetch(FetchDescriptor<Preispunkt>()).isEmpty)
     }
 }

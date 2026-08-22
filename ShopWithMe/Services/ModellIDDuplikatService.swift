@@ -61,7 +61,6 @@ enum ModellIDDuplikatService {
     static func pruefe(context: ModelContext) -> [Befund] {
         [
             pruefeTyp("Artikel", id: \Artikel.id, context: context),
-            pruefeTyp("ArtikelAlias", id: \ArtikelAlias.id, context: context),
             pruefeTyp("ArtikelGeschaeftVerfuegbarkeit", id: \ArtikelGeschaeftVerfuegbarkeit.id, context: context),
             pruefeTyp("ArtikelKategorie", id: \ArtikelKategorie.id, context: context),
             pruefeTyp("ArtikelListenKauf", id: \ArtikelListenKauf.id, context: context),

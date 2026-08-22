@@ -59,6 +59,17 @@ checksums“-Vorfall):
 pauschale Regel „jede Modelländerung bekommt ein neues Migrationsschema“ gilt
 ausdrücklich **nicht** für additiv-optionale Attribute.
 
+**Verschärfung (2026-08-22, GitHub #128/#129):** Bei einer strukturellen
+Änderung an einem reich vernetzten "Hub"-Typ (`Artikel`/`Produkt` — viele
+Relationships zueinander und zu anderen Typen) NICHT einfach nach obigem
+Muster einfrieren/verschachteln — das crasht in diesem Projekt reproduzierbar,
+selbst korrekt umgesetzt. Details, Diagnose-Vorgehen und der sichere
+Workaround stehen im `ios-swift-engineering`-Skill sowie
+`docs/ARTIKEL_PRODUKT_MODELL.md` → „Schritt 6/6". Die Schema-Historie wurde
+im Zuge dessen zurückgesetzt (`docs/DECISIONS.md` → „Schema-Historie
+zurückgesetzt"); das aktuelle `SchemaV1` (`Models/SchemaDefinition.swift`)
+ist ein frischer, migrationsfreier Ausgangspunkt.
+
 ## Build-Umgebung
 
 `xcode-select` zeigt auf dieser Maschine auf die Command-Line-Tools, nicht auf

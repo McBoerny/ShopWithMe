@@ -56,7 +56,7 @@ Zwei Kanäle mit unterschiedlicher Frequenz/Konfliktsemantik:
 | Bereich | Inhalt | Kanal | Konfliktregel |
 |---|---|---|---|
 | **A — zeitkritisch** | Einkaufslisten-Mitgliedschaft, Abhaken/Abwählen | `SyncEvent`, jeder Sync-Zyklus | Lamport-Uhr + `SyncKonfliktAufloesung` (Abschnitt 3) |
-| **B — Stammdaten** | `GeschaeftTyp`, `ArtikelKategorie`, `Geschaeft`, `Artikel`, `Einkaufsliste`, `ArtikelAlias`, `Produkt`, `Produktname` (seit v0.14, GitHub #47) | `SyncSnapshot`, jeder Sync-Zyklus | additiv/nie destruktiv (Abschnitt 4) |
+| **B — Stammdaten** | `GeschaeftTyp`, `ArtikelKategorie`, `Geschaeft`, `Artikel` (inkl. `alternativeNamen`), `Einkaufsliste`, `Produkt` (inkl. `alternativeKlarnamen`), `Produktname` (seit v0.14, GitHub #47; `ArtikelAlias` seit GitHub #128 abgelöst) | `SyncSnapshot`, jeder Sync-Zyklus | additiv/nie destruktiv (Abschnitt 4) |
 | **C — Historie** | `Einkaufsvorgang`, `KaufEintrag`, `Preispunkt` | `SyncSnapshot` | Union nach `id` |
 | **D — Lernen** | `WarengruppenDistanz`, `ArtikelListenKauf` (seit GitHub #99) | `SyncSnapshot` | gewichteter Mittelwert bzw. Union (Abschnitt 4.7) |
 
@@ -156,15 +156,15 @@ siehe `docs/GESCHAEFTS_AGGREGATE.md`.
 ### 4.1 Grundprinzip: nie destruktiv
 
 Ein bestehender lokaler Wert wird **nie** durch einen abweichenden
-Remote-Wert überschrieben — es gibt keine Feld-Zeitstempel/Lamport-Uhr für
-Bereich B, die entscheiden könnte, welcher Wert „neuer" ist (anders als
-Bereich A). Merge ergänzt nur fehlende Werte (`nil` → Remote-Wert) und
-vereinigt Mengen (Kategorien, Typen, ignorierte Artikel, alternative Namen),
-statt sie zu ersetzen. Diese additive Regel ist absichtlich beibehalten
-worden, auch nachdem Beobachtbarkeits-Werkzeuge (Abschnitt 7) einen Großteil
-ihres ursprünglichen Korruptions-Absicherungszwecks übernommen haben — sie
-ist in erster Linie die laufende Korrektheits-Grundlage für gleichzeitiges
-Bearbeiten auf mehreren Geräten, keine bloße Vorsichtsmaßnahme (siehe
+Remote-Wert überschrieben, sofern kein Lamport-Zähler entscheidet (siehe
+Ausnahme unten und 4.1a). Merge ergänzt nur fehlende Werte (`nil` →
+Remote-Wert) und vereinigt Mengen (Kategorien, Typen, ignorierte Artikel,
+alternative Namen), statt sie zu ersetzen. Diese additive Regel ist
+absichtlich beibehalten worden, auch nachdem Beobachtbarkeits-Werkzeuge
+(Abschnitt 7) einen Großteil ihres ursprünglichen
+Korruptions-Absicherungszwecks übernommen haben — sie ist in erster Linie
+die laufende Korrektheits-Grundlage für gleichzeitiges Bearbeiten auf
+mehreren Geräten, keine bloße Vorsichtsmaßnahme (siehe
 `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 21 für die vollständige
 Abwägung).
 
@@ -178,6 +178,85 @@ Abwägung).
 - **Additive Zähler** (`Geschaeft.anzahlEinkaufsvorgaenge`) — kein simples
   Überschreiben, sondern ein echtes G-Counter-CRDT-Muster (Abschnitt 4.4).
 - **`Einkaufsvorgang`/`KaufEintrag`** — Historie, Union nach `id`, siehe 4.3.
+- **Skalare mit echter Bearbeitungssemantik** (`GeschaeftTyp`/
+  `ArtikelKategorie`/`Geschaeft`/`Artikel`/`Produkt`) — Lamport-Zähler statt
+  additiv, siehe 4.1a.
+
+### 4.1a Ersetzend mit Lamport-Zähler — Ausnahme für Skalare mit echter Bearbeitungssemantik
+
+**Lücke, die diese Ausnahme schließt:** rein additiv bedeutet für ein Feld wie
+`name`: „nur setzen, wenn lokal noch `nil`/leer" — ein Feld, das schon einen
+Wert trägt, wird nie wieder verändert. Eine spätere Umbenennung eines bereits
+synchronisierten `Geschaeft`s/`Artikel`s/`Produkt`s propagierte dadurch
+**nie** an andere Geräte, unabhängig davon wie oft synchronisiert wird
+(gefunden bei einer vollständigen Feld-für-Feld-Prüfung aller Bereich-B-Merge-
+Funktionen, Session 2026-08-22). Reines „ersetzend ohne Ordnung" wäre
+ebenfalls falsch: ohne Tie-Breaker gewinnt, wer zufällig zuerst synct — bei
+jedem Peer potenziell ein anderer Zufallssieger, keine Konvergenz.
+
+**Mechanismus:** pro betroffener Entität ein `lamportZaehler: UInt64`
+(additiv-optional, `LamportClock` — dieselbe globale logische Uhr wie
+Bereich A — wiederverwendet, nicht domänenspezifisch neu erfunden). Beim
+Merge gewinnt der höhere Zähler **ganzheitlich für alle „ersetzenden" Felder
+dieser Entität zusammen** (Whole-Object-Last-Writer-Wins, kein
+Feld-für-Feld-Vergleich — bewusste Vereinfachung, siehe Abwägung unten).
+Umgesetzt für `GeschaeftTyp.name/symbolName/farbeHex`,
+`ArtikelKategorie.name/standardSymbol/standardFarbeHex`, `Geschaeft.name`,
+`Artikel.name/einheit/mengenSchritt`, `Produkt.name` — jeweils die Felder mit
+tatsächlichem UI-Bearbeitungspfad für einen bereits bestehenden Datensatz.
+
+**Referenzimplementierung je Entität** (sechs Schritte, siehe z.B.
+`GeschaeftTyp.lamportZaehler`/`mergeGeschaeftsTypen` als vollständiges
+Beispiel):
+1. Modell: `private var lamportZaehlerRaw: UInt64?` +
+   `var lamportZaehler: UInt64 { lamportZaehlerRaw ?? 0 }`.
+2. `func markiereGeaendert()` (setzt `lamportZaehlerRaw =
+   LamportClock.naechsterZaehler()`, neuer eigener Tick) und
+   `func uebernehmeLamportZaehler(_ fremderZaehler: UInt64)` (direkte
+   Übernahme ohne neuen Tick, für den Merge-Fall) auf dem Modell.
+3. Snapshot-Struct: `var lamportZaehler: UInt64 = 0`, additiv-optional statt
+   Versionssprung (Default deckt Peers auf älterer App-Version ab, analog
+   `ArtikelSnapshot.alternativeNamen`).
+4. Export: `lamportZaehler:` beim Bauen des Snapshots mitgeben
+   (`SyncSnapshotExportService.erstelleSnapshot`).
+5. Import/Merge: bei bestehendem Treffer nur überschreiben, wenn
+   `eintrag.lamportZaehler > lokal.lamportZaehler` (danach
+   `uebernehmeLamportZaehler`); bei Neuanlage aus einem Remote-Eintrag den
+   Zähler **direkt seeden** (`uebernehmeLamportZaehler(eintrag.lamportZaehler)`,
+   nicht bei `0` belassen) — sonst gewinnt später ein tatsächlich älterer
+   Stand eines dritten Peers fälschlich gegen die frisch angelegte Kopie.
+   `LamportClock.beiEmpfang(fremderZaehler:)` immer aufrufen, unabhängig
+   davon ob lokal oder remote gewinnt.
+6. UI: `.onChange(of: modell.feld) { _, _ in modell.markiereGeaendert() }` in
+   der Edit-View — mit `istNeu`-Guard, falls dieselbe View auch für
+   Neuanlage verwendet wird (Bump nur bei Bearbeitung eines bereits
+   bestehenden Datensatzes, nie während der Erstanlage — sonst würde bereits
+   das Ausfüllen des Neuanlage-Formulars unnötig einen Zählerstand
+   erzeugen).
+
+**Live-Fund im selben Zuge behoben:** `GeschaeftTyp.farbeHex` war vor diesem
+Umbau komplett unsynchronisiert (nicht nur additiv-eingefroren) — der Merge
+lief über `GeschaeftTyp.mitNamen(_:symbolName:context:)`, das gar keinen
+`farbeHex`-Parameter kennt. Ein neu über Sync empfangener Geschäftstyp bekam
+dadurch immer die neutrale Standardfarbe statt der vom Absender gewählten.
+Behoben durch Inline-Merge-Logik in `mergeGeschaeftsTypen` statt Delegation
+an `mitNamen`.
+
+**Verbleibende, aktuell folgenlose Gaps** (Feld wird nur bei Neuanlage
+gesetzt, hat aber keinen UI-Bearbeitungspfad für einen bestehenden
+Datensatz, daher kein Live-Bug): `GeschaeftTyp.sortIndex`,
+`ArtikelKategorie.sortIndex`, `Artikel.symbolName`/`farbeHex`,
+`Produkt.istStandard`, `Produktname.barcode`, `Einkaufsliste.erstelltAm`
+(letzteres zusätzlich unkritisch, weil semantisch unveränderlich).
+
+**Verbindliche Regel für neue Bearbeitungspfade:** Sobald eines dieser Felder
+(oder ein künftiges, bisher nur bei Neuanlage gesetztes Bereich-B-Feld) einen
+echten Bearbeitungspfad für bestehende Datensätze bekommt, sind die sechs
+Schritte oben im selben Arbeitsschritt nachzuziehen — nicht als separate,
+später nachgeholte Aufgabe. Außer rein lokal genutzten Daten (z.B. reine
+UI-/Geräte-Zustände ohne Bereich-B/C/D-Rolle) soll sich der Datenbestand über
+alle Geräte hinweg tatsächlich synchronisieren, nicht nur bei Erstanlage
+(Nutzervorgabe, Session 2026-08-22).
 
 ### 4.2 Entitäts-Matching und Alias-Auflösung
 
@@ -195,9 +274,8 @@ haben. Matching-Strategie je Typ:
 | `Einkaufsvorgang` | ID **plus** „lokal noch offener Vorgang für dasselbe (Geschäft, Liste)-Paar gilt als derselbe" | Alias bei Zusammenführung; s. 4.3 |
 | `KaufEintrag` | ID (unveränderliche Historie, nie gemergt, nur ergänzt) | — |
 | `Preispunkt` (seit v4, GitHub #76) | ID (unveränderliche Historie, nie gemergt, nur ergänzt) | Absender hat SCD-Kompression bereits vorgenommen (`PreispunktService`) |
-| `ArtikelAlias` (seit v4, GitHub #76) | case-insensitiver `erkannterName` | nie destruktiv — ein bereits lokal bekannter Alias wird nie überschrieben |
 | `Produkt` (seit v8, GitHub #47) | ID/Alias, sonst case-insensitiver Name **innerhalb desselben Artikels** | Alias bei abweichender ID; bewusst ohne Ambiguitäts-Rückstellung (noch keine Verwaltungs-UI, siehe `docs/ARTIKEL_PRODUKT_MODELL.md`) |
-| `Produktname` (seit v8, GitHub #47) | (Produkt, Geschäft, case-insensitiver Name) | nie destruktiv, analog `ArtikelAlias` — kein Alias-Register |
+| `Produktname` (seit v8, GitHub #47; seit v9/GitHub #128 zusätzlich die Rolle des abgelösten `ArtikelAlias` bei `geschaeft == nil`) | (Produkt, Geschäft, case-insensitiver Name) | nie destruktiv — kein Alias-Register |
 | `WarengruppenDistanz` | (Geschäft, KategorieA, KategorieB) | gewichteter Mittelwert bei Treffer |
 
 **`Einkaufsliste` bewusst namensbasiert statt ID-basiert:** Jedes Gerät legt
@@ -248,7 +326,7 @@ Zuordnungstabellen früherer): `GeschaeftTyp` → `ArtikelKategorie` →
 `Geschaeft` → `Artikel` → `Produkt` (GitHub #47, einzige Abhängigkeit:
 `Artikel`) → `Einkaufsliste` → `EinkaufslistenEintrag` →
 `Einkaufsvorgang` → `KaufEintrag` → `Preispunkt` → `Produktname` (GitHub #47,
-braucht `Produkt`+`Geschaeft`) → `ArtikelAlias` →
+braucht `Produkt`+`Geschaeft`) →
 `WarengruppenDistanz` → `ArtikelGeschaeftVerfuegbarkeit`/`GeschaeftBesuch` →
 `ArtikelListenKauf`. **Bewusst NACH `EinkaufslistenEintrag`** (GitHub #99,
 siehe Abschnitt 4.7): ein im selben Zyklus frisch eintreffender

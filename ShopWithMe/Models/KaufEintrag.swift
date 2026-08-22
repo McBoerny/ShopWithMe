@@ -122,38 +122,47 @@ extension KaufEintrag {
 
     /// Migriert vor GitHub #76 erfasste Preise/Namen (``preis``/``produktName``/
     /// ``alternativerName``, jetzt Altlast-Felder) einmalig nach ``Preispunkt``/
-    /// ``ArtikelAlias`` — dieselbe Rolle wie
+    /// ``Produktname``/``Artikel/alternativeNamen`` (GitHub #128, vormals
+    /// `ArtikelAlias`) — dieselbe Rolle wie
     /// ``Geschaeft/typenMigrierenFallsNoetig(context:)``. Wird beim App-Start
     /// aufgerufen (siehe ``ShopWithMeApp``).
     ///
     /// Verarbeitet chronologisch aufsteigend nach ``datum``, damit
     /// ``PreispunktService`` die Preishistorie korrekt auf echte Änderungen
-    /// komprimiert (Slowly-Changing-Dimension-Muster) und
-    /// ``ArtikelAlias/lernen(erkannterName:alternativerName:artikel:context:)``
-    /// denselben „neuester Alias gewinnt"-Effekt erzielt wie vormals die nach
-    /// `datum` absteigend suchende `gelernteZuordnung` (Upsert, letzter Aufruf
-    /// gewinnt). Setzt die migrierten Altlast-Felder danach auf `nil` zurück —
-    /// macht die Funktion idempotent (ein wiederholter Aufruf findet nichts
-    /// mehr vor) und verhindert doppelte ``Preispunkt``e bei jedem weiteren
-    /// App-Start.
+    /// komprimiert (Slowly-Changing-Dimension-Muster). Setzt die migrierten
+    /// Altlast-Felder danach auf `nil` zurück — macht die Funktion idempotent
+    /// (ein wiederholter Aufruf findet nichts mehr vor) und verhindert
+    /// doppelte ``Preispunkt``e bei jedem weiteren App-Start.
     @MainActor
     static func preisverlaufMigrierenFallsNoetig(context: ModelContext) {
         let deskriptor = FetchDescriptor<KaufEintrag>(sortBy: [SortDescriptor(\.datum, order: .forward)])
         let alle = (try? context.fetch(deskriptor)) ?? []
         for eintrag in alle {
-            guard let preis = eintrag.preis else { continue }
+            // Produkt-Pflicht bei ``Preispunkt``: ohne Artikel-Zuordnung lässt
+            // sich kein Produkt bestimmen, der historische Preis wird dann
+            // nicht migriert (die operative Buchungszeile selbst bleibt
+            // unangetastet).
+            guard let preis = eintrag.preis, let artikel = eintrag.artikel else { continue }
+            // Geschäfts-Pflicht bei ``Preispunkt``: historische Einträge ohne
+            // Geschäft bekommen das Pseudo-Geschäft (siehe
+            // ``Geschaeft/unbekanntesGeschaeft(context:)``).
+            let geschaeft = eintrag.geschaeft ?? Geschaeft.unbekanntesGeschaeft(context: context)
+            let produkt = Produkt.standardProdukt(fuer: artikel, context: context)
             PreispunktService.erfassen(
-                preis: preis, artikel: eintrag.artikel, geschaeft: eintrag.geschaeft, datum: eintrag.datum,
+                preis: preis, produkt: produkt, geschaeft: geschaeft, datum: eintrag.datum,
                 produktName: eintrag.produktName, alternativerName: eintrag.alternativerName, context: context
             )
             if let alternativerName = eintrag.alternativerName,
                !alternativerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 let erkannterName = eintrag.produktName ?? eintrag.artikelNameSnapshot
                 if !erkannterName.isEmpty {
-                    ArtikelAlias.lernen(
-                        erkannterName: erkannterName, alternativerName: alternativerName, artikel: eintrag.artikel, context: context
-                    )
+                    if !produkt.produktnamen.contains(where: {
+                        $0.geschaeft == nil && $0.name.localizedCaseInsensitiveCompare(erkannterName) == .orderedSame
+                    }) {
+                        context.insert(Produktname(name: erkannterName, produkt: produkt, geschaeft: nil))
+                    }
                 }
+                artikel.alternativenNamenLernen(alternativerName)
             }
             eintrag.preis = nil
             eintrag.produktName = nil

@@ -50,28 +50,29 @@ hinzufügen" öffnet sich eine durchsuchbare Liste aller übrigen Abteilungen zu
 Auswahl, mit der Möglichkeit, dort direkt eine neue Abteilung anzulegen.
 
 Einem bereits angelegten Artikel kannst du in der Artikel-Bearbeitung beliebig
-viele **Alias-Namen** geben — weitere Suchbegriffe, unter denen du beim
+viele **alternative Namen** geben — weitere Suchbegriffe, unter denen du beim
 Hinzufügen zur Einkaufsliste denselben Artikel findest (z.B. „Zahncreme" oder
-„Zahnreiniger" als Alias für „Zahnpasta"). Ein Alias-Name ist kein eigenes
-Produkt, sondern nur ein zusätzlicher Suchbegriff für den bestehenden Artikel
-— für tatsächlich unterschiedliche Produkte (z.B. „Odol", „Paradontol",
-„Sebamed" als konkrete Zahnpasta-Marken) leg stattdessen **Produkte** an
-(siehe unten). Ein Alias-Name kann jeweils nur einem Artikel zugeordnet sein;
-ist er bereits vergeben, zeigt die App an, zu welchem Artikel er gehört.
+„Zahnreiniger" als alternativer Name für „Zahnpasta"). Ein alternativer Name
+ist kein eigenes Produkt, sondern nur ein zusätzlicher Suchbegriff für den
+bestehenden Artikel — für tatsächlich unterschiedliche Produkte (z.B. „Odol",
+„Paradontol", „Sebamed" als konkrete Zahnpasta-Marken) leg stattdessen
+**Produkte** an (siehe unten).
 
 In derselben Artikel-Bearbeitung kannst du außerdem beliebig viele
 **Produkte** anlegen — konkrete, kaufbare Dinge mit eigenem Preis, die zu
 diesem Artikel gehören (z.B. „Odol", „Paradontol Zahncreme", „Sebamed" für
 „Zahnpasta"). Tippe auf ein Produkt, um es zu bearbeiten: dort kannst du ihm
-je Geschäft einen eigenen **Produktnamen** geben (derselbe Artikel kann in
-Geschäft A anders auf dem Preisschild stehen als in Geschäft B) und siehst
-seine eigene Preishistorie. Hat ein Artikel mindestens ein Produkt, zeigt
-„Artikel hinzufügen" beim entsprechenden Eintrag zusätzlich einen kleinen
-Chevron-Pfeil — Antippen klappt die Produktliste direkt in der Suche aus,
-sodass du das gewünschte Produkt sofort antippen kannst; der Name erscheint
-danach klein unter dem Artikel auf der Einkaufsliste. Ohne diese Auswahl
-(einfacher Tap wie bisher) landet der Artikel weiterhin ohne festgelegtes
-Produkt auf der Liste.
+ebenfalls beliebig viele **alternative Namen** geben (zusätzliche
+Anzeigenamen für dasselbe Produkt, z.B. „Andechser Vollmilch fett" für
+„Andechser Milch 3,5%") sowie je Geschäft einen eigenen **Produktnamen**
+(derselbe Artikel kann in Geschäft A anders auf dem Preisschild stehen als in
+Geschäft B) und siehst seine eigene Preishistorie. Hat ein Artikel mindestens
+ein Produkt, zeigt „Artikel hinzufügen" beim entsprechenden Eintrag
+zusätzlich einen kleinen Chevron-Pfeil — Antippen klappt die Produktliste
+direkt in der Suche aus, sodass du das gewünschte Produkt sofort antippen
+kannst; der Name erscheint danach klein unter dem Artikel auf der
+Einkaufsliste. Ohne diese Auswahl (einfacher Tap wie bisher) landet der
+Artikel weiterhin ohne festgelegtes Produkt auf der Liste.
 
 ## Geschäfte
 
@@ -232,8 +233,14 @@ für den nächsten Scan), über das Scannen-Menü beim Einkaufen für das gerade
 gewählte Geschäft, oder direkt in der Geschäfts-Detailansicht — z.B. für ältere,
 nachträglich gefundene Bons.
 
-Lokale KI erkennt Geschäft, Datum, Artikel und Preise (Foto oder aus der
-Mediathek) und trägt sie in die passenden Positionen ein. Jede Position zeigt
+**Geschäft ist Pflicht:** „Preise übernehmen" lässt sich erst antippen, wenn ein
+Geschäft feststeht — automatisch erkannt oder von dir gewählt (siehe unten). Kennt
+die App das Geschäft (noch) nicht, leg es direkt im Auswahl-Dialog neu an (auch mit
+einem selbst gewählten Namen wie „Unbekannt", falls du es nicht genauer zuordnen
+willst) — Preise ganz ohne Geschäftsbezug gibt es seitdem nicht mehr.
+
+Lokale KI erkennt Geschäft, Datum, Artikel und Preise (Foto, aus der
+Fotomediathek oder aus den Dateien) und trägt sie in die passenden Positionen ein. Jede Position zeigt
 oben einen editierbaren **Produktnamen** (konkreter Klarname, z.B. „Sebamed
 Urea 5%" — von der KI vorbelegt) und darunter einen antippe-baren
 **Artikel-Button** (generische Kategorie, z.B. „Shampoo"). Der auf dem Bon

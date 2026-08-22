@@ -14,32 +14,32 @@ struct ArtikelEditView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \ArtikelKategorie.sortIndex) private var kategorien: [ArtikelKategorie]
-    @Query private var preisHistorie: [Preispunkt]
-    @Query private var aliase: [ArtikelAlias]
-    @Query private var alleAliase: [ArtikelAlias]
     @Query private var produkte: [Produkt]
     @Query private var alleArtikel: [Artikel]
 
     @State private var kiVorschlagLaeuft = false
     @State private var kiFehlermeldung: String?
     @State private var zeigeKategorieHinzufuegen = false
-    @State private var neuerAliasName = ""
-    @State private var aliasFehlermeldung: String?
+    @State private var neuerAlternativerName = ""
     @State private var neuesProduktEntwurf: Produkt?
     @State private var bearbeitetesProdukt: Produkt?
+
+    /// Preishistorie über alle ``Produkt``e dieses Artikels (auch das
+    /// Platzhalter-Standardprodukt und Unter-Produkte, anders als ``produkte``
+    /// unten) — bewusst kein `#Predicate`-``Query`` mehr: ``Preispunkt/artikel``
+    /// ist seit der Produkt-Pflicht eine abgeleitete Computed-Property
+    /// (`produkt?.artikel`), keine echte gespeicherte Relationship mehr, auf
+    /// die ein `#Predicate` zugreifen könnte (SwiftData-Fatal-Error zur
+    /// Laufzeit trotz erfolgreichem Build). ``Artikel/preispunkte`` liest
+    /// stattdessen live über die Produkt-Relationship.
+    private var preisHistorie: [Preispunkt] {
+        artikel.preispunkte.sorted { $0.datum > $1.datum }
+    }
 
     init(artikel: Artikel, istNeu: Bool) {
         self.artikel = artikel
         self.istNeu = istNeu
         let artikelID = artikel.persistentModelID
-        _preisHistorie = Query(
-            filter: #Predicate<Preispunkt> { $0.artikel?.persistentModelID == artikelID },
-            sort: [SortDescriptor(\.datum, order: .reverse)]
-        )
-        _aliase = Query(
-            filter: #Predicate<ArtikelAlias> { $0.artikel?.persistentModelID == artikelID },
-            sort: [SortDescriptor(\.erkannterName)]
-        )
         // Nur oberste Ebene (kein `elternProdukt`) und ohne das automatisch
         // angelegte Platzhalter-Produkt (``Produkt/istStandard``) — Rekursion
         // (Unter-Produkte, z.B. Packungsgrößen) hat bewusst noch keine UI
@@ -131,25 +131,19 @@ struct ArtikelEditView: View {
 
                 if !istNeu {
                     Section {
-                        ForEach(aliase) { alias in
-                            Text(alias.erkannterName)
+                        ForEach(artikel.alternativeNamen, id: \.self) { name in
+                            Text(name)
                         }
-                        .onDelete(perform: aliasEntfernen)
+                        .onDelete(perform: alternativerNameEntfernen)
 
                         HStack {
-                            TextField("Alias-Name, z.B. \"Zahncreme\"", text: $neuerAliasName)
-                                .onSubmit(aliasHinzufuegen)
-                            Button("Hinzufügen", action: aliasHinzufuegen)
-                                .disabled(neuerAliasName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        }
-
-                        if let aliasFehlermeldung {
-                            Text(aliasFehlermeldung)
-                                .font(.footnote)
-                                .foregroundStyle(.red)
+                            TextField("Alternativer Name, z.B. \"Zahncreme\"", text: $neuerAlternativerName)
+                                .onSubmit(alternativenNamenHinzufuegen)
+                            Button("Hinzufügen", action: alternativenNamenHinzufuegen)
+                                .disabled(neuerAlternativerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         }
                     } header: {
-                        Text("Alias-Namen")
+                        Text("Alternative Namen")
                     } footer: {
                         Text("Unter diesen Namen wird derselbe Artikel ebenfalls gefunden, z.B. \"Zahncreme\" oder \"Zahnreiniger\" für \"Zahnpasta\".")
                     }
@@ -206,6 +200,9 @@ struct ArtikelEditView: View {
             }
             .navigationTitle(istNeu ? "Neuer Artikel" : artikel.name)
             .navigationBarTitleDisplayMode(.inline)
+            .onChange(of: artikel.name) { _, _ in markiereGeaendertFallsBestehend() }
+            .onChange(of: artikel.einheit) { _, _ in markiereGeaendertFallsBestehend() }
+            .onChange(of: artikel.mengenSchritt) { _, _ in markiereGeaendertFallsBestehend() }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Abbrechen") { dismiss() }
@@ -252,26 +249,36 @@ struct ArtikelEditView: View {
         Artikel.dublette(name: artikel.name, alle: alleArtikel, ausgenommen: artikel)
     }
 
-    /// Legt einen neuen Alias-Namen für ``artikel`` an (GitHub #111) — blockiert
-    /// mit Fehlermeldung, falls der Name bereits einem anderen Artikel gehört
-    /// (siehe ``ArtikelAlias/manuellHinzufuegen(name:zu:alle:context:)``).
-    private func aliasHinzufuegen() {
-        aliasFehlermeldung = nil
-        do {
-            try ArtikelAlias.manuellHinzufuegen(name: neuerAliasName, zu: artikel, alle: alleAliase, context: modelContext)
-            neuerAliasName = ""
-        } catch {
-            switch error {
-            case .bereitsVergeben(let andererArtikelName):
-                aliasFehlermeldung = "„\(neuerAliasName)“ wird bereits von „\(andererArtikelName)“ verwendet."
-            }
-        }
+    /// Reagiert auf Änderungen an ``Artikel/name``/``Artikel/einheit``/
+    /// ``Artikel/mengenSchritt`` — nur bei einem bereits bestehenden Artikel
+    /// (siehe ``Artikel/lamportZaehler``); bei Neuanlage (`istNeu == true`)
+    /// ist jede Zwischenänderung noch keine echte Bearbeitung eines bereits
+    /// synchronisierten Datensatzes.
+    private func markiereGeaendertFallsBestehend() {
+        guard !istNeu else { return }
+        artikel.markiereGeaendert()
     }
 
-    private func aliasEntfernen(at indexSet: IndexSet) {
-        for index in indexSet {
-            modelContext.delete(aliase[index])
+    /// Legt einen neuen alternativen Namen für ``artikel`` an (GitHub #111/#128)
+    /// — anders als vormals `ArtikelAlias` keine geräteweite Eindeutigkeits-
+    /// prüfung nötig: ``Artikel/alternativeNamen`` ist eine reine, pro Artikel
+    /// gepflegte Synonymliste ohne globalen Matching-Anspruch (siehe
+    /// `docs/ARTIKEL_PRODUKT_MODELL.md`).
+    private func alternativenNamenHinzufuegen() {
+        let getrimmt = neuerAlternativerName.trimmingCharacters(in: .whitespacesAndNewlines)
+        defer { neuerAlternativerName = "" }
+        guard !getrimmt.isEmpty,
+              !artikel.alternativeNamen.contains(where: { $0.localizedCaseInsensitiveCompare(getrimmt) == .orderedSame })
+        else { return }
+        artikel.alternativeNamen.append(getrimmt)
+    }
+
+    private func alternativerNameEntfernen(at indexSet: IndexSet) {
+        var aktuelle = artikel.alternativeNamen
+        for index in indexSet.sorted(by: >) {
+            aktuelle.remove(at: index)
         }
+        artikel.alternativeNamen = aktuelle
     }
 
     /// Legt einen neuen Produkt-Entwurf für ``artikel`` an (GitHub #47,
@@ -391,5 +398,5 @@ private struct KategorieHinzufuegenSheet: View {
         artikel: Artikel(name: "Vollmilch", symbolName: "refrigerator.fill", farbeHex: "#5AC8FA"),
         istNeu: true
     )
-    .modelContainer(for: [Artikel.self, ArtikelKategorie.self, GeschaeftTyp.self, Einkaufsliste.self, EinkaufslistenEintrag.self, ArtikelAlias.self, Produkt.self, Produktname.self], inMemory: true)
+    .modelContainer(for: [Artikel.self, ArtikelKategorie.self, GeschaeftTyp.self, Einkaufsliste.self, EinkaufslistenEintrag.self, Produkt.self, Produktname.self], inMemory: true)
 }

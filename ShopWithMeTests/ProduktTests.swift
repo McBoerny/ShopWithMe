@@ -215,8 +215,10 @@ struct ProduktTests {
         context.insert(zahnpasta)
         let produkt = Produkt(name: "Paradontol Zahncreme", artikel: zahnpasta)
         context.insert(produkt)
-        context.insert(Preispunkt(artikel: zahnpasta, produkt: produkt, geschaeft: nil, preis: 1.99))
-        context.insert(Preispunkt(artikel: zahnpasta, produkt: produkt, geschaeft: nil, preis: 2.49))
+        let geschaeft = Geschaeft(name: "Rewe", typen: [])
+        context.insert(geschaeft)
+        context.insert(Preispunkt(produkt: produkt, geschaeft: geschaeft, preis: 1.99))
+        context.insert(Preispunkt(produkt: produkt, geschaeft: geschaeft, preis: 2.49))
 
         #expect(produkt.minimum == 1.99)
         #expect(produkt.maximum == 2.49)
@@ -235,8 +237,10 @@ struct ProduktTests {
         context.insert(klein)
         let gross = Produkt(name: "Paradontol 125ml", artikel: zahnpasta, elternProdukt: paradontol)
         context.insert(gross)
-        context.insert(Preispunkt(artikel: zahnpasta, produkt: klein, geschaeft: nil, preis: 1.99))
-        context.insert(Preispunkt(artikel: zahnpasta, produkt: gross, geschaeft: nil, preis: 3.49))
+        let geschaeft = Geschaeft(name: "Rewe", typen: [])
+        context.insert(geschaeft)
+        context.insert(Preispunkt(produkt: klein, geschaeft: geschaeft, preis: 1.99))
+        context.insert(Preispunkt(produkt: gross, geschaeft: geschaeft, preis: 3.49))
 
         // Das Eltern-Produkt selbst trägt keinen eigenen Preispunkt — kumuliert
         // trotzdem über beide Unter-Produkte hinweg.
@@ -257,7 +261,9 @@ struct ProduktTests {
         context.insert(zahncreme)
         let klein = Produkt(name: "Paradontol Zahncreme 75ml", artikel: zahnpasta, elternProdukt: zahncreme)
         context.insert(klein)
-        context.insert(Preispunkt(artikel: zahnpasta, produkt: klein, geschaeft: nil, preis: 2.29))
+        let geschaeft = Geschaeft(name: "Rewe", typen: [])
+        context.insert(geschaeft)
+        context.insert(Preispunkt(produkt: klein, geschaeft: geschaeft, preis: 2.29))
 
         // Zwei Ebenen tief — muss trotzdem beim Großvater-Produkt ankommen.
         #expect(wurzel.minimum == 2.29)

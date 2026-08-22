@@ -19,7 +19,6 @@ extension Einkaufsvorgang: IdentifizierbaresModell {}
 extension KaufEintrag: IdentifizierbaresModell {}
 extension WarengruppenDistanz: IdentifizierbaresModell {}
 extension Preispunkt: IdentifizierbaresModell {}
-extension ArtikelAlias: IdentifizierbaresModell {}
 extension Produkt: IdentifizierbaresModell {}
 extension Produktname: IdentifizierbaresModell {}
 

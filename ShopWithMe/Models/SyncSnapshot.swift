@@ -91,7 +91,14 @@ struct SyncSnapshot: Codable {
     /// ``Produktname`` und `docs/ARTIKEL_PRODUKT_MODELL.md`. ``PreispunktSnapshot``/
     /// ``EinkaufslistenEintragSnapshot`` bekommen zusätzlich `produktID`.
     /// Wieder keine Rückwärtskompatibilität nötig, siehe Version 3.
-    static let aktuelleFormatVersion = 8
+    ///
+    /// **Version 9 (GitHub #128 — Ablösung von `ArtikelAlias`):**
+    /// `artikelAliase`/`ArtikelAliasSnapshot` entfallen ersatzlos — die Rolle
+    /// übernehmen jetzt vollständig ``Artikel/alternativeNamen`` (bereits Teil
+    /// von ``ArtikelSnapshot``) und ``Produktname`` (bereits synchronisiert
+    /// seit Version 8). Wieder keine Rückwärtskompatibilität nötig, siehe
+    /// Version 3.
+    static let aktuelleFormatVersion = 9
 
     var formatVersion: Int
     var erzeugtAm: Date
@@ -120,9 +127,6 @@ struct SyncSnapshot: Codable {
     /// Preishistorie (seit Version 4, GitHub #76) — unabhängig vom
     /// ``Einkaufsvorgang``, siehe ``Preispunkt``.
     var preispunkte: [PreispunktSnapshot]
-    /// Gelernte Beleg-/Preisschild-Aliase (seit Version 4, GitHub #76), siehe
-    /// ``ArtikelAlias``.
-    var artikelAliase: [ArtikelAliasSnapshot]
     var warengruppenDistanzen: [WarengruppenDistanzSnapshot]
     /// Seit Version 6, siehe ``ArtikelGeschaeftVerfuegbarkeit``.
     var artikelGeschaeftVerfuegbarkeiten: [ArtikelGeschaeftVerfuegbarkeitSnapshot] = []
@@ -146,6 +150,13 @@ struct GeschaeftTypSnapshot: Codable {
     var symbolName: String
     var farbeHex: String
     var sortIndex: Int
+    /// Additiv-optional statt Versionssprung (analog
+    /// ``EinkaufslistenEintragSnapshot/produktID``) — siehe
+    /// ``GeschaeftTyp/lamportZaehler``. Default `0` für Peers auf einer
+    /// älteren App-Version, die diesen Schlüssel noch nicht schreiben
+    /// (Swifts synthetisierter Decoder füllt einen fehlenden Schlüssel bei
+    /// vorhandenem Default-Wert automatisch auf).
+    var lamportZaehler: UInt64 = 0
 }
 
 struct ArtikelKategorieSnapshot: Codable {
@@ -159,6 +170,9 @@ struct ArtikelKategorieSnapshot: Codable {
     /// auf ``GeschaeftTypSnapshot`` gespiegelt (dieselbe Relationship, keine
     /// redundante Doppelspeicherung).
     var geschaeftsTypIDs: [UUID]
+    /// Additiv-optional statt Versionssprung — siehe
+    /// ``ArtikelKategorie/lamportZaehler``.
+    var lamportZaehler: UInt64 = 0
 }
 
 struct GeschaeftSnapshot: Codable {
@@ -202,6 +216,8 @@ struct GeschaeftSnapshot: Codable {
     /// Phase 3 vorgeschlagen: gerätelokal berechnet lassen statt zu mergen
     /// (siehe Plan-Dokument).
     var unauffaelligeEinkaeufeInFolge: Int
+    /// Additiv-optional statt Versionssprung — siehe ``Geschaeft/lamportZaehler``.
+    var lamportZaehler: UInt64 = 0
 }
 
 struct ArtikelSnapshot: Codable {
@@ -214,6 +230,11 @@ struct ArtikelSnapshot: Codable {
     var einheit: String
     var mengenSchritt: Double
     var erstelltAm: Date
+    /// Seit Version 9 (GitHub #128), siehe ``Artikel/alternativeNamen`` —
+    /// Nachfolge der Rohname-Rolle von `ArtikelAlias`.
+    var alternativeNamen: [String] = []
+    /// Additiv-optional statt Versionssprung — siehe ``Artikel/lamportZaehler``.
+    var lamportZaehler: UInt64 = 0
 }
 
 struct EinkaufslisteSnapshot: Codable {
@@ -328,23 +349,18 @@ struct ArtikelListenKaufSnapshot: Codable {
 
 struct PreispunktSnapshot: Codable {
     var id: UUID
-    var artikelID: UUID?
     var geschaeftID: UUID?
     var preis: Decimal
     var datum: Date
     var produktName: String?
     var alternativerName: String?
-    var artikelNameSnapshot: String
     var geschaeftNameSnapshot: String
-    /// Seit Version 8 (GitHub #47), siehe ``Preispunkt/produkt``.
+    /// Seit Version 8 (GitHub #47), siehe ``Preispunkt/produkt``. Seit der
+    /// Produkt-Pflicht der tragende Bezug — ``Preispunkt/artikel`` (früher
+    /// eigenes Feld `artikelID`) leitet sich beim Empfänger aus
+    /// `produktID`/``Produkt/artikel`` ab, wird also nicht mehr separat
+    /// übertragen.
     var produktID: UUID?
-}
-
-struct ArtikelAliasSnapshot: Codable {
-    var id: UUID
-    var erkannterName: String
-    var alternativerName: String?
-    var artikelID: UUID?
 }
 
 /// Seit Version 8, siehe ``Produkt``. `elternProduktID` kann in der Liste vor
@@ -357,6 +373,10 @@ struct ProduktSnapshot: Codable {
     var artikelID: UUID?
     var elternProduktID: UUID?
     var istStandard: Bool
+    /// Seit Version 9 (GitHub #128), siehe ``Produkt/alternativeKlarnamen``.
+    var alternativeKlarnamen: [String] = []
+    /// Additiv-optional statt Versionssprung — siehe ``Produkt/lamportZaehler``.
+    var lamportZaehler: UInt64 = 0
 }
 
 /// Seit Version 8, siehe ``Produktname``.
@@ -426,7 +446,7 @@ struct SyncPeerManifest: Codable {
 /// (bei jedem Abhaken/Hinzufügen/Entfernen auf einer Einkaufsliste) und riss
 /// dadurch bislang bei JEDER dieser sehr häufigen Aktionen einen kompletten
 /// Neuaufbau/-schrieb der eigentlich seltenen echten Stammdaten
-/// (Geschäftstypen/Kategorien/Geschäfte/Artikel/Listen/Aliase) mit sich, weil
+/// (Geschäftstypen/Kategorien/Geschäfte/Artikel/Listen/Produkte) mit sich, weil
 /// der Fingerabdruck-Vergleich die gesamte Struktur als eine Einheit
 /// behandelt — analog der bereits bestehenden Begründung für die Trennung von
 /// ``SyncVorgaengeSnapshot``/``SyncPreisSnapshot`` unten.
@@ -436,7 +456,6 @@ struct SyncStammSnapshot: Codable {
     var geschaefte: [GeschaeftSnapshot]
     var artikel: [ArtikelSnapshot]
     var einkaufslisten: [EinkaufslisteSnapshot]
-    var artikelAliase: [ArtikelAliasSnapshot]
     /// Seit GitHub #47, Schritt 2/5, siehe ``Produkt``.
     var produkte: [ProduktSnapshot] = []
     /// Seit GitHub #47, Schritt 2/5, siehe ``Produktname``.

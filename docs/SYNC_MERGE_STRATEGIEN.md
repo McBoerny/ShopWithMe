@@ -12,12 +12,13 @@ GitHub [#75](https://github.com/McBoerny/ShopWithMe/issues/75) (generische
 
 ---
 
-## 1. Haupttabelle — alle 19 Funktionen
+## 1. Haupttabelle — alle 18 Funktionen
 
 Geordnet nach Aufrufposition in `mergePaket`/`merge` (= Abhängigkeitsreihenfolge).
 Alle Angaben gegen den aktuellen Stand von `SyncSnapshotImportService.swift`
-geprüft (2026-08-13). Zeile 0 deckt Bereich A ab (eigene Datei, hier zur
-Vollständigkeit); Zeilen 1–19 decken Bereich B/C/D ab.
+geprüft (2026-08-22, GitHub #128 — Zeilennummern ab Zeile 14 aktualisiert,
+`mergeArtikelAliase` entfernt). Zeile 0 deckt Bereich A ab (eigene Datei, hier zur
+Vollständigkeit); Zeilen 1–18 decken Bereich B/C/D ab.
 
 | # | Funktion | Zeile | Strategie | Bereich | Seiteneffekte |
 |---|---|---|---|---|---|
@@ -35,12 +36,16 @@ Vollständigkeit); Zeilen 1–19 decken Bereich B/C/D ab.
 | 11 | `mergeEinkaufslistenEintraege` | 1030 | **OR-Set add-wins**, gegated durch `istBereitsAbgehakt`; schreibt zusätzlich `ArtikelListenKauf.zuletztHinzugefuegtAm` (monotoner Max-Merge) | B | `ArtikelListenKauf.zuletztHinzugefuegtAm` aktualisieren |
 | 12 | `mergeEinkaufsvorgaenge` | 1293 | **Komplexeste Funktion der Datei**: heuristischer Verbund-Match (`offenerTreffer`) + MIN-Merge (`startZeit`) + write-once-dann-immutable `endZeit` (plausibilitätsgegated, schließt zusätzlich `andereOffeneVorgaengeDerListe` mit) | C | Schließt andere offene Vorgänge derselben Liste |
 | 13 | `mergeKaufEintraege` | 1599 | **Immutable-Log Union-by-ID**: unveränderliche Kaufhistorie; gegateter Lösch-Seiteneffekt auf `EinkaufslistenEintrag`; schreibt `ArtikelListenKauf.zuletztAbgehaktAm` | C | `EinkaufslistenEintrag` entfernen; `ArtikelListenKauf.zuletztAbgehaktAm` aktualisieren |
-| 14 | `mergePreispunkte` | 1733 | **Immutable-Log Union-by-ID**: Preishistorie-Einträge sind unveränderlich | C | — |
-| 15 | `mergeArtikelAliase` | 1773 | **Case-insensitive-Name-Union**: additives Alias-Register, nie destruktiv | B | — |
-| 16 | `mergeWarengruppenDistanzen` | 1816 | **Gewichteter-Mittelwert-CRDT** (domänenspezifisch): `distanz = (lokal × lokalGew + fremd × peerZuwachs) / (lokalGew + peerZuwachs)`; delta-gegated (`peerZuwachs > 0`) und gewichts-gedeckelt (`maximaleMergeGewichtung`) — bewusst nicht naive 50/50 | D | `WarengruppenDistanzPeerZaehlerStand` aktualisieren |
-| 17 | `mergeArtikelGeschaeftVerfuegbarkeiten` | 1863 | **Tupel-Union** nach (`artikel`, `geschaeft`): Existenz-Fakt, kein Tombstone nötig (wird nie direkt gelöscht) | D | — |
-| 18 | `mergeGeschaeftBesuche` | 1881 | **Immutable-Log Union-by-ID**: historisches Ereignis, unveränderlich | D | — |
-| 19 | `mergeArtikelListenKaeufe` | 1914 | **Direkter Sync-Kanal für beide monotone Max-Timestamp-Fakten**: schreibt `zuletztAbgehaktAm` UND `zuletztHinzugefuegtAm` via `ArtikelListenKaufService`; komplementär zu Zeile 11 und 13 (Abschnitt 2.2) | D | `ArtikelListenKauf.zuletztAbgehaktAm` und `zuletztHinzugefuegtAm` aktualisieren |
+| 14 | `mergePreispunkte` | 1804 | **Immutable-Log Union-by-ID**: Preishistorie-Einträge sind unveränderlich; Pseudo-Geschäft-Fallback bei nicht auflösbarer `geschaeftID` seit GitHub #128 (Geschäfts-Pflicht) | C | — |
+| 15 | `mergeWarengruppenDistanzen` | 1868 | **Gewichteter-Mittelwert-CRDT** (domänenspezifisch): `distanz = (lokal × lokalGew + fremd × peerZuwachs) / (lokalGew + peerZuwachs)`; delta-gegated (`peerZuwachs > 0`) und gewichts-gedeckelt (`maximaleMergeGewichtung`) — bewusst nicht naive 50/50 | D | `WarengruppenDistanzPeerZaehlerStand` aktualisieren |
+| 16 | `mergeArtikelGeschaeftVerfuegbarkeiten` | 1915 | **Tupel-Union** nach (`artikel`, `geschaeft`): Existenz-Fakt, kein Tombstone nötig (wird nie direkt gelöscht) | D | — |
+| 17 | `mergeGeschaeftBesuche` | 1933 | **Immutable-Log Union-by-ID**: historisches Ereignis, unveränderlich | D | — |
+| 18 | `mergeArtikelListenKaeufe` | 1966 | **Direkter Sync-Kanal für beide monotone Max-Timestamp-Fakten**: schreibt `zuletztAbgehaktAm` UND `zuletztHinzugefuegtAm` via `ArtikelListenKaufService`; komplementär zu Zeile 11 und 13 (Abschnitt 2.2) | D | `ArtikelListenKauf.zuletztAbgehaktAm` und `zuletztHinzugefuegtAm` aktualisieren |
+
+**GitHub #128:** `mergeArtikelAliase` (vormals Zeile 15, Case-insensitive-Name-Union
+auf `ArtikelAlias`) entfällt ersatzlos — die Rolle übernimmt `mergeProduktnamen`
+(Zeile 9) bereits vollständig mit, seit `Produktname.geschaeft == nil` dieselbe
+geschäftsunabhängige Semantik trägt.
 
 ---
 
@@ -74,9 +79,9 @@ durch **drei verschiedene Merge-Funktionen** gepflegt — nicht an einer Stelle:
 |---|---|---|
 | `mergeEinkaufslistenEintraege` (11) | Nein | Ja (Sicherheitsnetz: Peer hat Eintrag gerade offen) |
 | `mergeKaufEintraege` (13) | Ja (beim Einbuchen eines Kaufbelegs) | Nein |
-| `mergeArtikelListenKaeufe` (19) | Ja (direkter dauerhafter Sync-Kanal) | Ja (direkter dauerhafter Sync-Kanal) |
+| `mergeArtikelListenKaeufe` (18) | Ja (direkter dauerhafter Sync-Kanal) | Ja (direkter dauerhafter Sync-Kanal) |
 
-Funktion 19 ist der symmetrische, robuste Pfad für beide Fakten; 11 und 13 pflegen
+Funktion 18 ist der symmetrische, robuste Pfad für beide Fakten; 11 und 13 pflegen
 einen von beiden als Seiteneffekt ihres eigentlichen Auftrags mit. Diese Dreifachigkeit
 ist ein konkretes Beispiel für die Duplikation, die GitHub #75 (generische Merge-Engine)
 beseitigen würde — und deshalb ein gutes Leitbeispiel für das #75-Design.
@@ -84,7 +89,7 @@ beseitigen würde — und deshalb ein gutes Leitbeispiel für das #75-Design.
 **Architekturentscheidung (2026-08-10):** Der Seiteneffekt in Funktion 11 war
 anfänglich einseitig (nur `zuletztAbgehaktAm`), was zu einem asymmetrischen Faktum
 führte: das „hinzugefügt"-Faktum propagierte nur indirekt, wenn der Artikel beim
-Peer gerade offen war. Funktion 19 schreibt jetzt symmetrisch beide Seiten. Details
+Peer gerade offen war. Funktion 18 schreibt jetzt symmetrisch beide Seiten. Details
 in `ArtikelListenKauf`-Typ-Doku und `docs/DATENSYNCHRONISATION_VERLAUF.md` §55–60.
 
 ### 2.3 `Geschaeft.umbauVerdacht` — bekanntes Risiko, kein sofortiger Fix
@@ -142,14 +147,14 @@ Die Tabelle oben liefert dafür drei Erkenntnisse:
 
 - **Kandidaten für vollständige Generalisierung:** Zeilen 4, 9, 14, 15, 17, 18 —
   einfache Union-by-ID oder Tupel-Union ohne domänenspezifische Logik.
-- **Kandidaten für Teile-Generalisierung:** Zeilen 5, 7, 8, 11, 13, 19 — haben einen
+- **Kandidaten für Teile-Generalisierung:** Zeilen 5, 7, 8, 11, 13, 18 — haben einen
   generellen Kern (Union/LWW), aber domänenspezifische Seiteneffekte oder Gates.
 - **Nicht-Kandidaten für vollständige Generalisierung:** Zeilen 6, 10, 12, 16 —
   domänenspezifisch genug (Ambiguitäts-Deferral, heuristischer Verbund-Match,
   Weighted-Average), dass eine generische Engine sie nicht ohne Domänenwissen umsetzen
   kann. Würden in #75 als „custom merge hook" verbleiben.
 
-Zeile 19 (`mergeArtikelListenKaeufe`) ist das Leitbeispiel für #75: zwei identisch
+Zeile 18 (`mergeArtikelListenKaeufe`) ist das Leitbeispiel für #75: zwei identisch
 strukturierte monotone Fakten, die heute über drei Funktionen verteilt gepflegt werden,
 würden in einer generischen Engine durch einen einzigen deklarierten `monoMaxTimestamp`-
 Feldtyp ausgedrückt — und genau diese drei Stellen wären das Ziel.

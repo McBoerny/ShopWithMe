@@ -13,7 +13,8 @@ struct ModelTests {
             Artikel.self, ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self,
             Einkaufsvorgang.self, KaufEintrag.self, WarengruppenDistanz.self,
             Einkaufsliste.self, EinkaufslistenEintrag.self, IgnorierterArtikel.self,
-            SyncEvent.self, SyncPeerZaehlerStand.self, Preispunkt.self, ArtikelAlias.self,
+            SyncEvent.self, SyncPeerZaehlerStand.self, Preispunkt.self,
+            Produkt.self, Produktname.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
@@ -116,8 +117,9 @@ struct ModelTests {
     @Test
     func anzeigeNamePriorisiertAlternativenNamenVorProduktNameVorArtikelVorSnapshot() {
         let artikel = Artikel(name: "Zahnpasta", symbolName: "sparkles", farbeHex: "#AF52DE")
-        let eintrag = Preispunkt(artikel: artikel, geschaeft: nil, preis: 2.49)
-        eintrag.artikelNameSnapshot = "Zahnpasta"
+        let produkt = Produkt(name: "Zahnpasta", artikel: artikel)
+        let geschaeft = Geschaeft(name: "Rewe", typen: [])
+        let eintrag = Preispunkt(produkt: produkt, geschaeft: geschaeft, preis: 2.49, produktName: "Zahnpasta")
         #expect(eintrag.anzeigeName == "Zahnpasta")
 
         eintrag.produktName = "Colgate Total"
@@ -134,33 +136,38 @@ struct ModelTests {
     }
 
     @Test
-    func artikelAliasPassendFindetExaktenTrefferVorTeilstringTreffer() {
+    func produktnamePassendFindetExaktenTrefferVorTeilstringTreffer() {
         let zahnpasta = Artikel(name: "Zahnpasta", symbolName: "sparkles", farbeHex: "#AF52DE")
-        let exakt = ArtikelAlias(erkannterName: "COL-ZAH", alternativerName: "Colgate", artikel: zahnpasta)
-        let teilstring = ArtikelAlias(erkannterName: "COL", alternativerName: "Colgate (kurz)", artikel: zahnpasta)
+        let colgate = Produkt(name: "Colgate", artikel: zahnpasta)
+        let exakt = Produktname(name: "COL-ZAH", produkt: colgate, geschaeft: nil)
+        let teilstring = Produktname(name: "COL", produkt: colgate, geschaeft: nil)
 
-        let gelernt = ArtikelAlias.passend(fuerErkannterName: "COL-ZAH", in: [teilstring, exakt])
-        #expect(gelernt?.alias == "Colgate")
-        #expect(gelernt?.artikel === zahnpasta)
+        let gelernt = Produktname.passend(fuerErkannterName: "COL-ZAH", bevorzugtesGeschaeft: nil, in: [teilstring, exakt])
+        #expect(gelernt === exakt)
+        #expect(gelernt?.produkt?.artikel === zahnpasta)
     }
 
     @Test
-    func artikelAliasPassendLiefertNilOhneTrefferUndBeiLeeremNamen() {
-        let anderesProdukt = ArtikelAlias(erkannterName: "MIL-VOLL", alternativerName: "Vollmilch", artikel: nil)
+    func produktnamePassendLiefertNilOhneTrefferUndBeiLeeremNamen() {
+        let milch = Produkt(name: "Vollmilch", artikel: nil)
+        let anderesProdukt = Produktname(name: "MIL-VOLL", produkt: milch, geschaeft: nil)
 
-        #expect(ArtikelAlias.passend(fuerErkannterName: "COL-ZAH", in: [anderesProdukt]) == nil)
-        #expect(ArtikelAlias.passend(fuerErkannterName: "", in: [anderesProdukt]) == nil)
+        #expect(Produktname.passend(fuerErkannterName: "COL-ZAH", bevorzugtesGeschaeft: nil, in: [anderesProdukt]) == nil)
+        #expect(Produktname.passend(fuerErkannterName: "", bevorzugtesGeschaeft: nil, in: [anderesProdukt]) == nil)
     }
 
     @Test
     func artikelPreisSpanneGruppiertUndBerechnetMinMax() throws {
         let zahnpasta = Artikel(name: "Zahnpasta", symbolName: "sparkles", farbeHex: "#AF52DE")
         let milch = Artikel(name: "Vollmilch", symbolName: "refrigerator.fill", farbeHex: "#5AC8FA")
+        let zahnpastaProdukt = Produkt(name: "Zahnpasta", artikel: zahnpasta)
+        let milchProdukt = Produkt(name: "Vollmilch", artikel: milch)
+        let geschaeft = Geschaeft(name: "Rewe", typen: [])
 
-        let eintragEins = Preispunkt(artikel: zahnpasta, geschaeft: nil, preis: 1.99)
-        let eintragZwei = Preispunkt(artikel: zahnpasta, geschaeft: nil, preis: 2.49)
-        let eintragMilch = Preispunkt(artikel: milch, geschaeft: nil, preis: 1.19)
-        let eintragOhneArtikel = Preispunkt(artikel: nil, geschaeft: nil, preis: 0.99)
+        let eintragEins = Preispunkt(produkt: zahnpastaProdukt, geschaeft: geschaeft, preis: 1.99)
+        let eintragZwei = Preispunkt(produkt: zahnpastaProdukt, geschaeft: geschaeft, preis: 2.49)
+        let eintragMilch = Preispunkt(produkt: milchProdukt, geschaeft: geschaeft, preis: 1.19)
+        let eintragOhneArtikel = Preispunkt(produkt: nil, geschaeft: geschaeft, preis: 0.99)
 
         let spannen = ArtikelPreisSpanne.gruppieren([eintragEins, eintragZwei, eintragMilch, eintragOhneArtikel])
 
@@ -316,9 +323,9 @@ struct ModelTests {
         let anderesGeschaeft = Geschaeft(name: "Anderer Laden", typen: [lebensmittelTyp()])
         context.insert(anderesGeschaeft)
 
-        let eintrag = Preispunkt(artikel: nil, geschaeft: geschaeft, preis: 1.99)
+        let eintrag = Preispunkt(produkt: nil, geschaeft: geschaeft, preis: 1.99)
         context.insert(eintrag)
-        let andererEintrag = Preispunkt(artikel: nil, geschaeft: anderesGeschaeft, preis: 2.49)
+        let andererEintrag = Preispunkt(produkt: nil, geschaeft: anderesGeschaeft, preis: 2.49)
         context.insert(andererEintrag)
         try context.save()
 

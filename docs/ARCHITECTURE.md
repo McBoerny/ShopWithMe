@@ -71,16 +71,19 @@ mengenSchrittRaw: Double?            ──────────
 ┌einkaufslistenEintraege:            id: UUID
 │ [EinkaufslistenEintrag]            artikel: Artikel?  (nullify, weiterhin gepflegt)
 │                                    produkt: Produkt?  (GitHub #47, seit v0.14)
-├preispunkte: [Preispunkt]           geschaeft: Geschaeft?  (cascade)
+├preispunkte: [Preispunkt]           geschaeft: Geschaeft  (cascade, non-optional seit GitHub #128)
 │ (nullify)                          preis: Decimal
 ├produkte: [Produkt]                 datum: Date
 │ (cascade, GitHub #47, seit v0.14)  produktName/alternativerName: String?
-Einkaufsliste                        EinkaufslistenEintrag           ArtikelAlias (GitHub #76 — Mitlernen)
-─────────────                        ─────────────────────           ─────────────
-id: UUID                             id: UUID                        id: UUID
-name: String                         einkaufsliste: Einkaufsliste?   erkannterName: String
-erstelltAm: Date                     artikel: Artikel? ─────────────┘ alternativerName: String?
-└eintraege: [EinkaufslistenEintrag]  produkt: Produkt? (seit v0.14)   artikel: Artikel?
+├alternativeNamenRaw: String?
+│ (→ alternativeNamen, GitHub #111/#128 —
+│  Mitlernen, vormals eigenes ArtikelAlias-Modell)
+Einkaufsliste                        EinkaufslistenEintrag
+─────────────                        ─────────────────────
+id: UUID                             id: UUID
+name: String                         einkaufsliste: Einkaufsliste?
+erstelltAm: Date                     artikel: Artikel? ─────────────┘
+└eintraege: [EinkaufslistenEintrag]  produkt: Produkt? (seit v0.14)
                                       menge: Double
                                       notiz: String?
                                       erstelltAm: Date
@@ -95,6 +98,8 @@ elternProdukt: Produkt?  (rekursiv,       geschaeft: Geschaeft?
 ┌unterProdukte: [Produkt] (cascade)
 ├produktnamen: [Produktname] (cascade)
 ├preispunkte: [Preispunkt] (nullify)
+├alternativeKlarnamenRaw: String?
+│ (→ alternativeKlarnamen, GitHub #128)
 istStandard: Bool  (automatisch angelegter
   Platzhalter, siehe standardProdukt(fuer:context:))
 
@@ -117,14 +122,14 @@ geschaeft: Geschaeft?                     startZeit/endZeit: Date
 (reine Existenz-Tatsache, kein Zähler)     anzahlProdukte: Int
 ```
 
-**`Produkt`/`Produktname` (GitHub #47, Schritt 1/5, v0.14):** erste echte
-strukturelle SwiftData-Migration dieses Projekts (`SchemaV1` → `SchemaV2`,
-`Models/SchemaV1Frozen.swift`/`Models/SchemaDefinition.swift`) — bislang war
-jede Modelländerung additiv-optional und brauchte keine `MigrationStage`
-(siehe `docs/DECISIONS.md`). Ein `MigrationStage.custom` verknüpft beim
-ersten Start nach dem Update automatisch jeden bereits bestehenden
-`Preispunkt`/`EinkaufslistenEintrag` mit einem Platzhalter-`Produkt` seines
-Artikels (`Produkt.standardProdukt(fuer:context:)`). Seit Schritt 2/5 auch
+**`Produkt`/`Produktname` (GitHub #47, Schritt 1/5, v0.14):** ursprünglich
+über die erste echte strukturelle SwiftData-Migration dieses Projekts
+eingeführt. **Historisch** — die gesamte `VersionedSchema`-Migrationshistorie
+wurde am 2026-08-22 zurückgesetzt (Entwicklungsphase, Store neu angelegt,
+siehe `docs/ARTIKEL_PRODUKT_MODELL.md` „Schema-Historie zurückgesetzt" und
+`docs/DECISIONS.md`); `Produkt`/`Produktname` sind seither einfach von Anfang
+an Teil des frischen `SchemaV1`-Ausgangspunkts (`Models/SchemaDefinition.swift`),
+keine Migration nötig. Seit Schritt 2/5 auch
 Teil der Datensynchronisation (`SyncSnapshot`-Version 8, siehe
 `docs/DATENSYNCHRONISATION.md` Abschnitt 4.2/4.6) — `mergeProdukte` matcht
 namensbasiert **innerhalb desselben Artikels**, bewusst ohne die bei
@@ -195,12 +200,13 @@ Abschnitt zurückfällt (Belegscan, Preisschild-Scan, Sync-Import).
   ohne UI-Änderungen eingesetzt werden kann. Erkannte Preise landen seit GitHub #76 in
   einem eigenständigen `Preispunkt` (nicht mehr in `KaufEintrag`, siehe Datenmodell
   oben) — `Preispunkt.anzeigeName` priorisiert einen optionalen, vom Nutzer pro Punkt
-  vergebenen `alternativerName` (Alias) vor dem erkannten `produktName`/`artikel`/
-  `artikelNameSnapshot`; `PreispunktZuordnenSheet` lässt Alias und `Artikel`-Zuordnung
+  vergebenen `alternativerName` (Alias) vor dem erkannten `produktName`/`produkt`
+  (Produkt-Pflicht — `artikel` ist nur noch davon abgeleitet, siehe
+  `docs/ARTIKEL_PRODUKT_MODELL.md`); `PreispunktZuordnenSheet` lässt Alias und `Artikel`-Zuordnung
   (inkl. Neuanlage) gemeinsam pflegen. `ArtikelPreisSpanne.gruppieren(_:)` aggregiert
-  die Preisübersicht eines Geschäfts pro Artikel; `ArtikelAlias.passend(fuerErkannterName:in:)`
-  schlägt beim nächsten Scan bereits bekannte Alias-/Artikel-Kombinationen automatisch
-  vor — Details in `docs/BELEGSCAN.md`.
+  die Preisübersicht eines Geschäfts pro Artikel; `Produktname.passend(fuerErkannterName:bevorzugtesGeschaeft:in:)`
+  (GitHub #128, vormals `ArtikelAlias.passend`) schlägt beim nächsten Scan bereits
+  bekannte Namens-/Artikel-Kombinationen automatisch vor — Details in `docs/BELEGSCAN.md`.
 - **PriceTagScanService** (Protokoll): dasselbe Vision-OCR-+-FoundationModels-Muster wie
   `ReceiptScanService`, hier auf ein einzelnes fotografiertes Preisschild statt einen
   ganzen Kassenbon angewendet. Legt direkt einen `Preispunkt` mit heutigem Datum an,
@@ -254,17 +260,19 @@ Abschnitt zurückfällt (Belegscan, Preisschild-Scan, Sync-Import).
   Einstellungsseite `EinkaufslisteDarstellungsSettingsView` über
   `SettingsNavigationsziel.listendarstellung`. Vollständiges Design:
   `docs/LISTENDARSTELLUNG.md`.
-- **Artikel-Alias-Namen** (GitHub #111, v0.13): `ArtikelAlias` — bislang nur für
-  die Bon-Scan-Erkennung genutzt (siehe oben) — trägt seit v0.13 zusätzlich
-  manuell in `ArtikelEditView` gepflegte Alias-Namen
-  (`ArtikelAlias.manuellHinzufuegen(name:zu:alle:context:)`, blockiert im
-  Unterschied zu `lernen(...)` bei Namenskollision mit einem anderen Artikel
-  statt stillschweigend umzuhängen). `ArtikelHinzufuegenView.gefilterteArtikel`
-  durchsucht neben `Artikel.name` auch diese Aliase — derselbe Artikel bleibt
-  dabei einmalig im Ergebnis. Abgrenzung zum weiterhin offenen
-  Artikel→Produkt→Produktname-Konzept ([#47](https://github.com/McBoerny/ShopWithMe/issues/47),
-  `docs/ARTIKEL_PRODUKT_MODELL.md`): ein Alias ist reine Textsuche für
-  denselben Artikel, kein eigenständiges Produkt mit eigenem Preis.
+- **Artikel-Alias-Namen** (GitHub #111, v0.13; seit GitHub #128 `Artikel.alternativeNamen`
+  statt eines eigenen `ArtikelAlias`-Modells): manuell in `ArtikelEditView`
+  gepflegte, generische Synonyme (`Artikel.alternativenNamenLernen(_:)`), reine
+  `[String]`-Liste ohne geräteweite Eindeutigkeitsprüfung (anders als vormals
+  `ArtikelAlias.manuellHinzufuegen`, das bei Namenskollision mit einem anderen
+  Artikel blockierte). `ArtikelHinzufuegenView.gefilterteArtikel` durchsucht
+  neben `Artikel.name` auch `alternativeNamen` — derselbe Artikel bleibt dabei
+  einmalig im Ergebnis. Abgrenzung zum Artikel→Produkt→Produktname-Konzept
+  (`docs/ARTIKEL_PRODUKT_MODELL.md`): ein alternativer Name ist reine
+  Textsuche für denselben Artikel, kein eigenständiges Produkt mit eigenem
+  Preis — die Rohtext-Rolle beim Scan (vormals ebenfalls `ArtikelAlias`) trägt
+  seit #128 stattdessen `Produktname` (mit `geschaeft == nil` als
+  geschäftsunabhängiger Fall).
 - **Artikel hinzufügen — Mehrfachauswahl**: Tap auf eine ganze Zeile in
   `ArtikelHinzufuegenView` wählt sie aus/ab (statt sofort zu übernehmen); „Hinzufügen
   (n)" committet die gesamte Auswahl auf einmal; ein per Direktanlage neu erstellter

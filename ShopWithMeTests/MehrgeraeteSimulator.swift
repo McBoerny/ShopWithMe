@@ -32,7 +32,7 @@ final class MehrgeraeteSimulator {
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: syncOrdner, withIntermediateDirectories: true)
 
-        let schema = Schema(SchemaV2.models)
+        let schema = Schema(SchemaV1.models)
         geraete = try (1...anzahlGeraete).map { index in
             let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
             let container = try ModelContainer(for: schema, configurations: [konfiguration])

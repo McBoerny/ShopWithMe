@@ -1,18 +1,22 @@
 import SwiftUI
 import SwiftData
 
-/// Sheet zum Vergeben eines Alias-Namens und/oder Zuordnen eines übergreifenden
-/// ``Artikel``s für einen einzelnen ``Preispunkt`` — siehe `docs/BELEGSCAN.md`.
+/// Sheet zum Vergeben eines Anzeigenamens und/oder Umordnen (Korrektur) eines
+/// übergreifenden ``Artikel``s für einen einzelnen ``Preispunkt`` — siehe
+/// `docs/BELEGSCAN.md`. Seit der Produkt-Pflicht (siehe ``Preispunkt``-Typ-Doku)
+/// hat jeder Preispunkt bereits eine Zuordnung; dieses Sheet dient nur noch
+/// der nachträglichen Korrektur (z.B. falsch erkannter Artikel).
 /// Vormals `KaufEintragZuordnenSheet` (GitHub #76 — Preishistorie-Rolle von
 /// ``KaufEintrag`` nach ``Preispunkt`` verschoben).
 ///
 /// Existiert der gewünschte Artikel noch nicht, lässt er sich direkt hier über die
 /// bestehende ``ArtikelEditView`` anlegen und wird danach automatisch ausgewählt.
 ///
-/// Speichert die Zuordnung zusätzlich als ``ArtikelAlias``, damit künftige
-/// Beleg-/Preisschild-Scans desselben erkannten Namens sie automatisch
-/// wiederfinden (ersetzt die frühere Suche über die komplette Kaufhistorie,
-/// siehe ``ArtikelZuordnungsService``).
+/// Löst über ``Produkt/aufgeloestesOderNeuesProdukt(klarname:erkannterName:artikel:geschaeft:context:)``
+/// zusätzlich ein konkretes ``Produkt`` auf/legt es an und lernt dabei den
+/// erkannten Rohtext als ``Produktname`` — damit künftige Beleg-/Preisschild-
+/// Scans desselben erkannten Namens ihn automatisch wiederfinden (GitHub #128,
+/// ersetzt das frühere `ArtikelAlias`).
 struct PreispunktZuordnenSheet: View {
     let eintrag: Preispunkt
 
@@ -50,30 +54,14 @@ struct PreispunktZuordnenSheet: View {
         NavigationStack {
             List {
                 Section {
-                    TextField("Alias-Name", text: $aliasText)
+                    TextField("Anzeigename", text: $aliasText)
                 } header: {
-                    Text("Alias")
+                    Text("Anzeigename")
                 } footer: {
-                    Text("Ersetzt ab sofort überall den erkannten Namen „\(eintrag.produktName ?? eintrag.artikelNameSnapshot)“ dieser Position.")
+                    Text("Ersetzt ab sofort überall den erkannten Namen „\(eintrag.produktName ?? eintrag.produktNameSicher)“ dieser Position.")
                 }
 
                 Section {
-                    Button {
-                        ausgewaehlterArtikel = nil
-                    } label: {
-                        HStack {
-                            Text("Keine Zuordnung")
-                                .foregroundStyle(.primary)
-                            Spacer()
-                            if ausgewaehlterArtikel == nil {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(Color.accentColor)
-                            }
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-
                     if !getrimmterSuchtext.isEmpty && !existiertGenau {
                         Button {
                             neuenArtikelAnlegen()
@@ -114,6 +102,7 @@ struct PreispunktZuordnenSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Speichern", action: speichern)
+                        .disabled(ausgewaehlterArtikel == nil)
                 }
             }
             .sheet(item: $neuerArtikelEntwurf, onDismiss: nachNeuanlageAufraeumen) { entwurf in
@@ -144,7 +133,7 @@ struct PreispunktZuordnenSheet: View {
 
     private func speichern() {
         let getrimmterAlias = aliasText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let erkannterName = eintrag.produktName ?? eintrag.artikelNameSnapshot
+        let erkannterName = eintrag.produktName ?? eintrag.produktNameSicher
         // Nur die Identität über die `await`-Grenze hinweg sichern (siehe
         // ``ModelReference``) — zwischen dem Erwerb des Micro-Lease und dieser
         // Zuweisung kann ein nebenläufiger Sync-Zyklus genau diesen Artikel
@@ -153,14 +142,23 @@ struct PreispunktZuordnenSheet: View {
         let artikelReferenz = ModelReference(ausgewaehlterArtikel)
         Task {
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
-                guard let eintragFrisch = eintragReferenz.resolved(in: modelContext) else { return }
-                let artikel = artikelReferenz?.resolved(in: modelContext)
+                // Produkt-Pflicht: ohne (noch) auflösbaren Artikel lässt sich
+                // kein Produkt bestimmen — der Preispunkt bleibt dann bei
+                // seiner bisherigen Zuordnung unverändert, statt sie zu
+                // verlieren.
+                guard let eintragFrisch = eintragReferenz.resolved(in: modelContext),
+                      let artikel = artikelReferenz?.resolved(in: modelContext)
+                else { return }
                 let alias = getrimmterAlias.isEmpty ? nil : getrimmterAlias
                 eintragFrisch.alternativerName = alias
-                eintragFrisch.artikel = artikel
-                eintragFrisch.produkt = artikel.map { Produkt.standardProdukt(fuer: $0, context: modelContext) }
                 if !erkannterName.isEmpty {
-                    ArtikelAlias.lernen(erkannterName: erkannterName, alternativerName: alias, artikel: artikel, context: modelContext)
+                    let klarname = getrimmterAlias.isEmpty ? erkannterName : getrimmterAlias
+                    eintragFrisch.produkt = Produkt.aufgeloestesOderNeuesProdukt(
+                        klarname: klarname, erkannterName: erkannterName, artikel: artikel,
+                        geschaeft: eintragFrisch.geschaeft, context: modelContext
+                    )
+                } else {
+                    eintragFrisch.produkt = Produkt.standardProdukt(fuer: artikel, context: modelContext)
                 }
             }
             dismiss()
@@ -169,9 +167,11 @@ struct PreispunktZuordnenSheet: View {
 }
 
 #Preview {
-    let eintrag = Preispunkt(artikel: nil, geschaeft: nil, preis: 2.49)
-    eintrag.artikelNameSnapshot = "COL-ZAH"
+    let artikel = Artikel(name: "Zahnpasta", symbolName: "circle", farbeHex: "#34C759")
+    let geschaeft = Geschaeft(name: "Rewe", typen: [])
+    let produkt = Produkt(name: "COL-ZAH", artikel: artikel)
+    let eintrag = Preispunkt(produkt: produkt, geschaeft: geschaeft, preis: 2.49)
     eintrag.produktName = "COL-ZAH"
     return PreispunktZuordnenSheet(eintrag: eintrag)
-        .modelContainer(for: [Artikel.self, ArtikelKategorie.self, GeschaeftTyp.self, Preispunkt.self, ArtikelAlias.self, Produkt.self, Produktname.self], inMemory: true)
+        .modelContainer(for: [Artikel.self, ArtikelKategorie.self, GeschaeftTyp.self, Preispunkt.self, Produkt.self, Produktname.self], inMemory: true)
 }

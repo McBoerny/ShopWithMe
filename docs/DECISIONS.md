@@ -185,6 +185,26 @@ Sync-Ordner wieder auf, exakt wie beim bereits bestehenden
 Wipe-und-Neuaufbau-Mechanismus. Gilt für jede künftige `MigrationStage`
 gleichermaßen, nicht nur für diesen einen Vorfall.
 
+**Nachtrag (2026-08-22, GitHub #128/#129) — Schema-Historie zurückgesetzt:**
+Bei der Ablösung von `ArtikelAlias` (Geschäfts-Pflicht bei `Preispunkt`) stieß
+eine weitere, tiefere Falle auf: reich vernetzte "Hub"-Modelltypen (`Artikel`/
+`Produkt`, viele Relationships zueinander und zu anderen Typen) crashen beim
+Einfrieren in einer `VersionedSchema`-Stufe reproduzierbar — selbst wenn alle
+oben genannten Regeln korrekt befolgt werden, sogar schon beim Speichern
+eines ganz gewöhnlichen Objekts, nicht erst bei der Migration selbst. Details
+und der sichere Workaround (zweiphasiger Container-Start statt einer neuen
+`VersionedSchema`-Stufe) stehen dauerhaft im `ios-swift-engineering`-Skill.
+Da sich die App noch in der Entwicklungsphase befand und der lokale Store zu
+diesem Zeitpunkt ohnehin zurückgesetzt wurde, entschied sich das Projekt für
+den pragmatischeren Weg: die komplette bisherige `VersionedSchema`-Historie
+(`SchemaV1Frozen.swift`…`SchemaV4`, `ShopWithMeMigrationPlan`) wurde
+ersatzlos gelöscht und durch einen frischen `SchemaV1`-Ausgangspunkt mit dem
+aktuellen Modell ersetzt (`Models/SchemaDefinition.swift`, kein Migrationsplan
+mehr). Die obigen Lektionen (additiv vs. strukturell, Checksum-Kollisionen,
+"unknown model version") bleiben für **künftige** strukturelle Änderungen
+weiterhin uneingeschränkt gültig — nur die konkret zitierten `SchemaV1`/
+`SchemaV2`-Dateien von damals existieren nicht mehr.
+
 ## Git-Autor (lokal, nur dieses Repo)
 
 `user.name`/`user.email` wurden nur lokal für dieses Repo gesetzt (nicht global), da

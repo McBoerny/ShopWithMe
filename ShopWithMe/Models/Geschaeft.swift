@@ -219,11 +219,34 @@ final class Geschaeft {
         set { unauffaelligeEinkaeufeInFolgeRaw = newValue }
     }
 
+    /// Rohspeicher für ``lamportZaehler`` — additiv optional, siehe
+    /// ``GeschaeftTyp/lamportZaehler``.
+    private var lamportZaehlerRaw: UInt64?
+    /// Logischer Zeitstempel der letzten Änderung an ``name`` — Grundlage
+    /// dafür, dass eine Umbenennung auch bereits synchronisierte Geräte
+    /// erreicht (`SyncSnapshotImportService.mergeGeschaefte`); alle übrigen
+    /// Felder bleiben unverändert additiv/nil-füllend, siehe
+    /// ``GeschaeftTyp/lamportZaehler`` für die volle Begründung.
+    var lamportZaehler: UInt64 { lamportZaehlerRaw ?? 0 }
+
     init(name: String, typen: [GeschaeftTyp], adresse: String? = nil) {
         self.id = UUID()
         self.name = name
         self.typenModelle = typen
         self.adresse = adresse
+    }
+
+    /// Aufgerufen, wenn der Anwender ``name`` dieses bereits bestehenden
+    /// Geschäfts ändert (siehe `GeschaeftStammdatenEditView`) — nie bei
+    /// bloßer Neuanlage, siehe ``GeschaeftTyp/markiereGeaendert()``.
+    func markiereGeaendert() {
+        lamportZaehlerRaw = LamportClock.naechsterZaehler()
+    }
+
+    /// Übernimmt beim Sync-Merge einen tatsächlich neueren Zählerstand, siehe
+    /// ``GeschaeftTyp/uebernehmeLamportZaehler(_:)``.
+    func uebernehmeLamportZaehler(_ fremderZaehler: UInt64) {
+        lamportZaehlerRaw = fremderZaehler
     }
 
     /// Merkt sich `name` als zusätzlichen ``alternativeNamen``-Eintrag dieses
@@ -238,6 +261,26 @@ final class Geschaeft {
               !alternativeNamen.contains(where: { $0.localizedCaseInsensitiveCompare(getrimmt) == .orderedSame })
         else { return }
         alternativeNamen.append(getrimmt)
+    }
+
+    /// Findet-oder-legt-an das Pseudo-Geschäft für ``Preispunkt``e ohne
+    /// bekanntes Geschäft — seit GitHub #128 braucht ``Preispunkt/geschaeft``
+    /// zwingend einen Wert (Geschäfts-Pflicht bei der Preiserfassung, siehe
+    /// `docs/ARTIKEL_PRODUKT_MODELL.md`). Genutzt für Alt-Daten (historische
+    /// ``KaufEintrag``-Migration) und für nicht auflösbare Geschäfts-Referenzen
+    /// beim Sync-Import (``SyncSnapshotImportService``). Ein ganz gewöhnliches
+    /// ``Geschaeft`` ohne Sondermarkierung im Modell — der Nutzer kann es
+    /// hinterher wie jedes andere umbenennen. Gefunden über den festen Namen
+    /// „Unbekannt" (case-insensitiv), nicht über ein Flag.
+    static func unbekanntesGeschaeft(context: ModelContext) -> Geschaeft {
+        let name = "Unbekannt"
+        let alle = (try? context.fetch(FetchDescriptor<Geschaeft>())) ?? []
+        if let bestehendes = alle.first(where: { $0.name.localizedCaseInsensitiveCompare(name) == .orderedSame }) {
+            return bestehendes
+        }
+        let neues = Geschaeft(name: name, typen: [])
+        context.insert(neues)
+        return neues
     }
 
     /// Sucht unter `geschaefte` dasjenige, dessen ``name`` oder ``alternativeNamen``

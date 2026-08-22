@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 import PhotosUI
 import VisionKit
+import UniformTypeIdentifiers
 
 /// Kontext, in dem ein Kassenbon gescannt wird.
 ///
@@ -43,11 +44,12 @@ enum BelegScanKontext {
 /// ein zusätzlicher, schnellerer Weg.
 ///
 /// Erkannte Positionen, die sich keinem bestehenden ``Artikel`` zuordnen lassen,
-/// werden trotzdem als eigenständiger ``Preispunkt`` ohne ``Artikel``-Verknüpfung
-/// gespeichert — der Artikelname bleibt über `artikelNameSnapshot` trotzdem in der
-/// Preishistorie lesbar. Kassenbons weisen bei mehreren Stück oft nur einen
-/// Gesamtpreis aus; übernommen wird ausschließlich der von der KI berechnete
-/// Einzelpreis (siehe ``BelegPosition``), keine Mengenangabe.
+/// werden übersprungen — ein ``Preispunkt`` braucht seit der Produkt-Pflicht
+/// (siehe ``Preispunkt``-Typ-Doku) immer ein aufgelöstes ``Produkt``, es gibt
+/// keinen Freitext-Fall ohne Zuordnung mehr. Kassenbons weisen bei mehreren
+/// Stück oft nur einen Gesamtpreis aus; übernommen wird ausschließlich der
+/// von der KI berechnete Einzelpreis (siehe ``BelegPosition``), keine
+/// Mengenangabe.
 ///
 /// Das Einkaufsdatum wird von der KI aus dem Beleg erkannt (Vorbelegung), lässt sich
 /// vor dem Übernehmen aber jederzeit manuell korrigieren (``ErgebnisListe``). Benennt
@@ -59,8 +61,9 @@ enum BelegScanKontext {
 ///
 /// **Automatische Artikel-Zuordnung (``ArtikelZuordnungsService``, GitHub #123):**
 /// Beim Einlesen wird jede erkannte Position dreistufig verarbeitet: (1) Text-Abgleich
-/// (Alias und Teilstring) mit dem rohen Bon-Text, (2) Klarname-Ableitung — bei Treffer
-/// aus Produkt-/Aliasname, sonst KI-Vorschlag (``AISuggestionService/produktKlarname``),
+/// (``Produktname`` und Artikel-Teilstring/``Artikel/alternativeNamen``) mit dem rohen
+/// Bon-Text, (2) Klarname-Ableitung — bei Treffer aus dem Produktnamen, sonst
+/// KI-Vorschlag (``AISuggestionService/produktKlarname``),
 /// (3) KI-Artikel-Match (``AISuggestionService/artikelMatch``) auf Basis des Klarnamens
 /// statt des rohen Bon-Texts. ``PositionsZeile`` zeigt den Klarname dominant (editierbar)
 /// und den generischen ``Artikel`` als antippe-baren Button — Antippen öffnet
@@ -93,6 +96,7 @@ struct BelegScanView: View {
 
     @State private var ausgewaehltesFoto: PhotosPickerItem?
     @State private var zeigeKamera = false
+    @State private var zeigeDateiAuswahl = false
     @State private var laeuft = false
     @State private var fehlermeldung: String?
     @State private var bearbeitbarePositionen: [BearbeitbarePosition]?
@@ -166,7 +170,8 @@ struct BelegScanView: View {
                         fehlermeldung: fehlermeldung,
                         geschaeftName: kontext.geschaeft.flatMap { modelContext.existiertNochImStore($0) ? $0.name : nil } ?? "",
                         ausgewaehltesFoto: $ausgewaehltesFoto,
-                        kameraOeffnen: { zeigeKamera = true }
+                        kameraOeffnen: { zeigeKamera = true },
+                        dateiAuswahlOeffnen: { zeigeDateiAuswahl = true }
                     )
                 }
             }
@@ -208,6 +213,16 @@ struct BelegScanView: View {
                 }
             }
         }
+        .fileImporter(isPresented: $zeigeDateiAuswahl, allowedContentTypes: [.image]) { ergebnis in
+            guard let url = try? ergebnis.get() else { return }
+            let zugriffErlaubt = url.startAccessingSecurityScopedResource()
+            defer { if zugriffErlaubt { url.stopAccessingSecurityScopedResource() } }
+            if let daten = try? Data(contentsOf: url), let bild = UIImage(data: daten) {
+                verarbeite(bild: bild)
+            } else {
+                fehlermeldung = "Die gewählte Datei konnte nicht als Bild gelesen werden."
+            }
+        }
     }
 
     private func verarbeite(bild rohesBild: UIImage) {
@@ -225,7 +240,6 @@ struct BelegScanView: View {
                     belegDatum = erkanntesDatum
                 }
                 geschaeftAbgleichen(erkannterName: ergebnis.geschaeftName, erkannteAdresse: ergebnis.geschaeftAdresse)
-                let bekannteAliase = (try? modelContext.fetch(FetchDescriptor<ArtikelAlias>())) ?? []
                 // GitHub #47, Schritt 5/5 — geschäftsabhängiger Produktname-Abgleich,
                 // siehe ``ArtikelZuordnungsService``.
                 let bekannteProduktnamen = (try? modelContext.fetch(FetchDescriptor<Produktname>())) ?? []
@@ -234,21 +248,18 @@ struct BelegScanView: View {
                     if IgnorierterArtikel.istIgnoriert(position.artikelName, geschaeft: erkanntesGeschaeft, unter: alleIgnoriertenArtikel) {
                         continue
                     }
-                    // Stage 1+2: text-based matching with OCR text (alias + substring).
+                    // Stage 1+2: text-based matching with OCR text (Produktname + Substring).
                     let textTreffer = ArtikelZuordnungsService.textBasierteZuordnung(
                         erkannterName: position.artikelName,
-                        bekannteAliase: bekannteAliase,
                         alleArtikel: alleArtikel,
                         geschaeft: erkanntesGeschaeft,
                         bekannteProduktnamen: bekannteProduktnamen
                     )
                     // Klarname (GitHub #121, #123): Produktname-Treffer → direkt;
-                    // Alias-Treffer → alias; sonst KI aus erkanntem Bon-Text.
+                    // sonst KI aus erkanntem Bon-Text.
                     let produktKlarname: String
                     if let produkt = textTreffer?.produkt {
                         produktKlarname = produkt.name
-                    } else if let alias = textTreffer?.alias {
-                        produktKlarname = alias
                     } else if AISuggestionService.istVerfuegbar {
                         let bekannteKlarnamen = textTreffer?.artikel?.produkte.filter { !$0.istStandard }.map { $0.name } ?? []
                         let vorschlag = try? await AISuggestionService.produktKlarname(
@@ -261,17 +272,17 @@ struct BelegScanView: View {
                     }
                     // Stage 3: AI article match using Klarname (not OCR text) —
                     // only when stages 1+2 found nothing (GitHub #123).
-                    let zuordnung: (alias: String?, artikel: Artikel?, produkt: Produkt?, quelle: ArtikelZuordnungsService.Quelle?)
+                    let zuordnung: (artikel: Artikel?, produkt: Produkt?, quelle: ArtikelZuordnungsService.Quelle?)
                     if let treffer = textTreffer {
-                        zuordnung = (treffer.alias, treffer.artikel, treffer.produkt, treffer.quelle)
+                        zuordnung = (treffer.artikel, treffer.produkt, treffer.quelle)
                     } else if AISuggestionService.istVerfuegbar {
                         let matchInput = produktKlarname.isEmpty ? position.artikelName : produktKlarname
                         let kiVorschlag = try? await AISuggestionService.artikelMatch(fuerName: matchInput, bekannteArtikel: alleArtikel.map(\.name))
                         let passend = kiVorschlag?.passenderArtikel ?? ""
                         let kiArtikel = passend.isEmpty ? nil : alleArtikel.first { $0.name.localizedCaseInsensitiveCompare(passend) == .orderedSame }
-                        zuordnung = (nil, kiArtikel, nil, kiArtikel != nil ? .ki : nil)
+                        zuordnung = (kiArtikel, nil, kiArtikel != nil ? .ki : nil)
                     } else {
-                        zuordnung = (nil, nil, nil, nil)
+                        zuordnung = (nil, nil, nil)
                     }
                     // Tages-Kollisionsprüfung (GitHub #76-Folgearbeit): existiert für
                     // den zugeordneten Artikel bereits ein Preispunkt vom selben
@@ -280,9 +291,10 @@ struct BelegScanView: View {
                     // ``PositionsZeile``/``uebernehmen()``. Nur möglich, wenn bereits
                     // eine Artikel-Zuordnung UND ein Geschäft feststehen.
                     var bestehenderPreisHeute: Decimal?
-                    if let artikel = zuordnung.artikel {
+                    if let artikel = zuordnung.artikel, let erkanntesGeschaeft,
+                       let produktFuerPruefung = zuordnung.produkt ?? Produkt.bestehendesStandardProdukt(fuer: artikel, context: modelContext) {
                         bestehenderPreisHeute = PreispunktService.vorhandenerPunktHeute(
-                            artikel: artikel, produkt: zuordnung.produkt, geschaeft: erkanntesGeschaeft, amDatum: belegDatum, context: modelContext
+                            produkt: produktFuerPruefung, geschaeft: erkanntesGeschaeft, amDatum: belegDatum, context: modelContext
                         )?.preis
                         if bestehenderPreisHeute == position.einzelpreis { bestehenderPreisHeute = nil }
                     }
@@ -330,6 +342,10 @@ struct BelegScanView: View {
     }
 
     private func uebernehmen() {
+        // Geschäfts-Pflicht: ohne Geschäft entsteht kein Preispunkt (siehe
+        // `docs/ARTIKEL_PRODUKT_MODELL.md`) — der Button ist zwar bereits
+        // `.disabled`, dieser Guard schützt zusätzlich den Aufrufpfad selbst.
+        guard erkanntesGeschaeft != nil else { return }
         // Nur Identitäten über die `await`-Grenzen hinweg sichern (siehe
         // ``ModelReference``) — zwischen jetzt und der eigentlichen Zuweisung
         // im Lease-Block (nach Geocoding-Warten UND Lease-Erwerb, zwei
@@ -344,9 +360,6 @@ struct BelegScanView: View {
         let positionsArtikelReferenzen = positionen.map { ModelReference($0.effektivZugeordneterArtikel) }
         // GitHub #47, Schritt 5/5 — analog `positionsArtikelReferenzen`.
         let positionsProduktReferenzen = positionen.map { ModelReference($0.effektivZugeordnetesProdukt) }
-        // Folgearbeit zu GitHub #47/#116 (automatische Produkt-Neuanlage unten) —
-        // reiner Enum-Wert, keine `ModelReference` nötig.
-        let positionsQuelleReferenzen = positionen.map(\.zuordnungsQuelle)
         // GitHub #121 — reiner String, keine `ModelReference` nötig.
         let positionsKlarnamen = positionen.map { $0.produktKlarname.trimmingCharacters(in: .whitespacesAndNewlines) }
 
@@ -403,15 +416,16 @@ struct BelegScanView: View {
                     let artikel = positionsArtikelReferenzen[index]?.resolved(in: modelContext)
                     var produkt = positionsProduktReferenzen[index]?.resolved(in: modelContext)
 
-                    let geschaeftFuerPreispunkt: Geschaeft?
+                    let geschaeftFuerPreispunkt: Geschaeft
                     switch kontext {
                     case .einkaufsvorgang:
                         // Der Einkaufsvorgang selbst kann inzwischen gelöscht worden
                         // sein (siehe oben) — dann fehlt jeder Bezug für diese
                         // Position, sie wird übersprungen statt einen losgelösten
-                        // Kaufeintrag anzulegen.
-                        guard let einkaufsvorgangFrisch else { continue }
-                        geschaeftFuerPreispunkt = einkaufsvorgangFrisch.geschaeft
+                        // Kaufeintrag anzulegen. Ebenso, falls das soeben zugewiesene
+                        // Geschäft zwischenzeitlich gelöscht wurde (Geschäfts-Pflicht).
+                        guard let einkaufsvorgangFrisch, let vorgangGeschaeft = einkaufsvorgangFrisch.geschaeft else { continue }
+                        geschaeftFuerPreispunkt = vorgangGeschaeft
                         // Nur die operative Buchungszeile: existiert bereits ein
                         // passender ``KaufEintrag`` (Artikel wurde auf der Liste
                         // abgehakt), bleibt er unverändert bis auf das vom Beleg
@@ -435,28 +449,33 @@ struct BelegScanView: View {
                     case .geschaeft, .unbekannt:
                         // Kein laufender Einkauf, also keine operative Rolle — hier
                         // entsteht ausschließlich ein ``Preispunkt``, kein ``KaufEintrag``.
+                        // Geschäfts-Pflicht: ohne (noch aufgelöstes) Geschäft keine Position.
+                        guard let erkanntesGeschaeftFrisch else { continue }
                         geschaeftFuerPreispunkt = erkanntesGeschaeftFrisch
                     }
 
-                    // Folgearbeit zu GitHub #47/#116: nur ein Alias- oder bereits
-                    // bekannter Produktname-Treffer bringt an dieser Stelle schon
-                    // ein `produkt` mit (siehe ``ArtikelZuordnungsService``). Bei
+                    // Folgearbeit zu GitHub #47/#116: nur ein bereits bekannter
+                    // Produktname-Treffer bringt an dieser Stelle schon ein
+                    // `produkt` mit (siehe ``ArtikelZuordnungsService``). Bei
                     // Substring-/KI-Treffer oder manueller Artikel-Zuweisung ohne
-                    // Produktwahl (``zuordnungsQuelle != .alias``) sonst automatisch
-                    // ein neues, eigenständiges Produkt auflösen/anlegen statt im
-                    // geteilten Standardprodukt des Artikels zu landen — siehe
-                    // `docs/ARTIKEL_PRODUKT_MODELL.md` → „Automatische Neuanlage
-                    // beim Belegscan”. Hat der Nutzer einen Klarname eingegeben,
-                    // wird selbst bei einem Alias-Treffer ein eigenes Produkt
-                    // aufgelöst/angelegt (GitHub #121).
-                    if produkt == nil, let artikel,
-                       positionsQuelleReferenzen[index] != .alias || !getrimmterProduktKlarname.isEmpty {
+                    // Produktwahl sonst automatisch ein neues, eigenständiges
+                    // Produkt auflösen/anlegen statt im geteilten Standardprodukt
+                    // des Artikels zu landen — siehe `docs/ARTIKEL_PRODUKT_MODELL.md`
+                    // → „Automatische Neuanlage beim Belegscan”. Legt bei Bedarf
+                    // auch gleich den passenden ``Produktname`` an (GitHub #128) —
+                    // ersetzt das frühere separate ``ArtikelAlias/lernen(...)``.
+                    if produkt == nil, let artikel {
                         let klarname = getrimmterProduktKlarname.isEmpty ? erkannterName : getrimmterProduktKlarname
                         produkt = Produkt.aufgeloestesOderNeuesProdukt(
                             klarname: klarname, erkannterName: erkannterName, artikel: artikel,
                             geschaeft: geschaeftFuerPreispunkt, context: modelContext
                         )
                     }
+                    // Produkt-Pflicht (siehe ``Preispunkt``-Typ-Doku): ohne Artikel-
+                    // Zuordnung entsteht kein Produkt, also auch kein Preispunkt für
+                    // diese Position — die operative ``KaufEintrag``-Buchungszeile
+                    // oben bleibt davon unberührt.
+                    guard let produktFuerPreispunkt = produkt else { continue }
 
                     // Tages-Kollision (GitHub #76-Folgearbeit): Anwender hat „Bisherigen
                     // behalten" gewählt → kein neuer Preispunkt für diese Position.
@@ -465,23 +484,16 @@ struct BelegScanView: View {
                     let behalteBestehenden = position.bestehenderPreisHeute != nil && position.behalteBestehendenPreisHeute
                     if position.bestehenderPreisHeute != nil, !behalteBestehenden,
                        let vorhandenerPunkt = PreispunktService.vorhandenerPunktHeute(
-                           artikel: artikel, produkt: produkt, geschaeft: geschaeftFuerPreispunkt, amDatum: belegDatum, context: modelContext
+                           produkt: produktFuerPreispunkt, geschaeft: geschaeftFuerPreispunkt, amDatum: belegDatum, context: modelContext
                        ) {
                         PreispunktService.ersetzeVorhandenenPunkt(vorhandenerPunkt, context: modelContext)
                     }
                     if !behalteBestehenden {
                         PreispunktService.erfassen(
-                            preis: preis, artikel: artikel, produkt: produkt, geschaeft: geschaeftFuerPreispunkt, datum: belegDatum,
-                            produktName: produktName, alternativerName: neuerAlternativerName, nameFallback: name, context: modelContext
+                            preis: preis, produkt: produktFuerPreispunkt, geschaeft: geschaeftFuerPreispunkt, datum: belegDatum,
+                            produktName: produktName, alternativerName: neuerAlternativerName, context: modelContext
                         )
                     }
-                    // Lernt sowohl einen expliziten Alias (falls der Anwender den
-                    // Namen zwecks Zuordnung geändert hat) als auch eine reine
-                    // Artikel-Zuordnung ohne Alias — ohne Wirkung, wenn keins von
-                    // beidem vorliegt (siehe ``ArtikelAlias/lernen(...)``).
-                    ArtikelAlias.lernen(
-                        erkannterName: erkannterName, alternativerName: neuerAlternativerName, artikel: artikel, context: modelContext
-                    )
                 }
             }
             if istEigenerTab {
@@ -507,10 +519,9 @@ struct BelegScanView: View {
     }
 
     /// Der Text im „Artikel“-Feld weicht vom rohen erkannten Namen ab (manuell
-    /// korrigiert oder aus ``ArtikelAlias/passend(fuerErkannterName:in:)``
-    /// vorbelegt) → als Alias übernehmen (``ArtikelAlias/lernen(erkannterName:alternativerName:artikel:context:)``),
-    /// damit spätere Belegscans desselben Produkts ihn wiederfinden (siehe
-    /// `docs/BELEGSCAN.md`).
+    /// korrigiert) → als ``Preispunkt/alternativerName`` übernehmen, damit die
+    /// Preishistorie den vom Nutzer bestätigten Namen statt des rohen Bon-Texts
+    /// anzeigt (siehe ``Preispunkt/anzeigeName``).
     private func leiteAlternativenNamenAb(eingegeben: String, erkannt: String) -> String? {
         guard !erkannt.isEmpty, eingegeben.localizedCaseInsensitiveCompare(erkannt) != .orderedSame else { return nil }
         return eingegeben
@@ -551,7 +562,7 @@ struct BelegScanView: View {
 /// „Shampoo”). `produktKlarname` (editierbar, GitHub #121) benennt das konkrete
 /// Produkt menschenlesbar (z.B. „Sebamed Urea 5%”) — von der KI vorbelegt oder
 /// leer. `zugeordneterArtikel` ist bereits beim Einlesen über
-/// ``ArtikelZuordnungsService/zuordnen(erkannterName:bekannteAliase:alleArtikel:geschaeft:bekannteProduktnamen:)``
+/// ``ArtikelZuordnungsService/textBasierteZuordnung(erkannterName:alleArtikel:geschaeft:bekannteProduktnamen:)``
 /// ermittelt (siehe ``BelegScanView/verarbeite(bild:)``).
 private struct BearbeitbarePosition: Identifiable {
     let id = UUID()
@@ -628,6 +639,7 @@ private struct AufnahmeAnsicht: View {
     let geschaeftName: String
     @Binding var ausgewaehltesFoto: PhotosPickerItem?
     let kameraOeffnen: () -> Void
+    let dateiAuswahlOeffnen: () -> Void
 
     var body: some View {
         VStack(spacing: 16) {
@@ -638,8 +650,8 @@ private struct AufnahmeAnsicht: View {
                     Label("Beleg scannen", systemImage: "doc.text.viewfinder")
                 } description: {
                     Text(geschaeftName.isEmpty
-                         ? "Scanne den Kassenbon oder wähle ein Foto aus deiner Mediathek. Das Geschäft wird nach Möglichkeit automatisch erkannt."
-                         : "Scanne den Kassenbon von „\(geschaeftName)“ oder wähle ein Foto aus deiner Mediathek.")
+                         ? "Scanne den Kassenbon, wähle ein Foto aus deiner Mediathek oder aus den Dateien. Das Geschäft wird nach Möglichkeit automatisch erkannt."
+                         : "Scanne den Kassenbon von „\(geschaeftName)“, wähle ein Foto aus deiner Mediathek oder aus den Dateien.")
                 } actions: {
                     VStack(spacing: 12) {
                         if VNDocumentCameraViewController.isSupported {
@@ -647,6 +659,8 @@ private struct AufnahmeAnsicht: View {
                                 .buttonStyle(.glass)
                         }
                         PhotosPicker("Aus Fotomediathek wählen", selection: $ausgewaehltesFoto, matching: .images)
+                            .buttonStyle(.glass)
+                        Button("Aus Dateien wählen", action: dateiAuswahlOeffnen)
                             .buttonStyle(.glass)
                     }
                 }
@@ -751,6 +765,7 @@ private struct ErgebnisListe: View {
             .safeAreaInset(edge: .bottom) {
                 Button("Preise übernehmen", action: uebernehmen)
                     .buttonStyle(.glass)
+                    .disabled(erkanntesGeschaeft == nil)
                     .padding()
             }
         }

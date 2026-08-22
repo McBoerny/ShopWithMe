@@ -21,6 +21,7 @@ struct ProduktEditView: View {
 
     @State private var zeigeArtikelAuswahl = false
     @State private var zeigeDatenpunkte = false
+    @State private var neuerAlternativerKlarname = ""
 
     init(produkt: Produkt, istNeu: Bool) {
         self.produkt = produkt
@@ -73,6 +74,26 @@ struct ProduktEditView: View {
                     }
                 } footer: {
                     Text("Menschenlesbarer Klarname des Produkts, z.\u{202f}B. \u{201e}Paradontol Zahncreme\u{201c} — unabhängig vom geschäftsspezifischen Bon-Text.")
+                }
+
+                if !istNeu {
+                    Section {
+                        ForEach(produkt.alternativeKlarnamen, id: \.self) { name in
+                            Text(name)
+                        }
+                        .onDelete(perform: alternativerKlarnameEntfernen)
+
+                        HStack {
+                            TextField("Alternativer Name, z.B. \"Andechser Vollmilch fett\"", text: $neuerAlternativerKlarname)
+                                .onSubmit(alternativenKlarnamenHinzufuegen)
+                            Button("Hinzufügen", action: alternativenKlarnamenHinzufuegen)
+                                .disabled(neuerAlternativerKlarname.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        }
+                    } header: {
+                        Text("Alternative Namen")
+                    } footer: {
+                        Text("Zusätzliche Anzeigenamen für dieses Produkt, geschäftsunabhängig — im Unterschied zu den geschäftsspezifischen Bon-Namen unten.")
+                    }
                 }
 
                 if !istNeu && !produktnamen.isEmpty {
@@ -135,6 +156,10 @@ struct ProduktEditView: View {
             }
             .navigationTitle(istNeu ? "Neues Produkt" : produkt.name)
             .navigationBarTitleDisplayMode(.inline)
+            .onChange(of: produkt.name) { _, _ in
+                guard !istNeu else { return }
+                produkt.markiereGeaendert()
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Abbrechen") { dismiss() }
@@ -176,6 +201,25 @@ struct ProduktEditView: View {
         for index in indexSet {
             modelContext.delete(produktnamen[index])
         }
+    }
+
+    /// Analog ``ArtikelEditView/alternativenNamenHinzufuegen()`` — reine,
+    /// pro Produkt gepflegte Liste ohne globale Eindeutigkeitsprüfung.
+    private func alternativenKlarnamenHinzufuegen() {
+        let getrimmt = neuerAlternativerKlarname.trimmingCharacters(in: .whitespacesAndNewlines)
+        defer { neuerAlternativerKlarname = "" }
+        guard !getrimmt.isEmpty,
+              !produkt.alternativeKlarnamen.contains(where: { $0.localizedCaseInsensitiveCompare(getrimmt) == .orderedSame })
+        else { return }
+        produkt.alternativeKlarnamen.append(getrimmt)
+    }
+
+    private func alternativerKlarnameEntfernen(at indexSet: IndexSet) {
+        var aktuelle = produkt.alternativeKlarnamen
+        for index in indexSet.sorted(by: >) {
+            aktuelle.remove(at: index)
+        }
+        produkt.alternativeKlarnamen = aktuelle
     }
 }
 

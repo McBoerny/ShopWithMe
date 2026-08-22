@@ -38,9 +38,11 @@ feststehendes Geschäft, siehe „Kein geschäftsloser Einstieg“ unten.
 | Kontext | `BelegScanKontext` (`.einkaufsvorgang`/`.geschaeft`/`.unbekannt`) | `geschaeft: Geschaeft` — immer feststehend, kein geschäftsloser Fall |
 | Grundpreis | kommt auf Kassenbons praktisch nicht vor | Preisschilder zeigen oft zusätzlich einen Grundpreis (z.B. „1,99 € / 100g“) — die KI-Instruktion weist explizit an, ausschließlich den Verkaufspreis zurückzugeben, nicht den Grundpreis |
 
-Mitlern-Logik (`ArtikelAlias.passend(fuerErkannterName:in:)`), Artikel-Namensabgleich
-(`passendesArtikel`) und `alternativerName`-Ableitung sind identisch zum Belegscan
-übernommen (siehe `docs/BELEGSCAN.md` → „Mitlernen“/„Übernahme“).
+Mitlern-Logik (`Produktname.passend(fuerErkannterName:bevorzugtesGeschaeft:in:)`,
+GitHub #128, vormals `ArtikelAlias.passend`) läuft geschäftsspezifisch (diese
+Ansicht hat immer ein festes Geschäft) statt geschäftsunabhängig, sonst analog
+zum Belegscan — ebenso Artikel-Namensabgleich (`passendesArtikel`) und
+`alternativerName`-Ableitung (siehe `docs/BELEGSCAN.md` → „Mitlernen“/„Übernahme“).
 
 ## Kein geschäftsloser Einstieg (bewusste Entscheidung)
 

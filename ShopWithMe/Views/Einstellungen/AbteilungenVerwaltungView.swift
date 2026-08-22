@@ -31,8 +31,12 @@ struct AbteilungenVerwaltungView: View {
                 NavigationLink {
                     AbteilungBearbeitenView(kategorie: kategorie)
                 } label: {
-                    Label(kategorie.name, systemImage: kategorie.standardSymbol)
-                        .foregroundStyle(Color(hex: kategorie.standardFarbeHex))
+                    Label {
+                        Text(kategorie.name)
+                    } icon: {
+                        Image(systemName: kategorie.standardSymbol)
+                            .foregroundStyle(Color(hex: kategorie.standardFarbeHex))
+                    }
                 }
             }
         }
@@ -117,6 +121,9 @@ private struct AbteilungBearbeitenView: View {
         }
         .navigationTitle(kategorie.name)
         .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: kategorie.name) { _, _ in kategorie.markiereGeaendert() }
+        .onChange(of: kategorie.standardSymbol) { _, _ in kategorie.markiereGeaendert() }
+        .onChange(of: kategorie.standardFarbeHex) { _, _ in kategorie.markiereGeaendert() }
         .sheet(isPresented: $zeigeArtikelHinzufuegen) {
             ArtikelZuAbteilungHinzufuegenSheet(kategorie: kategorie)
         }

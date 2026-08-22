@@ -71,6 +71,18 @@ final class Artikel {
     var erstelltAm: Date
     /// Optionale, dauerhafte Notiz, z.B. bevorzugte Marke.
     var notiz: String?
+    /// Rohwert für ``alternativeNamen`` — durch `\n` getrennt gespeichert.
+    /// Additiv-optional, analog ``Geschaeft/alternativeNamenRaw``.
+    private var alternativeNamenRaw: String?
+    /// Generische Synonyme dieses Artikels (z.B. „Fettreiche Milch" für
+    /// „Vollmilch") — geschäfts- und produktunabhängig, frei vom Nutzer
+    /// gepflegt (``ArtikelEditView``) und Teil der Substring-Matchstufe in
+    /// ``ArtikelZuordnungsService`` (Nachfolge von `ArtikelAlias`, siehe
+    /// `docs/ARTIKEL_PRODUKT_MODELL.md`).
+    var alternativeNamen: [String] {
+        get { (alternativeNamenRaw ?? "").split(separator: "\n").map(String.init) }
+        set { alternativeNamenRaw = newValue.isEmpty ? nil : newValue.joined(separator: "\n") }
+    }
 
     /// Die Einkaufslisten-Mitgliedschaften dieses Artikels — je ``Einkaufsliste``,
     /// auf der er aktuell steht, ein Eintrag (siehe ``EinkaufslistenEintrag``). Wird
@@ -87,12 +99,6 @@ final class Artikel {
     /// ``Geschaeft/einkaufsvorgaenge`` beschrieben.
     @Relationship(deleteRule: .nullify, inverse: \KaufEintrag.artikel)
     var kaufEintraege: [KaufEintrag] = []
-    /// Preishistorie (``Preispunkt``, GitHub #76), die diesen Artikel
-    /// referenziert — inverse zu ``Preispunkt/artikel``. Nullify statt Cascade,
-    /// dieselbe Begründung wie ``kaufEintraege`` (``Preispunkt/artikelNameSnapshot``
-    /// hält den Namen dauerhaft fest).
-    @Relationship(deleteRule: .nullify, inverse: \Preispunkt.artikel)
-    var preispunkte: [Preispunkt] = []
     /// Konkrete Produkte dieses Artikels (GitHub #47, z.B. "Odol"/"Paradontol"
     /// für "Zahnpasta") — inverse zu ``Produkt/artikel``. Kaskadierend: ein
     /// Produkt ist ohne seinen Artikel bedeutungslos (analog
@@ -123,6 +129,18 @@ final class Artikel {
         set { mengenSchrittRaw = newValue }
     }
 
+    /// Rohspeicher für ``lamportZaehler`` — additiv optional, siehe
+    /// ``GeschaeftTyp/lamportZaehler``.
+    private var lamportZaehlerRaw: UInt64?
+    /// Logischer Zeitstempel der letzten Änderung an ``name``/``einheit``/
+    /// ``mengenSchritt`` — Grundlage dafür, dass eine Umbenennung/
+    /// Mengenänderung auch bereits synchronisierte Geräte erreicht
+    /// (`SyncSnapshotImportService.mergeArtikel`); ``symbolName``/``farbeHex``
+    /// haben aktuell keinen Bearbeitungs-Pfad für bestehende Artikel und
+    /// bleiben deshalb bewusst außen vor. Siehe ``GeschaeftTyp/lamportZaehler``
+    /// für die volle Begründung.
+    var lamportZaehler: UInt64 { lamportZaehlerRaw ?? 0 }
+
     init(
         name: String,
         symbolName: String,
@@ -143,9 +161,27 @@ final class Artikel {
         self.einheitRaw = einheit.rawValue
         self.mengenSchrittRaw = mengenSchritt
     }
+
+    /// Aufgerufen, wenn der Anwender ``name``/``einheit``/``mengenSchritt``
+    /// dieses bereits bestehenden Artikels ändert (siehe `ArtikelEditView`) —
+    /// nie bei bloßer Neuanlage, siehe ``GeschaeftTyp/markiereGeaendert()``.
+    func markiereGeaendert() {
+        lamportZaehlerRaw = LamportClock.naechsterZaehler()
+    }
+
+    /// Übernimmt beim Sync-Merge einen tatsächlich neueren Zählerstand, siehe
+    /// ``GeschaeftTyp/uebernehmeLamportZaehler(_:)``.
+    func uebernehmeLamportZaehler(_ fremderZaehler: UInt64) {
+        lamportZaehlerRaw = fremderZaehler
+    }
 }
 
 extension Artikel {
+    /// Preishistorie über alle ``produkte`` dieses Artikels hinweg — abgeleitet,
+    /// kein eigenes gespeichertes Feld mehr (``Preispunkt`` hängt seit der
+    /// Produkt-Pflicht nur noch an ``Produkt``, siehe dort).
+    var preispunkte: [Preispunkt] { produkte.flatMap(\.preispunkte) }
+
     /// Kategorien, denen dieser Artikel zugeordnet ist — ein Artikel kann mehreren
     /// gleichzeitig angehören (z.B. "Süßigkeiten" und "Geschenke"). Die erste
     /// Kategorie gilt als führend und bleibt automatisch in ``kategorie``
@@ -215,6 +251,20 @@ extension Artikel {
         return kandidaten[0]
     }
 
+    /// Merkt sich `name` als zusätzlichen ``alternativeNamen``-Eintrag dieses
+    /// Artikels, falls er weder dem eigentlichen ``name`` noch einem bereits
+    /// bekannten alternativen Namen entspricht (kein Duplikat) — analog
+    /// ``Geschaeft/alternativenNamenLernen(_:)``. Genutzt für den
+    /// additiven Sync-Merge (``SyncSnapshotImportService``, GitHub #128).
+    func alternativenNamenLernen(_ name: String) {
+        let getrimmt = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !getrimmt.isEmpty,
+              getrimmt.localizedCaseInsensitiveCompare(self.name) != .orderedSame,
+              !alternativeNamen.contains(where: { $0.localizedCaseInsensitiveCompare(getrimmt) == .orderedSame })
+        else { return }
+        alternativeNamen.append(getrimmt)
+    }
+
     /// Ein anderer Artikel unter `alle` mit demselben Namen (case-insensitiv,
     /// nach Trimmen — dieselbe Vergleichsregel wie beim Sync-Merge, siehe
     /// `docs/DATENSYNCHRONISATION.md` §4.2), `ausgenommen` selbst — `nil`,
@@ -224,10 +274,9 @@ extension Artikel {
     /// Einträge auf derselben Einkaufsliste — der namensbasierte Merge greift
     /// nur beim Import eines fremden Sync-Snapshots, nie auf rein lokal
     /// entstandenen Dubletten. Deshalb bewusst kein technisch erzwungenes
-    /// Verbot (kein `throw`, kein Speicher-Block wie bei
-    /// ``ArtikelAlias/manuellHinzufuegen(name:zu:alle:context:)``) — anders
-    /// als bei Alias-Namen ist der Artikel-Name außerhalb des Sync-Kontexts
-    /// kein technisch eindeutiges Merkmal, nur meist ungewollt doppelt.
+    /// Verbot (kein `throw`, kein Speicher-Block) — der Artikel-Name ist
+    /// außerhalb des Sync-Kontexts kein technisch eindeutiges Merkmal, nur
+    /// meist ungewollt doppelt.
     static func dublette(name: String, alle: [Artikel], ausgenommen: Artikel?) -> Artikel? {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return nil }

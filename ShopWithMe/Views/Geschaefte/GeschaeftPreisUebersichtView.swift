@@ -6,9 +6,10 @@ import Charts
 /// zwei Sektionen direkt in ``GeschaeftDetailView`` eingebettet) — zeigt pro
 /// jemals hier gekauftem ``Artikel`` die Preisspanne (niedrigster–höchster
 /// erfasster Preis, ``ArtikelPreisSpanne/gruppieren(_:)``). Ein Antippen öffnet
-/// ``ArtikelPreisVerlaufView`` mit Preisdiagramm und Einzelpositionen.
-/// Belegpositionen ohne Artikel-Zuordnung erscheinen separat darunter — siehe
-/// `docs/BELEGSCAN.md`.
+/// ``ArtikelPreisVerlaufView`` mit Preisdiagramm und Einzelpositionen. Seit der
+/// Produkt-Pflicht (siehe ``Preispunkt``-Typ-Doku) hat jeder Preispunkt eine
+/// Artikel-Zuordnung — die frühere separate „Ohne Artikel-Zuordnung"-Sektion
+/// entfällt.
 struct GeschaeftPreisUebersichtView: View {
     let geschaeft: Geschaeft
     @Query private var preisHistorie: [Preispunkt]
@@ -26,10 +27,6 @@ struct GeschaeftPreisUebersichtView: View {
         ArtikelPreisSpanne.gruppieren(preisHistorie)
     }
 
-    private var eintraegeOhneArtikel: [Preispunkt] {
-        preisHistorie.filter { $0.artikel == nil }
-    }
-
     var body: some View {
         List {
             if !artikelPreisSpannen.isEmpty {
@@ -44,21 +41,7 @@ struct GeschaeftPreisUebersichtView: View {
                 } footer: {
                     Text("Zeigt pro Artikel die Preisspanne aller hier gescannten Käufe. Zum Verlauf mit Preisdiagramm antippen.")
                 }
-            }
-
-            if !eintraegeOhneArtikel.isEmpty {
-                Section {
-                    ForEach(eintraegeOhneArtikel) { eintrag in
-                        PreisHistorieZeile(eintrag: eintrag, zeigeArtikel: true)
-                    }
-                } header: {
-                    Text("Ohne Artikel-Zuordnung")
-                } footer: {
-                    Text("Diese Belegpositionen sind noch keinem Artikel zugeordnet. Nach rechts wischen, um sie über „Zuordnen“ einem (ggf. neuen) Artikel zuzuweisen.")
-                }
-            }
-
-            if artikelPreisSpannen.isEmpty && eintraegeOhneArtikel.isEmpty {
+            } else {
                 ContentUnavailableView(
                     "Noch keine Preise",
                     systemImage: "chart.line.uptrend.xyaxis",

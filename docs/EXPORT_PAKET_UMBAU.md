@@ -33,7 +33,8 @@ tombstones.json  Löschungen (Geschäft/Artikel/ArtikelKategorie/Einkaufsliste/
                  mit vorgaenge.json gebündelt (siehe „Warum eine eigene
                  tombstones.json" unten).
 stamm.json       GeschaeftTyp, ArtikelKategorie, Geschaeft, Artikel,
-                 Einkaufsliste, ArtikelAlias.
+                 Einkaufsliste, Produkt, Produktname (ArtikelAlias seit
+                 GitHub #128 abgelöst, siehe docs/ARTIKEL_PRODUKT_MODELL.md).
 listen.json      EinkaufslistenEintrag — seit GitHub #85 eigene Datei statt
                  Bündelung mit stamm.json, siehe unten.
 lernen.json      WarengruppenDistanz.

@@ -6,27 +6,42 @@ import SwiftData
 /// `docs/BELEGSCAN.md`, GitHub #76). Entsteht ausschließlich, wenn Belegscan
 /// oder Preisschild-Scan tatsächlich einen Preis erfassen, und nur, wenn sich
 /// dieser Preis gegenüber dem zuletzt bekannten ``Preispunkt`` für dasselbe
-/// (``artikel``, ``geschaeft``)-Paar unterscheidet (Slowly-Changing-
+/// (``produkt``, ``geschaeft``)-Paar unterscheidet (Slowly-Changing-
 /// Dimension-Muster „nur Änderungen") — reines Abhaken ohne Preis und ein
 /// unveränderter Preis erzeugen keinen neuen Eintrag, siehe
-/// ``PreispunktService/erfassen(preis:artikel:geschaeft:datum:produktName:alternativerName:context:)``.
+/// ``PreispunktService/erfassen(preis:produkt:geschaeft:datum:produktName:alternativerName:context:)``.
 ///
 /// Anders als ``KaufEintrag`` ohne Bezug zu einem ``Einkaufsvorgang`` — ein
 /// Preis ist auch ohne laufenden Einkauf sinnvoll (Preisschild-Scan).
+///
+/// **Produkt-Pflicht:** ein ``Preispunkt`` hängt fachlich nie direkt an einem
+/// ``Artikel``, sondern immer an einem konkreten ``Produkt`` (``artikel`` ist
+/// nur noch die abgeleitete ``produkt``/``Produkt/artikel``-Kette, siehe
+/// ``artikel``). Ein Preis ganz ohne Produkt-Zuordnung („Ohne
+/// Artikel-Zuordnung", der frühere Freitext-Fall bei Scans ohne Treffer) wird
+/// nicht mehr angelegt — ``PreispunktService`` erzwingt ein aufgelöstes
+/// ``Produkt`` bereits vor der Erfassung. ``produkt`` bleibt im Modell
+/// dennoch optional, da SwiftData-Relationships auf Storage-Ebene ohnehin
+/// immer nullable sind (kein struktureller Storage-Vorteil durch ein
+/// non-optionales Feld) — siehe ``geschaeft`` für dieselbe Begründung.
 @Model
 final class Preispunkt {
     /// Eindeutige Kennung.
     var id: UUID
-    /// Der Artikel, dessen Preis beobachtet wurde (kann `nil` werden, wenn der
-    /// Artikel später gelöscht wird).
-    var artikel: Artikel?
     /// Das konkrete Produkt, dessen Preis beobachtet wurde (GitHub #47) —
-    /// inverse zu ``Produkt/preispunkte``. Fachlich der eigentliche
-    /// Preisträger (siehe `docs/ARTIKEL_PRODUKT_MODELL.md`); ``artikel``
-    /// bleibt zusätzlich gepflegt als der über viele bestehende Stellen
-    /// bereits genutzte, direkte Bezug zum übergreifenden Artikel.
+    /// inverse zu ``Produkt/preispunkte``. Der eigentliche Preisträger (siehe
+    /// `docs/ARTIKEL_PRODUKT_MODELL.md`) — seit GitHub #131 die einzige
+    /// Zuordnung, ``artikel`` ist nur noch davon abgeleitet.
     var produkt: Produkt?
-    /// Das Geschäft, in dem der Preis beobachtet wurde.
+    /// Das Geschäft, in dem der Preis beobachtet wurde. Im Modell weiterhin
+    /// optional (SwiftData-Relationships sind auf Storage-Ebene ohnehin immer
+    /// optional, siehe `docs/ARTIKEL_PRODUKT_MODELL.md`) — die Geschäfts-
+    /// Pflicht bei der Preiserfassung (GitHub #128, Pseudo-Geschäft bei
+    /// Bedarf) wird bewusst nur auf Service-Ebene durchgesetzt
+    /// (``PreispunktService/erfassen(preis:produkt:geschaeft:datum:produktName:alternativerName:context:)``),
+    /// nicht hier — ein non-optionales Modellfeld hätte hier ohne echten
+    /// Storage-Vorteil eine riskante strukturelle SwiftData-Migration
+    /// erzwungen.
     var geschaeft: Geschaeft?
     /// Der zuletzt beobachtete Preis.
     var preis: Decimal
@@ -38,16 +53,21 @@ final class Preispunkt {
     var produktName: String?
     /// Vom Nutzer vergebener alternativer Anzeigename, siehe ehemals
     /// `KaufEintrag.alternativerName`. Hat Vorrang vor ``produktName``/
-    /// ``artikel``/``artikelNameSnapshot`` — siehe ``anzeigeName``.
+    /// ``produkt`` — siehe ``anzeigeName``.
     var alternativerName: String?
-    /// Name des Artikels zum Beobachtungszeitpunkt (dauerhafter Schnappschuss).
-    var artikelNameSnapshot: String
-    /// Name des Geschäfts zum Beobachtungszeitpunkt (dauerhafter Schnappschuss).
+    /// Name des Geschäfts zum Beobachtungszeitpunkt (dauerhafter Schnappschuss)
+    /// — bleibt bestehen, weil der Peer-Sync ohne zentrale Autorität einen
+    /// Preispunkt empfangen kann, dessen ``geschaeft`` auf diesem Gerät
+    /// niemals auflösbar ist (das referenzierte Geschäft wurde beim Sender
+    /// gelöscht, bevor es je zu diesem Gerät synchronisiert wurde) — siehe
+    /// `docs/DATENSYNCHRONISATION.md` §4.5. ``produkt``/``Produkt/artikel``
+    /// brauchen kein Pendant: ``Produkt`` kaskadiert seit derselben
+    /// Produkt-Pflicht mit ``Preispunkt``, ein lebender Preispunkt hat also
+    /// immer ein lebendes ``produkt``.
     var geschaeftNameSnapshot: String
 
     init(
-        artikel: Artikel?,
-        produkt: Produkt? = nil,
+        produkt: Produkt?,
         geschaeft: Geschaeft?,
         preis: Decimal,
         datum: Date = Date(),
@@ -55,31 +75,36 @@ final class Preispunkt {
         alternativerName: String? = nil
     ) {
         self.id = UUID()
-        self.artikel = artikel
         self.produkt = produkt
         self.geschaeft = geschaeft
         self.preis = preis
         self.datum = datum
         self.produktName = produktName
         self.alternativerName = alternativerName
-        self.artikelNameSnapshot = artikel?.name ?? ""
         self.geschaeftNameSnapshot = geschaeft?.name ?? ""
     }
 }
 
 extension Preispunkt {
-    /// Der Name von ``artikel``, sofern er noch tatsächlich existiert (nicht
-    /// bereits eine baumelnde Referenz auf einen gelöschten Artikel ist —
-    /// siehe `docs/DATABASE_CONCURRENCY.md`), sonst der dauerhafte
-    /// ``artikelNameSnapshot``.
-    var artikelNameSicher: String {
-        guard let artikel, let context = modelContext, context.existiertNochImStore(artikel) else {
-            return artikelNameSnapshot
+    /// Der übergreifende Artikel des ``produkt``s — abgeleitet, kein eigenes
+    /// gespeichertes Feld mehr (siehe Typ-Doku „Produkt-Pflicht“).
+    var artikel: Artikel? { produkt?.artikel }
+
+    /// Der Name von ``produkt``, sofern es noch tatsächlich existiert (nicht
+    /// bereits eine baumelnde Referenz auf ein gelöschtes Produkt ist — siehe
+    /// `docs/DATABASE_CONCURRENCY.md`), sonst der rohe ``produktName`` vom
+    /// Scan, falls vorhanden — beides sichere, keine baumelnde Referenz
+    /// lesende Quellen (anders als früher gibt es keinen dauerhaften
+    /// Namens-Schnappschuss mehr, da ``produkt`` einen lebenden Preispunkt
+    /// dank Cascade-Löschregel nie überlebt).
+    var produktNameSicher: String {
+        guard let produkt, let context = modelContext, context.existiertNochImStore(produkt) else {
+            return produktName ?? ""
         }
-        return artikel.name
+        return produkt.name
     }
 
-    /// Wie ``artikelNameSicher``, für ``geschaeft``/``geschaeftNameSnapshot``.
+    /// Wie ``produktNameSicher``, für ``geschaeft``/``geschaeftNameSnapshot``.
     var geschaeftNameSicher: String {
         guard let geschaeft, let context = modelContext, context.existiertNochImStore(geschaeft) else {
             return geschaeftNameSnapshot
@@ -89,12 +114,12 @@ extension Preispunkt {
 
     /// Der für Anzeigen (z.B. `PreisHistorieZeile`) tatsächlich zu verwendende
     /// Artikelname, mit ``alternativerName`` an oberster Priorität, sonst
-    /// ``produktName`` (Original vom Kassenbon), dann ``artikelNameSicher``.
+    /// ``produktName`` (Original vom Kassenbon), dann ``produktNameSicher``.
     var anzeigeName: String {
         if let alternativerName, !alternativerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return alternativerName
         }
-        let name = produktName ?? artikelNameSicher
+        let name = produktName ?? produktNameSicher
         return name.isEmpty ? "Unbekannter Artikel" : name
     }
 }

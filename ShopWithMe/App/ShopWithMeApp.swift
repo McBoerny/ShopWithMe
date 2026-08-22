@@ -3,9 +3,9 @@ import SwiftData
 
 /// Einstiegspunkt der App.
 ///
-/// Baut den ``ModelContainer`` mit dem vollständigen Datenmodell-Schema und dem
-/// ``ShopWithMeMigrationPlan`` auf — immer am SwiftData-Standardpfad (GitHub #54)
-/// — und sät beim ersten Start die Standardkategorien via ``SeedData``.
+/// Baut den ``ModelContainer`` mit dem vollständigen Datenmodell-Schema auf —
+/// immer am SwiftData-Standardpfad (GitHub #54) — und sät beim ersten Start
+/// die Standardkategorien via ``SeedData``.
 @main
 struct ShopWithMeApp: App {
     @StateObject private var modelContainerController: ModelContainerController
@@ -48,10 +48,10 @@ struct ShopWithMeApp: App {
         //
         // GitHub #119: Steht bereits eine Wiederherstellung aus (der Store
         // wurde also in einer vorherigen Sitzung verworfen, siehe
-        // ``oeffneContainer(schema:konfiguration:mitMigrationsplan:)``), MUSS
-        // das VOR dem `loescheStoreDateiFallsAusstehend`-Aufruf ausgelesen
-        // werden — danach ist der Zustand bereits wieder "kein Store" und
-        // nicht mehr von einer regulären Erstinstallation unterscheidbar.
+        // ``oeffneContainer(schema:konfiguration:)``), MUSS das VOR dem
+        // `loescheStoreDateiFallsAusstehend`-Aufruf ausgelesen werden —
+        // danach ist der Zustand bereits wieder "kein Store" und nicht mehr
+        // von einer regulären Erstinstallation unterscheidbar.
         let wiederherstellungAusstehend = SyncErsetzenService.ausstehendeAktion != nil
         // Race-frei HIER gesetzt, synchron und vor `body` (siehe Doku bei
         // `SyncPollingService.ueberspringeRueckkehrerErkennungBeimNaechstenStart`
@@ -64,9 +64,7 @@ struct ShopWithMeApp: App {
         DatabaseDebugLogger.log(.storeOpenStart, details: konfiguration.url.path)
         let container: ModelContainer
         do {
-            container = try Self.oeffneContainer(
-                schema: schema, konfiguration: konfiguration, mitMigrationsplan: !wiederherstellungAusstehend
-            )
+            container = try Self.oeffneContainer(schema: schema, konfiguration: konfiguration)
         } catch {
             // Log ist Best-Effort: `fatalError` beendet den Prozess sofort danach,
             // das asynchrone Schreiben des Log-Eintrags kann daher vereinzelt nicht
@@ -96,13 +94,12 @@ struct ShopWithMeApp: App {
         try? context.save()
     }
 
-    /// Öffnet den `ModelContainer` — bei einem Migrationsfehler (GitHub #119:
-    /// ein Gerät, dessen Store eine Zwischenstufe des additiven Schema-
-    /// Verlaufs vor der ersten echten `MigrationStage` trägt, siehe
-    /// `docs/DECISIONS.md`, "Explizite SwiftData-Migrationslogik ab v1.5")
-    /// ist der Store über SwiftData nicht mehr reparierbar. Einziger Ausweg:
-    /// den unlesbaren Store physisch verwerfen und aus einem Peer-Snapshot
-    /// wiederherstellen (siehe ``SyncErsetzenService``) — anders als
+    /// Öffnet den `ModelContainer` — bei einem Fehler (GitHub #119: ein Store,
+    /// der sich über SwiftData nicht mehr öffnen lässt, z.B. durch
+    /// Beschädigung oder einen inkompatiblen Vorzustand) ist der Store nicht
+    /// mehr reparierbar. Einziger Ausweg: den unlesbaren Store physisch
+    /// verwerfen und aus einem Peer-Snapshot wiederherstellen (siehe
+    /// ``SyncErsetzenService``) — anders als
     /// ``SyncErsetzenService/planeErsetzenDurchPeer(context:)`` OHNE
     /// Vorher-Backup, weil der Store zu diesem Zeitpunkt gar nicht mehr
     /// offen ist. Jeder lokale, noch nicht synchronisierte Stand geht dabei
@@ -110,36 +107,19 @@ struct ShopWithMeApp: App {
     /// Store gar nicht mehr geöffnet werden kann.
     ///
     /// **Bewusst KEIN sofortiger Retry im selben Prozess:** Ein
-    /// zurückliegender fehlgeschlagener Staged-Migration-Versuch scheitert
-    /// bei einem erneuten `ModelContainer`-Aufruf im selben Prozess
-    /// zuverlässig identisch (SwiftData/CoreData behält den
-    /// Migrations-Manager-Zustand offenbar prozessweit bei, unabhängig davon,
-    /// ob der Store-Datei zwischenzeitlich gelöscht wurde — reproduziert bei
-    /// GitHub #119, deckt sich mit Berichten im Apple Developer Forum). Der
-    /// verworfene, für den nächsten Start vorgemerkte Store wird deshalb erst
-    /// beim NÄCHSTEN Prozessstart tatsächlich neu geöffnet.
-    ///
-    /// **`mitMigrationsplan: false` bei bereits ausstehender Wiederherstellung
-    /// (Live-Test-Nachtrag GitHub #119):** Auch ein tatsächlich per
-    /// `destroyPersistentStore` vollständig verworfener, also GARANTIERT
-    /// leerer Store scheiterte auf dem Testgerät beim nächsten
-    /// Prozessstart am selben `Cannot use staged migration with an unknown
-    /// model version`-Fehler, solange `migrationPlan:` übergeben wurde — die
-    /// Staged-Migration-Engine verlangt offenbar zwingend eine erkennbare
-    /// Ausgangsversion, auch für einen frisch angelegten Store ohne jede
-    /// Historie. Ein leerer Store hat aber ohnehin nichts zu migrieren, daher
-    /// öffnet dieser eine Aufruf (ausgelöst über ``wiederherstellungAusstehend``
-    /// in ``init()``) bewusst ohne `migrationPlan:` — umgeht die
-    /// Staged-Migration-Engine für diesen Fall vollständig, statt auf ihr
-    /// korrektes Verhalten bei leeren Stores angewiesen zu sein.
-    private static func oeffneContainer(schema: Schema, konfiguration: ModelConfiguration, mitMigrationsplan: Bool) throws -> ModelContainer {
-        guard mitMigrationsplan else {
-            return try ModelContainer(for: schema, configurations: [konfiguration])
-        }
+    /// zurückliegender fehlgeschlagener Öffnen-Versuch scheitert bei einem
+    /// erneuten `ModelContainer`-Aufruf im selben Prozess zuverlässig
+    /// identisch (SwiftData/CoreData behält internen Zustand offenbar
+    /// prozessweit bei, unabhängig davon, ob die Store-Datei zwischenzeitlich
+    /// gelöscht wurde — reproduziert bei GitHub #119, deckt sich mit
+    /// Berichten im Apple Developer Forum). Der verworfene, für den nächsten
+    /// Start vorgemerkte Store wird deshalb erst beim NÄCHSTEN Prozessstart
+    /// tatsächlich neu geöffnet.
+    private static func oeffneContainer(schema: Schema, konfiguration: ModelConfiguration) throws -> ModelContainer {
         do {
-            return try ModelContainer(for: schema, migrationPlan: SchemaDefinition.migrationPlan, configurations: [konfiguration])
+            return try ModelContainer(for: schema, configurations: [konfiguration])
         } catch {
-            DatabaseDebugLogger.log(.storeOpenFailure, details: "Migration fehlgeschlagen, verwerfe Store für Wiederherstellung beim nächsten Start: \(error)")
+            DatabaseDebugLogger.log(.storeOpenFailure, details: "Öffnen fehlgeschlagen, verwerfe Store für Wiederherstellung beim nächsten Start: \(error)")
             SyncErsetzenService.loescheUnlesbarenStoreUndPlaneWiederherstellung(url: konfiguration.url)
             throw error
         }
