@@ -240,7 +240,7 @@ enum SyncOrdnerService {
     /// identisch aus wie „Datei existiert noch nicht" — ohne die Unterscheidung
     /// unten hätten zwei zeitgleich nicht erreichbare Geräte unabhängig
     /// voneinander unterschiedliche IDs erfunden und sich über den
-    /// Discovery-Schlüssel (``multipeerDiscoveryGruppenSchluessel(fuerGruppenID:)``)
+    /// Gruppenschlüssel (``multipeerGruppenSchluessel(fuerGruppenID:)``)
     /// nie mehr gefunden — silent, ohne jede Fehlermeldung. Nur wenn
     /// `FileManager.fileExists` die Abwesenheit LOKAL bestätigt (nicht bloß
     /// der Lesezugriff scheiterte), gilt „wirklich noch nie angelegt" und eine
@@ -271,7 +271,7 @@ enum SyncOrdnerService {
     /// SDK-Doku ohnehin nur „das Netzwerkprotokoll der App" (max. 15 Zeichen,
     /// Kleinbuchstaben/Ziffern/Bindestrich), nicht eine konkrete
     /// Gruppenzugehörigkeit — dafür ist stattdessen `discoveryInfo`
-    /// vorgesehen (siehe ``multipeerDiscoveryGruppenSchluessel(fuerGruppenID:)``),
+    /// vorgesehen (siehe ``multipeerGruppenSchluessel(fuerGruppenID:)``),
     /// das MultipeerConnectivity explizit für genau diesen Zweck anbietet
     /// ("advertised for browsers to see"). Alle ShopWithMe-Installationen
     /// teilen sich denselben Service-Type; welche Peers tatsächlich zur
@@ -279,18 +279,17 @@ enum SyncOrdnerService {
     /// Gruppen-Schlüssel-Abgleich in ``MultipeerSyncService``.
     static let multipeerServiceType = "swm-sync"
 
-    /// Kurzer, aus ``multipeerGruppenID(in:)`` abgeleiteter Schlüssel für das
-    /// `discoveryInfo`-Dictionary bzw. den Einladungs-Kontext von
-    /// `MCNearbyServiceAdvertiser`/`-Browser` (``MultipeerSyncService``) —
-    /// der eigentliche Gruppen-Trust-Abgleich, seit der Service-Type selbst
-    /// dafür nicht mehr genutzt werden kann (siehe ``multipeerServiceType``).
-    /// Anders als dort kein 15-Zeichen-Limit (TXT-Records erlauben deutlich
-    /// mehr), trotzdem ein Hash statt der rohen ID, um sie nicht im Klartext
-    /// über das lokale Netz zu senden (gleiches Hashing-Muster wie
-    /// ``SyncSnapshotExportService``s Fingerabdruck-Bildung).
-    static func multipeerDiscoveryGruppenSchluessel(fuerGruppenID gruppenID: UUID) -> String {
-        let hash = SHA256.hash(data: Data(gruppenID.uuidString.utf8))
-        let hex = hash.map { String(format: "%02x", $0) }.joined()
-        return String(hex.prefix(16))
+    /// Aus ``multipeerGruppenID(in:)`` abgeleitetes HMAC-Schlüsselmaterial
+    /// für den Challenge-Response-Gruppentrust-Check in
+    /// ``MultipeerSyncService`` (GitHub #97, härtet den früher direkt
+    /// gesendeten Hash-Vergleich). **Verlässt das Gerät nie**: über das
+    /// lokale Netz laufen nur ein pro Advertising-Session neu erzeugter
+    /// Zufalls-Nonce (`discoveryInfo`) sowie ein damit gebildeter HMAC
+    /// (Einladungs-Kontext) — aus beidem lässt sich dieses Schlüsselmaterial
+    /// dank der Einwegeigenschaft von HMAC-SHA256 nicht zurückrechnen, anders
+    /// als beim vorherigen, direkt übertragenen und beliebig oft
+    /// wiederverwendbaren Hash-Wert.
+    static func multipeerGruppenSchluessel(fuerGruppenID gruppenID: UUID) -> SymmetricKey {
+        SymmetricKey(data: Data(gruppenID.uuidString.utf8))
     }
 }

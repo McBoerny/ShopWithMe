@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import SwiftData
 import Testing
@@ -178,13 +179,48 @@ struct MultipeerSyncServiceTests {
     }
 
     @Test
-    func multipeerDiscoveryGruppenSchluesselIstDeterministischUndUnterscheidetGruppen() {
+    func multipeerGruppenSchluesselIstDeterministischUndUnterscheidetGruppen() {
         let gruppenID = UUID()
-        let ersterAufruf = SyncOrdnerService.multipeerDiscoveryGruppenSchluessel(fuerGruppenID: gruppenID)
-        let zweiterAufruf = SyncOrdnerService.multipeerDiscoveryGruppenSchluessel(fuerGruppenID: gruppenID)
-        let andereGruppe = SyncOrdnerService.multipeerDiscoveryGruppenSchluessel(fuerGruppenID: UUID())
+        let ersterAufruf = SyncOrdnerService.multipeerGruppenSchluessel(fuerGruppenID: gruppenID)
+        let zweiterAufruf = SyncOrdnerService.multipeerGruppenSchluessel(fuerGruppenID: gruppenID)
+        let andereGruppe = SyncOrdnerService.multipeerGruppenSchluessel(fuerGruppenID: UUID())
 
-        #expect(ersterAufruf == zweiterAufruf)
-        #expect(ersterAufruf != andereGruppe)
+        func alsData(_ schluessel: SymmetricKey) -> Data { schluessel.withUnsafeBytes { Data($0) } }
+
+        #expect(alsData(ersterAufruf) == alsData(zweiterAufruf))
+        #expect(alsData(ersterAufruf) != alsData(andereGruppe))
+    }
+
+    /// Schützt das in ``MultipeerSyncService`` implementierte Challenge-
+    /// Response-Verfahren (GitHub #97) gegen Regressionen: derselbe Nachweis
+    /// darf nur für exakt Nonce+Schlüssel+Peer-Identität gültig sein, für den
+    /// er gebildet wurde.
+    @Test
+    func challengeResponseNachweisIstAnNonceSchluesselUndPeerGebunden() {
+        let schluessel = SyncOrdnerService.multipeerGruppenSchluessel(fuerGruppenID: UUID())
+        let andererSchluessel = SyncOrdnerService.multipeerGruppenSchluessel(fuerGruppenID: UUID())
+        let nonce = Data((0..<16).map { _ in UInt8.random(in: .min ... .max) })
+        let andererNonce = Data((0..<16).map { _ in UInt8.random(in: .min ... .max) })
+        let peerName = "Testgerät"
+        let andererPeerName = "Anderes Gerät"
+
+        func nachweis(schluessel: SymmetricKey, nonce: Data, peerName: String) -> Data {
+            Data(HMAC<SHA256>.authenticationCode(for: nonce + Data(peerName.utf8), using: schluessel))
+        }
+
+        let gueltig = nachweis(schluessel: schluessel, nonce: nonce, peerName: peerName)
+
+        #expect(HMAC<SHA256>.isValidAuthenticationCode(
+            gueltig, authenticating: nonce + Data(peerName.utf8), using: schluessel
+        ))
+        #expect(!HMAC<SHA256>.isValidAuthenticationCode(
+            gueltig, authenticating: nonce + Data(peerName.utf8), using: andererSchluessel
+        ))
+        #expect(!HMAC<SHA256>.isValidAuthenticationCode(
+            gueltig, authenticating: andererNonce + Data(peerName.utf8), using: schluessel
+        ))
+        #expect(!HMAC<SHA256>.isValidAuthenticationCode(
+            gueltig, authenticating: nonce + Data(andererPeerName.utf8), using: schluessel
+        ))
     }
 }

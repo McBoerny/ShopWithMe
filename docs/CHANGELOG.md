@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.16 (Build 323) — Multipeer-Vertrauensmodell gehärtet (Challenge-Response statt Klartext-Gruppenschlüssel)
+
+GitHub #97: der Gruppen-Schlüssel für den Multipeer-Beschleunigungskanal
+(`MultipeerSyncService`) wanderte bisher als fester, wiederverwendbarer
+Hash-Wert im Klartext über Bonjour `discoveryInfo` bzw. den
+Einladungs-Kontext — ein passiver Mitschnitt in Funkreichweite hätte damit
+dauerhaft in eine fremde Einkaufsgruppe eintreten können. Ersetzt durch ein
+Challenge-Response-Verfahren: der Advertiser broadcastet pro
+Advertising-Session nur einen neuen Zufalls-Nonce, ein browsender Peer sendet
+statt des Schlüssels selbst nur einen daraus und aus seiner eigenen
+`MCPeerID` gebildeten HMAC-SHA256-Nachweis, den der Advertiser konstant-zeitig
+verifiziert (`HMAC<SHA256>.isValidAuthenticationCode`). Das Schlüsselmaterial
+selbst geht dadurch nie mehr über das Netz. Das TLS-Zertifikat selbst wird wie
+zuvor ungeprüft akzeptiert — Vertrauen kommt weiterhin aus dem
+Gruppenschlüssel-Abgleich, nicht aus einer PKI (dokumentierte Restlücke,
+siehe Issue #97 sowie Typ-Doku `MultipeerSyncService.swift`).
+
 ## v0.16 (Build 322) — Mehrere Backup-Versionen, Löschen, Export/Import ins Dateisystem
 
 Backup-Funktion erweitert (Nutzerwunsch): statt eines einzigen, bei jedem

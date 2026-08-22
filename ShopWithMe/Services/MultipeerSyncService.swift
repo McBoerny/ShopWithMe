@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 // MultipeerConnectivity ist ein altes, nicht Sendable-auditiertes ObjC-
 // Framework — `@preconcurrency` unterdrückt die sonst nötige, aber hier nicht
@@ -22,21 +23,41 @@ import SwiftData
 /// Funktioniert nur bei physischer Nähe (WiFi/Bluetooth/AWDL über Bonjour),
 /// nicht übers offene Internet (mDNS ist link-local-scoped).
 ///
-/// **Vertrauensmodell:** Der Bonjour-Service-Type
+/// **Vertrauensmodell (gehärtet, GitHub #97):** Der Bonjour-Service-Type
 /// (``SyncOrdnerService/multipeerServiceType``) ist app-weit fest und sagt
 /// nichts über Gruppenzugehörigkeit — alle ShopWithMe-Installationen
 /// verwenden denselben Type (siehe dortige Typ-Doku, warum das nicht anders
 /// geht: `NSBonjourServices` muss statisch zur Build-Zeit deklariert werden).
-/// Die eigentliche Zugehörigkeit zur selben Einkaufsgruppe prüft
-/// ``gruppenSchluessel`` (aus dem geteilten Sync-Ordner abgeleitet,
-/// ``SyncOrdnerService/multipeerDiscoveryGruppenSchluessel(fuerGruppenID:)``):
-/// auf der Browsing-Seite über `discoveryInfo` (``browser(_:foundPeer:withDiscoveryInfo:)``),
-/// auf der Advertising-Seite über den Einladungs-`context`
-/// (``advertiser(_:didReceiveInvitationFromPeer:withContext:invitationHandler:)``)
-/// — nur bei Übereinstimmung wird überhaupt eingeladen/angenommen. Das
-/// empfangene TLS-Zertifikat selbst wird trotzdem ungeprüft akzeptiert
-/// (``session(_:didReceiveCertificate:fromPeer:certificateHandler:)``), das
-/// Vertrauen kommt aus dem Gruppen-Schlüssel-Abgleich, nicht aus einer PKI.
+/// Die eigentliche Zugehörigkeit zur selben Einkaufsgruppe prüft ein
+/// Challenge-Response-Verfahren auf Basis von ``gruppenSchluessel`` (aus dem
+/// geteilten Sync-Ordner abgeleitetes HMAC-Schlüsselmaterial,
+/// ``SyncOrdnerService/multipeerGruppenSchluessel(fuerGruppenID:)``), das
+/// selbst nie über das Netz geht:
+/// 1. Der Advertiser broadcastet pro Advertising-Session einen neuen,
+///    zufälligen ``discoveryNonce`` über `discoveryInfo`
+///    (``starteAdvertisingUndBrowsing()``) — ein reiner Zufallswert ohne
+///    Rückschluss auf den Schlüssel.
+/// 2. Ein browsender Peer bildet daraus einen an seine eigene `MCPeerID`
+///    gebundenen HMAC-SHA256-Nachweis und sendet NUR diesen als
+///    Einladungs-`context`
+///    (``browser(_:foundPeer:withDiscoveryInfo:)``).
+/// 3. Der Advertiser verifiziert den Nachweis konstant-zeitig gegen seinen
+///    eigenen Nonce/Schlüssel, gebunden an die tatsächliche, vom Framework
+///    gelieferte `MCPeerID` des Einladenden
+///    (``istGueltigerNachweis(_:von:)``,
+///    ``advertiser(_:didReceiveInvitationFromPeer:withContext:invitationHandler:)``)
+///    — nur bei Erfolg wird angenommen.
+///
+/// Ein passiver Mitschnitt liefert damit nie das Schlüsselmaterial selbst
+/// (HMAC ist nicht umkehrbar) und ist wegen der Peer-ID-Bindung nicht gegen
+/// einen anderen Peer wiederverwendbar; ein Replay bleibt nur innerhalb
+/// derselben, noch laufenden Advertising-Session gegen exakt denselben
+/// Advertiser theoretisch möglich (Nonce wechselt bei jedem erneuten
+/// Betreten von `EinkaufenView`) — bewusst dokumentierte Restlücke, siehe
+/// Issue #97. Das empfangene TLS-Zertifikat selbst wird weiterhin ungeprüft
+/// akzeptiert (``session(_:didReceiveCertificate:fromPeer:certificateHandler:)``),
+/// das Vertrauen kommt aus dem beschriebenen Challenge-Response, nicht aus
+/// einer PKI.
 @MainActor
 final class MultipeerSyncService: NSObject, ObservableObject {
     /// Schwache Referenz auf die laufende Instanz, damit
@@ -84,10 +105,16 @@ final class MultipeerSyncService: NSObject, ObservableObject {
     private var session: MCSession?
     private var advertiser: MCNearbyServiceAdvertiser?
     private var browser: MCNearbyServiceBrowser?
-    /// Eigener, aus dem aktuellen Sync-Ordner abgeleiteter Gruppen-Schlüssel
+    /// Eigenes, aus dem aktuellen Sync-Ordner abgeleitetes HMAC-Schlüsselmaterial
     /// — erst nach dem asynchronen Auflösen in ``starteAdvertisingUndBrowsing()``
-    /// gesetzt, für den Abgleich in beiden Delegate-Methoden zwischengespeichert.
-    private var gruppenSchluessel: String?
+    /// gesetzt, für den Challenge-Response-Abgleich in beiden Delegate-Methoden
+    /// zwischengespeichert. Geht nie über das Netz (siehe Typ-Doku
+    /// „Vertrauensmodell").
+    private var gruppenSchluessel: SymmetricKey?
+    /// Pro Advertising-Session neu erzeugter Zufalls-Nonce, über
+    /// `discoveryInfo` broadcastet — Grundlage des Challenge-Response-Nachweises
+    /// (Typ-Doku „Vertrauensmodell").
+    private var discoveryNonce: Data?
     /// Synchron (vor dem ersten `await` in ``starteAdvertisingUndBrowsing()``)
     /// gesetzte Sperre gegen überlappende Aufrufe — siehe dort.
     private var wirdAufgebaut = false
@@ -160,8 +187,10 @@ final class MultipeerSyncService: NSObject, ObservableObject {
         // verlassen) — dann nicht mehr verbinden.
         guard aktiv, session == nil else { return }
 
-        let schluessel = SyncOrdnerService.multipeerDiscoveryGruppenSchluessel(fuerGruppenID: gruppenID)
+        let schluessel = SyncOrdnerService.multipeerGruppenSchluessel(fuerGruppenID: gruppenID)
         gruppenSchluessel = schluessel
+        let nonce = SymmetricKey(size: .bits128).withUnsafeBytes { Data($0) }
+        discoveryNonce = nonce
         let peerID = MCPeerID(displayName: Self.displayNameSicherBegrenzt(DatabaseLeaseService.geraeteName))
 
         let neueSession = MCSession(peer: peerID, securityIdentity: nil, encryptionPreference: .required)
@@ -170,7 +199,7 @@ final class MultipeerSyncService: NSObject, ObservableObject {
 
         let neuerAdvertiser = MCNearbyServiceAdvertiser(
             peer: peerID,
-            discoveryInfo: [Self.discoveryInfoSchluessel: schluessel],
+            discoveryInfo: [Self.discoveryInfoSchluessel: nonce.base64EncodedString()],
             serviceType: SyncOrdnerService.multipeerServiceType
         )
         neuerAdvertiser.delegate = self
@@ -209,6 +238,7 @@ final class MultipeerSyncService: NSObject, ObservableObject {
         session?.disconnect()
         session = nil
         gruppenSchluessel = nil
+        discoveryNonce = nil
         verbundenePeerNamen = []
     }
 
@@ -222,14 +252,18 @@ final class MultipeerSyncService: NSObject, ObservableObject {
         try? session.send(daten, toPeers: session.connectedPeers, with: .reliable)
     }
 
-    /// Gemeinsamer Gruppen-Trust-Check für beide Delegate-Seiten (Browsing
-    /// über `discoveryInfo`, Advertising über den Einladungs-`context`) —
-    /// eine Stelle statt zweier unabhängig gepflegter Vergleiche, die sonst
-    /// bei einer künftigen Änderung des Vertrauens-Checks auseinanderlaufen
-    /// könnten.
-    private func passtGruppenSchluessel(_ empfangen: String?) -> Bool {
-        guard let gruppenSchluessel else { return false }
-        return empfangen == gruppenSchluessel
+    /// Verifiziert im Advertiser einen per Einladungs-`context` empfangenen
+    /// Challenge-Response-Nachweis (GitHub #97, Typ-Doku „Vertrauensmodell")
+    /// gegen den eigenen, aktuell beworbenen ``discoveryNonce`` und den
+    /// eigenen ``gruppenSchluessel`` — an `peerID` gebunden, damit ein
+    /// mitgeschnittener Nachweis eines anderen Peers nicht wiederverwendbar
+    /// ist. `HMAC<SHA256>.isValidAuthenticationCode` vergleicht dabei
+    /// konstant-zeitig, um Seitenkanal-Rückschlüsse auf den erwarteten Wert
+    /// zu vermeiden.
+    private func istGueltigerNachweis(_ empfangenerNachweis: Data?, von peerID: MCPeerID) -> Bool {
+        guard let empfangenerNachweis, let gruppenSchluessel, let discoveryNonce else { return false }
+        let nachricht = discoveryNonce + Data(peerID.displayName.utf8)
+        return HMAC<SHA256>.isValidAuthenticationCode(empfangenerNachweis, authenticating: nachricht, using: gruppenSchluessel)
     }
 }
 
@@ -301,21 +335,22 @@ extension MultipeerSyncService: MCSessionDelegate {
 
 extension MultipeerSyncService: MCNearbyServiceAdvertiserDelegate {
     /// Nur annehmen, wenn der von ``browser(_:foundPeer:withDiscoveryInfo:)``
-    /// als Einladungs-Kontext mitgesendete Gruppen-Schlüssel zum eigenen
-    /// passt (Typ-Doku „Vertrauensmodell") — kein manuelles Pairing-UI, aber
-    /// auch kein blindes Annehmen jeder Einladung allein auf Basis des
-    /// (app-weit festen) Service-Types. Parameter bewusst `gruppenContext`
-    /// benannt (nicht `context`, wie der externe Label `withContext:` nahelegen
+    /// als Einladungs-Kontext mitgesendete Challenge-Response-Nachweis gegen
+    /// den eigenen Nonce/Schlüssel gültig ist (``istGueltigerNachweis(_:von:)``,
+    /// Typ-Doku „Vertrauensmodell") — kein manuelles Pairing-UI, aber auch
+    /// kein blindes Annehmen jeder Einladung allein auf Basis des (app-weit
+    /// festen) Service-Types. Parameter bewusst `gruppenNachweis` benannt
+    /// (nicht `context`, wie der externe Label `withContext:` nahelegen
     /// würde) — die Klasse hat bereits eine gleichnamige `context:
     /// ModelContext?`-Property, ein `context`-Parameter hier würde sie
     /// innerhalb dieser Methode ohne Warnung verdecken.
     nonisolated func advertiser(
         _ advertiser: MCNearbyServiceAdvertiser, didReceiveInvitationFromPeer peerID: MCPeerID,
-        withContext gruppenContext: Data?, invitationHandler: @escaping @Sendable (Bool, MCSession?) -> Void
+        withContext gruppenNachweis: Data?, invitationHandler: @escaping @Sendable (Bool, MCSession?) -> Void
     ) {
         Task { @MainActor [weak self] in
             guard let self, let session = self.session,
-                  self.passtGruppenSchluessel(gruppenContext.flatMap { String(data: $0, encoding: .utf8) }),
+                  self.istGueltigerNachweis(gruppenNachweis, von: peerID),
                   !session.connectedPeers.contains(peerID)
             else {
                 invitationHandler(false, nil)
@@ -330,20 +365,25 @@ extension MultipeerSyncService: MCNearbyServiceAdvertiserDelegate {
 
 extension MultipeerSyncService: MCNearbyServiceBrowserDelegate {
     /// Beide Geräte browsen UND advertisen gleichzeitig (symmetrisches
-    /// Auto-Connect, wie in Apples eigenen Multipeer-Beispielen). Lädt nur
-    /// ein, wenn der per `discoveryInfo` gemeldete Gruppen-Schlüssel zum
-    /// eigenen passt (Typ-Doku „Vertrauensmodell") — und nicht erneut, falls
-    /// der Peer bereits verbunden ist, obwohl Bonjour ihn zwischenzeitlich
-    /// erneut meldet. Der eigene Schlüssel wandert als Einladungs-`context`
-    /// mit, damit die Gegenseite (``advertiser(_:didReceiveInvitationFromPeer:withContext:invitationHandler:)``)
-    /// ihn ebenfalls prüfen kann.
+    /// Auto-Connect, wie in Apples eigenen Multipeer-Beispielen). Bildet aus
+    /// dem per `discoveryInfo` gemeldeten Nonce des gefundenen Peers und dem
+    /// eigenen Gruppenschlüssel einen an die eigene `MCPeerID` gebundenen
+    /// HMAC-Nachweis (Typ-Doku „Vertrauensmodell") und lädt damit ein — der
+    /// Gruppenschlüssel selbst geht dabei nie über das Netz. Nicht erneut,
+    /// falls der Peer bereits verbunden ist, obwohl Bonjour ihn
+    /// zwischenzeitlich erneut meldet. Die Gegenseite
+    /// (``advertiser(_:didReceiveInvitationFromPeer:withContext:invitationHandler:)``)
+    /// verifiziert den Nachweis anhand ihres eigenen, aktuell beworbenen
+    /// Nonces.
     nonisolated func browser(_ browser: MCNearbyServiceBrowser, foundPeer peerID: MCPeerID, withDiscoveryInfo info: [String: String]?) {
         Task { @MainActor [weak self] in
             guard let self, let session = self.session, let eigenerSchluessel = self.gruppenSchluessel,
-                  self.passtGruppenSchluessel(info?[Self.discoveryInfoSchluessel]),
+                  let nonceBase64 = info?[Self.discoveryInfoSchluessel], let nonce = Data(base64Encoded: nonceBase64),
                   !session.connectedPeers.contains(peerID)
             else { return }
-            browser.invitePeer(peerID, to: session, withContext: Data(eigenerSchluessel.utf8), timeout: 30)
+            let nachricht = nonce + Data(session.myPeerID.displayName.utf8)
+            let nachweis = HMAC<SHA256>.authenticationCode(for: nachricht, using: eigenerSchluessel)
+            browser.invitePeer(peerID, to: session, withContext: Data(nachweis), timeout: 30)
         }
     }
 
