@@ -191,110 +191,69 @@ private struct NeuesProduktSheet: View {
 /// einen „Neu anlegen"-Button; nach dem Sichern schließt das Sheet und übergibt den
 /// neuen Artikel an den Aufrufer.
 ///
+/// Erster Verwender der generischen ``AuswahlSheet`` (GitHub #130) — reine
+/// Wrapper-Konfiguration, keine eigene Listen-/Sheet-Logik mehr.
+///
 /// `onSelect` wird direkt beim Tippen auf einen Eintrag aufgerufen, noch vor dem
-/// `dismiss()` — dadurch kommt die Zuweisung sicher an, auch wenn der Aufrufer sie
-/// via `onDismiss` lesen würde (was Timing-Probleme verursachen kann).
+/// Dismiss — dadurch kommt die Zuweisung sicher an, auch wenn der Aufrufer sie
+/// erst danach lesen würde (was Timing-Probleme verursachen kann).
 struct ArtikelAuswahlSheet: View {
     @Binding var gewaehlterArtikel: Artikel?
-    /// Optionaler Callback, der synchron vor dem Dismiss aufgerufen wird.
-    /// `NeuesProduktSheet` lässt diesen leer und wertet stattdessen die Binding aus.
+    /// Optionaler Callback, der bei jeder Auswahl (bestehender oder neu
+    /// angelegter Artikel) aufgerufen wird. `NeuesProduktSheet` lässt diesen
+    /// leer und wertet stattdessen die Binding aus.
     var onSelect: ((Artikel) -> Void)? = nil
-    @Environment(\.dismiss) private var dismiss
     @Query(sort: \Artikel.name) private var alleArtikel: [Artikel]
-    @State private var suchtext = ""
-    @State private var neuerArtikelEntwurf: Artikel?
-    /// Löst den Dismiss dieses Sheets verzögert aus, nachdem ein neu angelegter
-    /// Artikel übergeben wurde — vermeidet Re-Entranz im `onDismiss`-Callback
-    /// des inneren ``ArtikelEditView``-Sheets.
-    @State private var sollteDismissen = false
-
-    private var getrimmterSuchtext: String {
-        suchtext.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var gefilterteArtikel: [Artikel] {
-        guard !getrimmterSuchtext.isEmpty else { return alleArtikel }
-        return alleArtikel.filter { $0.name.localizedCaseInsensitiveContains(getrimmterSuchtext) }
-    }
-
-    private var zeigtNeuAnlegenOption: Bool {
-        !getrimmterSuchtext.isEmpty &&
-        !alleArtikel.contains { $0.name.localizedCaseInsensitiveCompare(getrimmterSuchtext) == .orderedSame }
-    }
 
     var body: some View {
-        NavigationStack {
-            List {
-                ForEach(gefilterteArtikel) { artikel in
-                    Button {
-                        gewaehlterArtikel = artikel
-                        onSelect?(artikel)
-                        dismiss()
-                    } label: {
-                        HStack {
-                            Text(artikel.name)
-                                .foregroundStyle(.primary)
-                            Spacer()
-                            if gewaehlterArtikel == artikel {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(.tint)
-                            }
+        AuswahlSheet(
+            titel: "Artikel w\u{00E4}hlen",
+            items: alleArtikel,
+            name: \.name,
+            modus: .einzel(Binding(
+                get: { gewaehlterArtikel },
+                set: { neu in
+                    gewaehlterArtikel = neu
+                    if let neu { onSelect?(neu) }
+                }
+            )),
+            suchPrompt: "Artikel suchen",
+            neuAnlegenTitel: { "\u{201E}\($0)\u{201C} neu anlegen" },
+            neuAnlegenInhalt: { suchtext, gesichert in
+                NeuerArtikelInhalt(entwurfsname: suchtext, onGesichert: gesichert)
+            }
+        )
+    }
+}
+
+/// Präsentiert ``ArtikelEditView`` für einen neuen ``Artikel``-Entwurf und
+/// meldet den Callback erst, wenn tatsächlich gesichert wurde
+/// (`entwurf.modelContext != nil` — beim bloßen Abbrechen bleibt der Entwurf
+/// unverankert). Nötig, weil ``ArtikelEditView`` selbst keinen
+/// Sicherungs-Callback anbietet, nur `istNeu`/eigenes `dismiss()`.
+private struct NeuerArtikelInhalt: View {
+    let entwurfsname: String
+    let onGesichert: (Artikel) -> Void
+    @State private var entwurf: Artikel?
+
+    var body: some View {
+        Group {
+            if let entwurf {
+                ArtikelEditView(artikel: entwurf, istNeu: true)
+                    .onDisappear {
+                        if entwurf.modelContext != nil {
+                            onGesichert(entwurf)
                         }
                     }
-                    .buttonStyle(.plain)
-                }
-                if zeigtNeuAnlegenOption {
-                    Button {
-                        neuerArtikelEntwurf = Artikel(
-                            name: getrimmterSuchtext,
-                            symbolName: SymbolPalette.alle[0],
-                            farbeHex: Color.artikelPalette[0]
-                        )
-                    } label: {
-                        Label("\u{201E}\(getrimmterSuchtext)\u{201D} neu anlegen", systemImage: "plus.circle.fill")
-                    }
-                    .foregroundStyle(.tint)
-                }
-            }
-            .searchable(text: $suchtext, prompt: "Artikel suchen")
-            .overlay {
-                if gefilterteArtikel.isEmpty && !zeigtNeuAnlegenOption {
-                    ContentUnavailableView(
-                        suchtext.isEmpty ? "Keine Artikel" : "Keine Treffer",
-                        systemImage: "tag",
-                        description: Text(
-                            suchtext.isEmpty
-                                ? "Lege zuerst einen Artikel an."
-                                : "Kein Artikel passt zu \u{201E}\(suchtext)\u{201C}."
-                        )
-                    )
-                }
-            }
-            .navigationTitle("Artikel w\u{00E4}hlen")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Abbrechen") { dismiss() }
-                }
-            }
-            .sheet(item: $neuerArtikelEntwurf, onDismiss: nachNeuanlageAufraeumen) { entwurf in
-                ArtikelEditView(artikel: entwurf, istNeu: true)
-            }
-            .onChange(of: sollteDismissen) { _, neu in
-                if neu { dismiss() }
             }
         }
-    }
-
-    private func nachNeuanlageAufraeumen() {
-        guard let entwurf = neuerArtikelEntwurf, entwurf.modelContext != nil else {
-            neuerArtikelEntwurf = nil
-            return
+        .onAppear {
+            entwurf = Artikel(
+                name: entwurfsname,
+                symbolName: SymbolPalette.alle[0],
+                farbeHex: Color.artikelPalette[0]
+            )
         }
-        gewaehlterArtikel = entwurf
-        onSelect?(entwurf)
-        neuerArtikelEntwurf = nil
-        sollteDismissen = true
     }
 }
 

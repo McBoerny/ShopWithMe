@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.16 (Build 324) — Generisches AuswahlSheet für reine Listenauswahl-Sheets
+
+GitHub #130: neue, wiederverwendbare Komponente ``AuswahlSheet`` (`Views/Components/AuswahlSheet.swift`)
+für Sheets, die ausschließlich eine Auswahl aus einer Liste anbieten (bewusst
+nicht für Sheets mit Sonderlogik wie Geocoding/Duplikat-Behandlung, z.B.
+`GeschaeftWahlSheet`). Deckt ab: ganze Zeile auswählbar, Suchfeld ab
+konfigurierbarer Mindestanzahl, alphabetische Schnellnavigation an der
+rechten Kante ab 100 Einträgen (SwiftUI-Nachbau des `UITableView`-
+Sektionsindex, den es dort nativ nicht gibt), Einfach- oder Mehrfachauswahl
+(bei Mehrfachauswahl ein Haken-Button oben rechts zum Schließen — bei
+Einfachauswahl schließt bereits der Zeilen-Tap), sowie eine optionale
+„+"-Neuanlage-Zeile mit vom Aufrufer gelieferter Neuanlage-Ansicht.
+``ArtikelAuswahlSheet`` (GitHub #123) als erster Verwender umgestellt,
+Verhalten für Anwender unverändert.
+
 ## v0.16 (Build 323) — Multipeer-Vertrauensmodell gehärtet (Challenge-Response statt Klartext-Gruppenschlüssel)
 
 GitHub #97: der Gruppen-Schlüssel für den Multipeer-Beschleunigungskanal
