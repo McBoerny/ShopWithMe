@@ -19,6 +19,8 @@ struct ArtikelDuplikatVorschlaegeView: View {
     @State private var kiVorschlagLaeuft = false
     @State private var kiFehlermeldung: String?
     @State private var bereitsGesucht = false
+    @State private var geprueftGruppenAnzahl = 0
+    @State private var gesamtGruppenAnzahl = 0
 
     private struct Vorschlag: Identifiable {
         let id = UUID()
@@ -38,9 +40,16 @@ struct ArtikelDuplikatVorschlaegeView: View {
         NavigationStack {
             List {
                 if kiVorschlagLaeuft {
-                    HStack {
-                        ProgressView()
-                        Text("Apple Intelligence sucht nach Dubletten…")
+                    VStack(alignment: .leading, spacing: 6) {
+                        if gesamtGruppenAnzahl > 0 {
+                            ProgressView(value: Double(geprueftGruppenAnzahl), total: Double(gesamtGruppenAnzahl))
+                            Text("Apple Intelligence sucht nach Dubletten… (\(geprueftGruppenAnzahl) von \(gesamtGruppenAnzahl) Kategorien)")
+                        } else {
+                            HStack {
+                                ProgressView()
+                                Text("Apple Intelligence sucht nach Dubletten…")
+                            }
+                        }
                     }
                     .foregroundStyle(.secondary)
                 }
@@ -124,6 +133,8 @@ struct ArtikelDuplikatVorschlaegeView: View {
         kiFehlermeldung = nil
         kiVorschlagLaeuft = true
         bereitsGesucht = true
+        geprueftGruppenAnzahl = 0
+        gesamtGruppenAnzahl = 0
         defer { kiVorschlagLaeuft = false }
 
         guard AISuggestionService.istVerfuegbar else {
@@ -134,10 +145,13 @@ struct ArtikelDuplikatVorschlaegeView: View {
         let gruppen = Dictionary(grouping: alleArtikel) { artikel in
             artikel.effektiveKategorien(context: modelContext).first?.persistentModelID
         }
+        let zuPruefendeGruppen = gruppen.values.filter { $0.count > 1 }
+        gesamtGruppenAnzahl = zuPruefendeGruppen.count
 
         var gefundene: [Vorschlag] = []
         var trafFehler = false
-        for gruppenArtikel in gruppen.values where gruppenArtikel.count > 1 {
+        for gruppenArtikel in zuPruefendeGruppen {
+            defer { geprueftGruppenAnzahl += 1 }
             do {
                 let rohVorschlaege = try await AISuggestionService.artikelBeziehungsVorschlaege(
                     fuerArtikelNamen: gruppenArtikel.map(\.name)

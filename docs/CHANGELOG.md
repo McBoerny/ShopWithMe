@@ -1,5 +1,44 @@
 # Changelog
 
+## v0.16 (Build 332) — Artikel manuell als Produkt/Alias eines anderen Artikels zusammenführen
+
+`ArtikelEditView` hat eine neue Sektion „Zusammenführen" (nur bei bestehendem,
+nicht bei neu angelegtem Artikel): „Als Produkt eines anderen Artikels
+übernehmen" und „Als Alias zu einem anderen Artikel hinzufügen" öffnen jeweils
+die bestehende ``ArtikelAuswahlSheet``-Zielartikel-Auswahl (dafür um einen
+optionalen `ausschluss`-Parameter erweitert, damit der gerade bearbeitete
+Artikel nicht sich selbst als Ziel wählen kann) und nach Bestätigung eines
+erklärenden Alerts den bereits bestehenden `ArtikelZusammenfuehrungsService`
+(`alsProduktKonvertieren`/`alsAliasAufloesen`, bisher nur aus der KI-
+Dublettenerkennung erreichbar, siehe GitHub #133). Der Produkt-Merge bei
+„Als Alias" war dort bereits eingebaut, keine weitere Logik nötig — nur der
+manuelle Einstiegspunkt ist neu. Der aktuell bearbeitete Artikel wird durch
+den Merge gelöscht, die Detailansicht schließt sich danach automatisch.
+
+## v0.16 — Dauerhaftes Suchfeld in der Artikelliste, Dubletten-Übernahme-Crash behoben, Fortschrittsanzeige bei KI-Suche
+
+`ArtikelListView` (Einstellungen → Artikel) hat das kollabierende
+`.searchable(...)`-Suchfeld aus Build 328 durch ein dauerhaft sichtbares
+Textfeld direkt unter der Navigationsleiste ersetzt — bewusst abweichend vom
+sonstigen `.searchable`-Muster (``ProduktVerwaltungView``,
+``AbteilungenVerwaltungView``), weil hier sofort beim Öffnen gesucht werden
+soll, ohne erst per Pull-to-Search den Titel wegzuscrollen.
+
+`ArtikelZusammenfuehrungsService.referenzenUmhaengen` griff beim „Übernehmen"
+eines Dublettenvorschlags in `ArtikelDuplikatVorschlaegeView` auf `.id` und
+`.enthaelt(...)` einer möglicherweise bereits baumelnden `Einkaufsliste`-
+Referenz zu (`EinkaufslistenEintrag.einkaufsliste`/`ArtikelListenKauf.einkaufsliste`
+sind ohne `inverse` deklariert) — stürzte ab, wenn eine referenzierte Liste
+zwischenzeitlich (z.B. durch einen nebenläufigen Sync-Zyklus) bereits gelöscht
+wurde. Jetzt wird vorab einmal die Menge tatsächlich noch existierender
+Einkaufslisten-IDs eingesammelt und jede Referenz per `persistentModelID`
+dagegen geprüft, bevor eine andere Eigenschaft gelesen wird (Muster wie
+`ArtikelListenKauf.alleEintraege(context:)`).
+
+`ArtikelDuplikatVorschlaegeView` zeigt während der kategorieweisen KI-Suche
+jetzt einen Fortschrittsbalken („X von Y Kategorien") statt nur eines
+unbestimmten Spinners.
+
 ## v0.16 (Build 331) — PreispunktZuordnenSheet auf ArtikelAuswahlSheet umgestellt (GitHub #130)
 
 Letzter Baustein des #130-Rollouts: `PreispunktZuordnenSheet` hatte noch eine

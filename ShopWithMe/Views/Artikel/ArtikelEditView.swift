@@ -23,6 +23,21 @@ struct ArtikelEditView: View {
     @State private var neuerAlternativerName = ""
     @State private var neuesProduktEntwurf: Produkt?
     @State private var bearbeitetesProdukt: Produkt?
+    @State private var zeigeZielArtikelFuerProduktKonvertierung = false
+    @State private var zeigeZielArtikelFuerAliasAufloesung = false
+    @State private var zielArtikelFuerAuswahl: Artikel?
+    @State private var zuBestaetigenderMerge: MergeBestaetigung?
+
+    private enum ZusammenfuehrungsModus {
+        case alsProdukt
+        case alsAlias
+    }
+
+    private struct MergeBestaetigung: Identifiable {
+        let id = UUID()
+        let ziel: Artikel
+        let modus: ZusammenfuehrungsModus
+    }
 
     /// Preishistorie über alle ``Produkt``e dieses Artikels (auch das
     /// Platzhalter-Standardprodukt und Unter-Produkte, anders als ``produkte``
@@ -61,141 +76,17 @@ struct ArtikelEditView: View {
     private var navigationInhalt: some View {
         NavigationStack {
             Form {
-                Section {
-                    TextField("Name", text: $artikel.name)
-                        .font(.title3)
-                    if let moeglicheDublette {
-                        Label("Es gibt bereits einen Artikel „\(moeglicheDublette.name)“", systemImage: "exclamationmark.triangle.fill")
-                            .font(.footnote)
-                            .foregroundStyle(.orange)
-                    }
-                }
-
-                Section {
-                    ForEach(artikel.kategorien) { kategorie in
-                        Label(kategorie.name, systemImage: kategorie.standardSymbol)
-                    }
-                    .onDelete(perform: kategorieEntfernen)
-
-                    Button {
-                        zeigeKategorieHinzufuegen = true
-                    } label: {
-                        Label("Abteilung hinzufügen", systemImage: "plus")
-                    }
-
-                    if kiVorschlagLaeuft {
-                        HStack {
-                            ProgressView()
-                            Text("Apple Intelligence schlägt eine Abteilung vor…")
-                        }
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    }
-                    if let kiFehlermeldung {
-                        Text(kiFehlermeldung)
-                            .font(.footnote)
-                            .foregroundStyle(.orange)
-                    }
-                } footer: {
-                    Text("Mehrfachauswahl möglich. Ohne Auswahl landet der Artikel automatisch in „Sonstiges“.")
-                }
-
-                Section("Menge & Einheit") {
-                    Picker("Einheit", selection: $artikel.einheit) {
-                        ForEach(Einheit.allCases) { einheit in
-                            Text(einheit.anzeigename).tag(einheit)
-                        }
-                    }
-                    HStack {
-                        Text("Standardmenge")
-                        Spacer()
-                        TextField("Menge", value: $artikel.mengenSchritt, format: .number)
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 80)
-                        Text(artikel.einheit.kurzform)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Section("Notiz") {
-                    TextField(
-                        "Optionale Notiz, z.B. bevorzugte Marke",
-                        text: Binding(
-                            get: { artikel.notiz ?? "" },
-                            set: { artikel.notiz = $0.isEmpty ? nil : $0 }
-                        ),
-                        axis: .vertical
-                    )
-                }
-
+                nameSektion
+                kategorienSektion
+                mengeUndEinheitSektion
+                notizSektion
                 if !istNeu {
-                    Section {
-                        ForEach(artikel.alternativeNamen, id: \.self) { name in
-                            Text(name)
-                        }
-                        .onDelete(perform: alternativerNameEntfernen)
-
-                        HStack {
-                            TextField("Alternativer Name, z.B. \"Zahncreme\"", text: $neuerAlternativerName)
-                                .onSubmit(alternativenNamenHinzufuegen)
-                            Button("Hinzufügen", action: alternativenNamenHinzufuegen)
-                                .disabled(neuerAlternativerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        }
-                    } header: {
-                        Text("Alternative Namen")
-                    } footer: {
-                        Text("Unter diesen Namen wird derselbe Artikel ebenfalls gefunden, z.B. \"Zahncreme\" oder \"Zahnreiniger\" für \"Zahnpasta\".")
-                    }
+                    alternativeNamenSektion
+                    produkteSektion
+                    zusammenfuehrenSektion
                 }
-
-                if !istNeu {
-                    Section {
-                        ForEach(produkte) { produkt in
-                            Button {
-                                bearbeitetesProdukt = produkt
-                            } label: {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(produkt.name)
-                                            .foregroundStyle(.primary)
-                                        if !produkt.produktnamen.isEmpty {
-                                            let anzahl = produkt.produktnamen.count
-                                            Text("\(anzahl) Bon-Name\(anzahl == 1 ? "" : "n")")
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                        }
-                                    }
-                                    Spacer()
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption)
-                                        .foregroundStyle(.tertiary)
-                                }
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        .onDelete(perform: produktLoeschen)
-
-                        Button {
-                            neuesProduktAnlegen()
-                        } label: {
-                            Label("Neues Produkt anlegen", systemImage: "plus")
-                        }
-                    } header: {
-                        Text("Produkte")
-                    } footer: {
-                        Text("Konkrete Produkte dieses Artikels, z.B. \"Odol\" oder \"Paradontol\" für \"Zahnpasta\" — jedes mit eigenem Preis und eigenen Namen je Geschäft.")
-                    }
-                }
-
                 if !istNeu && !preisHistorie.isEmpty {
-                    Section("Preishistorie") {
-                        ForEach(preisHistorie) { eintrag in
-                            PreisHistorieZeile(eintrag: eintrag, zeigeArtikel: false,
-                                               loeschen: { modelContext.delete(eintrag) })
-                        }
-                    }
+                    preisHistorieSektion
                 }
             }
             .navigationTitle(istNeu ? "Neuer Artikel" : artikel.name)
@@ -241,6 +132,236 @@ struct ArtikelEditView: View {
             .sheet(item: $bearbeitetesProdukt) { produkt in
                 ProduktEditView(produkt: produkt, istNeu: false)
             }
+            .sheet(isPresented: $zeigeZielArtikelFuerProduktKonvertierung) {
+                ArtikelAuswahlSheet(gewaehlterArtikel: $zielArtikelFuerAuswahl, ausschluss: artikel) { ziel in
+                    zuBestaetigenderMerge = MergeBestaetigung(ziel: ziel, modus: .alsProdukt)
+                }
+            }
+            .sheet(isPresented: $zeigeZielArtikelFuerAliasAufloesung) {
+                ArtikelAuswahlSheet(gewaehlterArtikel: $zielArtikelFuerAuswahl, ausschluss: artikel) { ziel in
+                    zuBestaetigenderMerge = MergeBestaetigung(ziel: ziel, modus: .alsAlias)
+                }
+            }
+            .alert(
+                "Artikel zusammenführen?",
+                isPresented: Binding(
+                    get: { zuBestaetigenderMerge != nil },
+                    set: { istPraesentiert in
+                        if !istPraesentiert { zuBestaetigenderMerge = nil }
+                    }
+                ),
+                presenting: zuBestaetigenderMerge
+            ) { bestaetigung in
+                Button("Abbrechen", role: .cancel) {}
+                Button("Übernehmen", role: .destructive) {
+                    zusammenfuehren(mit: bestaetigung.ziel, modus: bestaetigung.modus)
+                }
+            } message: { bestaetigung in
+                switch bestaetigung.modus {
+                case .alsProdukt:
+                    Text("\u{201E}\(artikel.name)\u{201C} wird zu einem Produkt von \u{201E}\(bestaetigung.ziel.name)\u{201C}. Preise, Käufe und Einkaufslisten-Einträge wandern mit, \u{201E}\(artikel.name)\u{201C} wird anschließend gelöscht.")
+                case .alsAlias:
+                    Text("\u{201E}\(artikel.name)\u{201C} wird als Alias zu \u{201E}\(bestaetigung.ziel.name)\u{201C} hinzugefügt. Vorhandene Produkte, Preise, Käufe und Einkaufslisten-Einträge wandern mit, \u{201E}\(artikel.name)\u{201C} wird anschließend gelöscht.")
+                }
+            }
+        }
+    }
+
+    // MARK: - Form-Sektionen
+    //
+    // Als eigene Computed-Properties statt direkt im `Form { ... }`-ViewBuilder
+    // von ``navigationInhalt`` — bei acht Sektionen inline in einem einzigen
+    // Ausdruck bricht der Swift-Typchecker mit „unable to type-check this
+    // expression in reasonable time" ab (meldet dabei eine scheinbar
+    // unbeteiligte Zeile als Fundort). Kleinere, separat typgeprüfte
+    // Teilausdrücke lösen das zuverlässig.
+
+    private var nameSektion: some View {
+        Section {
+            TextField("Name", text: $artikel.name)
+                .font(.title3)
+            if let moeglicheDublette {
+                Label("Es gibt bereits einen Artikel „\(moeglicheDublette.name)“", systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+            }
+        }
+    }
+
+    private var kategorienSektion: some View {
+        Section {
+            ForEach(artikel.kategorien) { kategorie in
+                Label(kategorie.name, systemImage: kategorie.standardSymbol)
+            }
+            .onDelete(perform: kategorieEntfernen)
+
+            Button {
+                zeigeKategorieHinzufuegen = true
+            } label: {
+                Label("Abteilung hinzufügen", systemImage: "plus")
+            }
+
+            if kiVorschlagLaeuft {
+                HStack {
+                    ProgressView()
+                    Text("Apple Intelligence schlägt eine Abteilung vor…")
+                }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
+            if let kiFehlermeldung {
+                Text(kiFehlermeldung)
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+            }
+        } footer: {
+            Text("Mehrfachauswahl möglich. Ohne Auswahl landet der Artikel automatisch in „Sonstiges“.")
+        }
+    }
+
+    private var mengeUndEinheitSektion: some View {
+        Section("Menge & Einheit") {
+            Picker("Einheit", selection: $artikel.einheit) {
+                ForEach(Einheit.allCases) { einheit in
+                    Text(einheit.anzeigename).tag(einheit)
+                }
+            }
+            HStack {
+                Text("Standardmenge")
+                Spacer()
+                TextField("Menge", value: $artikel.mengenSchritt, format: .number)
+                    .keyboardType(.decimalPad)
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 80)
+                Text(artikel.einheit.kurzform)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var notizSektion: some View {
+        Section("Notiz") {
+            TextField(
+                "Optionale Notiz, z.B. bevorzugte Marke",
+                text: Binding(
+                    get: { artikel.notiz ?? "" },
+                    set: { artikel.notiz = $0.isEmpty ? nil : $0 }
+                ),
+                axis: .vertical
+            )
+        }
+    }
+
+    private var alternativeNamenSektion: some View {
+        Section {
+            ForEach(artikel.alternativeNamen, id: \.self) { name in
+                Text(name)
+            }
+            .onDelete(perform: alternativerNameEntfernen)
+
+            HStack {
+                TextField("Alternativer Name, z.B. \"Zahncreme\"", text: $neuerAlternativerName)
+                    .onSubmit(alternativenNamenHinzufuegen)
+                Button("Hinzufügen", action: alternativenNamenHinzufuegen)
+                    .disabled(neuerAlternativerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        } header: {
+            Text("Alternative Namen")
+        } footer: {
+            Text("Unter diesen Namen wird derselbe Artikel ebenfalls gefunden, z.B. \"Zahncreme\" oder \"Zahnreiniger\" für \"Zahnpasta\".")
+        }
+    }
+
+    private var produkteSektion: some View {
+        Section {
+            ForEach(produkte) { produkt in
+                Button {
+                    bearbeitetesProdukt = produkt
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(produkt.name)
+                                .foregroundStyle(.primary)
+                            if !produkt.produktnamen.isEmpty {
+                                let anzahl = produkt.produktnamen.count
+                                Text("\(anzahl) Bon-Name\(anzahl == 1 ? "" : "n")")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            .onDelete(perform: produktLoeschen)
+
+            Button {
+                neuesProduktAnlegen()
+            } label: {
+                Label("Neues Produkt anlegen", systemImage: "plus")
+            }
+        } header: {
+            Text("Produkte")
+        } footer: {
+            Text("Konkrete Produkte dieses Artikels, z.B. \"Odol\" oder \"Paradontol\" für \"Zahnpasta\" — jedes mit eigenem Preis und eigenen Namen je Geschäft.")
+        }
+    }
+
+    private var zusammenfuehrenSektion: some View {
+        Section {
+            Button {
+                zeigeZielArtikelFuerProduktKonvertierung = true
+            } label: {
+                Label("Als Produkt eines anderen Artikels übernehmen", systemImage: "shippingbox")
+            }
+            Button {
+                zeigeZielArtikelFuerAliasAufloesung = true
+            } label: {
+                Label("Als Alias zu einem anderen Artikel hinzufügen", systemImage: "arrow.triangle.merge")
+            }
+        } header: {
+            Text("Zusammenführen")
+        } footer: {
+            Text("Wandelt \u{201E}\(artikel.name)\u{201C} in ein Produkt oder einen Alias eines anderen Artikels um. Vorhandene Preise, Käufe und Einkaufslisten-Einträge (bei Alias auch vorhandene Produkte) wandern zum Zielartikel, \u{201E}\(artikel.name)\u{201C} wird anschließend gelöscht.")
+        }
+    }
+
+    private var preisHistorieSektion: some View {
+        Section("Preishistorie") {
+            ForEach(preisHistorie) { eintrag in
+                PreisHistorieZeile(eintrag: eintrag, zeigeArtikel: false,
+                                   loeschen: { modelContext.delete(eintrag) })
+            }
+        }
+    }
+
+    /// Führt `artikel` mit `ziel` zusammen (siehe ``ZusammenfuehrungsModus``)
+    /// und schließt die Detailansicht anschließend — `artikel` existiert nach
+    /// einem erfolgreichen Merge nicht mehr. Wie ``ArtikelDuplikatVorschlaegeView/uebernehmen(_:)``
+    /// nur über ``ModelReference`` aufgelöste Objekte innerhalb der Micro-Lease-
+    /// `mutate`-Closure verwendet (nebenläufiger Sync kann `artikel`/`ziel`
+    /// zwischenzeitlich bereits gelöscht haben).
+    private func zusammenfuehren(mit ziel: Artikel, modus: ZusammenfuehrungsModus) {
+        let quelleReferenz = ModelReference(artikel)
+        let zielReferenz = ModelReference(ziel)
+        Task {
+            await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                guard let quelle = quelleReferenz.resolved(in: modelContext),
+                      let ziel = zielReferenz.resolved(in: modelContext)
+                else { return }
+                switch modus {
+                case .alsProdukt:
+                    ArtikelZusammenfuehrungsService.alsProduktKonvertieren(quelle, unter: ziel, context: modelContext)
+                case .alsAlias:
+                    ArtikelZusammenfuehrungsService.alsAliasAufloesen(quelle, in: ziel, context: modelContext)
+                }
+            }
+            dismiss()
         }
     }
 

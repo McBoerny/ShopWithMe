@@ -199,16 +199,26 @@ private struct NeuesProduktSheet: View {
 /// erst danach lesen würde (was Timing-Probleme verursachen kann).
 struct ArtikelAuswahlSheet: View {
     @Binding var gewaehlterArtikel: Artikel?
+    /// Optional ausgeschlossener Artikel (z.B. der gerade in
+    /// ``ArtikelEditView`` bearbeitete, beim Zusammenführen mit einem
+    /// anderen Artikel) — taucht nicht in der Auswahlliste auf.
+    var ausschluss: Artikel? = nil
     /// Optionaler Callback, der bei jeder Auswahl (bestehender oder neu
     /// angelegter Artikel) aufgerufen wird. `NeuesProduktSheet` lässt diesen
-    /// leer und wertet stattdessen die Binding aus.
+    /// leer und wertet stattdessen die Binding aus. Bewusst letzter Parameter
+    /// (Trailing-Closure-fähig), siehe ``ArtikelEditView``s Aufrufe.
     var onSelect: ((Artikel) -> Void)? = nil
     @Query(sort: \Artikel.name) private var alleArtikel: [Artikel]
+
+    private var waehlbareArtikel: [Artikel] {
+        guard let ausschluss else { return alleArtikel }
+        return alleArtikel.filter { $0.persistentModelID != ausschluss.persistentModelID }
+    }
 
     var body: some View {
         AuswahlSheet(
             titel: "Artikel w\u{00E4}hlen",
-            items: alleArtikel,
+            items: waehlbareArtikel,
             name: \.name,
             modus: .einzel(Binding(
                 get: { gewaehlterArtikel },

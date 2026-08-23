@@ -114,11 +114,22 @@ enum ArtikelZusammenfuehrungsService {
             kauf.artikel = ziel
         }
 
+        // `EinkaufslistenEintrag.einkaufsliste`/`ArtikelListenKauf.einkaufsliste`
+        // sind ohne `inverse`-Deklaration referenziert (wie
+        // `ArtikelGeschaeftVerfuegbarkeit`) — eine andernorts (z.B. nebenläufig
+        // durch einen Sync-Zyklus) bereits gelöschte Einkaufsliste bleibt hier
+        // eine "baumelnde" `PersistentIdentifier`-only-Referenz, auf der nur
+        // `persistentModelID` sicher lesbar ist, siehe
+        // `ArtikelListenKauf.alleEintraege(context:)`. Einmal vorab einsammeln
+        // statt pro Eintrag zu raten.
+        let gueltigeEinkaufslistenIDs = Set(((try? context.fetch(FetchDescriptor<Einkaufsliste>())) ?? []).map(\.persistentModelID))
+
         for eintrag in quelle.einkaufslistenEintraege {
             if let produktFuerLeereEintraege, eintrag.produkt == nil {
                 eintrag.produkt = produktFuerLeereEintraege
             }
-            if let liste = eintrag.einkaufsliste, liste.enthaelt(ziel, produkt: eintrag.produkt) {
+            if let liste = eintrag.einkaufsliste, gueltigeEinkaufslistenIDs.contains(liste.persistentModelID),
+               liste.enthaelt(ziel, produkt: eintrag.produkt) {
                 // `ziel` hat auf derselben Liste bereits denselben (Produkt-)Eintrag
                 // — dieser hier würde eine Dublette erzeugen, bleibt also bei
                 // `quelle` und verschwindet gleich mit dessen Löschung (cascade).
@@ -144,7 +155,7 @@ enum ArtikelZusammenfuehrungsService {
         if !listenKaeufe.isEmpty {
             var bekannt = ArtikelListenKaufService.alleEintraege(context: context)
             for kauf in listenKaeufe {
-                if let einkaufsliste = kauf.einkaufsliste {
+                if let einkaufsliste = kauf.einkaufsliste, gueltigeEinkaufslistenIDs.contains(einkaufsliste.persistentModelID) {
                     ArtikelListenKaufService.vermerkeAbgehaktFallsNoetig(
                         artikel: ziel, einkaufsliste: einkaufsliste, am: kauf.zuletztAbgehaktAm, bekannt: &bekannt, context: context
                     )

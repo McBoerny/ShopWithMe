@@ -76,14 +76,25 @@ Artikel weiterhin ohne festgelegtes Produkt auf der Liste.
 
 Ist Apple Intelligence verfügbar, findest du in der Artikelliste (Einstellungen
 → Artikel) oben rechts einen **„Dubletten finden"**-Knopf (Funkeln-Symbol). Er
-durchsucht deinen gesamten Artikelbestand nach potenziellen Dubletten (z.B.
-„Cola" und „Coca Cola" als derselbe generische Artikel) und Varianten (z.B.
-„Persil" als konkrete Marke von „Waschmittel") und zeigt sie dir zur
-Bestätigung. Zu jedem Vorschlag wählst du, ob der zweite Artikel als
+durchsucht deinen gesamten Artikelbestand kategorieweise nach potenziellen
+Dubletten (z.B. „Cola" und „Coca Cola" als derselbe generische Artikel) und
+Varianten (z.B. „Persil" als konkrete Marke von „Waschmittel") — ein
+Fortschrittsbalken zeigt dabei an, wie viele Kategorien schon geprüft sind —
+und zeigt die Treffer dir zur Bestätigung. Zu jedem Vorschlag wählst du, ob
+der zweite Artikel als
 **Alias** (alternativer Name des ersten) oder als **Produkt** (konkrete Marke
 darunter) aufgelöst werden soll, bevor du „Übernehmen" antippst — bereits
 vorhandene Preise, Käufe und Einkaufslisten-Einträge des aufgelösten Artikels
 bleiben dabei erhalten und wandern zum verbleibenden Artikel.
+
+Du musst dafür nicht auf einen KI-Vorschlag warten: in der Artikel-Bearbeitung
+findest du ganz unten die Sektion **„Zusammenführen"** mit denselben beiden
+Optionen von Hand — „Als Produkt eines anderen Artikels übernehmen" und „Als
+Alias zu einem anderen Artikel hinzufügen". Nach Auswahl des Zielartikels
+erscheint zur Sicherheit ein Bestätigungsdialog, danach wird der bearbeitete
+Artikel gelöscht (seine Preise, Käufe, Einkaufslisten-Einträge und bei „Alias"
+auch seine Produkte wandern zum gewählten Zielartikel), und die
+Bearbeitungsansicht schließt sich automatisch.
 
 ## Geschäfte
 

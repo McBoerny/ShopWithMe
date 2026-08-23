@@ -66,43 +66,10 @@ struct ArtikelListView: View {
     }
 
     var body: some View {
-        List {
-            switch sortierung {
-            case .alphabetisch:
-                AlphabetischeListenSektion(
-                    alphabetischSortiert,
-                    name: \.name,
-                    loeschen: { offsets, gruppe in artikelLoeschen(offsets.map { gruppe[$0] }) }
-                ) { eintrag in
-                    artikelZeile(eintrag)
-                }
-            case .abteilung:
-                ForEach(kategorieGruppen) { gruppe in
-                    Section(gruppe.kategorie.name) {
-                        ForEach(gruppe.artikel) { eintrag in
-                            artikelZeile(eintrag)
-                        }
-                        .onDelete { offsets in
-                            artikelLoeschen(offsets.map { gruppe.artikel[$0] })
-                        }
-                    }
-                }
-            }
+        VStack(spacing: 0) {
+            suchfeld
+            liste
         }
-        .overlay {
-            if alphabetischSortiert.isEmpty {
-                ContentUnavailableView(
-                    artikel.isEmpty ? "Keine Artikel" : "Keine Treffer",
-                    systemImage: "carrot.fill",
-                    description: Text(
-                        artikel.isEmpty
-                            ? "Lege deinen ersten Artikel mit dem Plus-Symbol an."
-                            : "Kein Artikel passt zu \u{201E}\(getrimmterSuchtext)\u{201C}."
-                    )
-                )
-            }
-        }
-        .searchable(text: $suchtext, prompt: "Artikel suchen")
         .navigationTitle("Artikel")
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
@@ -142,6 +109,72 @@ struct ArtikelListView: View {
         }
         .sheet(isPresented: $zeigeDuplikatVorschlaege) {
             ArtikelDuplikatVorschlaegeView()
+        }
+    }
+
+    /// Dauerhaft sichtbares Suchfeld über der Liste — bewusst kein
+    /// `.searchable(...)` (anders als ``ProduktVerwaltungView``/
+    /// ``AbteilungenVerwaltungView``): der Anwender möchte hier direkt beim
+    /// Öffnen suchen können, ohne erst per Pull-to-Search den Titel
+    /// wegzuscrollen.
+    private var suchfeld: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField("Artikel suchen", text: $suchtext)
+                .textFieldStyle(.plain)
+            if !suchtext.isEmpty {
+                Button {
+                    suchtext = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(8)
+        .background(.fill.tertiary, in: RoundedRectangle(cornerRadius: 10))
+        .padding(.horizontal)
+        .padding(.top, 8)
+    }
+
+    private var liste: some View {
+        List {
+            switch sortierung {
+            case .alphabetisch:
+                AlphabetischeListenSektion(
+                    alphabetischSortiert,
+                    name: \.name,
+                    loeschen: { offsets, gruppe in artikelLoeschen(offsets.map { gruppe[$0] }) }
+                ) { eintrag in
+                    artikelZeile(eintrag)
+                }
+            case .abteilung:
+                ForEach(kategorieGruppen) { gruppe in
+                    Section(gruppe.kategorie.name) {
+                        ForEach(gruppe.artikel) { eintrag in
+                            artikelZeile(eintrag)
+                        }
+                        .onDelete { offsets in
+                            artikelLoeschen(offsets.map { gruppe.artikel[$0] })
+                        }
+                    }
+                }
+            }
+        }
+        .overlay {
+            if alphabetischSortiert.isEmpty {
+                ContentUnavailableView(
+                    artikel.isEmpty ? "Keine Artikel" : "Keine Treffer",
+                    systemImage: "carrot.fill",
+                    description: Text(
+                        artikel.isEmpty
+                            ? "Lege deinen ersten Artikel mit dem Plus-Symbol an."
+                            : "Kein Artikel passt zu \u{201E}\(getrimmterSuchtext)\u{201C}."
+                    )
+                )
+            }
         }
     }
 
