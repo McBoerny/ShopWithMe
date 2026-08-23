@@ -32,6 +32,7 @@ struct ArtikelListView: View {
     @State private var bearbeiteterArtikel: Artikel?
     @State private var sortierung: ArtikelSortierung = .alphabetisch
     @State private var suchtext = ""
+    @State private var zeigeDuplikatVorschlaege = false
 
     private struct KategorieGruppe: Identifiable {
         let kategorie: ArtikelKategorie
@@ -112,6 +113,15 @@ struct ArtikelListView: View {
                 }
                 .pickerStyle(.menu)
             }
+            if AISuggestionService.istVerfuegbar {
+                ToolbarItem(placement: .secondaryAction) {
+                    Button {
+                        zeigeDuplikatVorschlaege = true
+                    } label: {
+                        Label("Dubletten finden", systemImage: "sparkles")
+                    }
+                }
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     neuerArtikelEntwurf = Artikel(
@@ -129,6 +139,9 @@ struct ArtikelListView: View {
         }
         .sheet(item: $bearbeiteterArtikel) { eintrag in
             ArtikelEditView(artikel: eintrag, istNeu: false)
+        }
+        .sheet(isPresented: $zeigeDuplikatVorschlaege) {
+            ArtikelDuplikatVorschlaegeView()
         }
     }
 

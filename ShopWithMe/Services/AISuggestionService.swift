@@ -161,6 +161,46 @@ enum AISuggestionService {
         )
         return antwort.content
     }
+
+    /// Erkennt potenzielle Dubletten/Varianten unter `namen` — Grundlage für
+    /// ``ArtikelDuplikatVorschlaegeView`` (GitHub #133). Anders als die
+    /// übrigen Funktionen dieses Typs (ein Name gegen eine bekannte Liste) ist
+    /// dies ein Ganzkatalog-Abgleich: jeder Name wird gegen jeden anderen
+    /// verglichen, daher `namen` **vorab vom Aufrufer nach Kategorie
+    /// gruppieren** (Dubletten/Varianten liegen praktisch immer in derselben
+    /// Kategorie) — ein Aufruf pro Gruppe hält den Kontext klein und die
+    /// Trefferqualität hoch, statt den gesamten Artikelbestand in einer
+    /// Anfrage zu bündeln.
+    static func artikelBeziehungsVorschlaege(
+        fuerArtikelNamen namen: [String]
+    ) async throws -> [ArtikelBeziehungsVorschlag] {
+        guard namen.count > 1 else { return [] }
+        let anweisungen = """
+        Du hilfst in einer Einkaufs-App dabei, Dubletten und Varianten unter \
+        Artikelnamen zu finden, die versehentlich als getrennte Artikel \
+        angelegt wurden (z.B. durch Import oder mehrfache manuelle Anlage). \
+        Zwei Fälle:
+        1. DUPLIKAT: zwei Namen meinen dasselbe generische Ding, nur anders \
+        geschrieben (z.B. "Cola" und "Coca Cola", "Zahnpaste" und \
+        "Zahncreme").
+        2. VARIANTE: ein Name ist eigentlich kein eigener generischer \
+        Artikel, sondern ein konkretes Produkt/eine Marke eines anderen \
+        Namens (z.B. "Persil" ist eine Marke von "Waschmittel").
+        Gib für jedes gefundene Paar den primären Namen (den allgemeineren \
+        bzw. den, der bestehen bleiben soll) und den verwandten Namen an, \
+        markiere DUPLIKAT-Fälle mit istDuplikat=true und VARIANTE-Fälle mit \
+        istDuplikat=false, und begründe kurz. Nenne nur Namen aus dieser \
+        Liste, erfinde keine: \(namen.joined(separator: ", ")). Nenne kein \
+        Paar, wenn du dir nicht recht sicher bist — lieber wenige, \
+        zuverlässige Vorschläge als viele fragwürdige.
+        """
+        let session = LanguageModelSession(instructions: anweisungen)
+        let antwort = try await session.respond(
+            to: "Artikel: \(namen.joined(separator: ", "))",
+            generating: ArtikelBeziehungsVorschlaege.self
+        )
+        return antwort.content.vorschlaege
+    }
 }
 
 /// Von der lokalen Apple-KI vorgeschlagene, typische Abteilungen für einen
@@ -206,4 +246,28 @@ struct ProduktKlarnameVorschlag {
 struct AdressMatchVorschlag {
     @Guide(description: "Die am besten passende bekannte Adresse, oder ein leerer String, falls keine wirklich passt")
     var passendeAdresse: String
+}
+
+/// Ein von der lokalen Apple-KI erkanntes Paar potenziell zusammengehöriger
+/// Artikelnamen — siehe
+/// ``AISuggestionService/artikelBeziehungsVorschlaege(fuerArtikelNamen:)``
+/// (GitHub #133).
+@Generable
+struct ArtikelBeziehungsVorschlag {
+    @Guide(description: "Name des primären Artikels, der bestehen bleiben soll")
+    var primaerName: String
+    @Guide(description: "Name des verwandten Artikels, der aufgelöst werden könnte")
+    var verwandterName: String
+    @Guide(description: "true, wenn beide Namen dasselbe generische Ding meinen (Duplikat); false, wenn verwandterName eher eine konkrete Marke/Variante des primären Artikels ist")
+    var istDuplikat: Bool
+    @Guide(description: "Kurze Begründung des Vorschlags")
+    var begruendung: String
+}
+
+/// Container für die Liste der ``ArtikelBeziehungsVorschlag``e — FoundationModels
+/// generiert kein `@Generable`-Array direkt als Top-Level-Ergebnistyp, daher
+/// dieselbe Wrapper-Struktur wie ``AbteilungsVorschlag/kategorieNamen``.
+@Generable
+struct ArtikelBeziehungsVorschlaege {
+    var vorschlaege: [ArtikelBeziehungsVorschlag]
 }

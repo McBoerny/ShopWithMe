@@ -74,6 +74,17 @@ kannst; der Name erscheint danach klein unter dem Artikel auf der
 Einkaufsliste. Ohne diese Auswahl (einfacher Tap wie bisher) landet der
 Artikel weiterhin ohne festgelegtes Produkt auf der Liste.
 
+Ist Apple Intelligence verfügbar, findest du in der Artikelliste (Einstellungen
+→ Artikel) oben rechts einen **„Dubletten finden"**-Knopf (Funkeln-Symbol). Er
+durchsucht deinen gesamten Artikelbestand nach potenziellen Dubletten (z.B.
+„Cola" und „Coca Cola" als derselbe generische Artikel) und Varianten (z.B.
+„Persil" als konkrete Marke von „Waschmittel") und zeigt sie dir zur
+Bestätigung. Zu jedem Vorschlag wählst du, ob der zweite Artikel als
+**Alias** (alternativer Name des ersten) oder als **Produkt** (konkrete Marke
+darunter) aufgelöst werden soll, bevor du „Übernehmen" antippst — bereits
+vorhandene Preise, Käufe und Einkaufslisten-Einträge des aufgelösten Artikels
+bleiben dabei erhalten und wandern zum verbleibenden Artikel.
+
 ## Geschäfte
 
 Ein Geschäft hat einen oder mehrere Typen (Lebensmittel, Drogerie, Baumarkt,

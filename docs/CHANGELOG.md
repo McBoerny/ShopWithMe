@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.16 (Build 330) — Artikel-Dubletten per KI erkennen und auflösen (GitHub #133)
+
+Neuer „Dubletten finden"-Knopf in der Artikelliste (Einstellungen → Artikel,
+nur bei verfügbarer Apple Intelligence): erkennt potenzielle Duplikate/
+Varianten kategorieweise per KI (`AISuggestionService.artikelBeziehungsVorschlaege`)
+und zeigt sie in `ArtikelDuplikatVorschlaegeView` zur Bestätigung. Der neue
+`ArtikelZusammenfuehrungsService` löst einen Artikel entweder als Alias
+(`alsAliasAufloesen`, mergt Namen über `Artikel.alternativenNamenLernen`) oder
+als konkretes Produkt eines anderen Artikels auf (`alsProduktKonvertieren`) —
+beide hängen Käufe, Einkaufslisten-Einträge, Verfügbarkeits-/Listen-Fakten
+um und registrieren vor dem Tombstone-Löschen einen `SyncEntitaetsAlias`,
+damit Peers, die die alte ID noch referenzieren, korrekt auflösen.
+
 ## v0.16 (Build 329) — Belegscan erkennt mehrere Geschäftsadressen (GitHub #132)
 
 `BelegErgebnis.geschaeftAdresse: String` → `geschaeftAdressen: [String]` — viele
