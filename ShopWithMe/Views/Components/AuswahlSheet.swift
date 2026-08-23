@@ -29,8 +29,11 @@ import SwiftUI
 ///
 /// Erster Verwender: ``ArtikelAuswahlSheet`` (GitHub #123). Bewusst NICHT für
 /// Sheets mit substanzieller Sonderlogik wie `GeschaeftWahlSheet` (Geocoding,
-/// Filial-Sonderfall) — dort bliebe der Nutzen einer generischen Hülle
-/// gering gegenüber dem Umbaurisiko.
+/// Filial-Sonderfall) oder `ArtikelHinzufuegenView` (Toggle-ohne-Dismiss direkt
+/// in die DB, aufklappbare Produkt-Unterzeilen, Mengen-Badges mit eigenem
+/// Sheet, Singular/Plural-/Produktnamen-Fuzzy-Suche) — dort bliebe der Nutzen
+/// einer generischen Hülle gering gegenüber dem Umbaurisiko (bewusste,
+/// dokumentierte Ausnahme vom #130-Rollout).
 struct AuswahlSheet<Item: Identifiable & Hashable, NeuAnlegenContent: View>: View {
     /// Einfachauswahl schließt bei Zeilen-Tap sofort automatisch;
     /// Mehrfachauswahl bleibt offen, bis der Haken-Button oben rechts

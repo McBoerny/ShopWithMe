@@ -22,12 +22,10 @@ struct PreispunktZuordnenSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \Artikel.name) private var alleArtikel: [Artikel]
 
     @State private var aliasText: String
     @State private var ausgewaehlterArtikel: Artikel?
-    @State private var suchtext = ""
-    @State private var neuerArtikelEntwurf: Artikel?
+    @State private var zeigeArtikelAuswahl = false
 
     init(eintrag: Preispunkt) {
         self.eintrag = eintrag
@@ -35,24 +33,9 @@ struct PreispunktZuordnenSheet: View {
         _ausgewaehlterArtikel = State(initialValue: eintrag.artikel)
     }
 
-    private var getrimmterSuchtext: String {
-        suchtext.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var gefilterteArtikel: [Artikel] {
-        guard !getrimmterSuchtext.isEmpty else { return alleArtikel }
-        return alleArtikel.filter { $0.name.localizedCaseInsensitiveContains(getrimmterSuchtext) }
-    }
-
-    private var existiertGenau: Bool {
-        alleArtikel.contains {
-            $0.name.localizedCaseInsensitiveCompare(getrimmterSuchtext) == .orderedSame
-        }
-    }
-
     var body: some View {
         NavigationStack {
-            List {
+            Form {
                 Section {
                     TextField("Anzeigename", text: $aliasText)
                 } header: {
@@ -62,38 +45,28 @@ struct PreispunktZuordnenSheet: View {
                 }
 
                 Section {
-                    if !getrimmterSuchtext.isEmpty && !existiertGenau {
-                        Button {
-                            neuenArtikelAnlegen()
-                        } label: {
-                            Label("„\(getrimmterSuchtext)“ neu anlegen", systemImage: "plus.circle.fill")
+                    Button {
+                        zeigeArtikelAuswahl = true
+                    } label: {
+                        HStack {
+                            Text("Artikel")
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            Text(ausgewaehlterArtikel?.name ?? "Bitte w\u{00E4}hlen")
+                                .foregroundStyle(.secondary)
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
                         }
+                        .contentShape(Rectangle())
                     }
-
-                    ForEach(gefilterteArtikel) { artikel in
-                        Button {
-                            ausgewaehlterArtikel = artikel
-                        } label: {
-                            HStack {
-                                Text(artikel.name)
-                                    .foregroundStyle(.primary)
-                                Spacer()
-                                if ausgewaehlterArtikel?.id == artikel.id {
-                                    Image(systemName: "checkmark")
-                                        .foregroundStyle(Color.accentColor)
-                                }
-                            }
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
+                    .buttonStyle(.plain)
                 } header: {
                     Text("Artikel")
                 } footer: {
                     Text("Ordnet diese Belegposition dauerhaft einem übergreifenden Artikel zu — Grundlage für die Preisübersicht des Geschäfts und künftige Belegscans desselben Produkts.")
                 }
             }
-            .searchable(text: $suchtext, prompt: "Artikel suchen oder anlegen")
             .navigationTitle("Position zuordnen")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -105,30 +78,10 @@ struct PreispunktZuordnenSheet: View {
                         .disabled(ausgewaehlterArtikel == nil)
                 }
             }
-            .sheet(item: $neuerArtikelEntwurf, onDismiss: nachNeuanlageAufraeumen) { entwurf in
-                ArtikelEditView(artikel: entwurf, istNeu: true)
+            .sheet(isPresented: $zeigeArtikelAuswahl) {
+                ArtikelAuswahlSheet(gewaehlterArtikel: $ausgewaehlterArtikel)
             }
         }
-    }
-
-    private func neuenArtikelAnlegen() {
-        neuerArtikelEntwurf = Artikel(
-            name: getrimmterSuchtext,
-            symbolName: SymbolPalette.alle[0],
-            farbeHex: Color.artikelPalette[0]
-        )
-    }
-
-    /// Wurde der Entwurf tatsächlich gesichert (also in den Model-Context
-    /// eingefügt), wählt ihn dieses Sheet direkt als Zuordnung aus — siehe
-    /// ``ArtikelHinzufuegenView`` für dasselbe Muster.
-    private func nachNeuanlageAufraeumen() {
-        guard let entwurf = neuerArtikelEntwurf, entwurf.modelContext != nil else {
-            neuerArtikelEntwurf = nil
-            return
-        }
-        ausgewaehlterArtikel = entwurf
-        neuerArtikelEntwurf = nil
     }
 
     private func speichern() {

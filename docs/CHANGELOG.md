@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.16 (Build 331) — PreispunktZuordnenSheet auf ArtikelAuswahlSheet umgestellt (GitHub #130)
+
+Letzter Baustein des #130-Rollouts: `PreispunktZuordnenSheet` hatte noch eine
+eigene, handgeschriebene Suchliste zur Artikel-Auswahl — jetzt stattdessen
+eine Zeile, die `ArtikelAuswahlSheet` als verschachteltes Sheet öffnet
+(exakt das Muster aus `ProduktEditView`s "Artikel neu zuordnen"). Bewusst
+NICHT umgestellt: `ArtikelHinzufuegenView` — dessen Toggle-ohne-Dismiss-
+Verhalten, aufklappbare Produkt-Unterzeilen und Mengen-Badges passen nicht
+zum generischen `AuswahlSheet`-Modell (dokumentierte Ausnahme, analog
+`GeschaeftWahlSheet`, siehe `AuswahlSheet`-Typ-Doku).
+
 ## v0.16 (Build 330) — Artikel-Dubletten per KI erkennen und auflösen (GitHub #133)
 
 Neuer „Dubletten finden"-Knopf in der Artikelliste (Einstellungen → Artikel,
