@@ -114,10 +114,11 @@ struct BelegScanView: View {
     /// — Grundlage sowohl für den automatischen Abgleich als auch fürs Mitlernen
     /// (``Geschaeft/alternativenNamenLernen(_:)``) beim Übernehmen.
     @State private var erkannterGeschaeftName = ""
-    /// Die auf dem Beleg erkannte, rohe Geschäftsadresse (``BelegErgebnis/geschaeftAdresse``)
-    /// — Tie-Breaker bei mehreren namensgleichen Geschäften (``Geschaeft/passendes(fuerErkannterName:erkannteAdresse:unter:)``)
-    /// und Vorbelegung beim „neu anlegen“ in ``GeschaeftWahlSheet``.
-    @State private var erkannteGeschaeftAdresse = ""
+    /// Die auf dem Beleg erkannten, rohen Geschäftsadressen (``BelegErgebnis/geschaeftAdressen``,
+    /// GitHub #132) — Tie-Breaker bei mehreren namensgleichen Geschäften
+    /// (``Geschaeft/passendes(fuerErkannterName:erkannteAdressen:unter:)``) und
+    /// Auswahlgrundlage beim „neu anlegen“ in ``GeschaeftWahlSheet``.
+    @State private var erkannteGeschaeftAdressen: [String] = []
     @State private var zeigeGeschaeftWahl = false
 
     private let scanner: ReceiptScanService = VisionFoundationModelsReceiptScanner()
@@ -200,7 +201,7 @@ struct BelegScanView: View {
             .ignoresSafeArea()
         }
         .sheet(isPresented: $zeigeGeschaeftWahl) {
-            GeschaeftWahlSheet(erkannterName: erkannterGeschaeftName, erkannteAdresse: erkannteGeschaeftAdresse) { gewaehlt in
+            GeschaeftWahlSheet(erkannterName: erkannterGeschaeftName, erkannteAdressen: erkannteGeschaeftAdressen) { gewaehlt in
                 erkanntesGeschaeft = gewaehlt
             }
         }
@@ -239,7 +240,7 @@ struct BelegScanView: View {
                 if let erkanntesDatum = ergebnis.erkanntesDatum {
                     belegDatum = erkanntesDatum
                 }
-                geschaeftAbgleichen(erkannterName: ergebnis.geschaeftName, erkannteAdresse: ergebnis.geschaeftAdresse)
+                await geschaeftAbgleichen(erkannterName: ergebnis.geschaeftName, erkannteAdressen: ergebnis.geschaeftAdressen)
                 // GitHub #47, Schritt 5/5 — geschäftsabhängiger Produktname-Abgleich,
                 // siehe ``ArtikelZuordnungsService``.
                 let bekannteProduktnamen = (try? modelContext.fetch(FetchDescriptor<Produktname>())) ?? []
@@ -321,19 +322,20 @@ struct BelegScanView: View {
 
     /// Bestimmt ``erkanntesGeschaeft`` nach dem Scan: bei bereits feststehendem
     /// ``kontext``-Geschäft unverändert übernommen, sonst per
-    /// ``Geschaeft/passendes(fuerErkannterName:erkannteAdresse:unter:)`` gegen alle
+    /// ``Geschaeft/passendes(fuerErkannterName:erkannteAdressen:unter:)`` gegen alle
     /// vorhandenen Geschäfte (inkl. gelernter ``Geschaeft/alternativeNamen``, inkl.
-    /// Adress-Tie-Break bei mehreren namensgleichen Geschäften) abgeglichen. Ohne
-    /// Treffer öffnet sich sofort ``GeschaeftWahlSheet`` (weiterhin abbrechbar, dann
-    /// bleibt ``erkanntesGeschaeft`` `nil` — wie bisher bei Käufen ohne Geschäft).
-    private func geschaeftAbgleichen(erkannterName: String, erkannteAdresse: String) {
+    /// Adress-Tie-Break bei mehreren namensgleichen Geschäften, inkl. KI-Abgleich bei
+    /// mehreren erkannten Adressen, GitHub #132) abgeglichen. Ohne Treffer öffnet sich
+    /// sofort ``GeschaeftWahlSheet`` (weiterhin abbrechbar, dann bleibt
+    /// ``erkanntesGeschaeft`` `nil` — wie bisher bei Käufen ohne Geschäft).
+    private func geschaeftAbgleichen(erkannterName: String, erkannteAdressen: [String]) async {
         erkannterGeschaeftName = erkannterName
-        erkannteGeschaeftAdresse = erkannteAdresse
+        erkannteGeschaeftAdressen = erkannteAdressen
         guard geschaeftAbgleichNoetig else {
             erkanntesGeschaeft = kontext.geschaeft
             return
         }
-        if let treffer = Geschaeft.passendes(fuerErkannterName: erkannterName, erkannteAdresse: erkannteAdresse, unter: alleGeschaefte) {
+        if let treffer = await Geschaeft.passendes(fuerErkannterName: erkannterName, erkannteAdressen: erkannteAdressen, unter: alleGeschaefte, context: modelContext) {
             erkanntesGeschaeft = treffer
         } else {
             erkanntesGeschaeft = nil
@@ -367,7 +369,7 @@ struct BelegScanView: View {
             // Geocoding braucht Netzwerk (async) und muss daher vor dem
             // (synchronen) Micro-Lease abgeschlossen sein — analog
             // `GeschaeftWahlSheet.neuesGeschaeftAnlegen()`.
-            let getrimmteErkannteAdresse = erkannteGeschaeftAdresse.trimmingCharacters(in: .whitespacesAndNewlines)
+            let getrimmteErkannteAdresse = (erkannteGeschaeftAdressen.first ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             var gelernteKoordinaten: (breitengrad: Double, laengengrad: Double)?
             if let erkanntesGeschaeft, erkanntesGeschaeft.adresse == nil, !getrimmteErkannteAdresse.isEmpty {
                 gelernteKoordinaten = await GeschaeftErkennungService.koordinaten(fuerAdresse: getrimmteErkannteAdresse)
@@ -514,7 +516,7 @@ struct BelegScanView: View {
         fehlermeldung = nil
         erkanntesGeschaeft = nil
         erkannterGeschaeftName = ""
-        erkannteGeschaeftAdresse = ""
+        erkannteGeschaeftAdressen = []
         belegDatum = .now
     }
 

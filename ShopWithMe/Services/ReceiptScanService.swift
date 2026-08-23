@@ -25,8 +25,8 @@ struct BelegPosition {
 struct BelegErgebnis {
     @Guide(description: "Name des Geschäfts, falls auf dem Bon erkennbar, sonst ein leerer String")
     var geschaeftName: String
-    @Guide(description: "Adresse des Geschaefts (Strassenname und -abkuerzung genau wie auf dem Bon, Hausnummer, Postleitzahl, Ort), meist in der Kopf- oder Fusszeile. Postleitzahl einschliessen wenn vorhanden. Abkuerzungen nicht aendern. Sonst leerer String.")
-    var geschaeftAdresse: String
+    @Guide(description: "Alle auf dem Bon vorkommenden, voneinander unterscheidbaren Adressen (Strassenname und -abkuerzung genau wie auf dem Bon, Hausnummer, Postleitzahl, Ort) — typischerweise die Filialadresse in der Kopfzeile und/oder die Betreiber-/Zentraladresse im Kleingedruckten der Fusszeile. Postleitzahl je Adresse einschliessen wenn vorhanden. Abkuerzungen nicht aendern. Doppelte Adressen nicht wiederholen. Leeres Array, falls keine erkennbar.")
+    var geschaeftAdressen: [String]
     @Guide(description: "Datum des Einkaufs im Format JJJJ-MM-TT (z.B. 2026-03-24), falls auf dem Bon erkennbar, sonst ein leerer String")
     var datum: String
     @Guide(description: "Alle erkannten Artikelpositionen mit Menge und Einzelpreis, ohne Zwischensummen/Pfand/MwSt.-Zeilen")
@@ -205,6 +205,15 @@ struct VisionFoundationModelsReceiptScanner: ReceiptScanService {
         'REWE', 'Aldi Süd'), der prominent im Kopf des Bons erscheint. \
         Den Firmennamen des Betreibers (z.B. 'HEV Heimwerkermarkt GmbH \
         & Co.KG') im Kleingedruckten ignorieren.
+
+        ADRESSEN: Anders als beim Geschäftsnamen hier NICHT nur eine \
+        Adresse auswählen, sondern alle voneinander unterscheidbaren \
+        Adressen zurückgeben. Viele Bons drucken sowohl die Filialadresse \
+        (Kopfzeile) als auch die Betreiber-/Zentraladresse (Kleingedrucktes \
+        der Fusszeile, oft bei derselben Firma wie unter GESCHAEFTSNAME \
+        ignoriert). Beide gehören hier hinein, auch wenn nur eine als \
+        Geschäftsname übernommen wurde. Identische Adressen nicht doppelt \
+        aufführen.
 
         MENGEN – besonders wichtig: Viele deutsche Kassenbons (Norma, Lidl, \
         Penny, Netto) drucken die Menge in einer separaten Folgezeile direkt \

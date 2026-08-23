@@ -6,15 +6,15 @@ import Testing
 struct ReceiptScanServiceTests {
     @Test
     func erkanntesDatumParstGueltigesISOFormat() {
-        let ergebnis = BelegErgebnis(geschaeftName: "", geschaeftAdresse: "", datum: "2026-03-24", positionen: [])
+        let ergebnis = BelegErgebnis(geschaeftName: "", geschaeftAdressen: [], datum: "2026-03-24", positionen: [])
         let erwartet = Calendar.current.date(from: DateComponents(year: 2026, month: 3, day: 24))
         #expect(ergebnis.erkanntesDatum == erwartet)
     }
 
     @Test
     func erkanntesDatumIstNilBeiLeeremOderUngueltigemText() {
-        #expect(BelegErgebnis(geschaeftName: "", geschaeftAdresse: "", datum: "", positionen: []).erkanntesDatum == nil)
-        #expect(BelegErgebnis(geschaeftName: "", geschaeftAdresse: "", datum: "nicht erkennbar", positionen: []).erkanntesDatum == nil)
+        #expect(BelegErgebnis(geschaeftName: "", geschaeftAdressen: [], datum: "", positionen: []).erkanntesDatum == nil)
+        #expect(BelegErgebnis(geschaeftName: "", geschaeftAdressen: [], datum: "nicht erkennbar", positionen: []).erkanntesDatum == nil)
     }
 
     // MARK: - Decimal.aufCentGerundet

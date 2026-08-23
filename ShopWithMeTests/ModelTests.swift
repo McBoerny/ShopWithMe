@@ -396,6 +396,81 @@ struct ModelTests {
         ) == nil)
     }
 
+    // MARK: - passendes(fuerErkannterName:erkannteAdressen:unter:context:) — GitHub #132
+
+    @Test
+    func passendesMitMehrerenAdressenFindetTrefferUeberSchnellenSubstringPfadOhneKI() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let filialeA = Geschaeft(name: "Rewe", typen: [lebensmittelTyp()], adresse: "Marktstraße 1, 12345 Musterstadt")
+        let filialeB = Geschaeft(name: "Rewe", typen: [lebensmittelTyp()], adresse: "Bahnhofstraße 9, 12345 Musterstadt")
+        context.insert(filialeA)
+        context.insert(filialeB)
+
+        // Erste Adresse (Filiale) passt zu keiner Adresse, zweite (Zentrale) matcht
+        // eindeutig filialeB — der schnelle Substring-Pfad muss das ohne KI-Aufruf lösen.
+        let treffer = await Geschaeft.passendes(
+            fuerErkannterName: "Rewe",
+            erkannteAdressen: ["Ganz andere Straße 5, 99999 Woanders", "Bahnhofstraße 9, 12345 Musterstadt"],
+            unter: [filialeA, filialeB],
+            context: context
+        )
+
+        #expect(treffer === filialeB)
+    }
+
+    @Test
+    func passendesLiefertNilBeiLeeremAdressArray() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let rewe = Geschaeft(name: "Rewe", typen: [lebensmittelTyp()])
+        context.insert(rewe)
+
+        let treffer = await Geschaeft.passendes(
+            fuerErkannterName: "Unbekannt", erkannteAdressen: [], unter: [rewe], context: context
+        )
+
+        #expect(treffer == nil)
+    }
+
+    @Test
+    func passendesLiefertNilOhneBekannteAdressenAlsVergleichsgrundlage() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        // Kein Geschäft hat eine hinterlegte Adresse — weder Substring- noch
+        // KI-Pfad haben eine Vergleichsgrundlage, unabhängig von der
+        // KI-Verfügbarkeit auf dem Testgerät.
+        let rewe = Geschaeft(name: "Edeka", typen: [lebensmittelTyp()])
+        context.insert(rewe)
+
+        let treffer = await Geschaeft.passendes(
+            fuerErkannterName: "Unbekannter Name",
+            erkannteAdressen: ["Marktstraße 1, 12345 Musterstadt"],
+            unter: [rewe],
+            context: context
+        )
+
+        #expect(treffer == nil)
+    }
+
+    @Test
+    func passendesFindetTrefferPerKIBeiOCRVerrauschterAdresse() async throws {
+        guard AISuggestionService.istVerfuegbar else { return }
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let rewe = Geschaeft(name: "Rewe", typen: [lebensmittelTyp()], adresse: "Marktstraße 1, 12345 Musterstadt")
+        context.insert(rewe)
+
+        // Verrauschte Adresse (einzelner Zifferndreher in der PLZ, typischer
+        // OCR-Fehler) passt bei keinem Substring-Vergleich, sollte der
+        // KI-Ähnlichkeitsabgleich aber lösen.
+        let treffer = await Geschaeft.passendes(
+            fuerErkannterName: "", erkannteAdressen: ["Marktstraße 1, 12354 Musterstadt"], unter: [rewe], context: context
+        )
+
+        #expect(treffer === rewe)
+    }
+
     @Test
     func koordinateIstNilOhneBreitenUndLaengengrad() {
         let geschaeft = Geschaeft(name: "Rewe", typen: [lebensmittelTyp()])

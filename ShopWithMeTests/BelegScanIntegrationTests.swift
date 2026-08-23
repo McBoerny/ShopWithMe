@@ -168,14 +168,16 @@ struct BelegScanIntegrationTests {
             )
         }
 
-        // Adresse (Teilstring-Abgleich in beide Richtungen, falls angegeben)
+        // Adresse (Teilstring-Abgleich in beide Richtungen, falls angegeben) — seit
+        // GitHub #132 kann `ist` mehrere Adressen liefern, es reicht, wenn eine davon passt.
         if !soll.geschaeftAdresse.isEmpty {
-            let adressePasst =
-                ist.geschaeftAdresse.localizedCaseInsensitiveContains(soll.geschaeftAdresse) ||
-                soll.geschaeftAdresse.localizedCaseInsensitiveContains(ist.geschaeftAdresse)
+            let adressePasst = ist.geschaeftAdressen.contains {
+                $0.localizedCaseInsensitiveContains(soll.geschaeftAdresse) ||
+                soll.geschaeftAdresse.localizedCaseInsensitiveContains($0)
+            }
             #expect(
                 adressePasst,
-                "Erkannte Adresse '\(ist.geschaeftAdresse)' != Soll '\(soll.geschaeftAdresse)' [Testfall: \(testfall.name)]"
+                "Erkannte Adressen \(ist.geschaeftAdressen) != Soll '\(soll.geschaeftAdresse)' [Testfall: \(testfall.name)]"
             )
         }
 

@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 
 /// Sheet zur Auswahl eines Geschäfts für einen Belegscan, dessen Geschäft nicht
-/// automatisch über ``Geschaeft/passendes(fuerErkannterName:erkannteAdresse:unter:)``
+/// automatisch über ``Geschaeft/passendes(fuerErkannterName:erkannteAdressen:unter:)``
 /// zugeordnet werden konnte — siehe `docs/BELEGSCAN.md` → „Automatischer
 /// Geschäfts-Abgleich“.
 ///
@@ -18,9 +18,11 @@ struct GeschaeftWahlSheet: View {
     /// Der auf dem Beleg erkannte Geschäftsname, falls vorhanden — nur zur Anzeige
     /// und als Vorbelegung der Suche/Neuanlage.
     let erkannterName: String
-    /// Die auf dem Beleg erkannte Geschäftsadresse, falls vorhanden — Vorbelegung
-    /// für „neu anlegen“ (siehe ``neuesGeschaeftAnlegen()``).
-    let erkannteAdresse: String
+    /// Alle auf dem Beleg erkannten Geschäftsadressen (GitHub #132, z.B. Filiale UND
+    /// Betreiber-/Zentraladresse) — bei mehr als einer bietet das Sheet eine Auswahl
+    /// an, deren Ergebnis (``gewaehlteAdresse``) die Vorbelegung für „neu anlegen“
+    /// liefert (siehe ``neuesGeschaeftAnlegen()``).
+    let erkannteAdressen: [String]
     /// Geschäfts-Pflicht (siehe `docs/ARTIKEL_PRODUKT_MODELL.md`): non-optional
     /// statt vormals `Geschaeft?` — dieses Sheet bietet seit der Geschäfts-Pflicht
     /// keine „Kein Geschäft"-Option mehr an, jeder Aufruf von `onAuswahl` liefert
@@ -33,12 +35,16 @@ struct GeschaeftWahlSheet: View {
     @State private var suchtext: String
     @State private var neuesGeschaeftEntwurf: Geschaeft?
     @State private var erstelleGeschaeft = false
+    /// Vom Anwender gewählte Adresse, falls ``erkannteAdressen`` mehrere Kandidaten
+    /// enthält — sonst automatisch die einzige (oder keine) erkannte Adresse.
+    @State private var gewaehlteAdresse: String
 
-    init(erkannterName: String, erkannteAdresse: String = "", onAuswahl: @escaping (Geschaeft) -> Void) {
+    init(erkannterName: String, erkannteAdressen: [String] = [], onAuswahl: @escaping (Geschaeft) -> Void) {
         self.erkannterName = erkannterName
-        self.erkannteAdresse = erkannteAdresse
+        self.erkannteAdressen = erkannteAdressen
         self.onAuswahl = onAuswahl
         _suchtext = State(initialValue: erkannterName)
+        _gewaehlteAdresse = State(initialValue: erkannteAdressen.first ?? "")
     }
 
     /// Namen, die unter allen Geschäften mehrfach vorkommen — steuert, ob
@@ -64,7 +70,7 @@ struct GeschaeftWahlSheet: View {
     }
 
     private var getrimmteErkannteAdresse: String {
-        erkannteAdresse.trimmingCharacters(in: .whitespacesAndNewlines)
+        gewaehlteAdresse.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// Ob trotz eines exakt namensgleichen Geschäfts weiterhin „neu anlegen“
@@ -89,6 +95,21 @@ struct GeschaeftWahlSheet: View {
                     Section {
                         Text("Auf dem Foto erkannt: „\(erkannterName)“")
                             .foregroundStyle(.secondary)
+                    }
+                }
+
+                if erkannteAdressen.count > 1 {
+                    Section {
+                        Picker("Adresse", selection: $gewaehlteAdresse) {
+                            ForEach(erkannteAdressen, id: \.self) { adresse in
+                                Text(adresse).tag(adresse)
+                            }
+                        }
+                        .pickerStyle(.inline)
+                    } header: {
+                        Text("Mehrere Adressen erkannt")
+                    } footer: {
+                        Text("Für ein neu anzulegendes Geschäft wird die ausgewählte Adresse übernommen.")
                     }
                 }
 
@@ -152,7 +173,7 @@ struct GeschaeftWahlSheet: View {
     /// `docs/BELEGSCAN.md`. Schlägt das Geocoding fehl, öffnet sich der Entwurf
     /// trotzdem, nur ohne Koordinaten (``Geschaeft/adresse`` bleibt optional).
     private func neuesGeschaeftAnlegen() {
-        let getrimmteAdresse = erkannteAdresse.trimmingCharacters(in: .whitespacesAndNewlines)
+        let getrimmteAdresse = gewaehlteAdresse.trimmingCharacters(in: .whitespacesAndNewlines)
         Task {
             erstelleGeschaeft = true
             defer { erstelleGeschaeft = false }

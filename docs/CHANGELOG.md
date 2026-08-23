@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.16 (Build 329) — Belegscan erkennt mehrere Geschäftsadressen (GitHub #132)
+
+`BelegErgebnis.geschaeftAdresse: String` → `geschaeftAdressen: [String]` — viele
+Bons drucken sowohl eine Filial- als auch eine Betreiber-/Zentraladresse im
+Kleingedruckten. `Geschaeft.passendes(fuerErkannterName:erkannteAdressen:unter:context:)`
+(neuer async Wrapper neben der unveränderten Einzeladress-Funktion) probiert
+zunächst pro Adresse den bestehenden KI-freien Teilstring-Tie-Break, bevor bei
+Uneindeutigkeit ein neuer KI-Ähnlichkeitsabgleich (`AISuggestionService.adressMatch`)
+versucht wird, der auch OCR-Erkennungsfehler toleriert. `GeschaeftWahlSheet` zeigt
+bei mehr als einer erkannten Adresse eine Auswahlliste für die Neuanlage.
+
 ## v0.16 (Build 328) — Suchfeld für Artikelliste (Einstellungen) ergänzt (GitHub #134)
 
 Die Artikelliste unter Einstellungen → Artikel hatte als einzige der

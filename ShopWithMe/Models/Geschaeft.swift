@@ -309,32 +309,97 @@ final class Geschaeft {
         unter geschaefte: [Geschaeft]
     ) -> Geschaeft? {
         let erkannterName = erkannterName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let getrimmteAdresse = erkannteAdresse.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        func nameTrifftZu(_ bekannterName: String) -> Bool {
-            guard !bekannterName.isEmpty, !erkannterName.isEmpty else { return false }
-            return bekannterName.localizedCaseInsensitiveContains(erkannterName)
-                || erkannterName.localizedCaseInsensitiveContains(bekannterName)
-        }
-        func adresseTrifftZu(_ bekannteAdresse: String?) -> Bool {
-            guard let bekannteAdresse, !bekannteAdresse.isEmpty, !getrimmteAdresse.isEmpty else { return false }
-            return bekannteAdresse.localizedCaseInsensitiveContains(getrimmteAdresse)
-                || getrimmteAdresse.localizedCaseInsensitiveContains(bekannteAdresse)
-        }
 
         let kandidaten = erkannterName.isEmpty
             ? []
-            : geschaefte.filter { nameTrifftZu($0.name) || $0.alternativeNamen.contains(where: nameTrifftZu) }
+            : geschaefte.filter { nameTrifftZu($0.name, gesucht: erkannterName) || $0.alternativeNamen.contains { nameTrifftZu($0, gesucht: erkannterName) } }
 
         guard !kandidaten.isEmpty else {
-            let adressTreffer = geschaefte.filter { adresseTrifftZu($0.adresse) }
+            let adressTreffer = geschaefte.filter { adresseTrifftZu($0.adresse, gesucht: erkannteAdresse) }
             return adressTreffer.count == 1 ? adressTreffer.first : nil
         }
         guard kandidaten.count > 1 else { return kandidaten.first }
 
-        guard !getrimmteAdresse.isEmpty else { return kandidaten.first }
-        let anhandAdresse = kandidaten.filter { adresseTrifftZu($0.adresse) }
+        let anhandAdresse = kandidaten.filter { adresseTrifftZu($0.adresse, gesucht: erkannteAdresse) }
         return anhandAdresse.count == 1 ? anhandAdresse.first : kandidaten.first
+    }
+
+    /// Wie ``passendes(fuerErkannterName:erkannteAdresse:unter:)``, aber für einen
+    /// Kassenbon mit **mehreren** erkannten Adressen (GitHub #132, z.B. Filiale UND
+    /// Betreiber-/Zentraladresse auf demselben Beleg). Anders als ein einfacher
+    /// Aufruf-pro-Adresse-Loop über die Einzeladress-Funktion (deren bewusster
+    /// Rückfall auf den ersten Namens-Kandidaten bei unklarer Adresse sonst schon
+    /// bei der ersten, evtl. falschen Adresse vorzeitig "gewinnen" würde) probiert
+    /// diese Funktion **alle** erkannten Adressen als Tie-Breaker durch, bevor sie
+    /// aufgibt.
+    ///
+    /// Erst schneller, KI-freier Teilstring-Abgleich (namensbasierte Kandidaten,
+    /// dann pro erkannter Adresse ein eindeutiger Tie-Break-Versuch; ohne
+    /// Namenskandidaten analog der Adress-only-Suche aus GitHub #19). Bleibt das
+    /// ergebnislos UND ist ``AISuggestionService/istVerfuegbar``, wird zusätzlich
+    /// ein KI-gestützter Ähnlichkeitsabgleich versucht (toleriert OCR-Fehler)
+    /// gegen denselben Suchraum. Liefert am Ende weder Substring- noch KI-Abgleich
+    /// etwas Eindeutiges, fällt die Funktion — wie die Einzeladress-Variante —
+    /// auf den ersten Namens-Kandidaten zurück (bzw. `nil` ohne jeden
+    /// Namenskandidaten), statt den Anwender zu unterbrechen.
+    ///
+    /// Nimmt bewusst `context` entgegen: der KI-Aufruf ist ein potenziell
+    /// mehrsekündiger `await`, währenddessen ein nebenläufiger Sync-Zyklus eines
+    /// der `geschaefte`-Objekte löschen könnte. Nur Werte (ID + Adresse), keine
+    /// lebenden Objekte, überleben deshalb die `await`-Grenze (siehe
+    /// ``ModelReference``); das Ergebnis wird danach frisch aus `context` gelesen.
+    @MainActor
+    static func passendes(
+        fuerErkannterName erkannterName: String,
+        erkannteAdressen: [String],
+        unter geschaefte: [Geschaeft],
+        context: ModelContext
+    ) async -> Geschaeft? {
+        let getrimmterName = erkannterName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let kandidaten = getrimmterName.isEmpty
+            ? []
+            : geschaefte.filter { nameTrifftZu($0.name, gesucht: getrimmterName) || $0.alternativeNamen.contains { nameTrifftZu($0, gesucht: getrimmterName) } }
+
+        if kandidaten.count == 1 { return kandidaten[0] }
+
+        let suchraum = kandidaten.isEmpty ? geschaefte : kandidaten
+        for adresse in erkannteAdressen {
+            let treffer = suchraum.filter { adresseTrifftZu($0.adresse, gesucht: adresse) }
+            if treffer.count == 1 { return treffer[0] }
+        }
+
+        guard AISuggestionService.istVerfuegbar, !erkannteAdressen.isEmpty else { return kandidaten.first }
+
+        let adressenNachID: [(id: UUID, adresse: String)] = suchraum.compactMap { geschaeft in
+            guard let adresse = geschaeft.adresse, !adresse.isEmpty else { return nil }
+            return (geschaeft.id, adresse)
+        }
+        guard !adressenNachID.isEmpty,
+              let vorschlag = try? await AISuggestionService.adressMatch(fuerAdressen: erkannteAdressen, bekannteAdressen: adressenNachID.map(\.adresse)),
+              !vorschlag.passendeAdresse.isEmpty,
+              let passendeID = adressenNachID.first(where: { $0.adresse == vorschlag.passendeAdresse })?.id
+        else { return kandidaten.first }
+        let frischeGeschaefte = (try? context.fetch(FetchDescriptor<Geschaeft>())) ?? []
+        return frischeGeschaefte.first { $0.id == passendeID } ?? kandidaten.first
+    }
+
+    /// Ob `bekannterName` per beidseitigem Teilstring-Abgleich zum erkannten Namen
+    /// eines Kassenbons passt — geteilte Grundlage beider
+    /// ``passendes(fuerErkannterName:erkannteAdresse:unter:)``-Überladungen.
+    private static func nameTrifftZu(_ bekannterName: String, gesucht erkannterName: String) -> Bool {
+        guard !bekannterName.isEmpty, !erkannterName.isEmpty else { return false }
+        return bekannterName.localizedCaseInsensitiveContains(erkannterName)
+            || erkannterName.localizedCaseInsensitiveContains(bekannterName)
+    }
+
+    /// Ob `bekannteAdresse` per beidseitigem Teilstring-Abgleich zur erkannten
+    /// Adresse eines Kassenbons passt — geteilte Grundlage beider
+    /// ``passendes(fuerErkannterName:erkannteAdresse:unter:)``-Überladungen.
+    private static func adresseTrifftZu(_ bekannteAdresse: String?, gesucht erkannteAdresse: String) -> Bool {
+        let getrimmt = erkannteAdresse.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let bekannteAdresse, !bekannteAdresse.isEmpty, !getrimmt.isEmpty else { return false }
+        return bekannteAdresse.localizedCaseInsensitiveContains(getrimmt)
+            || getrimmt.localizedCaseInsensitiveContains(bekannteAdresse)
     }
 
     /// Kurzform von ``adresse`` (Straße + Ort, ohne Postleitzahl) — z.B. „Marktstraße

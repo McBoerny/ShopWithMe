@@ -131,6 +131,36 @@ enum AISuggestionService {
         let antwort = try await session.respond(to: "Geschäftstyp: \(typName)", generating: AbteilungsVorschlag.self)
         return antwort.content
     }
+
+    /// Ermittelt für eine oder mehrere auf einem Kassenbon erkannte Adressen (z.B.
+    /// Filiale UND Betreiber-/Zentraladresse desselben Belegs, GitHub #132) die
+    /// inhaltlich am besten passende bereits bekannte ``Geschaeft``-Adresse — toleriert
+    /// OCR-Erkennungsfehler (Ziffern-/Buchstabenverwechslung, Abkürzungen), analog
+    /// ``artikelMatch(fuerName:bekannteArtikel:)``. Genutzt als letzte Stufe von
+    /// ``Geschaeft/passendes(fuerErkannterName:erkannteAdressen:unter:)``, nur wenn der
+    /// schnelle, KI-freie Teilstring-Abgleich keinen eindeutigen Treffer liefert.
+    static func adressMatch(
+        fuerAdressen erkannteAdressen: [String],
+        bekannteAdressen: [String]
+    ) async throws -> AdressMatchVorschlag {
+        let anweisungen = """
+        Du hilfst dabei, auf einem Kassenbon einer Einkaufs-App erkannte Adressen \
+        (oft mit OCR-Erkennungsfehlern wie vertauschten Ziffern/Buchstaben oder \
+        abweichenden Abkürzungen) auf bereits bekannte Geschäftsadressen abzubilden. \
+        Ein Bon kann mehrere Adressen enthalten (z.B. Filiale und Betreiber-/ \
+        Zentraladresse) — jede davon kann zum gesuchten Geschäft gehören. Wähle aus \
+        dieser Liste bekannter Adressen diejenige, die zu einer der erkannten \
+        Adressen am besten passt: \(bekannteAdressen.joined(separator: " | ")). \
+        Antworte mit einem leeren String, falls wirklich keine davon passt — erfinde \
+        keine neue Adresse.
+        """
+        let session = LanguageModelSession(instructions: anweisungen)
+        let antwort = try await session.respond(
+            to: "Erkannte Adressen: \(erkannteAdressen.joined(separator: " | "))",
+            generating: AdressMatchVorschlag.self
+        )
+        return antwort.content
+    }
 }
 
 /// Von der lokalen Apple-KI vorgeschlagene, typische Abteilungen für einen
@@ -167,4 +197,13 @@ struct ArtikelMatchVorschlag {
 struct ProduktKlarnameVorschlag {
     @Guide(description: "Menschenlesbarer Klarname des Produkts — bevorzugt aus den bekannten Namen, sonst ein neu formulierter allgemeinverständlicher Name")
     var klarname: String
+}
+
+/// Von der lokalen Apple-KI vorgeschlagene, am besten passende bereits bekannte
+/// ``Geschaeft``-Adresse für eine oder mehrere auf einem Kassenbon erkannte Adressen —
+/// siehe ``AISuggestionService/adressMatch(fuerAdressen:bekannteAdressen:)`` (GitHub #132).
+@Generable
+struct AdressMatchVorschlag {
+    @Guide(description: "Die am besten passende bekannte Adresse, oder ein leerer String, falls keine wirklich passt")
+    var passendeAdresse: String
 }
