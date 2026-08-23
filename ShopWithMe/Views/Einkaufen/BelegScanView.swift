@@ -304,7 +304,7 @@ struct BelegScanView: View {
                         // (der wandert in produktKlarname — GitHub #121).
                         artikelName: zuordnung.artikel.flatMap { modelContext.existiertNochImStore($0) ? $0.name : nil } ?? position.artikelName,
                         produktKlarname: produktKlarname,
-                        preisText: "\(position.einzelpreis.aufCentGerundet)",
+                        preisText: PreisEingabeFormat.text(fuer: position.einzelpreis.aufCentGerundet),
                         zugeordneterArtikel: zuordnung.artikel,
                         zugeordnetesProdukt: zuordnung.produkt,
                         zuordnungsQuelle: zuordnung.quelle,
@@ -411,7 +411,7 @@ struct BelegScanView: View {
                         erkannt: erkannterName
                     )
                     guard !name.isEmpty,
-                          let preis = Decimal(string: position.preisText.replacingOccurrences(of: ",", with: "."))
+                          let preis = PreisEingabeFormat.decimal(ausText: position.preisText)
                     else { continue }
                     let artikel = positionsArtikelReferenzen[index]?.resolved(in: modelContext)
                     var produkt = positionsProduktReferenzen[index]?.resolved(in: modelContext)

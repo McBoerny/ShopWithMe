@@ -31,6 +31,7 @@ struct ArtikelListView: View {
     @State private var neuerArtikelEntwurf: Artikel?
     @State private var bearbeiteterArtikel: Artikel?
     @State private var sortierung: ArtikelSortierung = .alphabetisch
+    @State private var suchtext = ""
 
     private struct KategorieGruppe: Identifiable {
         let kategorie: ArtikelKategorie
@@ -38,10 +39,16 @@ struct ArtikelListView: View {
         var id: PersistentIdentifier { kategorie.persistentModelID }
     }
 
-    /// ``artikel``, alphabetisch sortiert — Umlaute einsortiert bei ihrem
-    /// Basisbuchstaben (GitHub #46).
+    /// ``artikel``, alphabetisch sortiert und ggf. nach ``suchtext`` gefiltert
+    /// — Umlaute einsortiert bei ihrem Basisbuchstaben (GitHub #46).
     private var alphabetischSortiert: [Artikel] {
-        artikel.sorted { $0.name.vergleicheAlphabetisch(mit: $1.name) == .orderedAscending }
+        let sortiert = artikel.sorted { $0.name.vergleicheAlphabetisch(mit: $1.name) == .orderedAscending }
+        guard !getrimmterSuchtext.isEmpty else { return sortiert }
+        return sortiert.filter { $0.name.localizedCaseInsensitiveContains(getrimmterSuchtext) }
+    }
+
+    private var getrimmterSuchtext: String {
+        suchtext.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private var kategorieGruppen: [KategorieGruppe] {
@@ -82,14 +89,19 @@ struct ArtikelListView: View {
             }
         }
         .overlay {
-            if artikel.isEmpty {
+            if alphabetischSortiert.isEmpty {
                 ContentUnavailableView(
-                    "Keine Artikel",
+                    artikel.isEmpty ? "Keine Artikel" : "Keine Treffer",
                     systemImage: "carrot.fill",
-                    description: Text("Lege deinen ersten Artikel mit dem Plus-Symbol an.")
+                    description: Text(
+                        artikel.isEmpty
+                            ? "Lege deinen ersten Artikel mit dem Plus-Symbol an."
+                            : "Kein Artikel passt zu \u{201E}\(getrimmterSuchtext)\u{201C}."
+                    )
                 )
             }
         }
+        .searchable(text: $suchtext, prompt: "Artikel suchen")
         .navigationTitle("Artikel")
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {

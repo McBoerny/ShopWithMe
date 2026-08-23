@@ -405,7 +405,8 @@ werden ausgetauscht.
   (Ergänzung zu dieser Anleitung, siehe oben).
 - **Artikel / Geschäfte / Abteilungen / Einkaufslisten** — die vollständige
   Verwaltung (Anlegen/Bearbeiten/Löschen); die App startet immer direkt mit der
-  Einkaufsliste, Artikel und Geschäfte sind daher nur noch hier erreichbar.
+  Einkaufsliste, Artikel und Geschäfte sind daher nur noch hier erreichbar. Die
+  Artikelliste ist durchsuchbar (Suchfeld oben).
 - **Produkte** — durchsuchbare Übersicht aller Produkte artikelübergreifend
   (z.B. um schnell „Paradontol" zu finden, ohne vorher zu wissen, dass es unter
   „Zahnpasta" hängt). Zeigt zu jedem Produkt den zugehörigen Artikel und

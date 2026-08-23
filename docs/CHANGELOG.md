@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.16 (Build 328) — Suchfeld für Artikelliste (Einstellungen) ergänzt (GitHub #134)
+
+Die Artikelliste unter Einstellungen → Artikel hatte als einzige der
+vergleichbaren Verwaltungslisten (Produkte, Abteilungen) noch kein Suchfeld.
+Jetzt `.searchable(...)` analog `ProduktVerwaltungView`, wirkt in beiden
+Sortiermodi (alphabetisch und nach Abteilung).
+
+## v0.16 — Preisscan/-schild: Preis-Ein-/Ausgabe folgt jetzt dem Locale (GitHub #131)
+
+Preise wurden beim Belegscan/Preisschild-Scan bisher per direkter
+`Decimal`-String-Interpolation angezeigt (immer „.“ als Dezimaltrennzeichen,
+unabhängig vom Gerätelocale) und beim Speichern per manueller
+Komma-durch-Punkt-Ersetzung geparst — inkonsistent mit der Anzeige, die nie
+ein Komma erzeugte. Neu: `PreisEingabeFormat` (`Services/Decimal+PreisEingabeFormat.swift`)
+formatiert/parst den Preistext beider Scan-Flows locale-bewusst (z.B. „3,10“
+unter Deutsch) über einen gemeinsamen `NumberFormatter`.
+
 ## v0.16 (Build 327) — Fix (eigentliche Ursache): AuswahlSheet schloss sich beim allerersten Öffnen sofort wieder
 
 Der vorherige Fix (siehe unten, „AuswahlSheet flackerten auf/zu") behob eine

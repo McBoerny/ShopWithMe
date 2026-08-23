@@ -122,7 +122,7 @@ struct PreisschildScanView: View {
                 bearbeitbarePosition = BearbeitbarePreisschildPosition(
                     erkannterName: ergebnis.artikelName,
                     artikelName: gelernt?.produkt?.name ?? ergebnis.artikelName,
-                    preisText: "\(ergebnis.preis.aufCentGerundet)",
+                    preisText: PreisEingabeFormat.text(fuer: ergebnis.preis.aufCentGerundet),
                     gelernterArtikel: gelernt?.produkt?.artikel,
                     gelerntesProdukt: gelernt?.produkt,
                     bestehenderPreisHeute: bestehenderPreisHeute
@@ -157,7 +157,7 @@ struct PreisschildScanView: View {
             let name = bearbeitbarePosition.artikelName.trimmingCharacters(in: .whitespacesAndNewlines)
             let erkannterName = bearbeitbarePosition.erkannterName.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !name.isEmpty,
-                  let preis = Decimal(string: bearbeitbarePosition.preisText.replacingOccurrences(of: ",", with: "."))
+                  let preis = PreisEingabeFormat.decimal(ausText: bearbeitbarePosition.preisText)
             else { return }
 
             // Diskrete Einzelaktion → ein Micro-Lease (siehe
