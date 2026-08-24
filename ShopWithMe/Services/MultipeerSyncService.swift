@@ -252,10 +252,8 @@ final class MultipeerSyncService: NSObject, ObservableObject {
         catchUpSchleife = Task(priority: .utility) { @MainActor [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: Self.catchUpPruefIntervall)
-                guard !Task.isCancelled, let self, let session = self.session else { return }
-                for peerID in session.connectedPeers {
-                    self.pruefeUndSendeCatchUpFallsGeaendert(an: peerID)
-                }
+                guard !Task.isCancelled, let self else { return }
+                await self.pruefeUndSendeCatchUpFuerAlleVerbundenenPeers()
             }
         }
     }
@@ -310,37 +308,77 @@ final class MultipeerSyncService: NSObject, ObservableObject {
     }
 
     /// Bereich-B/C/D-Catch-up (GitHub #125) — aufgerufen sowohl beim
-    /// `.connected`-Event (``session(_:peer:didChange:)``) als auch
-    /// periodisch aus ``catchUpSchleife``. Sendet NICHT bei jedem Aufruf
-    /// blind das volle Paket, sondern nur, wenn sich der eigene
-    /// Bereich-B/C/D/Kaufhistorie-Fingerabdruck seit dem letzten
-    /// erfolgreichen Versand AN DIESEN Peer geändert hat
-    /// (``letzterGesendeterFingerabdruck``, Nutzer-Entscheidung 2026-08-24 —
-    /// bewusst kein blindes Senden bei jedem Reconnect, siehe Typ-Doku dort).
-    /// Ein neu verbundener Peer hat noch keinen Eintrag im Cache, der erste
-    /// Aufruf sendet also immer — das deckt den eigentlichen Issue-Fall
-    /// „Peer war lange offline" sofort ab.
+    /// `.connected`-Event (``session(_:peer:didChange:)``, für genau den neu
+    /// verbundenen Peer) als auch periodisch aus ``catchUpSchleife`` (für
+    /// ALLE aktuell verbundenen Peers gemeinsam). Der eigene
+    /// Bereich-B/C/D/Kaufhistorie-Zustand hängt nicht vom jeweiligen Peer ab
+    /// — deshalb wird der teure SwiftData-Fetch hier bewusst NUR EINMAL pro
+    /// Aufruf gemacht, nicht einmal je verbundenem Peer (Live-Fund: eine
+    /// frühere Fassung rief die alte, jetzt entfernte
+    /// `pruefeUndSendeCatchUpFallsGeaendert(an:)` in einer Schleife über
+    /// `session.connectedPeers` auf und vervielfachte damit unnötig
+    /// dieselbe teure Arbeit).
     ///
-    /// Selbst ein unnötiger Versand wäre unschädlich: die Ziel-Merge-Funktion
-    /// (``SyncSnapshotImportService/mergePaket(tombstones:stamm:listen:lernen:vorgaenge:preise:kaeufe:geraeteName:peerGeraeteID:erzeugtAm:context:)``)
-    /// ist bereits ein idempotentes State-CRDT (`docs/SYNC_CONNECTOR_ARCHITEKTUR.md`
-    /// §0.4/§3) — das Diffing hier ist eine reine Bandbreiten-/Akku-
-    /// Optimierung, keine Korrektheitsvoraussetzung.
-    ///
-    /// `sendResource` statt `send` (Größenbudget: Kaufhistorie kann über die
-    /// Zeit mehrere Megabyte erreichen, siehe Typ-Doku ``SyncKaeufeExportService``
-    /// „56% der Größe einer realen export.json").
-    private func pruefeUndSendeCatchUpFallsGeaendert(an peerID: MCPeerID) {
-        guard let context, let session else { return }
+    /// **`ModelContext`-Zugriff bleibt zwingend auf dem `MainActor`**
+    /// (SwiftData-Vorgabe), aber Encoding/Hashing/Datei-Schreiben der
+    /// bereits geladenen Werte NICHT — das wäre reine CPU-/I/O-Arbeit ohne
+    /// `ModelContext`-Bezug und lief vorher versehentlich synchron auf dem
+    /// `MainActor` mit, blockierte dort für die Dauer der UI (Live-Fund: App
+    /// wurde auf einem frisch befüllten Gerät mit größerer Kaufhistorie
+    /// unresponsive/beendet, unmittelbar nach dem ersten `.connected`-Event
+    /// — genau die Stelle, an der dieser Pfad zum ersten Mal lief). Jetzt
+    /// per `Task.detached` ausgelagert (Muster wie `SyncDateiZugriff`/
+    /// `SyncKaeufeExportService.exportiereNeueKaeufe`).
+    private func pruefeUndSendeCatchUpFuerAlleVerbundenenPeers() async {
+        guard let context, let session, !session.connectedPeers.isEmpty else { return }
         let teile = SyncSnapshotExportService.erstellePaketTeile(context: context)
         let kaeufe = SyncKaeufeExportService.alleSnapshots(context: context)
 
-        let fingerabdruck = SyncSnapshotExportService.zustandsFingerabdruck(
-            tombstones: teile.tombstones, stamm: teile.stamm, listen: teile.listen,
-            lernen: teile.lernen, vorgaenge: teile.vorgaenge, preise: teile.preise, kaeufe: kaeufe
-        )
-        guard letzterGesendeterFingerabdruck[peerID.displayName] != fingerabdruck else { return }
+        let fingerabdruck = await Task.detached(priority: .utility) {
+            SyncSnapshotExportService.zustandsFingerabdruck(
+                tombstones: teile.tombstones, stamm: teile.stamm, listen: teile.listen,
+                lernen: teile.lernen, vorgaenge: teile.vorgaenge, preise: teile.preise, kaeufe: kaeufe
+            )
+        }.value
 
+        for peerID in session.connectedPeers {
+            guard letzterGesendeterFingerabdruck[peerID.displayName] != fingerabdruck else { continue }
+            await sendeCatchUpPaket(teile: teile, kaeufe: kaeufe, fingerabdruck: fingerabdruck, an: peerID)
+        }
+    }
+
+    /// Einmal-Prüfung für GENAU EINEN Peer (Aufrufer: `.connected`-Event) —
+    /// dünner Wrapper um ``pruefeUndSendeCatchUpFuerAlleVerbundenenPeers()``,
+    /// vermeidet aber, für den neu verbundenen Peer auf den nächsten
+    /// periodischen Tick zu warten.
+    private func pruefeUndSendeCatchUpFallsGeaendert(an peerID: MCPeerID) {
+        Task { await pruefeUndSendeCatchUpFuerAlleVerbundenenPeers() }
+    }
+
+    /// Baut das eigentliche Übertragungspaket, kodiert und schreibt es
+    /// abseits des `MainActor` (siehe Typ-Doku
+    /// ``pruefeUndSendeCatchUpFuerAlleVerbundenenPeers()``) und übergibt es
+    /// erst danach an `MCSession.sendResource` (Größenbudget: Kaufhistorie
+    /// kann über die Zeit mehrere Megabyte erreichen, siehe Typ-Doku
+    /// ``SyncKaeufeExportService`` „56% der Größe einer realen export.json").
+    /// Sendet NICHT bei jedem Aufruf blind, sondern nur, wenn
+    /// `fingerabdruck` vom zuletzt erfolgreich AN DIESEN Peer gesendeten
+    /// abweicht (``letzterGesendeterFingerabdruck``, Nutzer-Entscheidung
+    /// 2026-08-24 — kein blindes Senden bei jedem Reconnect). Ein neu
+    /// verbundener Peer hat noch keinen Eintrag im Cache, der erste Aufruf
+    /// sendet also immer — deckt den Issue-Fall „Peer war lange offline"
+    /// sofort ab. Selbst ein unnötiger Versand wäre unschädlich: die
+    /// Ziel-Merge-Funktion (``SyncSnapshotImportService/mergePaket(tombstones:stamm:listen:lernen:vorgaenge:preise:kaeufe:geraeteName:peerGeraeteID:erzeugtAm:context:)``)
+    /// ist bereits ein idempotentes State-CRDT — das Diffing hier ist reine
+    /// Bandbreiten-/Akku-Optimierung, keine Korrektheitsvoraussetzung.
+    private func sendeCatchUpPaket(
+        teile: (
+            manifest: SyncPeerManifest, tombstones: [SyncTombstoneSnapshot], stamm: SyncStammSnapshot,
+            listen: SyncListenSnapshot, lernen: SyncLernenSnapshot, vorgaenge: SyncVorgaengeSnapshot, preise: SyncPreisSnapshot
+        ),
+        kaeufe: [KaufEintragSnapshot], fingerabdruck: String, an peerID: MCPeerID
+    ) async {
+        guard let session else { return }
         let paket = MultipeerCatchUpPaket(
             teile: SyncPaketTeile(
                 manifest: teile.manifest, tombstones: teile.tombstones, stamm: teile.stamm,
@@ -348,15 +386,20 @@ final class MultipeerSyncService: NSObject, ObservableObject {
             ),
             kaeufe: kaeufe
         )
-        guard let daten = try? JSONEncoder().encode(paket) else { return }
-
         let tempURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("multipeer-catchup-\(UUID().uuidString).json")
-        do {
-            try daten.write(to: tempURL)
-        } catch {
-            return
-        }
+
+        let erfolgreichGeschrieben = await Task.detached(priority: .utility) { () -> Bool in
+            guard let daten = try? JSONEncoder().encode(paket) else { return false }
+            do {
+                try daten.write(to: tempURL)
+                return true
+            } catch {
+                return false
+            }
+        }.value
+        guard erfolgreichGeschrieben else { return }
+
         // Optimistisch VOR Abschluss des Transfers vermerkt (Muster wie
         // ``sendeAnVerbundenePeers(_:)`` — fire-and-forget, kein Warten auf
         // Bestätigung): ein tatsächlich fehlgeschlagener Transfer bleibt

@@ -845,6 +845,20 @@ vollständige `KaufEintrag`-Historie als `[KaufEintragSnapshot]`,
 `SyncKaeufeExportService.alleSnapshots(context:)`) als JSON-Datei — `send`
 wäre für die potenziell mehrere Megabyte große Kaufhistorie ungeeignet.
 
+**Live-Fund (2026-08-24): Fetch einmal pro Tick, Encoding/Hashing/Schreiben
+abseits des `MainActor`.** Eine erste Fassung rief die Sende-Prüfung in einer
+Schleife über `session.connectedPeers` auf (unnötige Mehrfacharbeit bei
+mehreren verbundenen Peers) und kodierte/hashte den gesamten Zustand
+synchron auf dem `MainActor` — auf einem frisch aus einem Peer-Snapshot
+befüllten Gerät mit größerer Kaufhistorie führte das direkt beim ersten
+`.connected`-Event zu einer spürbaren UI-Blockade. Der SwiftData-Fetch selbst
+bleibt zwingend auf dem `MainActor` (`ModelContext`-Vorgabe), aber
+`erstellePaketTeile`/`alleSnapshots` laufen jetzt nur EINMAL pro Prüfung
+(nicht mehr je Peer), und das anschließende JSON-Encoding/SHA256-Hashing/
+Datei-Schreiben per `Task.detached` außerhalb des `MainActor`
+(`pruefeUndSendeCatchUpFuerAlleVerbundenenPeers()`/`sendeCatchUpPaket(...)`
+in `MultipeerSyncService.swift`).
+
 **Anwendung:** dieselbe, bereits idempotente Merge-Funktion wie der
 Datei-Import,
 `SyncSnapshotImportService.mergePaket(tombstones:stamm:listen:lernen:vorgaenge:preise:kaeufe:geraeteName:peerGeraeteID:erzeugtAm:context:)`

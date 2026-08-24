@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.16 (Build 344) — Multipeer-Catch-up: UI-Blockade auf dem MainActor behoben
+
+Nutzerbericht: App wurde auf einem frisch aus einem Peer-Snapshot befüllten
+Gerät mit größerer Kaufhistorie direkt beim ersten Multipeer-`.connected`-
+Event unresponsive (kein Absturzbericht, Konsolen-Log brach mittendrin ab —
+typisches Bild eines Main-Thread-Hängers statt eines Signal-Crashs). Ursache:
+der Catch-up-Sende-Pfad (GitHub #125) kodierte/hashte den kompletten
+Bereich-B/C/D/Kaufhistorie-Zustand synchron auf dem `MainActor`, zusätzlich
+einmal je verbundenem Peer wiederholt. Fix: der SwiftData-Fetch bleibt auf
+dem `MainActor` (Vorgabe), läuft aber nur noch einmal pro Prüfung statt
+einmal je Peer; Encoding/Hashing/Datei-Schreiben laufen jetzt per
+`Task.detached` abseits des `MainActor`. Details:
+`docs/DATENSYNCHRONISATION.md` §4.8.
+
 ## v0.16 (Build 341) — Multipeer-Catch-up-Sync für Bereich B/C/D (GitHub #125)
 
 Ein per Multipeer verbundener Peer, der länger offline war, musste bisher für
