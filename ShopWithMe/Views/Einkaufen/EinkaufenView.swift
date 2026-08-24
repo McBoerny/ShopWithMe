@@ -347,7 +347,7 @@ struct EinkaufenView: View {
     @ToolbarContentBuilder
     private var einkaufenToolbar: some ToolbarContent {
         if !einkaufslisten.isEmpty {
-            ToolbarItem(placement: .topBarLeading) {
+            ToolbarItem(placement: .secondaryAction) {
                 einkaufslistenMenu
             }
         }
@@ -380,10 +380,11 @@ struct EinkaufenView: View {
         }
     }
 
-    /// Das Einkaufslisten-Auswahl-`Menu` im Toolbar (`.topBarLeading`-Platzierung)
-    /// — als eigene `@ViewBuilder`-Property ausgelagert, siehe ``geschaeftPicker``
-    /// für die Begründung (Typchecker-Timeout bei zu tief verschachteltem
-    /// Toolbar-Inhalt).
+    /// Das Einkaufslisten-Auswahl-`Menu` im Toolbar (`.secondaryAction`-Platzierung,
+    /// erscheint dadurch im automatischen „Mehr"-Overflow-Menü zusammen mit dem
+    /// MilkForUs-Import aus ``EinkaufslisteView``, GitHub #150) — als eigene
+    /// `@ViewBuilder`-Property ausgelagert, siehe ``geschaeftPicker`` für die
+    /// Begründung (Typchecker-Timeout bei zu tief verschachteltem Toolbar-Inhalt).
     @ViewBuilder
     private var einkaufslistenMenu: some View {
         Menu {
