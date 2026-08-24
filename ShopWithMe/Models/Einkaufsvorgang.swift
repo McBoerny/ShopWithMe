@@ -118,9 +118,22 @@ final class Einkaufsvorgang {
     /// `Geschaeft?` typisierten Wert übergibt (auch wenn dessen Inhalt `nil`
     /// ist), wird von Swift automatisch korrekt in die äußere Optionalität
     /// gehoben — nur der reine `nil`-Literal bedeutet „kein Override".
+    /// `datum`: Zeitpunkt des ``KaufEintrag``s — Default `Date()` (lokales
+    /// Abhaken „jetzt"). **Live-Fund (2026-08-24):** der per Bereich-A-Event
+    /// materialisierte Aufrufer (``SyncImportService``) übergab hier bisher
+    /// KEINEN Zeitpunkt, obwohl das Event selbst einen ursprünglichen
+    /// ``SyncEvent/wallClock`` trägt — jeder `KaufEintrag` aus einem
+    /// Event-Replay (z.B. kompletter historischer Nachhol-Lauf nach einem
+    /// Geräte-Neuaufbau) bekam dadurch fälschlich den AKTUELLEN
+    /// Import-Zeitpunkt statt des tatsächlichen historischen Kaufdatums —
+    /// verfälscht sowohl die Kaufhistorie-/Preishistorie-Anzeige als auch
+    /// (über ``ArtikelListenKaufService/vermerkeAbgehakt(artikel:einkaufsliste:am:context:)``
+    /// unten) den `zuletztAbgehaktAm`-Vergleichswert des Sicherheitsnetzes
+    /// (Abschnitt 4.7). Analog zum bereits bestehenden `am:`-Parameter von
+    /// ``Einkaufsliste/artikelHinzufuegenOhneEventAufzeichnung(_:context:)``.
     @discardableResult
     func artikelAbhakenOhneEventAufzeichnung(
-        _ artikel: Artikel, produkt: Produkt? = nil, context: ModelContext, ursprungsGeraeteID: String? = nil,
+        _ artikel: Artikel, produkt: Produkt? = nil, am datum: Date = Date(), context: ModelContext, ursprungsGeraeteID: String? = nil,
         abteilung abteilungUeberschreibung: Abteilung? = nil,
         geschaeft geschaeftUeberschreibung: Geschaeft?? = nil
     ) -> AbhakErgebnis {
@@ -169,6 +182,7 @@ final class Einkaufsvorgang {
             geschaeft: geschaeftFuerEintrag,
             abteilung: abteilung,
             menge: listenEintrag?.menge ?? artikel.mengenSchritt,
+            datum: datum,
             abteilungBesuchsIndex: index,
             ursprungsGeraeteID: ursprungsGeraeteID
         )

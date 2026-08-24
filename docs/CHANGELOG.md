@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.16 (Build 352) — KaufEintrag-Datum bei Bereich-A-Event-Replay korrigiert
+
+Direkter Folgefund zum vorigen Sicherheitsnetz-Fix: `Einkaufsvorgang.artikelAbhakenOhneEventAufzeichnung`
+(genutzt von `SyncImportService.materialisiere`s `.artikelAbgehakt`-Zweig)
+nahm keinen Zeitpunkt-Parameter entgegen — jeder per Bereich-A-Event-Replay
+materialisierte `KaufEintrag` bekam dadurch den aktuellen Import-Zeitpunkt
+statt des tatsächlichen historischen Kaufdatums, live bestätigt nach einem
+Geräte-Neuaufbau. Verfälschte sowohl die Kaufhistorie-/Preishistorie-Anzeige
+als auch den `zuletztAbgehaktAm`-Vergleichswert des Sicherheitsnetzes selbst
+(macht dessen Prüfung höchstens zu konservativ, unterläuft sie aber nicht).
+Neuer optionaler `am:`-Parameter (Default weiterhin `Date()` für lokales
+Abhaken), analog dem bereits bestehenden Pendant bei `artikelHinzugefuegt` —
+`SyncImportService.materialisiere` übergibt jetzt den ursprünglichen
+Event-`wallClock`. Details: `docs/DATENSYNCHRONISATION.md` §4.7.
+
 ## v0.16 (Build 351) — Sicherheitsnetz gegen wiederbelebte Käufe auf Bereich-A-Event-Replay ausgeweitet
 
 Live-Fund: Nach einem Geräte-Neuaufbau spielte der Datei-Kanal die komplette

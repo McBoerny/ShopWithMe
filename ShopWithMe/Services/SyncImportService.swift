@@ -569,8 +569,13 @@ enum SyncImportService {
             // `nil`-Ergebnis (kein Geschäft ausgewählt) gilt so als expliziter
             // Override, nicht als „kein Override, self.geschaeft gilt".
             let geschaeftUeberschreibung: Geschaeft? = nutzlast.geschaeftID.flatMap { geschaeft(mitID: $0, aliase: aliase, context: context) }
+            // `am: wallClock` (Live-Fund 2026-08-24, siehe Typ-Doku des
+            // Parameters an ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:produkt:am:context:ursprungsGeraeteID:abteilung:geschaeft:)``):
+            // ohne diese Weitergabe bekäme jeder per Event-Replay materialisierte
+            // ``KaufEintrag`` fälschlich den aktuellen Import-Zeitpunkt statt des
+            // tatsächlichen historischen Kaufdatums.
             vorgang.artikelAbhakenOhneEventAufzeichnung(
-                artikel, context: context, ursprungsGeraeteID: autorGeraeteID, geschaeft: geschaeftUeberschreibung
+                artikel, am: wallClock, context: context, ursprungsGeraeteID: autorGeraeteID, geschaeft: geschaeftUeberschreibung
             )
             return .erfolgreich
         case .artikelAbgewaehlt:

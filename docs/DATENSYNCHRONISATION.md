@@ -835,6 +835,41 @@ ohne Zeitstempel (siehe `istBereitsAbgehakt`) — dieser Zweig hatte zuvor GAR
 keinen Schutz, die reine Ergänzung des robusten, primären Vergleichs ist
 bereits eine strikte Verbesserung.
 
+**Nachtrag (direkter Folgefund, Live-Fund 2026-08-24): derselbe
+Event-Replay-Nachhol-Lauf stempelte auch falsche `KaufEintrag.datum`-Werte.**
+Beim Aufspüren des Fundes oben fiel eine zweite, verwandte Lücke auf:
+``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:produkt:am:context:ursprungsGeraeteID:abteilung:geschaeft:)``
+(der von `SyncImportService.materialisiere`s `.artikelAbgehakt`-Zweig
+genutzte, nicht-aufzeichnende Mutationsweg) nahm bisher KEINEN
+Zeitpunkt-Parameter entgegen — jeder neu angelegte `KaufEintrag` bekam
+dadurch den `KaufEintrag`-Modell-Default `Date()` („jetzt"), unabhängig davon,
+wie alt das materialisierte Event tatsächlich war. Live bestätigt: ein
+kompletter historischer Event-Nachhol-Lauf nach einem Geräte-Neuaufbau
+erzeugte für tatsächlich Stunden zurückliegende Abhak-Events frische
+`KaufEintrag`e mit dem aktuellen Import-Zeitpunkt als `datum` — verzerrt
+sowohl die Kaufhistorie-/Preishistorie-Anzeige als auch (über
+``ArtikelListenKaufService/vermerkeAbgehakt(artikel:einkaufsliste:am:context:)``)
+den `zuletztAbgehaktAm`-Vergleichswert des Sicherheitsnetzes selbst — anders
+als beim Fund oben unterläuft ein zu JUNGER Zeitstempel die Schutzwirkung
+zwar nicht (macht die Prüfung höchstens konservativer), verfälscht aber die
+angezeigten Kaufdaten. **Fix:** neuer optionaler `am:`-Parameter (Default
+weiterhin `Date()` für lokales Abhaken), analog dem bereits bestehenden `am:`
+von ``Einkaufsliste/artikelHinzufuegenOhneEventAufzeichnung(_:context:)`` —
+`SyncImportService.materialisiere` übergibt jetzt den ursprünglichen
+``SyncEvent/wallClock`` des Events.
+
+**Verwandter, NICHT behobener Randfall (niedrigere Konfidenz, keine Live-
+Reproduktion):** Der Dedupe-Schutz gegen ein doppeltes Abhaken
+(`bereitsVorhanden` in derselben Funktion) prüft nur gegen KaufEintraege
+unter noch OFFENEN Einkaufsvorgängen derselben Liste. Ein per Event-Replay
+gegen einen bereits GESCHLOSSENEN Einkaufsvorgang gerichtetes
+`artikelAbgehakt`-Event würde diesen Schutz nicht durchlaufen. Da
+`SyncEventService/istBereitsBekannt(_:context:)` dieselbe Event-ID auf einem
+Gerät aber nie zweimal materialisiert, bräuchte es dafür ein bisher nicht
+beobachtetes Szenario (z.B. zwei verschiedene Events, die denselben
+realweltlichen Kauf beschreiben) — bewusst nur vermerkt, nicht spekulativ
+gefixt, bis ein konkreter Live-Fund vorliegt.
+
 **Nachtrag (Nutzerbericht 2026-08-10, Abschnitt 57): `mergeKaufEintraege`
 ließ den offenen Listen-Eintrag stehen.** Anders als das lokale Abhaken
 löschte der Bereich-C-Merge den zugehörigen `EinkaufslistenEintrag` nie,
