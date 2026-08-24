@@ -407,9 +407,30 @@ final class MultipeerSyncService: NSObject, ObservableObject {
         // Datei-Kanal ohnehin nachliefert (siehe Re-Entranz-Schutz-Kommentar
         // an ``wendeCatchUpPaketAn(_:context:)``).
         letzterGesendeterFingerabdruck[peerID.displayName] = fingerabdruck
-        session.sendResource(at: tempURL, withName: tempURL.lastPathComponent, toPeer: peerID) { _ in
+        // Live-Fund (2026-08-24, Absturz mit Stacktrace belegt):
+        // `MCSession.sendResource` ruft seinen Completion-Handler NIE auf
+        // dem `MainActor` auf, sondern auf einer eigenen internen
+        // `com.apple.MCSession.callbackQueue`. Ein Closure-Literal, das
+        // (wie zuvor hier) direkt inline innerhalb dieser `@MainActor`-
+        // Methode geschrieben wird, erbt ohne Gegenmaßnahme trotzdem
+        // `MainActor`-Isolation (Swifts Standard-Inferenzregel für Closures
+        // in aktor-isolierten Methoden) — zur Laufzeit erzwingt Swift dann
+        // eine Isolations-Prüfung beim tatsächlichen Aufruf und bricht hart
+        // ab (`dispatch_assert_queue`-Fail, `_swift_task_checkIsolatedSwift`),
+        // weil der Aufruf nachweislich NICHT auf dem `MainActor` läuft.
+        // Der explizit als `@Sendable`, nicht-isolierter Funktionstyp
+        // annotierte lokale Wert unten durchbricht diese Inferenz: der
+        // Closure-Körper selbst berührt ohnehin nur Sendable-Werte
+        // (`tempURL`), keine `MainActor`-isolierten Properties — die
+        // Einschränkung war rein durch den lexikalischen Schreibort
+        // entstanden, nicht durch echten Bedarf an `MainActor`-Isolation.
+        let raeumeTempDateiAuf: @Sendable (Error?) -> Void = { _ in
             try? FileManager.default.removeItem(at: tempURL)
         }
+        session.sendResource(
+            at: tempURL, withName: tempURL.lastPathComponent, toPeer: peerID,
+            withCompletionHandler: raeumeTempDateiAuf
+        )
     }
 
     /// Wendet ein per Multipeer empfangenes Catch-up-Paket an — geteilte

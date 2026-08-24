@@ -859,6 +859,24 @@ Datei-Schreiben per `Task.detached` außerhalb des `MainActor`
 (`pruefeUndSendeCatchUpFuerAlleVerbundenenPeers()`/`sendeCatchUpPaket(...)`
 in `MultipeerSyncService.swift`).
 
+**Zweiter Live-Fund (2026-08-24, mit Stacktrace belegt): Absturz im
+`sendResource`-Completion-Handler.** `MCSession.sendResource` ruft seinen
+Completion-Handler nie auf dem `MainActor` auf, sondern auf einer eigenen
+internen `com.apple.MCSession.callbackQueue`. Ein Closure-Literal, das direkt
+inline innerhalb der `@MainActor`-Methode geschrieben wird, erbt ohne
+Gegenmaßnahme trotzdem `MainActor`-Isolation (Swifts Standard-Inferenzregel
+für Closures in aktor-isolierten Methoden) — beim tatsächlichen Aufruf
+erzwingt Swift dann eine Laufzeit-Isolationsprüfung und bricht hart ab
+(`dispatch_assert_queue`-Fail), weil der Aufruf nachweislich nicht auf dem
+`MainActor` läuft. Fix: der Completion-Handler ist jetzt ein lokaler, explizit
+als `@Sendable (Error?) -> Void` (nicht-isoliert) typisierter Wert — der
+Closure-Körper berührt ohnehin nur den Sendable-Wert `tempURL`, keine
+`MainActor`-isolierten Properties, die vorherige Einschränkung entstand rein
+durch den lexikalischen Schreibort. Dasselbe Muster wird bereits an anderer
+Stelle in dieser Klasse korrekt verwendet (`invitationHandler: @escaping
+@Sendable (Bool, MCSession?) -> Void` in
+`advertiser(_:didReceiveInvitationFromPeer:withContext:invitationHandler:)`).
+
 **Anwendung:** dieselbe, bereits idempotente Merge-Funktion wie der
 Datei-Import,
 `SyncSnapshotImportService.mergePaket(tombstones:stamm:listen:lernen:vorgaenge:preise:kaeufe:geraeteName:peerGeraeteID:erzeugtAm:context:)`

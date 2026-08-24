@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.16 (Build 345) — Multipeer-Catch-up: harter Absturz im sendResource-Completion-Handler behoben
+
+Nutzerbericht mit Stacktrace: Absturz auf `com.apple.MCSession.callbackQueue`
+(`dispatch_assert_queue`-Fail, `_swift_task_checkIsolatedSwift`) direkt beim
+Abschluss des Catch-up-`sendResource`-Transfers (GitHub #125). Ursache: der
+inline geschriebene Completion-Handler-Closure erbte automatisch
+`MainActor`-Isolation von der umgebenden Methode, `MCSession` ruft ihn aber
+nachweislich auf einer eigenen internen Queue auf — Swift erzwingt dafür zur
+Laufzeit eine Isolationsprüfung, die hart abbricht. Fix: Completion-Handler
+jetzt ein explizit als `@Sendable`, nicht-isolierter Funktionstyp deklarierter
+lokaler Wert (Muster bereits an anderer Stelle in `MultipeerSyncService`
+korrekt verwendet, `invitationHandler`). Details:
+`docs/DATENSYNCHRONISATION.md` §4.8.
+
 ## v0.16 (Build 344) — Multipeer-Catch-up: UI-Blockade auf dem MainActor behoben
 
 Nutzerbericht: App wurde auf einem frisch aus einem Peer-Snapshot befüllten
