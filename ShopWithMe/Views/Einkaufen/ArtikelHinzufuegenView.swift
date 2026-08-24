@@ -37,9 +37,16 @@ struct ArtikelHinzufuegenView: View {
     /// Unterdrückt genau eine Aktualisierung von ``wirksamerSuchtext`` — gesetzt
     /// unmittelbar bevor `suchtext` nach einer Auswahl programmatisch geleert wird.
     @State private var filterEinfrieren = false
-    /// Auf `true` initialisiert, damit die Tastatur beim Öffnen des Sheets
-    /// sofort erscheint und der Nutzer direkt tippen kann.
-    @State private var sucheAktiv = true
+    /// Fokussiert das Suchfeld beim Öffnen des Sheets automatisch (siehe
+    /// `.onAppear` in ``body``), damit die Tastatur sofort erscheint und der
+    /// Nutzer direkt tippen kann — über `.searchFocused(_:)` statt (wie
+    /// zuvor) über `.searchable(isPresented:)`. Die `isPresented`-Variante
+    /// koppelte den Tastaturfokus an den „aktiv suchend"-Zustand des
+    /// Suchfelds selbst: ein Tap auf „Fertig" bei fokussiertem Suchfeld
+    /// beendete dadurch zunächst nur die Suche (erster Tap) und schloss das
+    /// Sheet erst beim zweiten Tap. `.searchFocused(_:)` steuert
+    /// ausschließlich den Tastaturfokus, ohne diese Kopplung.
+    @FocusState private var suchfeldFokussiert: Bool
     @State private var neuerArtikelEntwurf: Artikel?
     /// SwiftUI setzt die an `.sheet(item:)` gebundene Property bereits vor dem
     /// Aufruf von `onDismiss` auf `nil` zurück — ``nachNeuanlageAufraeumen`` braucht
@@ -362,18 +369,15 @@ struct ArtikelHinzufuegenView: View {
             // `.navigationBarDrawer(displayMode: .always)` hält Titel und „Fertig"-Button
             // dauerhaft sichtbar — bei `.automatic` (Standard) ersetzt der aktive Suchbalken
             // die gesamte Navigationsleiste und versteckt beide Elemente.
-            .searchable(text: $suchtext, isPresented: $sucheAktiv, placement: .navigationBarDrawer(displayMode: .always), prompt: "Artikel oder Produkt suchen")
+            .searchable(text: $suchtext, placement: .navigationBarDrawer(displayMode: .always), prompt: "Artikel oder Produkt suchen")
+            .searchFocused($suchfeldFokussiert)
+            .onAppear { suchfeldFokussiert = true }
             .onChange(of: suchtext) { _, neuerText in
                 if filterEinfrieren {
                     filterEinfrieren = false
                 } else {
                     wirksamerSuchtext = neuerText
                     umgeklappteArtikel = []
-                }
-            }
-            .onChange(of: sucheAktiv) { _, aktiv in
-                if !aktiv {
-                    wirksamerSuchtext = suchtext
                 }
             }
             .navigationTitle("Artikel hinzufügen")

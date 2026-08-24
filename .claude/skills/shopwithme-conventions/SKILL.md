@@ -123,10 +123,12 @@ Listenansichten verwenden für die Suche einheitlich `.searchable(text:prompt:)`
 direkt auf der `List` — Referenzmuster: `ProduktVerwaltungView.swift`. Ein
 eigenes, dauerhaft sichtbares Suchfeld statt `.searchable(...)` ist nur zulässig,
 wenn die Abweichung im Code explizit begründet dokumentiert ist — Referenz:
-`ArtikelHinzufuegenView.swift` (`.searchable(..., isPresented:, placement:
-.navigationBarDrawer(displayMode: .always), ...)`, sofort sichtbar statt per
-Pull-to-Search, weil beim Artikel-hinzufügen-Sheet sofortige Sucheingabe erwartet
-wird).
+`ArtikelHinzufuegenView.swift` (`.searchable(..., placement:
+.navigationBarDrawer(displayMode: .always), ...)` kombiniert mit
+`.searchFocused(_:)` statt `isPresented:` — siehe
+`docs/ARTIKEL_HINZUFUEGEN_INTERAKTION.md` —, sofort sichtbar und fokussiert
+statt per Pull-to-Search, weil beim Artikel-hinzufügen-Sheet sofortige
+Sucheingabe erwartet wird).
 
 ## Icon-Farben-Konvention (GitHub #142)
 

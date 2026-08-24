@@ -51,8 +51,21 @@ innerhalb von `onDismiss` erneut `neuerArtikelEntwurf` — und griff damit immer
 (`zuletztAngelegterEntwurf`) hält die Referenz über den Dismiss-Vorgang hinweg fest;
 `onDismiss` liest ausschließlich daraus.
 
-## Bekannte Grenzen
+## Suchfeld: sofortiger Fokus statt Pull-to-Search
 
-- Während das Suchfeld aktiv fokussiert ist, blendet iOS die Navigationsleiste
-  (inkl. „Fertig") systemseitig aus, bis der Suchfokus verlassen wird (Tippen
-  außerhalb, Wischen in der Liste) — Standardverhalten von `.searchable()`.
+Abweichend von der sonstigen Suchleisten-Konvention (`.searchable(text:prompt:)`
+ohne weitere Parameter, siehe `ProduktVerwaltungView`) fokussiert das Suchfeld
+hier beim Öffnen des Sheets automatisch, damit sofort getippt werden kann, ohne
+vorher antippen zu müssen. Umgesetzt über `.searchable(text:placement:
+.navigationBarDrawer(displayMode: .always), prompt:)` kombiniert mit
+`.searchFocused($suchfeldFokussiert)` und `.onAppear { suchfeldFokussiert =
+true }` — `.navigationBarDrawer(displayMode: .always)` hält Titel und „Fertig"
+dauerhaft sichtbar, `.searchFocused` steuert nur den Tastaturfokus.
+
+**Vormals `.searchable(isPresented:)` statt `.searchFocused`:** Eine frühere
+Fassung koppelte den Auto-Fokus stattdessen an `isPresented`. Das koppelte den
+Tastaturfokus an den „aktiv suchend"-Zustand des Suchfelds selbst — ein Tap auf
+„Fertig" bei fokussiertem Suchfeld beendete dadurch zunächst nur die Suche
+(erster Tap) und schloss das Sheet erst beim zweiten Tap. `.searchFocused`
+steuert ausschließlich den Tastaturfokus, ohne diese Kopplung, und behebt damit
+den Doppel-Tap.

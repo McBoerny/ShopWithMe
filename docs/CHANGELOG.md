@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.17 (Build 362) — Artikel hinzufügen: Suchfeld-Fokus über `.searchFocused` statt `.searchable(isPresented:)`
+
+- In „Artikel hinzufügen" benötigte das Schließen des Sheets über „Fertig" bislang
+  zwei Taps, solange das Suchfeld fokussiert war: `.searchable(isPresented:)` koppelte
+  den automatischen Tastaturfokus beim Öffnen an den „aktiv suchend"-Zustand des
+  Suchfelds — ein Tap beendete zunächst nur die Suche, ein zweiter schloss das Sheet.
+  Umgestellt auf `.searchFocused($suchfeldFokussiert)` (gesetzt in `.onAppear`), das
+  ausschließlich den Tastaturfokus steuert, ohne diese Kopplung — „Fertig" schließt
+  jetzt wie bei allen anderen Sheets mit einem Tap. Details/Historie:
+  `docs/ARTIKEL_HINZUFUEGEN_INTERAKTION.md`.
+
 ## v0.17 (Build 361) — Sync: dauerhaften Sandbox-Zugriffsverlust bei Dauerbetrieb behoben (#171)
 
 - **#171:** Nach ca. 10–15 Minuten Dauerbetrieb im aktiven Einkaufsmodus konnte der
