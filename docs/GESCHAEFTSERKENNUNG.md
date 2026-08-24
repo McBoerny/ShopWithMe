@@ -29,7 +29,7 @@ diesem Checkpoint).
    `async`-Schnittstelle, über `CheckedContinuation`.
 2. `MKLocalPointsOfInterestRequest` (Radius `suchradius`, 150m) mit
    `MKPointOfInterestFilter` auf die für Einzelhandel relevanten
-   `MKPointOfInterestCategory`-Werte (`relevanteKategorien`: `.foodMarket`, `.store`,
+   `MKPointOfInterestCategory`-Werte (`relevanteAbteilungen`: `.foodMarket`, `.store`,
    `.pharmacy`, `.bakery`, `.winery`, `.brewery`) — bewusst ohne Restaurants, Museen,
    Tankstellen usw.
 3. `passendenVorschlag(aus:standort:vorhandeneGeschaefte:)` (Matching-Logik, `internal`
@@ -183,7 +183,7 @@ Hintergrund-Sync, ``SyncAbgleichKandidat``-Warteschlange) genutzt.
   direkt als `ausgewaehltesGeschaeft` in `EinkaufenView`.
 - **Unbekannter Laden** (`.unbekannt(MKMapItem)`): Banner-Button „Hinzufügen“ baut
   über `GeschaeftErkennungService.entwurf(aus:)` einen Geschäfts-Entwurf (Name,
-  geschätzter `GeschaeftTyp` anhand der Apple-Maps-Kategorie, Adresse aus
+  geschätzter `GeschaeftTyp` anhand der Apple-Maps-Abteilung, Adresse aus
   `MKPlacemark/title`, Koordinaten) und öffnet den bestehenden
   `GeschaeftStammdatenEditView`-Anlage-Flow (`istNeu: true`, wie bereits in
   `GeschaeftListView`). Neuer optionaler `onGespeichert`-Callback dort übernimmt das
@@ -265,7 +265,7 @@ nicht erschien) manuell wählen kann, gibt es eine zweite, umfassendere Ansicht:
   (relevant z.B. ohne Standortberechtigung oder wenn Apple Maps den Laden nicht
   kennt).
 - **Deduplizierung:** Apple Maps liefert für denselben physischen Laden gelegentlich
-  mehrere `MKMapItem`-Treffer (z.B. unter leicht unterschiedlichen POI-Kategorien) —
+  mehrere `MKMapItem`-Treffer (z.B. unter leicht unterschiedlichen POI-Abteilungen) —
   ohne Gegenmaßnahme erschien z.B. ein ignoriertes Geschäft doppelt in der Liste, weil
   beide Treffer unabhängig voneinander auf dasselbe `Geschaeft` gemappt wurden.
   `GeschaeftErkennungService.dedupliziert(_:)` (aufgerufen am Ende von
@@ -319,7 +319,7 @@ eigenen Einstiegspunkt in den Einstellungen. Dafür musste `GeschaeftListView` s
 eigenen `NavigationStack` verlieren (verschachtelte `NavigationStack`s sind in
 SwiftUI problematisch): `RootView` umschließt den Tab-Aufruf jetzt selbst mit einem
 `NavigationStack`, `SettingsView` verlinkt per `NavigationLink` in ihren bereits
-vorhandenen `NavigationStack` hinein — analog zu `KategorienVerwaltungView`/
+vorhandenen `NavigationStack` hinein — analog zu `AbteilungenVerwaltungView`/
 `EinkaufslistenVerwaltungView`.
 
 ## Neues Geschäft ohne Apple-Maps-Treffer am aktuellen Ort protokollieren

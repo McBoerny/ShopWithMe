@@ -28,7 +28,7 @@ import Testing
 @MainActor
 struct DatenintegritaetsServiceTests {
     private let schema = Schema([
-        Artikel.self, ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self,
+        Artikel.self, Abteilung.self, Geschaeft.self, GeschaeftTyp.self,
         Einkaufsvorgang.self, KaufEintrag.self, WarengruppenDistanz.self,
         Einkaufsliste.self, EinkaufslistenEintrag.self, IgnorierterArtikel.self,
         SyncEvent.self, ArtikelGeschaeftVerfuegbarkeit.self, GeschaeftBesuch.self, ArtikelListenKauf.self,
@@ -71,11 +71,11 @@ struct DatenintegritaetsServiceTests {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
-        let kategorieA = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
-        let kategorieB = ArtikelKategorie(name: "Gemüse", standardSymbol: "leaf.fill", standardFarbeHex: "#34C759")
-        context.insert(kategorieA)
-        context.insert(kategorieB)
-        let distanz = WarengruppenDistanz(geschaeft: nil, kategorieA: kategorieA, kategorieB: kategorieB, distanz: 3)
+        let abteilungA = Abteilung(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        let abteilungB = Abteilung(name: "Gemüse", standardSymbol: "leaf.fill", standardFarbeHex: "#34C759")
+        context.insert(abteilungA)
+        context.insert(abteilungB)
+        let distanz = WarengruppenDistanz(geschaeft: nil, abteilungA: abteilungA, abteilungB: abteilungB, distanz: 3)
         context.insert(distanz)
         try context.save()
 
@@ -89,7 +89,7 @@ struct DatenintegritaetsServiceTests {
     /// ein ``Einkaufsvorgang`` ohne Einkaufsliste ist kein Absturzrisiko
     /// (``istBaumelnd`` erfasst ihn deshalb nicht, `nil` ist für SwiftData
     /// gültig), aber für die App komplett unerreichbar — eine eigene
-    /// Fehlerkategorie, die ``pruefe(context:)`` jetzt zusätzlich als EINE
+    /// Fehlerabteilung, die ``pruefe(context:)`` jetzt zusätzlich als EINE
     /// aggregierte Zeile meldet, inklusive der Anzahl real angehängter Käufe.
     @Test
     func einkaufsvorgangOhneListeWirdAlsUnerreichbarGemeldetMitKaufAnzahl() throws {

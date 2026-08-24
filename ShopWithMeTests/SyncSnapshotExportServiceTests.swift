@@ -8,7 +8,7 @@ import Testing
 struct SyncSnapshotExportServiceTests {
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {
         let schema = Schema([
-            Artikel.self, ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self,
+            Artikel.self, Abteilung.self, Geschaeft.self, GeschaeftTyp.self,
             Einkaufsvorgang.self, KaufEintrag.self, WarengruppenDistanz.self,
             Einkaufsliste.self, EinkaufslistenEintrag.self, IgnorierterArtikel.self, SyncEvent.self,
             SyncPeerZaehlerStand.self, Preispunkt.self,
@@ -33,33 +33,33 @@ struct SyncSnapshotExportServiceTests {
 
         let typ = GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")
         context.insert(typ)
-        let kategorie = ArtikelKategorie(name: "Obst & Gemüse", standardSymbol: "carrot", standardFarbeHex: "#34C759")
-        kategorie.geschaeftsTypen = [typ]
-        context.insert(kategorie)
+        let abteilung = Abteilung(name: "Obst & Gemüse", standardSymbol: "carrot", standardFarbeHex: "#34C759")
+        abteilung.geschaeftsTypen = [typ]
+        context.insert(abteilung)
         let geschaeft = Geschaeft(name: "Rewe", typen: [typ])
         geschaeft.erkennungsradiusRaw = 150
-        geschaeft.kategorien = [kategorie]
+        geschaeft.abteilungen = [abteilung]
         geschaeft.eigeneAnzahlEinkaufsvorgaenge = 3
         context.insert(geschaeft)
         let ignoriert = IgnorierterArtikel(erkannterName: "Pfand", geschaeft: geschaeft)
         context.insert(ignoriert)
-        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [kategorie])
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", abteilungen: [abteilung])
         apfel.alternativeNamen = ["Bio-Apfel"]
         context.insert(apfel)
         let liste = Einkaufsliste(name: "Wocheneinkauf")
         context.insert(liste)
         let laufenderEinkauf = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste)
         context.insert(laufenderEinkauf)
-        let eintrag = KaufEintrag(artikel: apfel, geschaeft: geschaeft, kategorie: kategorie)
+        let eintrag = KaufEintrag(artikel: apfel, geschaeft: geschaeft, abteilung: abteilung)
         context.insert(eintrag)
         eintrag.einkaufsvorgang = laufenderEinkauf
         let apfelProdukt = Produkt(name: "Apfel", artikel: apfel)
         context.insert(apfelProdukt)
         let preispunkt = Preispunkt(produkt: apfelProdukt, geschaeft: geschaeft, preis: 1.99)
         context.insert(preispunkt)
-        let kategorie2 = ArtikelKategorie(name: "Milchprodukte", standardSymbol: "drop", standardFarbeHex: "#007AFF")
-        context.insert(kategorie2)
-        let distanz = WarengruppenDistanz(geschaeft: geschaeft, kategorieA: kategorie, kategorieB: kategorie2, distanz: 0.3)
+        let abteilung2 = Abteilung(name: "Milchprodukte", standardSymbol: "drop", standardFarbeHex: "#007AFF")
+        context.insert(abteilung2)
+        let distanz = WarengruppenDistanz(geschaeft: geschaeft, abteilungA: abteilung, abteilungB: abteilung2, distanz: 0.3)
         context.insert(distanz)
         let verfuegbarkeit = ArtikelGeschaeftVerfuegbarkeit(artikel: apfel, geschaeft: geschaeft)
         context.insert(verfuegbarkeit)
@@ -72,18 +72,18 @@ struct SyncSnapshotExportServiceTests {
         #expect(snapshot.formatVersion == SyncSnapshot.aktuelleFormatVersion)
         #expect(snapshot.geschaeftsTypen.map(\.id) == [typ.id])
 
-        let kategorieSnapshot = try #require(snapshot.artikelKategorien.first { $0.id == kategorie.id })
-        #expect(kategorieSnapshot.geschaeftsTypIDs == [typ.id])
+        let abteilungSnapshot = try #require(snapshot.abteilungen.first { $0.id == abteilung.id })
+        #expect(abteilungSnapshot.geschaeftsTypIDs == [typ.id])
 
         let geschaeftSnapshot = try #require(snapshot.geschaefte.first { $0.id == geschaeft.id })
         #expect(geschaeftSnapshot.typIDs == [typ.id])
         #expect(geschaeftSnapshot.erkennungsradius == 150)
-        #expect(geschaeftSnapshot.kategorieIDs == [kategorie.id])
+        #expect(geschaeftSnapshot.abteilungIDs == [abteilung.id])
         #expect(geschaeftSnapshot.ignorierteArtikelNamen == ["Pfand"])
         #expect(geschaeftSnapshot.eigeneAnzahlEinkaufsvorgaenge == 3)
 
         let artikelSnapshot = try #require(snapshot.artikel.first { $0.id == apfel.id })
-        #expect(artikelSnapshot.kategorieIDs == [kategorie.id])
+        #expect(artikelSnapshot.abteilungIDs == [abteilung.id])
         #expect(artikelSnapshot.alternativeNamen == ["Bio-Apfel"])
 
         #expect(snapshot.einkaufslisten.map(\.id) == [liste.id])
@@ -102,8 +102,8 @@ struct SyncSnapshotExportServiceTests {
         #expect(preispunktSnapshot.preis == 1.99)
 
         let distanzSnapshot = try #require(snapshot.warengruppenDistanzen.first { $0.id == distanz.id })
-        #expect(distanzSnapshot.kategorieAID == kategorie.id)
-        #expect(distanzSnapshot.kategorieBID == kategorie2.id)
+        #expect(distanzSnapshot.abteilungAID == abteilung.id)
+        #expect(distanzSnapshot.abteilungBID == abteilung2.id)
 
         let verfuegbarkeitSnapshot = try #require(snapshot.artikelGeschaeftVerfuegbarkeiten.first)
         #expect(verfuegbarkeitSnapshot.artikelID == apfel.id)
@@ -217,7 +217,7 @@ struct SyncSnapshotExportServiceTests {
         let text = try String(contentsOf: SyncSnapshotExportService.eigeneStammURL(in: syncOrdner), encoding: .utf8)
 
         let topLevelSchluessel = [
-            "artikel", "artikelKategorien", "einkaufslisten",
+            "artikel", "abteilungen", "einkaufslisten",
             "geschaefte", "geschaeftsTypen",
         ]
         let gefundenInReihenfolge = try topLevelSchluessel
@@ -282,7 +282,7 @@ struct SyncSnapshotExportServiceTests {
     /// steckte bislang IN `stamm.json` — jede Einkaufslisten-Änderung, allen
     /// voran das sehr häufige Abhaken beim Einkaufen, riss dadurch einen
     /// kompletten Neuaufbau/-schrieb der eigentlich seltenen echten
-    /// Stammdaten (Geschäfte/Artikel/Kategorien/...) mit sich). Seit der
+    /// Stammdaten (Geschäfte/Artikel/Abteilungen/...) mit sich). Seit der
     /// Auslagerung in ``SyncListenSnapshot``/`listen.json` muss ein
     /// unveränderter `Geschaeft`-Bestand `stamm.json` NICHT neu schreiben,
     /// nur weil sich die Einkaufsliste geändert hat — `listen.json` dagegen
@@ -313,7 +313,7 @@ struct SyncSnapshotExportServiceTests {
         let listenVorher = try Data(contentsOf: listenURL)
 
         // Nur ein neuer Einkaufslisten-Eintrag (z.B. Artikel zur Liste
-        // hinzugefügt/abgehakt) — Geschäfte/Artikel/Kategorien bleiben
+        // hinzugefügt/abgehakt) — Geschäfte/Artikel/Abteilungen bleiben
         // unverändert.
         context.insert(EinkaufslistenEintrag(einkaufsliste: liste, artikel: apfel, menge: 1))
         try context.save()
@@ -369,7 +369,7 @@ struct SyncSnapshotExportServiceTests {
     /// erschien praktisch jeder Sync-Zyklus fälschlich als inhaltliche
     /// Änderung. Zwei Stamm-Teile mit identischem Inhalt, aber unterschiedlicher
     /// Reihenfolge sowohl der äußeren Geschäfte-Liste als auch der inneren
-    /// `typIDs`/`kategorieIDs`/`alternativeNamen`/`ignorierteArtikelNamen`
+    /// `typIDs`/`abteilungIDs`/`alternativeNamen`/`ignorierteArtikelNamen`
     /// müssen nach der Normalisierung identisch kodiert werden (== derselbe
     /// Fingerabdruck).
     @Test
@@ -377,16 +377,16 @@ struct SyncSnapshotExportServiceTests {
         let geschaeftID = UUID()
         let typA = UUID()
         let typB = UUID()
-        let kategorieA = UUID()
-        let kategorieB = UUID()
+        let abteilungA = UUID()
+        let abteilungB = UUID()
 
-        func stamm(typIDs: [UUID], kategorieIDs: [UUID], namen: [String]) -> SyncStammSnapshot {
+        func stamm(typIDs: [UUID], abteilungIDs: [UUID], namen: [String]) -> SyncStammSnapshot {
             SyncStammSnapshot(
-                geschaeftsTypen: [], artikelKategorien: [],
+                geschaeftsTypen: [], abteilungen: [],
                 geschaefte: [
                     GeschaeftSnapshot(
                         id: geschaeftID, name: "Rewe", typIDs: typIDs, adresse: nil, breitengrad: nil, laengengrad: nil,
-                        erkennungsradius: nil, kategorieIDs: kategorieIDs, ausgeschlosseneKategorieIDs: [],
+                        erkennungsradius: nil, abteilungIDs: abteilungIDs, ausgeschlosseneAbteilungIDs: [],
                         alternativeNamen: namen, ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 0,
                         umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
                     ),
@@ -395,8 +395,8 @@ struct SyncSnapshotExportServiceTests {
             )
         }
 
-        let a = stamm(typIDs: [typA, typB], kategorieIDs: [kategorieA, kategorieB], namen: ["Rewe Center", "Rewe City"])
-        let b = stamm(typIDs: [typB, typA], kategorieIDs: [kategorieB, kategorieA], namen: ["Rewe City", "Rewe Center"])
+        let a = stamm(typIDs: [typA, typB], abteilungIDs: [abteilungA, abteilungB], namen: ["Rewe Center", "Rewe City"])
+        let b = stamm(typIDs: [typB, typA], abteilungIDs: [abteilungB, abteilungA], namen: ["Rewe City", "Rewe Center"])
 
         let datenA = try SyncSnapshotExportService.encoder.encode(SyncSnapshotExportService.normalisiereStamm(a))
         let datenB = try SyncSnapshotExportService.encoder.encode(SyncSnapshotExportService.normalisiereStamm(b))

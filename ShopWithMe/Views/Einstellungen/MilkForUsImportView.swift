@@ -5,7 +5,7 @@ import UniformTypeIdentifiers
 /// Importiert eine MilkForUs-Textexport-Datei (siehe `docs/MILKFORUS_IMPORT.md`):
 /// Datei wählen oder — vom Aufrufer vorbefüllten Text (siehe ``initialText``, von der
 /// Share Extension übergeben) — direkt verarbeiten, dann parsen, für jede darin
-/// vorkommende Kategorie eine ``KategorieZuordnung`` vorschlagen, in einer Vorschau
+/// vorkommende Kategorie eine ``AbteilungZuordnung`` vorschlagen, in einer Vorschau
 /// prüfen/korrigieren lassen und abschließend auf eine gewählte ``Einkaufsliste``
 /// übernehmen.
 struct MilkForUsImportView: View {
@@ -21,7 +21,7 @@ struct MilkForUsImportView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @Query(sort: \ArtikelKategorie.sortIndex) private var alleKategorien: [ArtikelKategorie]
+    @Query(sort: \Abteilung.sortIndex) private var alleAbteilungen: [Abteilung]
     @Query(sort: \Artikel.name) private var alleArtikel: [Artikel]
     @Query private var alleProduktnamen: [Produktname]
     @Query(sort: \Einkaufsliste.erstelltAm) private var alleListen: [Einkaufsliste]
@@ -29,7 +29,7 @@ struct MilkForUsImportView: View {
     @State private var zeigeDateiPicker = false
     @State private var laedt = false
     @State private var uebernimmt = false
-    /// Fortschritt der jeweils laufenden Phase (Kategorieabgleich ODER
+    /// Fortschritt der jeweils laufenden Phase (Abteilungsabgleich ODER
     /// Übernehmen) — `nil` außerhalb beider Phasen bzw. kurz vor dem allerersten
     /// Fortschritts-Callback (siehe ``MilkForUsImportService``).
     @State private var fortschritt: (erledigt: Int, gesamt: Int)?
@@ -49,7 +49,7 @@ struct MilkForUsImportView: View {
                 } else if let gruppen {
                     VorschauListe(
                         gruppen: Binding(get: { gruppen }, set: { self.gruppen = $0 }),
-                        bestehendeKategorien: alleKategorien,
+                        bestehendeAbteilungen: alleAbteilungen,
                         bestehendeArtikelNamen: Set(alleArtikel.map { $0.name.lowercased() } + alleProduktnamen.map { $0.name.lowercased() }),
                         alleListen: alleListen,
                         zielListe: $zielListe
@@ -130,7 +130,7 @@ struct MilkForUsImportView: View {
             }
             gruppen = await MilkForUsImportService.gruppenMitVorschlag(
                 aus: eintraege,
-                bestehendeKategorien: alleKategorien
+                bestehendeAbteilungen: alleAbteilungen
             ) { erledigt, gesamt in
                 fortschritt = (erledigt, gesamt)
             }
@@ -196,7 +196,7 @@ private struct StartAnsicht: View {
     var body: some View {
         VStack(spacing: 16) {
             if laedt {
-                FortschrittsAnsicht(titel: "Kategorien werden abgeglichen…", fortschritt: fortschritt)
+                FortschrittsAnsicht(titel: "Abteilungen werden abgeglichen…", fortschritt: fortschritt)
             } else {
                 ContentUnavailableView {
                     Label("MilkForUs-Liste importieren", systemImage: "square.and.arrow.down.on.square")
@@ -217,11 +217,11 @@ private struct StartAnsicht: View {
     }
 }
 
-/// Editierbare Vorschau der geparsten Kategorien/Artikel zur Kontrolle vor dem
+/// Editierbare Vorschau der geparsten Abteilungen/Artikel zur Kontrolle vor dem
 /// Übernehmen — analog zur ``BelegScanView``-`ErgebnisListe`.
 private struct VorschauListe: View {
     @Binding var gruppen: [MilkForUsKategorieGruppe]
-    let bestehendeKategorien: [ArtikelKategorie]
+    let bestehendeAbteilungen: [Abteilung]
     let bestehendeArtikelNamen: Set<String>
     let alleListen: [Einkaufsliste]
     @Binding var zielListe: Einkaufsliste?
@@ -241,7 +241,7 @@ private struct VorschauListe: View {
                     }
                     .onDelete { gruppe.artikelNamen.remove(atOffsets: $0) }
                 } header: {
-                    KategorieZuordnungsMenu(gruppe: $gruppe, bestehendeKategorien: bestehendeKategorien)
+                    AbteilungZuordnungsMenu(gruppe: $gruppe, bestehendeAbteilungen: bestehendeAbteilungen)
                 }
             }
 
@@ -258,10 +258,10 @@ private struct VorschauListe: View {
     }
 }
 
-/// Menü im Section-Header zum Umstellen der ``KategorieZuordnung`` einer Gruppe.
-private struct KategorieZuordnungsMenu: View {
+/// Menü im Section-Header zum Umstellen der ``AbteilungZuordnung`` einer Gruppe.
+private struct AbteilungZuordnungsMenu: View {
     @Binding var gruppe: MilkForUsKategorieGruppe
-    let bestehendeKategorien: [ArtikelKategorie]
+    let bestehendeAbteilungen: [Abteilung]
 
     var body: some View {
         Menu {
@@ -277,11 +277,11 @@ private struct KategorieZuordnungsMenu: View {
             } label: {
                 Label("Sonstiges verwenden", systemImage: "shippingbox")
             }
-            if !bestehendeKategorien.isEmpty {
+            if !bestehendeAbteilungen.isEmpty {
                 Divider()
-                ForEach(bestehendeKategorien) { kategorie in
-                    Button(kategorie.name) {
-                        gruppe.zuordnung = .bestehend(kategorie)
+                ForEach(bestehendeAbteilungen) { abteilung in
+                    Button(abteilung.name) {
+                        gruppe.zuordnung = .bestehend(abteilung)
                     }
                 }
             }
@@ -301,7 +301,7 @@ private struct KategorieZuordnungsMenu: View {
 
     private var zuordnungsLabel: String {
         switch gruppe.zuordnung {
-        case .bestehend(let kategorie): kategorie.name
+        case .bestehend(let abteilung): abteilung.name
         case .neuAnlegen(let name): "neu: \(name)"
         case .sonstige: "Sonstiges"
         }

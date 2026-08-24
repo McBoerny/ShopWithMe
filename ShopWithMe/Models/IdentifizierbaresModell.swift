@@ -11,7 +11,7 @@ protocol IdentifizierbaresModell: PersistentModel {
 
 extension Geschaeft: IdentifizierbaresModell {}
 extension GeschaeftTyp: IdentifizierbaresModell {}
-extension ArtikelKategorie: IdentifizierbaresModell {}
+extension Abteilung: IdentifizierbaresModell {}
 extension Artikel: IdentifizierbaresModell {}
 extension Einkaufsliste: IdentifizierbaresModell {}
 extension EinkaufslistenEintrag: IdentifizierbaresModell {}

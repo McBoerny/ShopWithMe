@@ -1,7 +1,7 @@
 import SwiftUI
 import SwiftData
 
-/// Detailansicht eines ``Geschaeft``s: Stammdaten, Kategorien-Verwaltung
+/// Detailansicht eines ``Geschaeft``s: Stammdaten, Abteilungen-Verwaltung
 /// (``GeschaeftAbteilungenSektion``) sowie Kaufbeleg- und Preisschild-Scan.
 ///
 /// „Kaufbeleg scannen“ öffnet ``BelegScanView`` im ``BelegScanKontext/geschaeft(_:)``-
@@ -127,5 +127,5 @@ struct GeschaeftDetailView: View {
     NavigationStack {
         GeschaeftDetailView(geschaeft: Geschaeft(name: "Rewe", typen: [GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")]))
     }
-    .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self, ArtikelKategorie.self], inMemory: true)
+    .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self, Abteilung.self], inMemory: true)
 }

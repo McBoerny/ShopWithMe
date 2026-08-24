@@ -7,7 +7,7 @@ import Foundation
 /// nachvollziehbar bleiben, ob gerade eine gezielte Debug-Sitzung läuft.
 enum DatenintegritaetsLogger {
     private static let writer = DebugLogWriter(
-        kategorie: "Datenintegritaet",
+        abteilung: "Datenintegritaet",
         dateiURL: FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("datenintegritaet.log")
     )

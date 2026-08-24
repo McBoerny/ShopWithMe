@@ -5,11 +5,11 @@ import FoundationModels
 /// neu angelegten ``Artikel``.
 @Generable
 struct ArtikelVorschlag {
-    @Guide(description: "Name einer passenden Artikelkategorie")
-    var kategorieName: String
+    @Guide(description: "Name einer passenden Abteilung")
+    var abteilungName: String
 }
 
-/// Schlägt beim Anlegen eines Artikels automatisch eine Kategorie vor, indem die
+/// Schlägt beim Anlegen eines Artikels automatisch eine Abteilung vor, indem die
 /// lokale, on-device Apple-KI (FoundationModels/"Apple Intelligence") befragt wird.
 ///
 /// Ist auf dem Gerät keine Apple Intelligence verfügbar, ist ``istVerfuegbar`` `false`
@@ -21,42 +21,42 @@ enum AISuggestionService {
     }
 
     /// Erzeugt einen ``ArtikelVorschlag`` für den gegebenen Artikelnamen. Bestehende
-    /// Kategorienamen werden als Kontext mitgegeben, damit das Modell bevorzugt
+    /// Abteilungsnamen werden als Kontext mitgegeben, damit das Modell bevorzugt
     /// vorhandene Werte wiederverwendet statt neue zu erfinden.
     static func vorschlag(
         fuerArtikelName name: String,
-        bekannteKategorien: [String]
+        bekannteAbteilungen: [String]
     ) async throws -> ArtikelVorschlag {
         let anweisungen = """
         Du hilfst in einer Einkaufs-App dabei, neu angelegte Artikel einzuordnen. \
-        Schlage für den genannten Artikel eine passende Artikelkategorie vor. Verwende \
-        nach Möglichkeit eine dieser bestehenden Kategorien, falls sie passt: \
-        \(bekannteKategorien.joined(separator: ", ")).
+        Schlage für den genannten Artikel eine passende Abteilung vor. Verwende \
+        nach Möglichkeit eine dieser bestehenden Abteilungen, falls sie passt: \
+        \(bekannteAbteilungen.joined(separator: ", ")).
         """
         let session = LanguageModelSession(instructions: anweisungen)
         let antwort = try await session.respond(to: "Artikel: \(name)", generating: ArtikelVorschlag.self)
         return antwort.content
     }
 
-    /// Ermittelt für einen importierten Kategorienamen (z.B. aus einer fremden
+    /// Ermittelt für einen importierten Abteilungsnamen (z.B. aus einer fremden
     /// Shopping-App) die inhaltlich am besten passende bestehende
-    /// ``ArtikelKategorie`` — genutzt vom MilkForUs-Textimport
+    /// ``Abteilung`` — genutzt vom MilkForUs-Textimport
     /// (``MilkForUsImportService``), um z.B. "Brot" auf "Brot & Backwaren"
     /// abzubilden statt eine Dublette anzulegen.
-    static func kategorieMatch(
+    static func abteilungMatch(
         fuerName name: String,
-        bekannteKategorien: [String]
-    ) async throws -> KategorieMatchVorschlag {
+        bekannteAbteilungen: [String]
+    ) async throws -> AbteilungMatchVorschlag {
         let anweisungen = """
-        Du hilfst dabei, Kategorienamen aus dem Export einer anderen Einkaufs-App auf \
-        die Kategorien einer Einkaufs-App abzubilden. Wähle aus dieser Liste \
-        bestehender Kategorien diejenige, die inhaltlich am besten zum genannten \
-        Namen passt: \(bekannteKategorien.joined(separator: ", ")). Antworte mit \
+        Du hilfst dabei, Abteilungsnamen aus dem Export einer anderen Einkaufs-App auf \
+        die Abteilungen einer Einkaufs-App abzubilden. Wähle aus dieser Liste \
+        bestehender Abteilungen diejenige, die inhaltlich am besten zum genannten \
+        Namen passt: \(bekannteAbteilungen.joined(separator: ", ")). Antworte mit \
         einem leeren String, falls wirklich keine davon passt — erfinde keine neue \
-        Kategorie.
+        Abteilung.
         """
         let session = LanguageModelSession(instructions: anweisungen)
-        let antwort = try await session.respond(to: "Kategorie: \(name)", generating: KategorieMatchVorschlag.self)
+        let antwort = try await session.respond(to: "Abteilung: \(name)", generating: AbteilungMatchVorschlag.self)
         return antwort.content
     }
     /// Ermittelt für einen auf einem Kassenbon erkannten, oft abgekürzten oder
@@ -109,21 +109,21 @@ enum AISuggestionService {
 
     /// Schlägt für einen ``GeschaeftTyp`` (z.B. Drogerie) typische Abteilungen vor,
     /// genutzt in der Typ-Verwaltung der Einstellungen (GitHub #5), um
-    /// ``ArtikelKategorie/geschaeftsTypen`` schneller zu befüllen. Bestehende
-    /// Kategorienamen werden als Kontext mitgegeben, damit das Modell bevorzugt
+    /// ``Abteilung/geschaeftsTypen`` schneller zu befüllen. Bestehende
+    /// Abteilungsnamen werden als Kontext mitgegeben, damit das Modell bevorzugt
     /// vorhandene wiederverwendet statt Dubletten vorzuschlagen. Nimmt bewusst nur
     /// den Namen (nicht das ``GeschaeftTyp``-Objekt selbst) entgegen — seit GitHub
     /// #25 ein SwiftData-`@Model` und damit kein `Sendable`-Typ, der sich gefahrlos
     /// über die `async`-Grenze dieser Methode reichen ließe.
     static func vorschlag(
         fuerGeschaeftsTypName typName: String,
-        bekannteKategorien: [String]
+        bekannteAbteilungen: [String]
     ) async throws -> AbteilungsVorschlag {
         let anweisungen = """
         Du hilfst in einer Einkaufs-App dabei, für einen Geschäftstyp typische \
         Abteilungen vorzuschlagen. Nenne mehrere passende Abteilungen für den \
         genannten Geschäftstyp. Verwende nach Möglichkeit vorhandene Namen aus \
-        dieser Liste, falls sie passen: \(bekannteKategorien.joined(separator: ", ")). \
+        dieser Liste, falls sie passen: \(bekannteAbteilungen.joined(separator: ", ")). \
         Schlage nur dann neue Namen vor, wenn keine passende bestehende Abteilung \
         dabei ist.
         """
@@ -166,9 +166,9 @@ enum AISuggestionService {
     /// ``ArtikelDuplikatVorschlaegeView`` (GitHub #133). Anders als die
     /// übrigen Funktionen dieses Typs (ein Name gegen eine bekannte Liste) ist
     /// dies ein Ganzkatalog-Abgleich: jeder Name wird gegen jeden anderen
-    /// verglichen, daher `namen` **vorab vom Aufrufer nach Kategorie
+    /// verglichen, daher `namen` **vorab vom Aufrufer nach Abteilung
     /// gruppieren** (Dubletten/Varianten liegen praktisch immer in derselben
-    /// Kategorie) — ein Aufruf pro Gruppe hält den Kontext klein und die
+    /// Abteilung) — ein Aufruf pro Gruppe hält den Kontext klein und die
     /// Trefferqualität hoch, statt den gesamten Artikelbestand in einer
     /// Anfrage zu bündeln.
     static func artikelBeziehungsVorschlaege(
@@ -204,20 +204,20 @@ enum AISuggestionService {
 }
 
 /// Von der lokalen Apple-KI vorgeschlagene, typische Abteilungen für einen
-/// ``GeschaeftTyp`` — siehe ``AISuggestionService/vorschlag(fuerGeschaeftsTypName:bekannteKategorien:)``.
+/// ``GeschaeftTyp`` — siehe ``AISuggestionService/vorschlag(fuerGeschaeftsTypName:bekannteAbteilungen:)``.
 @Generable
 struct AbteilungsVorschlag {
     @Guide(description: "Namen typischer Abteilungen für diesen Geschäftstyp, bevorzugt aus den bekannten Namen")
-    var kategorieNamen: [String]
+    var abteilungNamen: [String]
 }
 
 /// Von der lokalen Apple-KI vorgeschlagene, am besten passende bestehende
-/// ``ArtikelKategorie`` für einen importierten Kategorienamen — siehe
-/// ``AISuggestionService/kategorieMatch(fuerName:bekannteKategorien:)``.
+/// ``Abteilung`` für einen importierten Abteilungsnamen — siehe
+/// ``AISuggestionService/abteilungMatch(fuerName:bekannteAbteilungen:)``.
 @Generable
-struct KategorieMatchVorschlag {
-    @Guide(description: "Name der am besten passenden bestehenden Kategorie, oder ein leerer String, falls keine davon wirklich passt")
-    var passendeKategorie: String
+struct AbteilungMatchVorschlag {
+    @Guide(description: "Name der am besten passenden bestehenden Abteilung, oder ein leerer String, falls keine davon wirklich passt")
+    var passendeAbteilung: String
 }
 
 /// Von der lokalen Apple-KI vorgeschlagene, am besten passende bestehende
@@ -266,7 +266,7 @@ struct ArtikelBeziehungsVorschlag {
 
 /// Container für die Liste der ``ArtikelBeziehungsVorschlag``e — FoundationModels
 /// generiert kein `@Generable`-Array direkt als Top-Level-Ergebnistyp, daher
-/// dieselbe Wrapper-Struktur wie ``AbteilungsVorschlag/kategorieNamen``.
+/// dieselbe Wrapper-Struktur wie ``AbteilungsVorschlag/abteilungNamen``.
 @Generable
 struct ArtikelBeziehungsVorschlaege {
     var vorschlaege: [ArtikelBeziehungsVorschlag]

@@ -289,7 +289,7 @@ Die folgenden Punkte sind bewusst ausgeklammert und können in späteren Iterati
 
 **Eingang als Ankerpunkt:** Wenn der Eingang eines Ladens als fester Startpunkt markiert wird, verbessert sich die Sortierung in der Anfangsphase deutlich. Könnte optional durch den Nutzer bestätigt werden.
 
-**Abteilungs-Hierarchie:** Aktuell sind alle Abteilungen gleichwertig. Eine Hierarchie (z.B. „Kühlwaren" als Oberkategorie von „Milch" und „Joghurt") könnte die Matrix kompakter und robuster machen.
+**Abteilungs-Hierarchie:** Aktuell sind alle Abteilungen gleichwertig. Eine Hierarchie (z.B. „Kühlwaren" als Oberabteilung von „Milch" und „Joghurt") könnte die Matrix kompakter und robuster machen.
 
 **Explizites Feedback:** Nutzer könnte Sortiervorschlag manuell korrigieren – diese Korrekturen wären hochwertige Lernsignale mit erhöhter Lernrate.
 
@@ -310,21 +310,21 @@ Der einzige kritische Integrationspunkt ist die **Abteilungs-Zuordnung** je Arti
 
 | Vorschlag | Entspricht in ShopWithMe | Bewertung |
 |---|---|---|
-| Abteilung | `ArtikelKategorie` | Exakte Entsprechung — bereits die "stabile Abstraktionsebene" (siehe `Artikel/kategorien`, `Geschaeft/verfuegbareKategorien`). Artikel→Abteilung-Zuordnung ist erfüllt. |
+| Abteilung | `Abteilung` | Exakte Entsprechung — bereits die "stabile Abstraktionsebene" (siehe `Artikel/abteilungen`, `Geschaeft/verfuegbareAbteilungen`). Artikel→Abteilung-Zuordnung ist erfüllt. |
 | LadenProfil | `Geschaeft` | Bereits vorhanden. `einkaufsAnzahl` entspricht bereits `Geschaeft.anzahlEinkaufsvorgaenge` (GitHub #30). |
 | Einkauf | `Einkaufsvorgang` | Bereits vorhanden, inkl. `geschaeft`-Bezug ("ladenId"). `lernungAbgeschlossen` ist unnötig als Feld: `ShelfOrderLearningService.lernenAus(_:context:)` wird bereits synchron beim `abschliessen()` aufgerufen (`EinkaufenView.einkaufAbschliessen()`), kein Zwischenzustand nötig. |
-| AbhakVorgang | `KaufEintrag` | **Wichtigster Befund:** `KaufEintrag` trägt bereits `kategorie` (→ abteilungId), `datum` (→ zeitstempel, wird beim Abhaken automatisch mit `Date()` gesetzt) und `kategorieBesuchsIndex` (→ die Positions-Reihenfolge selbst, pro Abteilung eines Einkaufsvorgangs eindeutig und bereits dedupliziert über mehrere Artikel derselben Kategorie hinweg). Für den Lernalgorithmus reicht ein Fetch aller `KaufEintrag` eines `Einkaufsvorgang`s, gruppiert nach `kategorieBesuchsIndex`. |
+| AbhakVorgang | `KaufEintrag` | **Wichtigster Befund:** `KaufEintrag` trägt bereits `abteilung` (→ abteilungId), `datum` (→ zeitstempel, wird beim Abhaken automatisch mit `Date()` gesetzt) und `abteilungBesuchsIndex` (→ die Positions-Reihenfolge selbst, pro Abteilung eines Einkaufsvorgangs eindeutig und bereits dedupliziert über mehrere Artikel derselben Abteilung hinweg). Für den Lernalgorithmus reicht ein Fetch aller `KaufEintrag` eines `Einkaufsvorgang`s, gruppiert nach `abteilungBesuchsIndex`. |
 
 ### 11.2 Fehlende Bausteine (echte neue Arbeit)
 
-- **DistanzMatrix** — existiert nicht. Die aktuelle `KategorieBesuchsStatistik` speichert nur einen **einzelnen Skalar** (`durchschnittlichePosition` je Kategorie+Geschäft), keine paarweisen Distanzen. Das ist der Kern der neuen Arbeit: ein neues `@Model` (Arbeitstitel `WarengruppenDistanz`) mit `geschaeft`, `kategorieA`, `kategorieB` (kanonisch sortiertes Paar, um Symmetrie ohne doppelte Zeilen abzubilden) und `distanz: Double`.
+- **DistanzMatrix** — existiert nicht. Die aktuelle `AbteilungBesuchsStatistik` speichert nur einen **einzelnen Skalar** (`durchschnittlichePosition` je Abteilung+Geschäft), keine paarweisen Distanzen. Das ist der Kern der neuen Arbeit: ein neues `@Model` (Arbeitstitel `WarengruppenDistanz`) mit `geschaeft`, `abteilungA`, `abteilungB` (kanonisch sortiertes Paar, um Symmetrie ohne doppelte Zeilen abzubilden) und `distanz: Double`.
 - **Umbau-Erkennung** — existiert nicht, aber additiv ergänzbar: neues optionales Feld auf `Geschaeft` nach dem etablierten Muster (`private var umbauVerdachtRaw: Bool?` + Computed Property mit Fallback `false`), keine neue `VersionedSchema` nötig (siehe `docs/DECISIONS.md`).
 - **Greedy-NN + 2-opt-Sortierung** — existiert nicht (aktuell nur eine einfache Sortierung nach Einzelwert, siehe `EinkaufenView.istVor(_:_:positionen:)`). Reine Swift-Logik ohne Datenmodell-Auswirkung, gut isolierbar.
-- **Dynamische Neusortierung nach jedem Abhaken** — aktuell sortiert `EinkaufenView` die Kategorie-Gruppen zwar reaktiv (SwiftUI), aber ohne "aktueller Standort = zuletzt abgehakte Abteilung" als Startpunkt für die Restliste. Muss ergänzt werden.
+- **Dynamische Neusortierung nach jedem Abhaken** — aktuell sortiert `EinkaufenView` die Abteilung-Gruppen zwar reaktiv (SwiftUI), aber ohne "aktueller Standort = zuletzt abgehakte Abteilung" als Startpunkt für die Restliste. Muss ergänzt werden.
 
 ### 11.3 Persistenz: SwiftData statt lokalem JSON
 
-Der Vorschlag empfiehlt (§5.2) strukturiertes JSON im App-Storage. Für ShopWithMe ist ein natives `@Model` (wie bei `KategorieBesuchsStatistik`) konsistenter mit dem Rest der App (SwiftData als einzige Quelle der Wahrheit, siehe `ios-swift-engineering`-Skill) und bringt automatisches iCloud-Backup/Synchronisation über denselben Store mit, ohne einen zweiten Persistenzmechanismus einzuführen. Empfehlung: **von §5.2 abweichen**, die Matrix als normalisierte SwiftData-Zeilen (eine je Kategorie-Paar) statt als JSON-Blob speichern.
+Der Vorschlag empfiehlt (§5.2) strukturiertes JSON im App-Storage. Für ShopWithMe ist ein natives `@Model` (wie bei `AbteilungBesuchsStatistik`) konsistenter mit dem Rest der App (SwiftData als einzige Quelle der Wahrheit, siehe `ios-swift-engineering`-Skill) und bringt automatisches iCloud-Backup/Synchronisation über denselben Store mit, ohne einen zweiten Persistenzmechanismus einzuführen. Empfehlung: **von §5.2 abweichen**, die Matrix als normalisierte SwiftData-Zeilen (eine je Abteilung-Paar) statt als JSON-Blob speichern.
 
 ### 11.4 Reibungspunkt: Verhältnis zu `Regal`/`ShelfOrderLearningService`
 
@@ -337,21 +337,21 @@ Der Vorschlag geht implizit von einer Abteilungs-Ebene ohne "Regal"-Zwischenschi
 Empfohlene Reihenfolge — jede Phase einzeln build- und testbar, damit die App zwischen den Phasen durchgehend funktionsfähig bleibt:
 
 ### Phase 1 — Datenmodell
-- Neues `Models/WarengruppenDistanz.swift`: `@Model final class WarengruppenDistanz` mit `geschaeft: Geschaeft?`, `kategorieA: ArtikelKategorie?`, `kategorieB: ArtikelKategorie?`, `distanz: Double`. Fetch-or-create-Helfer analog `KategorieBesuchsStatistik`/`ArtikelKategorie.sonstige(context:)`.
+- Neues `Models/WarengruppenDistanz.swift`: `@Model final class WarengruppenDistanz` mit `geschaeft: Geschaeft?`, `abteilungA: Abteilung?`, `abteilungB: Abteilung?`, `distanz: Double`. Fetch-or-create-Helfer analog `AbteilungBesuchsStatistik`/`Abteilung.sonstige(context:)`.
 - `Geschaeft`: additives `private var umbauVerdachtRaw: Bool?` + Computed Property `umbauVerdacht` (Fallback `false`), analog `regalSortierModusRaw`.
 - `SchemaDefinition.swift`: `WarengruppenDistanz.self` ergänzen.
 
 ### Phase 2 — Lern-Service
-- Neuer `Services/AbteilungsDistanzService.swift` (eigene Datei statt Erweiterung von `ShelfOrderLearningService`, da fachlich ein neuer, in sich geschlossener Algorithmus): `lerneAusEinkauf(_:context:)` implementiert Abschnitt 4.1 (paarweise Positions-/Zeit-Distanz, gleitender Durchschnitt, Lernrate 0.1/0.3) unter Verwendung von `KaufEintrag.kategorie`/`.datum`/`.kategorieBesuchsIndex`.
+- Neuer `Services/AbteilungsDistanzService.swift` (eigene Datei statt Erweiterung von `ShelfOrderLearningService`, da fachlich ein neuer, in sich geschlossener Algorithmus): `lerneAusEinkauf(_:context:)` implementiert Abschnitt 4.1 (paarweise Positions-/Zeit-Distanz, gleitender Durchschnitt, Lernrate 0.1/0.3) unter Verwendung von `KaufEintrag.abteilung`/`.datum`/`.abteilungBesuchsIndex`.
 - `erkenneUmbau(_:context:)` implementiert Abschnitt 4.4, setzt `Geschaeft.umbauVerdacht`.
 - Aufruf aus `EinkaufenView.einkaufAbschliessen()` zusätzlich zum bestehenden `ShelfOrderLearningService.lernenAus(...)` (oder als dessen Ersatz, siehe Phase 5).
 
 ### Phase 3 — Sortier-Algorithmus
-- Neue reine Funktion (z.B. `AbteilungsDistanzService.sortiere(offeneKategorien:startpunkt:distanzMatrix:)`), implementiert Greedy-Nearest-Neighbor + 2-opt (Abschnitt 4.2) auf `[ArtikelKategorie]`.
+- Neue reine Funktion (z.B. `AbteilungsDistanzService.sortiere(offeneAbteilungen:startpunkt:distanzMatrix:)`), implementiert Greedy-Nearest-Neighbor + 2-opt (Abschnitt 4.2) auf `[Abteilung]`.
 - Konfidenz-Schwelle: `einkaufsAnzahl < 3` → unsortiert + UI-Hinweis (Text nach Vorschlag §7). Hinweis: Der bestehende `ShelfOrderLearningService.mindestEinkaeufeFuerVorschlag` verwendet aktuell `5`; für Konsistenz beide Schwellen angleichen oder bewusst als zwei unabhängige Konstanten dokumentieren.
 
 ### Phase 4 — Dynamische Neusortierung + UI
-- `EinkaufenView.sonstigeGruppen` (bzw. deren Nachfolger nach Phase 5) nutzt den neuen Sortieralgorithmus statt `istVor(_:_:positionen:)`; Startpunkt = zuletzt abgehakte Kategorie (Abschnitt 4.3).
+- `EinkaufenView.sonstigeGruppen` (bzw. deren Nachfolger nach Phase 5) nutzt den neuen Sortieralgorithmus statt `istVor(_:_:positionen:)`; Startpunkt = zuletzt abgehakte Abteilung (Abschnitt 4.3).
 - UI-Hinweise gemäß Abschnitt 7 (Statuszeile "Lernt noch"/"optimiert", Umbau-Dialog).
 
 ### Phase 5 — Ablösung von `Regal`
@@ -367,32 +367,32 @@ Empfohlene Reihenfolge — jede Phase einzeln build- und testbar, damit die App 
 
 **Separates GitHub-Issue mit vollständiger Begründung: [#35](https://github.com/McBoerny/ShopWithMe/issues/35).** Diese Sektion dokumentiert nur die Kurzfassung der Entscheidung; die Begründung im Detail steht im Issue.
 
-**Kernargument:** `Regal` ist eine manuell zu pflegende Zwischenschicht (Anlegen, Umbenennen, Kategorien zuordnen, Reihenfolge ziehen) für genau das Problem, das die adaptive Sortierung aus Abschnitt 2–4 automatisch und ohne Pflegeaufwand löst — und zwar auf einer feineren, dynamischen Ebene (paarweise Distanzen statt starrer Gruppen). Nach Einführung der Abteilungs-Distanzmatrix hat `Regal` keinen Zweck mehr, den die neue Sortierung nicht besser abdeckt.
+**Kernargument:** `Regal` ist eine manuell zu pflegende Zwischenschicht (Anlegen, Umbenennen, Abteilungen zuordnen, Reihenfolge ziehen) für genau das Problem, das die adaptive Sortierung aus Abschnitt 2–4 automatisch und ohne Pflegeaufwand löst — und zwar auf einer feineren, dynamischen Ebene (paarweise Distanzen statt starrer Gruppen). Nach Einführung der Abteilungs-Distanzmatrix hat `Regal` keinen Zweck mehr, den die neue Sortierung nicht besser abdeckt.
 
-**Umfang der Entfernung** (Bestandsaufnahme, 26 betroffene Dateien): `Models/Regal.swift`, `RegalSortierModus`, `Geschaeft.regale`/`regalSortierModus`(Raw)/`regal(fuer:)`, `ArtikelKategorie.regale`, `Artikel.fuehrendeKategorie`s Regal-Priorität, `Views/Geschaefte/RegalDetailView.swift`, `GeschaeftDetailView`s Regal-Sektion samt bedingtem `EditButton` (GitHub #28), `EinkaufenView.gruppen`/`sonstigeArtikel` (Regal-Pfad entfällt, `sonstigeGruppen`-Pfad wird der einzige), `NeueKategorieSheet`/`KategorieHinzufuegenSheet`/`ArtikelEditView`/`PreisschildScanView`/`AISuggestionService`/`ArtikelVerfuegbarkeitService`-Erwähnungen, `SchemaDefinition.swift`, sowie 6 betroffene Testdateien.
+**Umfang der Entfernung** (Bestandsaufnahme, 26 betroffene Dateien): `Models/Regal.swift`, `RegalSortierModus`, `Geschaeft.regale`/`regalSortierModus`(Raw)/`regal(fuer:)`, `Abteilung.regale`, `Artikel.fuehrendeAbteilung`s Regal-Priorität, `Views/Geschaefte/RegalDetailView.swift`, `GeschaeftDetailView`s Regal-Sektion samt bedingtem `EditButton` (GitHub #28), `EinkaufenView.gruppen`/`sonstigeArtikel` (Regal-Pfad entfällt, `sonstigeGruppen`-Pfad wird der einzige), `NeueAbteilungSheet`/`AbteilungHinzufuegenSheet`/`ArtikelEditView`/`PreisschildScanView`/`AISuggestionService`/`ArtikelVerfuegbarkeitService`-Erwähnungen, `SchemaDefinition.swift`, sowie 6 betroffene Testdateien.
 
 ---
 
-## 14. Geschäftsspezifisch gelernte Kategorie (GitHub-Nachfolgefund zu #36)
+## 14. Geschäftsspezifisch gelernte Abteilung (GitHub-Nachfolgefund zu #36)
 
 **Separates GitHub-Issue: [#93](https://github.com/McBoerny/ShopWithMe/issues/93).** Diese Sektion dokumentiert die Kurzfassung; Motivation und Diskussion stehen im Issue.
 
-**Ausgangslage:** Seit Abschnitt 13/`fedf96b` (v0.9) zeigt `EinkaufenView` einen Artikel mit mehreren Kategorien gleichzeitig in allen zugehörigen Abschnitten — bewusst, weil eine frühere Einzelauswahl über eine ungeordnete SwiftData-Relationship zwischen Sync-Zyklen sichtbar zwischen Abschnitten sprang. Nebeneffekt: der Fortschritts-Zähler im Titel (`<abgehakt>/<gesamt>`) zählt eindeutige Artikel, während die sichtbare Zeilenzahl durch die Mehrfachanzeige höher sein kann — Auslöser war ein Nutzerbericht „5 Artikel angezeigt, aber Zähler 0/4" auf der Liste „Urlaub".
+**Ausgangslage:** Seit Abschnitt 13/`fedf96b` (v0.9) zeigt `EinkaufenView` einen Artikel mit mehreren Abteilungen gleichzeitig in allen zugehörigen Abschnitten — bewusst, weil eine frühere Einzelauswahl über eine ungeordnete SwiftData-Relationship zwischen Sync-Zyklen sichtbar zwischen Abschnitten sprang. Nebeneffekt: der Fortschritts-Zähler im Titel (`<abgehakt>/<gesamt>`) zählt eindeutige Artikel, während die sichtbare Zeilenzahl durch die Mehrfachanzeige höher sein kann — Auslöser war ein Nutzerbericht „5 Artikel angezeigt, aber Zähler 0/4" auf der Liste „Urlaub".
 
-**Beobachtung:** Seit derselben Änderung speichert jeder `KaufEintrag` bereits, aus welcher Kategorie tatsächlich abgehakt wurde (`kategorie`) sowie in welchem Geschäft (`geschaeft`) — die Rohdaten für eine geschäftsspezifische Auswertung lagen also vor, wurden aber nicht ausgewertet.
+**Beobachtung:** Seit derselben Änderung speichert jeder `KaufEintrag` bereits, aus welcher Abteilung tatsächlich abgehakt wurde (`abteilung`) sowie in welchem Geschäft (`geschaeft`) — die Rohdaten für eine geschäftsspezifische Auswertung lagen also vor, wurden aber nicht ausgewertet.
 
-**Algorithmus** (`AbteilungsDistanzService.gelernteKategorie(fuer:in:context:)`): zählt für ein (Artikel, Geschäft)-Paar die Häufigkeit je Kategorie über alle zugehörigen `KaufEintrag`e. Ergebnis nur, wenn:
-- mindestens `mindestKaeufeFuerGelernteKategorie` (5) Käufe vorliegen, UND
-- die häufigste Kategorie mindestens `mehrheitsschwelleGelernteKategorie` (80%) davon ausmacht.
+**Algorithmus** (`AbteilungsDistanzService.gelernteAbteilung(fuer:in:context:)`): zählt für ein (Artikel, Geschäft)-Paar die Häufigkeit je Abteilung über alle zugehörigen `KaufEintrag`e. Ergebnis nur, wenn:
+- mindestens `mindestKaeufeFuerGelernteAbteilung` (5) Käufe vorliegen, UND
+- die häufigste Abteilung mindestens `mehrheitsschwelleGelernteAbteilung` (80%) davon ausmacht.
 
-Bewusst nicht rein prozentual ab dem ersten Kauf: ein einzelner Kauf wäre immer "100% Mehrheit" und würde einen einzelnen Fehltap (falsche Kategorie versehentlich angetippt) sofort ungefiltert übernehmen — die Mindestzahl von 5 zusammen mit der 80%-Schwelle filtert einen solchen Ausreißer heraus (5 Käufe mit 1 Fehltap ergeben 80% — genau an der Schwelle; 2 Fehltaps ergeben 60%, deutlich darunter). Bewusst kein gleitender Durchschnitt wie bei der Distanzmatrix (Abschnitt 4.1) — hier soll das Ergebnis jederzeit exakt der aktuellen Kaufhistorie entsprechen. Bewusst auch keine dauerhafte Speicherung: die Auswertung läuft bei jedem Aufruf neu über die aktuellen `KaufEintrag`e, sodass sich eine einmal fälschlich erkannte Mehrheit durch weitere (auch über Sync eintreffende) Käufe von selbst wieder korrigiert — zusätzlich zur manuellen Korrekturmöglichkeit über den Lernmodus (siehe Integrationspunkte).
+Bewusst nicht rein prozentual ab dem ersten Kauf: ein einzelner Kauf wäre immer "100% Mehrheit" und würde einen einzelnen Fehltap (falsche Abteilung versehentlich angetippt) sofort ungefiltert übernehmen — die Mindestzahl von 5 zusammen mit der 80%-Schwelle filtert einen solchen Ausreißer heraus (5 Käufe mit 1 Fehltap ergeben 80% — genau an der Schwelle; 2 Fehltaps ergeben 60%, deutlich darunter). Bewusst kein gleitender Durchschnitt wie bei der Distanzmatrix (Abschnitt 4.1) — hier soll das Ergebnis jederzeit exakt der aktuellen Kaufhistorie entsprechen. Bewusst auch keine dauerhafte Speicherung: die Auswertung läuft bei jedem Aufruf neu über die aktuellen `KaufEintrag`e, sodass sich eine einmal fälschlich erkannte Mehrheit durch weitere (auch über Sync eintreffende) Käufe von selbst wieder korrigiert — zusätzlich zur manuellen Korrekturmöglichkeit über den Lernmodus (siehe Integrationspunkte).
 
 **Herleitung der Schwellenwerte** (pragmatische Abschätzung, keine strenge Signifikanzprüfung — bei Haushalts-Kauffrequenz einzelner Artikel wäre eine klassische Stichprobengröße von ~30 unrealistisch, das würde Jahre dauern):
 - Echte Vorliebe + ca. 10% gelegentliche Fehltap-Rate: P(≥4 von 5 korrekt) ≈ 92% — die Schwelle wird bei echtem Muster meist schon nach 5 Käufen erreicht.
 - Tatsächlich 50/50 mehrdeutiger Artikel (kein echtes Muster): P(eine Seite erreicht ≥4/5 rein zufällig) ≈ 19% — ein spürbarer, aber tolerierbarer Anteil falscher Früh-Treffer. Bewusst in Kauf genommen: die Neuberechnung bei jedem Aufruf löst so einen Fehltreffer mit wachsendem `n` von selbst wieder auf, UND der Lernmodus bietet zusätzlich eine sofortige manuelle Korrekturmöglichkeit.
 
 **Integrationspunkte:**
-1. `EinkaufenView.kategorienFuerAnzeige(_:)`: bei gewähltem Geschäft und gelernter Kategorie nur noch diese eine statt `Artikel.effektiveKategorien(context:)` vollständig — außer im Lernmodus (`zeigeAlleArtikel`, langer Tap auf die Schnellauswahl): dort bewusst immer ungefiltert wie alle zugeordneten Kategorien, analog zum bestehenden Bypass in `verfuegbarkeitsgefiltert(_:)`. Der Lernmodus ist damit die manuelle Korrekturmöglichkeit, falls die gelernte Kategorie (noch) nicht (mehr) stimmt.
-2. `Artikel.fuehrendeKategorie(inGeschaeft:context:)`: gelernte Kategorie als Top-Priorität vor der bisherigen, rein statischen `sortIndex`-Sortierung — wirkt sich auf Belegscan-/Preisschild-Scan-/Sync-Import-Zuordnung aus, die ohne konkret getappten Abschnitt auskommen müssen. Kein Lernmodus-Bypass hier, da diese Aufrufer keinen Bezug zu diesem UI-Zustand haben.
+1. `EinkaufenView.abteilungenFuerAnzeige(_:)`: bei gewähltem Geschäft und gelernter Abteilung nur noch diese eine statt `Artikel.effektiveAbteilungen(context:)` vollständig — außer im Lernmodus (`zeigeAlleArtikel`, langer Tap auf die Schnellauswahl): dort bewusst immer ungefiltert wie alle zugeordneten Abteilungen, analog zum bestehenden Bypass in `verfuegbarkeitsgefiltert(_:)`. Der Lernmodus ist damit die manuelle Korrekturmöglichkeit, falls die gelernte Abteilung (noch) nicht (mehr) stimmt.
+2. `Artikel.fuehrendeAbteilung(inGeschaeft:context:)`: gelernte Abteilung als Top-Priorität vor der bisherigen, rein statischen `sortIndex`-Sortierung — wirkt sich auf Belegscan-/Preisschild-Scan-/Sync-Import-Zuordnung aus, die ohne konkret getappten Abschnitt auskommen müssen. Kein Lernmodus-Bypass hier, da diese Aufrufer keinen Bezug zu diesem UI-Zustand haben.
 
-Rein anzeigeseitig/lesend: `Artikel.kategorien` (die globalen Tags) bleiben unverändert, nichts wird automatisch umgeschrieben oder gelöscht — bei fehlender/nicht mehr ausreichender Datenlage oder aktivem Lernmodus blendet sich die Mehrfachanzeige einfach wieder ein.
+Rein anzeigeseitig/lesend: `Artikel.abteilungen` (die globalen Tags) bleiben unverändert, nichts wird automatisch umgeschrieben oder gelöscht — bei fehlender/nicht mehr ausreichender Datenlage oder aktivem Lernmodus blendet sich die Mehrfachanzeige einfach wieder ein.

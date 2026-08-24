@@ -54,7 +54,7 @@ extension Einkaufsliste {
     static let standardName = "Einkaufsliste"
 
     /// Findet die zuerst angelegte Liste oder legt (namens ``standardName``) eine
-    /// neue an, falls noch keine existiert — analog ``ArtikelKategorie/sonstige(context:)``.
+    /// neue an, falls noch keine existiert — analog ``Abteilung/sonstige(context:)``.
     /// Stellt sicher, dass ``EinkaufenView`` immer mindestens eine Liste anzeigen kann.
     static func standard(context: ModelContext) -> Einkaufsliste {
         var deskriptor = FetchDescriptor<Einkaufsliste>(sortBy: [SortDescriptor(\.erstelltAm)])
@@ -130,7 +130,7 @@ extension Einkaufsliste {
     /// nicht der lokale Verarbeitungszeitpunkt, sonst ließe ein verspätet
     /// nachgeholtes, längst überholtes Event ``ArtikelListenKauf/zuletztHinzugefuegtAm``
     /// künstlich auf „gerade eben" springen (dieselbe Klasse Fehler wie bei
-    /// ``KaufEintrag/datum`` in ``SyncSnapshotImportService/mergeKaufEintraege(_:artikelZuordnung:einkaufsvorgangZuordnung:geschaeftZuordnung:kategorieZuordnung:peerGeraeteID:context:)``).
+    /// ``KaufEintrag/datum`` in ``SyncSnapshotImportService/mergeKaufEintraege(_:artikelZuordnung:einkaufsvorgangZuordnung:geschaeftZuordnung:abteilungZuordnung:peerGeraeteID:context:)``).
     @discardableResult
     func artikelHinzufuegenOhneEventAufzeichnung(_ artikel: Artikel, produkt: Produkt? = nil, am zeitpunkt: Date = Date(), context: ModelContext) -> EinkaufslistenEintrag {
         ArtikelListenKaufService.vermerkeHinzugefuegt(artikel: artikel, einkaufsliste: self, am: zeitpunkt, context: context)

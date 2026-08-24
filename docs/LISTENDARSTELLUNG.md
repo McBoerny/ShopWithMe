@@ -31,24 +31,24 @@ zwischen drei Untertypen:
 | `.chipsGross` | `ScrollView` + `ChipFlowLayout` | ✓ (via `DisclosureGroup`) | — |
 | `.chipsKlein` | `ScrollView` + `ChipFlowLayout` | ✓ (via `DisclosureGroup`) | — |
 
-Große Chips verzichten **bewusst** auf ein Kategorie-Icon — mehr Chips pro Zeile
+Große Chips verzichten **bewusst** auf ein Abteilung-Icon — mehr Chips pro Zeile
 bei gleicher Lesbarkeit; das Abhak-Häkchen übernimmt die Statuskommunikation.
 
 Der optionale Fortschrittsbalken wird als `.safeAreaInset(edge: .top)` eingehängt
 (beide Varianten klassisch und Chips).
 
-Akkordeon-Zustand: `@State private var geschlosseneKategorien: Set<PersistentIdentifier>`
+Akkordeon-Zustand: `@State private var geschlosseneAbteilungen: Set<PersistentIdentifier>`
 (invertierte Logik: leer = alle offen), weil `gruppen` zur Initialisierungszeit
 noch nicht zugänglich ist und `init()`-captures von `let`-Properties Compiler-Fehler
 erzeugen würden.
 
 ### Modus: Kacheln (`EinkaufslisteDarstellungsModus.kacheln`)
 
-`KachelInhaltView` rendert Artikel kategorie-übergreifend als flaches `LazyVGrid`
-(2 oder 3 Spalten). Artikel, die mehreren `KategorieGruppe`n angehören, werden
+`KachelInhaltView` rendert Artikel abteilung-übergreifend als flaches `LazyVGrid`
+(2 oder 3 Spalten). Artikel, die mehreren `AbteilungGruppe`n angehören, werden
 per `Set<PersistentIdentifier>` dedupliziert — jeder Artikel erscheint genau
-einmal. Optionaler Kategorie-Farbhintergrund (`farbig`-Flag): weiße Schrift auf
-Kategorie-Farbton statt neutralem Systemhintergrund.
+einmal. Optionaler Abteilung-Farbhintergrund (`farbig`-Flag): weiße Schrift auf
+Abteilung-Farbton statt neutralem Systemhintergrund.
 
 ## AppStorage-Schlüssel (`DarstellungsKey`)
 
@@ -68,7 +68,7 @@ gespeicherte Einstellungen identisch zur bisherigen klassischen Listenansicht au
 ## Farbstreifen + `listRowInsets`
 
 Bei aktiviertem Farbstreifen (nur klassisch) erhält `ArtikelAbhakZeile` eine
-`kategoriefarbe: Color?`-Property. Das äußere `body` der Zeile überschreibt in
+`abteilungfarbe: Color?`-Property. Das äußere `body` der Zeile überschreibt in
 diesem Fall `.listRowInsets(EdgeInsets(top:0, leading:0, bottom:0, trailing:16))`
 damit der 4 px-Streifen bündig am linken Rand liegt. Der eigentliche
 Row-Inhalt (`zeilenInhalt`) erhält dann `padding(.leading, 12)` als Ausgleich.
@@ -84,13 +84,13 @@ Row-Inhalt (`zeilenInhalt`) erhält dann `padding(.leading, 12)` als Ausgleich.
 `EinkaufenView` selbst bleibt unberührt — der Dispatcher-Aufruf
 `EinkaufslisteDarstellungsView(...)` ist der einzige Einstiegspunkt.
 
-## Datenvertrag: `KategorieGruppe`
+## Datenvertrag: `AbteilungGruppe`
 
 ```swift
-struct KategorieGruppe: Identifiable {
-    let kategorie: ArtikelKategorie
+struct AbteilungGruppe: Identifiable {
+    let abteilung: Abteilung
     let artikel: [Artikel]
-    var id: PersistentIdentifier { kategorie.persistentModelID }
+    var id: PersistentIdentifier { abteilung.persistentModelID }
 }
 ```
 

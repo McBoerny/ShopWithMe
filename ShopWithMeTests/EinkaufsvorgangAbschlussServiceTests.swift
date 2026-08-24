@@ -12,7 +12,7 @@ import Testing
 @MainActor
 struct EinkaufsvorgangAbschlussServiceTests {
     private let schema = Schema([
-        Artikel.self, ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self,
+        Artikel.self, Abteilung.self, Geschaeft.self, GeschaeftTyp.self,
         Einkaufsvorgang.self, KaufEintrag.self, Einkaufsliste.self, EinkaufslistenEintrag.self,
         WarengruppenDistanz.self, SyncEvent.self, SyncPeerZaehlerStand.self, GeschaeftBesuch.self,
     ])
@@ -153,19 +153,19 @@ struct EinkaufsvorgangAbschlussServiceTests {
     private func richteDeutlicheAbweichungEin(
         geschaeft: Geschaeft, vorgang: Einkaufsvorgang, context: ModelContext
     ) {
-        let a = ArtikelKategorie(name: "A", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
-        let b = ArtikelKategorie(name: "B", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
+        let a = Abteilung(name: "A", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        let b = Abteilung(name: "B", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
         context.insert(a)
         context.insert(b)
-        let (kategorieA, kategorieB) = WarengruppenDistanz.kanonischesPaar(a, b)
-        context.insert(WarengruppenDistanz(geschaeft: geschaeft, kategorieA: kategorieA, kategorieB: kategorieB, distanz: 0.1))
+        let (abteilungA, abteilungB) = WarengruppenDistanz.kanonischesPaar(a, b)
+        context.insert(WarengruppenDistanz(geschaeft: geschaeft, abteilungA: abteilungA, abteilungB: abteilungB, distanz: 0.1))
 
         let start = Date()
-        let ersterEintrag = KaufEintrag(artikel: nil, geschaeft: geschaeft, kategorie: a, datum: start, kategorieBesuchsIndex: 0)
+        let ersterEintrag = KaufEintrag(artikel: nil, geschaeft: geschaeft, abteilung: a, datum: start, abteilungBesuchsIndex: 0)
         context.insert(ersterEintrag)
         ersterEintrag.einkaufsvorgang = vorgang
         let zweiterEintrag = KaufEintrag(
-            artikel: nil, geschaeft: geschaeft, kategorie: b, datum: start.addingTimeInterval(300), kategorieBesuchsIndex: 1
+            artikel: nil, geschaeft: geschaeft, abteilung: b, datum: start.addingTimeInterval(300), abteilungBesuchsIndex: 1
         )
         context.insert(zweiterEintrag)
         zweiterEintrag.einkaufsvorgang = vorgang

@@ -1,10 +1,10 @@
 import SwiftUI
 import SwiftData
 
-/// „Kategorien“-Formularabschnitt eines ``Geschaeft``s — zeigt alle verfügbaren
-/// Kategorien (``Geschaeft/verfuegbareKategorien(alleKategorien:)``, GitHub #37),
+/// „Abteilungen“-Formularabschnitt eines ``Geschaeft``s — zeigt alle verfügbaren
+/// Abteilungen (``Geschaeft/verfuegbareAbteilungen(alleAbteilungen:)``, GitHub #37),
 /// manuell zugeordnete und über den Geschäftstyp automatische gemeinsam,
-/// alphabetisch, automatische Kategorien speziell markiert und nicht direkt
+/// alphabetisch, automatische Abteilungen speziell markiert und nicht direkt
 /// entfernbar.
 ///
 /// Wiederverwendet in ``GeschaeftDetailView`` (bestehendes Geschäft) und in
@@ -14,21 +14,21 @@ import SwiftData
 /// Detailansicht.
 struct GeschaeftAbteilungenSektion: View {
     @Bindable var geschaeft: Geschaeft
-    @Query private var alleKategorien: [ArtikelKategorie]
-    @State private var zeigeKategorieHinzufuegen = false
+    @Query private var alleAbteilungen: [Abteilung]
+    @State private var zeigeAbteilungHinzufuegen = false
 
-    private var kategorienAnzeige: [(kategorie: ArtikelKategorie, automatisch: Bool)] {
-        geschaeft.verfuegbareKategorien(alleKategorien: alleKategorien)
+    private var abteilungenAnzeige: [(abteilung: Abteilung, automatisch: Bool)] {
+        geschaeft.verfuegbareAbteilungen(alleAbteilungen: alleAbteilungen)
             .sorted { $0.name.vergleicheAlphabetisch(mit: $1.name) == .orderedAscending }
-            .map { ($0, !geschaeft.kategorien.contains($0)) }
+            .map { ($0, !geschaeft.abteilungen.contains($0)) }
     }
 
     var body: some View {
         Section {
-            ForEach(kategorienAnzeige, id: \.kategorie.id) { eintrag in
+            ForEach(abteilungenAnzeige, id: \.abteilung.id) { eintrag in
                 Label {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(eintrag.kategorie.name)
+                        Text(eintrag.abteilung.name)
                         if eintrag.automatisch {
                             Text("Automatisch über Geschäftstyp")
                                 .font(.caption)
@@ -36,18 +36,18 @@ struct GeschaeftAbteilungenSektion: View {
                         }
                     }
                 } icon: {
-                    Image(systemName: eintrag.kategorie.standardSymbol)
+                    Image(systemName: eintrag.abteilung.standardSymbol)
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                     if eintrag.automatisch {
                         Button(role: .destructive) {
-                            kategorieAusschliessen(eintrag.kategorie)
+                            abteilungAusschliessen(eintrag.abteilung)
                         } label: {
                             Label("Ausschließen", systemImage: "eye.slash")
                         }
                     } else {
                         Button(role: .destructive) {
-                            kategorieEntfernen(eintrag.kategorie)
+                            abteilungEntfernen(eintrag.abteilung)
                         } label: {
                             Label("Entfernen", systemImage: "trash")
                         }
@@ -56,7 +56,7 @@ struct GeschaeftAbteilungenSektion: View {
             }
 
             Button {
-                zeigeKategorieHinzufuegen = true
+                zeigeAbteilungHinzufuegen = true
             } label: {
                 Label("Abteilung hinzufügen", systemImage: "plus")
             }
@@ -66,21 +66,21 @@ struct GeschaeftAbteilungenSektion: View {
         } footer: {
             Text("Abteilungen sind sofort verfügbar. Die Reihenfolge beim Einkaufen lernt die App automatisch aus deinem bisherigen Abhakverhalten. Automatisch über den Geschäftstyp verfügbare Abteilungen lassen sich für dieses eine Geschäft ausschließen, ohne sie generell vom Geschäftstyp zu entfernen — sie tauchen danach wieder unter „Abteilung hinzufügen“ auf. Manuell zugeordnete Abteilungen: zum Entfernen nach links wischen.")
         }
-        .sheet(isPresented: $zeigeKategorieHinzufuegen) {
+        .sheet(isPresented: $zeigeAbteilungHinzufuegen) {
             AbteilungHinzufuegenSheet(geschaeft: geschaeft)
         }
     }
 
-    private func kategorieEntfernen(_ kategorie: ArtikelKategorie) {
-        geschaeft.kategorien.removeAll { $0 == kategorie }
+    private func abteilungEntfernen(_ abteilung: Abteilung) {
+        geschaeft.abteilungen.removeAll { $0 == abteilung }
     }
 
-    /// Schließt eine automatisch über den Geschäftstyp verfügbare Kategorie für
+    /// Schließt eine automatisch über den Geschäftstyp verfügbare Abteilung für
     /// dieses eine Geschäft aus (GitHub #43), ohne sie generell vom Geschäftstyp
     /// zu entfernen. Taucht danach wieder in ``AbteilungHinzufuegenSheet`` auf.
-    private func kategorieAusschliessen(_ kategorie: ArtikelKategorie) {
-        guard !geschaeft.ausgeschlosseneKategorien.contains(kategorie) else { return }
-        geschaeft.ausgeschlosseneKategorien.append(kategorie)
+    private func abteilungAusschliessen(_ abteilung: Abteilung) {
+        guard !geschaeft.ausgeschlosseneAbteilungen.contains(abteilung) else { return }
+        geschaeft.ausgeschlosseneAbteilungen.append(abteilung)
     }
 }
 
@@ -88,5 +88,5 @@ struct GeschaeftAbteilungenSektion: View {
     Form {
         GeschaeftAbteilungenSektion(geschaeft: Geschaeft(name: "Rewe", typen: [GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")]))
     }
-    .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self, ArtikelKategorie.self], inMemory: true)
+    .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self, Abteilung.self], inMemory: true)
 }

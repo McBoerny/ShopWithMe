@@ -5,7 +5,7 @@ import SwiftData
 ///
 /// Baut den ``ModelContainer`` mit dem vollständigen Datenmodell-Schema auf —
 /// immer am SwiftData-Standardpfad (GitHub #54) — und sät beim ersten Start
-/// die Standardkategorien via ``SeedData``.
+/// die Standardabteilungen via ``SeedData``.
 @main
 struct ShopWithMeApp: App {
     @StateObject private var modelContainerController: ModelContainerController
@@ -84,7 +84,7 @@ struct ShopWithMeApp: App {
         SeedData.seedeStandarddatenFallsLeer(context: context)
         SeedData.seedeGeschaeftsTypenFallsLeer(context: context)
         Geschaeft.typenMigrierenFallsNoetig(context: context)
-        ArtikelKategorie.geschaeftsTypenMigrierenFallsNoetig(context: context)
+        Abteilung.geschaeftsTypenMigrierenFallsNoetig(context: context)
         KaufEintrag.preisverlaufMigrierenFallsNoetig(context: context)
         DatenintegritaetsService.migriereGeschaeftsAggregateFallsNoetig(context: context)
         DatenintegritaetsService.migriereArtikelListenKaeufeFallsNoetig(context: context)

@@ -9,7 +9,7 @@ import Testing
 @MainActor
 struct ModellIDDuplikatServiceTests {
     private let schema = Schema([
-        Artikel.self, ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self,
+        Artikel.self, Abteilung.self, Geschaeft.self, GeschaeftTyp.self,
         Einkaufsvorgang.self, KaufEintrag.self, WarengruppenDistanz.self,
         Einkaufsliste.self, EinkaufslistenEintrag.self, IgnorierterArtikel.self,
         SyncEvent.self, ArtikelGeschaeftVerfuegbarkeit.self, GeschaeftBesuch.self, ArtikelListenKauf.self,

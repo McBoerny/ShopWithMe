@@ -20,8 +20,8 @@ enum A11yID {
     enum AbteilungenVerwaltung {
         static let list = "abteilungenVerwaltung.list"
         static let hinzufuegenButton = "abteilungenVerwaltung.hinzufuegenButton"
-        static func kategorieRow<ID>(_ id: ID) -> String {
-            "abteilungenVerwaltung.kategorieRow.\(String(describing: id))"
+        static func abteilungRow<ID>(_ id: ID) -> String {
+            "abteilungenVerwaltung.abteilungRow.\(String(describing: id))"
         }
     }
 
@@ -34,7 +34,7 @@ enum A11yID {
     }
 
     /// Gilt für alle Verwender der generischen ``AuswahlSheet``-Komponente
-    /// (``AbteilungHinzufuegenSheet``, ``KategorieHinzufuegenSheet``,
+    /// (``AbteilungHinzufuegenSheet``, ``AbteilungHinzufuegenSheet``,
     /// `ArtikelZuAbteilungHinzufuegenSheet`, ``ArtikelAuswahlSheet`` u.a.) — ein
     /// Test greift also unabhängig vom konkreten Aufrufer immer auf dieselben
     /// Bezeichner zu.

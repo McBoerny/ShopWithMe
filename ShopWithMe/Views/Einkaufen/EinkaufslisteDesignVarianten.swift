@@ -7,7 +7,7 @@ private struct MockArtikel: Identifiable {
     var name: String
     var menge: Double
     var einheit: String
-    var kategorie: String
+    var abteilung: String
     var symbol: String
     var farbe: Color
 
@@ -18,7 +18,7 @@ private struct MockArtikel: Identifiable {
     }
 }
 
-private struct MockKategorie: Identifiable {
+private struct MockAbteilung: Identifiable {
     let id = UUID()
     var name: String
     var symbol: String
@@ -27,21 +27,21 @@ private struct MockKategorie: Identifiable {
 }
 
 private let alleArtikel: [MockArtikel] = [
-    .init(name: "Vollmilch",   menge: 2,   einheit: "l",    kategorie: "Getränke",      symbol: "drop.fill",   farbe: .blue),
-    .init(name: "Orangensaft", menge: 1,   einheit: "l",    kategorie: "Getränke",      symbol: "drop.fill",   farbe: .cyan),
-    .init(name: "Butter",      menge: 1,   einheit: "Stk.", kategorie: "Milchprodukte", symbol: "cube.fill",   farbe: .yellow),
-    .init(name: "Joghurt",     menge: 3,   einheit: "Stk.", kategorie: "Milchprodukte", symbol: "cube.fill",   farbe: .yellow),
-    .init(name: "Käse",        menge: 200, einheit: "g",    kategorie: "Milchprodukte", symbol: "square.fill", farbe: .orange),
-    .init(name: "Äpfel",       menge: 6,   einheit: "Stk.", kategorie: "Obst & Gemüse", symbol: "leaf.fill",   farbe: .green),
-    .init(name: "Bananen",     menge: 1,   einheit: "Bund", kategorie: "Obst & Gemüse", symbol: "leaf.fill",   farbe: .yellow),
-    .init(name: "Tomaten",     menge: 4,   einheit: "Stk.", kategorie: "Obst & Gemüse", symbol: "circle.fill", farbe: .red),
-    .init(name: "Brot",        menge: 1,   einheit: "Stk.", kategorie: "Backwaren",     symbol: "bag.fill",    farbe: .brown),
-    .init(name: "Brötchen",    menge: 6,   einheit: "Stk.", kategorie: "Backwaren",     symbol: "bag",         farbe: .brown),
-    .init(name: "Pasta",       menge: 500, einheit: "g",    kategorie: "Nudeln & Reis", symbol: "fork.knife",  farbe: .orange),
-    .init(name: "Schokolade",  menge: 2,   einheit: "Stk.", kategorie: "Süßigkeiten",   symbol: "star.fill",   farbe: .pink),
+    .init(name: "Vollmilch",   menge: 2,   einheit: "l",    abteilung: "Getränke",      symbol: "drop.fill",   farbe: .blue),
+    .init(name: "Orangensaft", menge: 1,   einheit: "l",    abteilung: "Getränke",      symbol: "drop.fill",   farbe: .cyan),
+    .init(name: "Butter",      menge: 1,   einheit: "Stk.", abteilung: "Milchprodukte", symbol: "cube.fill",   farbe: .yellow),
+    .init(name: "Joghurt",     menge: 3,   einheit: "Stk.", abteilung: "Milchprodukte", symbol: "cube.fill",   farbe: .yellow),
+    .init(name: "Käse",        menge: 200, einheit: "g",    abteilung: "Milchprodukte", symbol: "square.fill", farbe: .orange),
+    .init(name: "Äpfel",       menge: 6,   einheit: "Stk.", abteilung: "Obst & Gemüse", symbol: "leaf.fill",   farbe: .green),
+    .init(name: "Bananen",     menge: 1,   einheit: "Bund", abteilung: "Obst & Gemüse", symbol: "leaf.fill",   farbe: .yellow),
+    .init(name: "Tomaten",     menge: 4,   einheit: "Stk.", abteilung: "Obst & Gemüse", symbol: "circle.fill", farbe: .red),
+    .init(name: "Brot",        menge: 1,   einheit: "Stk.", abteilung: "Backwaren",     symbol: "bag.fill",    farbe: .brown),
+    .init(name: "Brötchen",    menge: 6,   einheit: "Stk.", abteilung: "Backwaren",     symbol: "bag",         farbe: .brown),
+    .init(name: "Pasta",       menge: 500, einheit: "g",    abteilung: "Nudeln & Reis", symbol: "fork.knife",  farbe: .orange),
+    .init(name: "Schokolade",  menge: 2,   einheit: "Stk.", abteilung: "Süßigkeiten",   symbol: "star.fill",   farbe: .pink),
 ]
 
-private let alleKategorien: [MockKategorie] = {
+private let alleAbteilungen: [MockAbteilung] = {
     let reihenfolge = ["Getränke", "Milchprodukte", "Obst & Gemüse", "Backwaren", "Nudeln & Reis", "Süßigkeiten"]
     let meta: [String: (String, Color)] = [
         "Getränke":      ("drop.fill",  .blue),
@@ -51,11 +51,11 @@ private let alleKategorien: [MockKategorie] = {
         "Nudeln & Reis": ("fork.knife", .orange),
         "Süßigkeiten":   ("star.fill",  .pink),
     ]
-    let gruppen = Dictionary(grouping: alleArtikel, by: \.kategorie)
-    return reihenfolge.compactMap { name -> MockKategorie? in
+    let gruppen = Dictionary(grouping: alleArtikel, by: \.abteilung)
+    return reihenfolge.compactMap { name -> MockAbteilung? in
         guard let art = gruppen[name] else { return nil }
         let (sym, farbe) = meta[name] ?? ("tag.fill", .gray)
-        return MockKategorie(name: name, symbol: sym, farbe: farbe, artikel: art)
+        return MockAbteilung(name: name, symbol: sym, farbe: farbe, artikel: art)
     }
 }()
 
@@ -125,7 +125,7 @@ private struct ErledigtStatusLeiste: View {
 
 // MARK: - Variante 1: Klassisch + Farbbalken + Menge-Badge + Fortschritt
 
-/// Klassische Gruppenliste mit Kategorie-Farbbalken links, Menge als Capsule-Badge
+/// Klassische Gruppenliste mit Abteilung-Farbbalken links, Menge als Capsule-Badge
 /// und Gesamtfortschrittsbalken oben.
 private struct Variante01Klassisch: View {
     @State private var abgehakt: Set<UUID> = []
@@ -139,21 +139,21 @@ private struct Variante01Klassisch: View {
             FortschrittHeader(fortschritt: fortschritt, total: alleArtikel.count, abgehakt: abgehakt.count)
 
             List {
-                ForEach(alleKategorien) { kategorie in
+                ForEach(alleAbteilungen) { abteilung in
                     Section {
-                        ForEach(kategorie.artikel) { artikel in
+                        ForEach(abteilung.artikel) { artikel in
                             let erledigt = abgehakt.contains(artikel.id)
                             Button {
                                 if erledigt { abgehakt.remove(artikel.id) } else { abgehakt.insert(artikel.id) }
                             } label: {
-                                ArtikelFarbbalkenZeile(artikel: artikel, farbe: kategorie.farbe, erledigt: erledigt)
+                                ArtikelFarbbalkenZeile(artikel: artikel, farbe: abteilung.farbe, erledigt: erledigt)
                             }
                             .buttonStyle(.plain)
                             .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 16))
                         }
                     } header: {
-                        Label(kategorie.name, systemImage: kategorie.symbol)
-                            .foregroundStyle(kategorie.farbe)
+                        Label(abteilung.name, systemImage: abteilung.symbol)
+                            .foregroundStyle(abteilung.farbe)
                     }
                 }
             }
@@ -166,11 +166,11 @@ private struct Variante01Klassisch: View {
 
 // MARK: - Variante 10: Akkordeon + Farbbalken + Fortschritt
 
-/// Akkordeon-Kategorien mit Gesamtfortschrittsbalken oben und Kategorie-Farbbalken
+/// Akkordeon-Abteilungen mit Gesamtfortschrittsbalken oben und Abteilung-Farbbalken
 /// in jeder Zeile.
 private struct Variante10Akkordeon: View {
     @State private var abgehakt: Set<UUID> = []
-    @State private var geoffnet: Set<UUID> = Set(alleKategorien.map(\.id))
+    @State private var geoffnet: Set<UUID> = Set(alleAbteilungen.map(\.id))
 
     private var fortschritt: Double {
         alleArtikel.isEmpty ? 0 : Double(abgehakt.count) / Double(alleArtikel.count)
@@ -181,26 +181,26 @@ private struct Variante10Akkordeon: View {
             FortschrittHeader(fortschritt: fortschritt, total: alleArtikel.count, abgehakt: abgehakt.count)
 
             List {
-                ForEach(alleKategorien) { kategorie in
-                    let offen = kategorie.artikel.filter { !abgehakt.contains($0.id) }.count
+                ForEach(alleAbteilungen) { abteilung in
+                    let offen = abteilung.artikel.filter { !abgehakt.contains($0.id) }.count
                     DisclosureGroup(
                         isExpanded: Binding(
-                            get: { geoffnet.contains(kategorie.id) },
-                            set: { neu in if neu { geoffnet.insert(kategorie.id) } else { geoffnet.remove(kategorie.id) } }
+                            get: { geoffnet.contains(abteilung.id) },
+                            set: { neu in if neu { geoffnet.insert(abteilung.id) } else { geoffnet.remove(abteilung.id) } }
                         )
                     ) {
-                        ForEach(kategorie.artikel) { artikel in
+                        ForEach(abteilung.artikel) { artikel in
                             let erledigt = abgehakt.contains(artikel.id)
                             Button {
                                 if erledigt { abgehakt.remove(artikel.id) } else { abgehakt.insert(artikel.id) }
                             } label: {
-                                ArtikelFarbbalkenZeile(artikel: artikel, farbe: kategorie.farbe, erledigt: erledigt)
+                                ArtikelFarbbalkenZeile(artikel: artikel, farbe: abteilung.farbe, erledigt: erledigt)
                             }
                             .buttonStyle(.plain)
                             .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 16))
                         }
                     } label: {
-                        akkordeonHeader(kategorie, offenCount: offen)
+                        akkordeonHeader(abteilung, offenCount: offen)
                     }
                 }
             }
@@ -210,16 +210,16 @@ private struct Variante10Akkordeon: View {
     }
 
     @ViewBuilder
-    private func akkordeonHeader(_ kategorie: MockKategorie, offenCount: Int) -> some View {
+    private func akkordeonHeader(_ abteilung: MockAbteilung, offenCount: Int) -> some View {
         HStack(spacing: 8) {
-            Image(systemName: kategorie.symbol).foregroundStyle(kategorie.farbe).frame(width: 20)
-            Text(kategorie.name).font(.headline)
+            Image(systemName: abteilung.symbol).foregroundStyle(abteilung.farbe).frame(width: 20)
+            Text(abteilung.name).font(.headline)
             Spacer()
             if offenCount > 0 {
                 Text("\(offenCount)")
                     .font(.caption.bold()).foregroundStyle(Color.white)
                     .padding(.horizontal, 7).padding(.vertical, 2)
-                    .background(kategorie.farbe).clipShape(Capsule())
+                    .background(abteilung.farbe).clipShape(Capsule())
             } else {
                 Image(systemName: "checkmark.seal.fill").foregroundStyle(Color.green).font(.callout)
             }
@@ -338,7 +338,7 @@ private struct Variante02bDreiSpalten: View {
 
 // MARK: - Variante 2c: Farb-Kacheln
 
-/// Jede Kachel hat den Farbhintergrund ihrer Kategorie — bunte, visuelle Orientierung.
+/// Jede Kachel hat den Farbhintergrund ihrer Abteilung — bunte, visuelle Orientierung.
 private struct Variante02cFarbKacheln: View {
     @State private var abgehakt: Set<UUID> = []
     private let spalten = [GridItem(.flexible()), GridItem(.flexible())]
@@ -392,20 +392,20 @@ private struct Variante02cFarbKacheln: View {
 
 // MARK: - Variante 7: Chip-Auswahl (Flow-Layout)
 
-/// Artikel als anklickbare Chips im Fließ-Layout, nach Kategorie gruppiert.
+/// Artikel als anklickbare Chips im Fließ-Layout, nach Abteilung gruppiert.
 private struct Variante07ChipAuswahl: View {
     @State private var abgehakt: Set<UUID> = []
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                ForEach(alleKategorien) { kategorie in
+                ForEach(alleAbteilungen) { abteilung in
                     VStack(alignment: .leading, spacing: 8) {
-                        Label(kategorie.name, systemImage: kategorie.symbol)
+                        Label(abteilung.name, systemImage: abteilung.symbol)
                             .font(.subheadline.bold())
-                            .foregroundStyle(kategorie.farbe)
+                            .foregroundStyle(abteilung.farbe)
                         ChipFlowLayout(abstand: 8) {
-                            ForEach(kategorie.artikel) { artikel in
+                            ForEach(abteilung.artikel) { artikel in
                                 let erledigt = abgehakt.contains(artikel.id)
                                 Button {
                                     withAnimation(.easeInOut(duration: 0.15)) {
@@ -417,10 +417,10 @@ private struct Variante07ChipAuswahl: View {
                                         Text(artikel.name).font(.subheadline).strikethrough(erledigt)
                                     }
                                     .padding(.horizontal, 14).padding(.vertical, 8)
-                                    .background(kategorie.farbe.opacity(erledigt ? 0.12 : 0.07))
-                                    .foregroundStyle(erledigt ? Color.secondary : kategorie.farbe)
+                                    .background(abteilung.farbe.opacity(erledigt ? 0.12 : 0.07))
+                                    .foregroundStyle(erledigt ? Color.secondary : abteilung.farbe)
                                     .clipShape(Capsule())
-                                    .overlay(Capsule().stroke(kategorie.farbe.opacity(erledigt ? 0.2 : 0.4), lineWidth: 1))
+                                    .overlay(Capsule().stroke(abteilung.farbe.opacity(erledigt ? 0.2 : 0.4), lineWidth: 1))
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -438,29 +438,29 @@ private struct Variante07ChipAuswahl: View {
     }
 }
 
-// MARK: - Variante 7d: Große Symbol-Chips nach Kategorie gruppiert
+// MARK: - Variante 7d: Große Symbol-Chips nach Abteilung gruppiert
 
-/// Größere Chips mit Kategorie-Symbol und Mengenzeile, nach Kategorie gruppiert.
+/// Größere Chips mit Abteilung-Symbol und Mengenzeile, nach Abteilung gruppiert.
 private struct Variante07dGrosseChips: View {
     @State private var abgehakt: Set<UUID> = []
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                ForEach(alleKategorien) { kategorie in
+                ForEach(alleAbteilungen) { abteilung in
                     VStack(alignment: .leading, spacing: 8) {
-                        Label(kategorie.name, systemImage: kategorie.symbol)
+                        Label(abteilung.name, systemImage: abteilung.symbol)
                             .font(.subheadline.bold())
-                            .foregroundStyle(kategorie.farbe)
+                            .foregroundStyle(abteilung.farbe)
                         ChipFlowLayout(abstand: 8) {
-                            ForEach(kategorie.artikel) { artikel in
+                            ForEach(abteilung.artikel) { artikel in
                                 let erledigt = abgehakt.contains(artikel.id)
                                 Button {
                                     withAnimation(.spring(response: 0.25)) {
                                         if erledigt { abgehakt.remove(artikel.id) } else { abgehakt.insert(artikel.id) }
                                     }
                                 } label: {
-                                    grosserChipLabel(artikel, farbe: kategorie.farbe, erledigt: erledigt)
+                                    grosserChipLabel(artikel, farbe: abteilung.farbe, erledigt: erledigt)
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -516,7 +516,7 @@ private struct Variante07dGrosseChips: View {
                 NavigationLink("2c – Farbige Kacheln")      { Variante02cFarbKacheln() }
             }
             Section("Chips") {
-                NavigationLink("7 – Chips nach Kategorie")  { Variante07ChipAuswahl() }
+                NavigationLink("7 – Chips nach Abteilung")  { Variante07ChipAuswahl() }
                 NavigationLink("7d – Große Symbol-Chips")   { Variante07dGrosseChips() }
             }
         }

@@ -63,9 +63,9 @@ struct GeschaeftInDerNaeheEintrag: Identifiable {
 /// einmalige Standortabfrage ohne Hintergrund-Tracking, in
 /// `docs/GESCHAEFTSERKENNUNG.md`.
 enum GeschaeftErkennungService {
-    /// Kategorien, die für die Ladenerkennung relevant sind — bewusst auf Einzelhandel
+    /// Abteilungen, die für die Ladenerkennung relevant sind — bewusst auf Einzelhandel
     /// beschränkt (keine Restaurants, Museen, Tankstellen o.ä.).
-    static let relevanteKategorien: [MKPointOfInterestCategory] = [
+    static let relevanteAbteilungen: [MKPointOfInterestCategory] = [
         .foodMarket, .store, .pharmacy, .bakery, .winery, .brewery,
     ]
 
@@ -185,7 +185,7 @@ enum GeschaeftErkennungService {
     }
 
     /// Apple Maps liefert für denselben physischen Laden gelegentlich mehrere
-    /// `MKMapItem`-Treffer (z.B. unter leicht unterschiedlichen POI-Kategorien) — ohne
+    /// `MKMapItem`-Treffer (z.B. unter leicht unterschiedlichen POI-Abteilungen) — ohne
     /// Deduplizierung würde ``alleInDerNaehe(vorhandeneGeschaefte:ignorierteVorschlaege:)``
     /// dasselbe (ggf. ignorierte) ``Geschaeft``/denselben unbekannten Laden mehrfach
     /// auflisten. Behält jeweils den ersten (nächstgelegenen, da `treffer` vorher nach
@@ -385,8 +385,8 @@ enum GeschaeftErkennungService {
         return (standort.coordinate.latitude, standort.coordinate.longitude)
     }
 
-    private static func typVorschlag(fuer kategorie: MKPointOfInterestCategory?, context: ModelContext) -> GeschaeftTyp {
-        switch kategorie {
+    private static func typVorschlag(fuer abteilung: MKPointOfInterestCategory?, context: ModelContext) -> GeschaeftTyp {
+        switch abteilung {
         case .pharmacy: return GeschaeftTyp.mitNamen("Apotheke", symbolName: "cross.case.fill", context: context)
         case .foodMarket, .bakery: return GeschaeftTyp.mitNamen("Lebensmittel", symbolName: "cart.fill", context: context)
         case .winery, .brewery: return GeschaeftTyp.mitNamen("Getränkemarkt", symbolName: "waterbottle.fill", context: context)
@@ -397,7 +397,7 @@ enum GeschaeftErkennungService {
     @MainActor
     private static func nahegelegeneLaeden(bei standort: CLLocation, radius: CLLocationDistance) async throws -> [MKMapItem] {
         let anfrage = MKLocalPointsOfInterestRequest(center: standort.coordinate, radius: radius)
-        anfrage.pointOfInterestFilter = MKPointOfInterestFilter(including: relevanteKategorien)
+        anfrage.pointOfInterestFilter = MKPointOfInterestFilter(including: relevanteAbteilungen)
         let antwort = try await MKLocalSearch(request: anfrage).start()
         return antwort.mapItems
     }

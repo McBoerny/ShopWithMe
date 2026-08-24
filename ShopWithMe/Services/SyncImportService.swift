@@ -151,7 +151,7 @@ enum SyncImportService {
         // ``SyncSnapshotImportService/importiereSnapshots(context:)``, das im
         // selben Zyklus unmittelbar davor lief und ggf. neue Aliase
         // registriert hat (``SyncEntitaetsAliasService/registriere(entitaetsArt:fremdeID:lokaleID:context:)``,
-        // in ``SyncSnapshotImportService/mergeArtikel(_:kategorieZuordnung:peerGeraeteID:aliase:context:)``
+        // in ``SyncSnapshotImportService/mergeArtikel(_:abteilungZuordnung:peerGeraeteID:aliase:context:)``
         // u.a.) — ohne diesen einmaligen Schnappschuss könnte ein später in
         // diesem Batch verarbeitetes Event zwar dieselbe, bereits registrierte
         // Auflösung sehen wie der Snapshot-Import, ein früher verarbeitetes

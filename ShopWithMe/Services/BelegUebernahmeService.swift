@@ -102,7 +102,7 @@ enum BelegUebernahmeService {
                     let neuerEintrag = KaufEintrag(
                         artikel: artikel,
                         geschaeft: einkaufsvorgangFrisch.geschaeft,
-                        kategorie: artikel?.fuehrendeKategorie(inGeschaeft: einkaufsvorgangFrisch.geschaeft, context: context),
+                        abteilung: artikel?.fuehrendeAbteilung(inGeschaeft: einkaufsvorgangFrisch.geschaeft, context: context),
                         datum: belegDatum
                     )
                     neuerEintrag.artikelNameSnapshot = artikel?.name ?? name

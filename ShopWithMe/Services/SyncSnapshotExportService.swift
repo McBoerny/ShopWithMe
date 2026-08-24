@@ -71,10 +71,10 @@ enum SyncSnapshotExportService {
             )
         }
 
-        let alleArtikelKategorien = (try? context.fetch(FetchDescriptor<ArtikelKategorie>())) ?? []
-        let gueltigeKategorieIDs = Set(alleArtikelKategorien.map(\.persistentModelID))
-        let artikelKategorien = alleArtikelKategorien.map {
-            ArtikelKategorieSnapshot(
+        let alleAbteilungen = (try? context.fetch(FetchDescriptor<Abteilung>())) ?? []
+        let gueltigeAbteilungIDs = Set(alleAbteilungen.map(\.persistentModelID))
+        let abteilungen = alleAbteilungen.map {
+            AbteilungSnapshot(
                 id: $0.id,
                 name: $0.name,
                 standardSymbol: $0.standardSymbol,
@@ -96,8 +96,8 @@ enum SyncSnapshotExportService {
                 breitengrad: geschaeft.breitengrad,
                 laengengrad: geschaeft.laengengrad,
                 erkennungsradius: geschaeft.erkennungsradiusRaw,
-                kategorieIDs: sichereIDs(geschaeft.kategorien, gueltigeIDs: gueltigeKategorieIDs),
-                ausgeschlosseneKategorieIDs: sichereIDs(geschaeft.ausgeschlosseneKategorien, gueltigeIDs: gueltigeKategorieIDs),
+                abteilungIDs: sichereIDs(geschaeft.abteilungen, gueltigeIDs: gueltigeAbteilungIDs),
+                ausgeschlosseneAbteilungIDs: sichereIDs(geschaeft.ausgeschlosseneAbteilungen, gueltigeIDs: gueltigeAbteilungIDs),
                 alternativeNamen: geschaeft.alternativeNamen,
                 markenname: geschaeft.markenname,
                 ignorierteArtikelNamen: geschaeft.ignorierteArtikel.map(\.erkannterName),
@@ -111,15 +111,15 @@ enum SyncSnapshotExportService {
         let alleArtikel = (try? context.fetch(FetchDescriptor<Artikel>())) ?? []
         let gueltigeArtikelIDs = Set(alleArtikel.map(\.persistentModelID))
         let artikel = alleArtikel.map { artikel -> ArtikelSnapshot in
-            let kategorieIDs = artikel.kategorien.isEmpty
-                ? sichereIDs(artikel.kategorie.map { [$0] } ?? [], gueltigeIDs: gueltigeKategorieIDs)
-                : sichereIDs(artikel.kategorien, gueltigeIDs: gueltigeKategorieIDs)
+            let abteilungIDs = artikel.abteilungen.isEmpty
+                ? sichereIDs(artikel.abteilung.map { [$0] } ?? [], gueltigeIDs: gueltigeAbteilungIDs)
+                : sichereIDs(artikel.abteilungen, gueltigeIDs: gueltigeAbteilungIDs)
             return ArtikelSnapshot(
                 id: artikel.id,
                 name: artikel.name,
                 symbolName: artikel.symbolName,
                 farbeHex: artikel.farbeHex,
-                kategorieIDs: kategorieIDs,
+                abteilungIDs: abteilungIDs,
                 notiz: artikel.notiz,
                 einheit: artikel.einheit.rawValue,
                 mengenSchritt: artikel.mengenSchritt,
@@ -183,12 +183,12 @@ enum SyncSnapshotExportService {
                     artikelID: sichereID($0.artikel, gueltigeIDs: gueltigeArtikelIDs),
                     einkaufsvorgangID: sichereID($0.einkaufsvorgang, gueltigeIDs: gueltigeEinkaufsvorgangIDs),
                     geschaeftID: sichereID($0.geschaeft, gueltigeIDs: gueltigeGeschaeftIDs),
-                    kategorieID: sichereID($0.kategorie, gueltigeIDs: gueltigeKategorieIDs),
+                    abteilungID: sichereID($0.abteilung, gueltigeIDs: gueltigeAbteilungIDs),
                     artikelNameSnapshot: $0.artikelNameSnapshot,
                     geschaeftNameSnapshot: $0.geschaeftNameSnapshot,
                     datum: $0.datum,
                     menge: $0.menge,
-                    kategorieBesuchsIndex: $0.kategorieBesuchsIndex
+                    abteilungBesuchsIndex: $0.abteilungBesuchsIndex
                 )
             }
             : []
@@ -218,14 +218,14 @@ enum SyncSnapshotExportService {
 
         let warengruppenDistanzen = ((try? context.fetch(FetchDescriptor<WarengruppenDistanz>())) ?? [])
             .compactMap { distanz -> WarengruppenDistanzSnapshot? in
-                guard let kategorieAID = sichereID(distanz.kategorieA, gueltigeIDs: gueltigeKategorieIDs),
-                      let kategorieBID = sichereID(distanz.kategorieB, gueltigeIDs: gueltigeKategorieIDs)
+                guard let abteilungAID = sichereID(distanz.abteilungA, gueltigeIDs: gueltigeAbteilungIDs),
+                      let abteilungBID = sichereID(distanz.abteilungB, gueltigeIDs: gueltigeAbteilungIDs)
                 else { return nil }
                 return WarengruppenDistanzSnapshot(
                     id: distanz.id,
                     geschaeftID: sichereID(distanz.geschaeft, gueltigeIDs: gueltigeGeschaeftIDs),
-                    kategorieAID: kategorieAID,
-                    kategorieBID: kategorieBID,
+                    abteilungAID: abteilungAID,
+                    abteilungBID: abteilungBID,
                     distanz: distanz.distanz,
                     eigeneAnzahlBeobachtungen: distanz.eigeneBeobachtungsAnzahl
                 )
@@ -267,7 +267,7 @@ enum SyncSnapshotExportService {
             geraeteID: DatabaseLeaseService.geraeteID,
             geraeteName: DatabaseLeaseService.geraeteName,
             geschaeftsTypen: geschaeftsTypen,
-            artikelKategorien: artikelKategorien,
+            abteilungen: abteilungen,
             geschaefte: geschaefte,
             artikel: artikel,
             einkaufslisten: einkaufslisten,
@@ -546,17 +546,17 @@ enum SyncSnapshotExportService {
     static func normalisiereStamm(_ stamm: SyncStammSnapshot) -> SyncStammSnapshot {
         var stamm = stamm
         stamm.geschaeftsTypen.sort { $0.id.uuidString < $1.id.uuidString }
-        stamm.artikelKategorien = stamm.artikelKategorien.map { kategorie in
-            var kategorie = kategorie
-            kategorie.geschaeftsTypIDs.sort { $0.uuidString < $1.uuidString }
-            return kategorie
+        stamm.abteilungen = stamm.abteilungen.map { abteilung in
+            var abteilung = abteilung
+            abteilung.geschaeftsTypIDs.sort { $0.uuidString < $1.uuidString }
+            return abteilung
         }
-        stamm.artikelKategorien.sort { $0.id.uuidString < $1.id.uuidString }
+        stamm.abteilungen.sort { $0.id.uuidString < $1.id.uuidString }
         stamm.geschaefte = stamm.geschaefte.map { geschaeft in
             var geschaeft = geschaeft
             geschaeft.typIDs.sort { $0.uuidString < $1.uuidString }
-            geschaeft.kategorieIDs.sort { $0.uuidString < $1.uuidString }
-            geschaeft.ausgeschlosseneKategorieIDs.sort { $0.uuidString < $1.uuidString }
+            geschaeft.abteilungIDs.sort { $0.uuidString < $1.uuidString }
+            geschaeft.ausgeschlosseneAbteilungIDs.sort { $0.uuidString < $1.uuidString }
             geschaeft.alternativeNamen.sort()
             geschaeft.ignorierteArtikelNamen.sort()
             return geschaeft
@@ -564,7 +564,7 @@ enum SyncSnapshotExportService {
         stamm.geschaefte.sort { $0.id.uuidString < $1.id.uuidString }
         stamm.artikel = stamm.artikel.map { artikel in
             var artikel = artikel
-            artikel.kategorieIDs.sort { $0.uuidString < $1.uuidString }
+            artikel.abteilungIDs.sort { $0.uuidString < $1.uuidString }
             artikel.alternativeNamen.sort()
             return artikel
         }
@@ -641,7 +641,7 @@ enum SyncSnapshotExportService {
             geraeteID: snapshot.geraeteID, geraeteName: snapshot.geraeteName
         )
         let stamm = SyncStammSnapshot(
-            geschaeftsTypen: snapshot.geschaeftsTypen, artikelKategorien: snapshot.artikelKategorien,
+            geschaeftsTypen: snapshot.geschaeftsTypen, abteilungen: snapshot.abteilungen,
             geschaefte: snapshot.geschaefte, artikel: snapshot.artikel, einkaufslisten: snapshot.einkaufslisten,
             produkte: snapshot.produkte, produktnamen: snapshot.produktnamen
         )

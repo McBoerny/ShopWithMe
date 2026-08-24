@@ -635,7 +635,7 @@ private struct NeuaufbauZusammenfassungView: View {
         let n = zusammenfassung.nachher
         return [
             ("Geschäftstypen", v.geschaeftsTypen, n.geschaeftsTypen),
-            ("Abteilungen", v.artikelKategorien, n.artikelKategorien),
+            ("Abteilungen", v.abteilungen, n.abteilungen),
             ("Geschäfte", v.geschaefte, n.geschaefte),
             ("Artikel", v.artikel, n.artikel),
             ("Einkaufslisten", v.einkaufslisten, n.einkaufslisten),

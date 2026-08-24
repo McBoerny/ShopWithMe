@@ -1,11 +1,11 @@
 import Foundation
 import SwiftData
 
-/// Stellt Standard-Artikelkategorien bereit, die beim ersten App-Start angelegt
+/// Stellt Standard-Abteilungen bereit, die beim ersten App-Start angelegt
 /// werden, damit der Anwender nicht bei null anfangen muss.
 enum SeedData {
-    /// Name, SF-Symbol und Farbe der Standardkategorien in Anzeige-Reihenfolge.
-    static let standardKategorien: [(name: String, symbol: String, farbeHex: String)] = [
+    /// Name, SF-Symbol und Farbe der Standardabteilungen in Anzeige-Reihenfolge.
+    static let standardAbteilungen: [(name: String, symbol: String, farbeHex: String)] = [
         ("Obst & Gemüse", "carrot.fill", "#34C759"),
         ("Brot & Backwaren", "basket.fill", "#FF9500"),
         ("Milchprodukte & Eier", "refrigerator.fill", "#5AC8FA"),
@@ -38,29 +38,29 @@ enum SeedData {
         (GeschaeftTyp.sonstigesName, "shippingbox.fill"),
     ]
 
-    /// Legt die Standardkategorien an, sofern noch keine ``ArtikelKategorie`` im
+    /// Legt die Standardabteilungen an, sofern noch keine ``Abteilung`` im
     /// übergebenen Kontext existiert. Wird idempotent aufgerufen (z.B. bei jedem
-    /// App-Start) und ändert nichts, wenn der Anwender bereits eigene Kategorien hat.
+    /// App-Start) und ändert nichts, wenn der Anwender bereits eigene Abteilungen hat.
     @MainActor
     static func seedeStandarddatenFallsLeer(context: ModelContext) {
-        let deskriptor = FetchDescriptor<ArtikelKategorie>()
+        let deskriptor = FetchDescriptor<Abteilung>()
         let anzahl = (try? context.fetchCount(deskriptor)) ?? 0
         guard anzahl == 0 else { return }
 
-        for (index, eintrag) in standardKategorien.enumerated() {
-            let kategorie = ArtikelKategorie(
+        for (index, eintrag) in standardAbteilungen.enumerated() {
+            let abteilung = Abteilung(
                 name: eintrag.name,
                 standardSymbol: eintrag.symbol,
                 standardFarbeHex: eintrag.farbeHex,
                 sortIndex: index
             )
-            context.insert(kategorie)
+            context.insert(abteilung)
         }
         // Expliziter Save nötig, seit Autosave global deaktiviert ist (siehe
         // `docs/DATABASE_CONCURRENCY.md` → „Voraussetzung: explizite Speicherpunkte“).
         // Bewusst ohne Lease-Schutz (Nutzervorgabe) — das seltene Race bei
         // zeitgleichem Erst-Start zweier Geräte gegen einen leeren Store führt
-        // höchstens zu kosmetischen doppelten Kategorien, siehe „Vollständiger
+        // höchstens zu kosmetischen doppelten Abteilungen, siehe „Vollständiger
         // Schreibvorgang-Katalog“.
         try? context.save()
     }

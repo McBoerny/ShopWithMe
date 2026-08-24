@@ -62,7 +62,7 @@ enum ModellIDDuplikatService {
         [
             pruefeTyp("Artikel", id: \Artikel.id, context: context),
             pruefeTyp("ArtikelGeschaeftVerfuegbarkeit", id: \ArtikelGeschaeftVerfuegbarkeit.id, context: context),
-            pruefeTyp("ArtikelKategorie", id: \ArtikelKategorie.id, context: context),
+            pruefeTyp("Abteilung", id: \Abteilung.id, context: context),
             pruefeTyp("ArtikelListenKauf", id: \ArtikelListenKauf.id, context: context),
             pruefeTyp("Einkaufsliste", id: \Einkaufsliste.id, context: context),
             pruefeTyp("EinkaufslistenEintrag", id: \EinkaufslistenEintrag.id, context: context),

@@ -152,7 +152,7 @@ enum ArtikelListenKaufService {
 
     /// Vermerkt dauerhaft, dass `artikel` von `einkaufsliste` abgehakt wurde —
     /// aufgerufen aus
-    /// ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:kategorie:geschaeft:)``.
+    /// ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:abteilung:geschaeft:)``.
     /// Existiert bereits ein Eintrag für dieses Paar, wird `zuletztAbgehaktAm`
     /// nur nach VORNE (später) korrigiert, nie zurück — für den
     /// Einzelaufruf-Fall (ein Abhaken = eine Aktualisierung). Für Merge-Batches
@@ -241,7 +241,7 @@ enum ArtikelListenKaufService {
     /// EINHEITLICH verwendet an beiden Stellen, die vorher je einen eigenen,
     /// teils fragilen Vergleich anstellten
     /// (``SyncSnapshotImportService/istBereitsAbgehakt(_:aufListe:alleVorgaenge:istAusDerZeitGefallen:bekannterEintrag:)``,
-    /// ``SyncSnapshotImportService/mergeKaufEintraege(_:artikelZuordnung:einkaufsvorgangZuordnung:geschaeftZuordnung:kategorieZuordnung:peerGeraeteID:context:)``).
+    /// ``SyncSnapshotImportService/mergeKaufEintraege(_:artikelZuordnung:einkaufsvorgangZuordnung:geschaeftZuordnung:abteilungZuordnung:peerGeraeteID:context:)``).
     ///
     /// Bewusst BEIDE Werte erforderlich (kein Default-„offen" bei fehlendem
     /// `abgehaktAm`): eine bestehende ``ArtikelListenKauf``-Zeile OHNE

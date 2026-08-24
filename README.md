@@ -1,7 +1,7 @@
 # ShopWithMe
 
 iOS-App (SwiftUI, iOS 26+) zum täglichen Einkaufen: Artikel, Geschäfte, Regale,
-Kategorie-Zuordnung, lernende Regal-Reihenfolge, KI-gestützte Artikelanlage und
+Abteilung-Zuordnung, lernende Regal-Reihenfolge, KI-gestützte Artikelanlage und
 Belegscan mit Preishistorie.
 
 Siehe [docs/BEDIENUNGSANLEITUNG.md](docs/BEDIENUNGSANLEITUNG.md) für die Bedienung

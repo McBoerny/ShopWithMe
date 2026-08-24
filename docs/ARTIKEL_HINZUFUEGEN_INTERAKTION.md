@@ -15,7 +15,7 @@ Status: **Umgesetzt** (`Views/Einkaufen/ArtikelHinzufuegenView.swift`).
   Produktliste inline aus. Jedes `(Artikel, Produkt)`-Paar ist ein unabhängiger
   Eintrag, sodass mehrere Produkte desselben Artikels gleichzeitig auf der Liste
   stehen können (GitHub #47).
-- **Kategorie-Icon/Farbe** über den gemeinsamen `GlassSymbolBadge`-Baustein
+- **Abteilung-Icon/Farbe** über den gemeinsamen `GlassSymbolBadge`-Baustein
   (`DesignSystem/GlassStyles.swift`).
 - **Preise werden nicht angezeigt** (GitHub #124).
 

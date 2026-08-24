@@ -45,7 +45,7 @@ wurde auf Phase 1b verschoben, da das DTO-Design selbst eine substantielle
 Entwurfsentscheidung war (siehe Abschnitt 4.2/4.2a).
 
 **Status: Phase 1b umgesetzt** — `SyncSnapshot`-DTOs (Bereich B: `GeschaeftTyp`,
-`ArtikelKategorie`, `Geschaeft`, `Artikel`, `Einkaufsliste`; Bereich C: alle
+`Abteilung`, `Geschaeft`, `Artikel`, `Einkaufsliste`; Bereich C: alle
 `Einkaufsvorgang`, `KaufEintrag`; Bereich D: `WarengruppenDistanz`) und
 `SyncSnapshotExportService.exportiereSnapshot(context:)`, der bei jedem
 manuellen „Jetzt synchronisieren" einen vollständigen `export.json` in den
@@ -93,15 +93,15 @@ Phasen zusammen.
 
 **Status: Phase 3a umgesetzt** (Bereich-B-Import: Stammdaten) —
 `SyncSnapshotImportService` liest `export.json` aus allen fremden Peer-Ordnern
-und merged `GeschaeftTyp`/`ArtikelKategorie`/`Geschaeft`/`Artikel`/
+und merged `GeschaeftTyp`/`Abteilung`/`Geschaeft`/`Artikel`/
 `Einkaufsliste` dependency-geordnet in den lokalen Bestand, unter
 Wiederverwendung der in `docs/DATENSYNCHRONISATION.md` Abschnitt 4.2
 hergeleiteten Matching-Bausteine (`GeschaeftTyp.mitNamen`,
 `GeschaeftErkennungService.istGleicherOrt`, Namensabgleich für
-`ArtikelKategorie`/`Artikel`). Grundprinzip aller Merge-Regeln: **nie
+`Abteilung`/`Artikel`). Grundprinzip aller Merge-Regeln: **nie
 destruktiv** — ein bestehender lokaler Wert wird nie durch einen abweichenden
 Remote-Wert überschrieben, nur fehlende Werte werden ergänzt und Mengen
-(Kategorien, Typen, ignorierte Artikel, alternative Namen) vereinigt. Die
+(Abteilungen, Typen, ignorierte Artikel, alternative Namen) vereinigt. Die
 additive Merge-Regel für `Geschaeft.anzahlEinkaufsvorgaenge` (Abschnitt 4.2a)
 ist jetzt über ``SyncPeerZaehlerStand`` (Zähler-Zuwachs seit dem zuletzt
 bekannten Stand jedes Peers) tatsächlich implementiert, `umbauVerdacht` per
@@ -144,7 +144,7 @@ unveränderliche Historie) und `WarengruppenDistanz` (einfacher Mittelwert bei
 bereits vorhandenem Eintrag, sonst Übernahme — vereinfacht ggü. der im
 #39-Vorschlag skizzierten besuchsgewichteten Mittelung, da der Snapshot keine
 Besuchszahl je Eintrag mitführt). Die Zuordnungstabellen
-(`GeschaeftTyp`/`ArtikelKategorie`/`Geschaeft`/`Artikel`/`Einkaufsliste`) aus
+(`GeschaeftTyp`/`Abteilung`/`Geschaeft`/`Artikel`/`Einkaufsliste`) aus
 Phase 3a werden dafür direkt wiederverwendet. **Damit ist Phase 3 (Import
 Bereich B/C/D) vollständig umgesetzt.**
 
@@ -325,7 +325,7 @@ angelehnt an die „Datenbereiche"-Tabelle aus dem #39-Vorschlag:
 | Bereich | Inhalt | Sync-Frequenz | Konfliktregel |
 |---|---|---|---|
 | **A — zeitkritisch** | `Einkaufsliste`-Mitgliedschaft (hinzufügen/entfernen/Menge), Abhaken/Abwählen (`Einkaufsvorgang`) | Bei jedem Sync-Zyklus (Abschnitt 5.3) | CRDT-Regeln (Abschnitt 4.4) |
-| **B — Stammdaten** | `Artikel`, `ArtikelKategorie`, `GeschaeftTyp`, `Geschaeft` (inkl. `erkennungsradius`, `ausgeschlosseneKategorien`, `IgnorierterArtikel` — siehe Entscheidungen unten), `Einkaufsliste` (nur `id`/`name`, siehe 4.2a) | Export bei jedem Sync-Zyklus, weniger zeitkritisch | Namens-/Koordinaten-Matching (bereits vorhandene Bausteine, siehe `docs/DATENSYNCHRONISATION.md` Abschnitt 4.2) |
+| **B — Stammdaten** | `Artikel`, `Abteilung`, `GeschaeftTyp`, `Geschaeft` (inkl. `erkennungsradius`, `ausgeschlosseneAbteilungen`, `IgnorierterArtikel` — siehe Entscheidungen unten), `Einkaufsliste` (nur `id`/`name`, siehe 4.2a) | Export bei jedem Sync-Zyklus, weniger zeitkritisch | Namens-/Koordinaten-Matching (bereits vorhandene Bausteine, siehe `docs/DATENSYNCHRONISATION.md` Abschnitt 4.2) |
 | **C — Historie** | `KaufEintrag`, **alle** `Einkaufsvorgang` (auch laufende, siehe 4.2a) | Export, seltener (z.B. nur bei Konsolidierung) | Union nach `id`, nie Konflikt (jeder Kauf ein abgeschlossenes Ereignis) |
 | **D — Lernen** | `WarengruppenDistanz` | Export, selten | Gewichteter Mittelwert (siehe #39-Vorschlag §5.2 „mergeDistanzMatrix", direkt übertragbar) |
 | **Nicht synchronisiert** | `DebugEinstellungen`, lokale UI-Zustände, `IgnorierterGeschaeftsVorschlag` (siehe Entscheidungen unten) | — | — |
@@ -546,7 +546,7 @@ spiegeln, statt auf den nächsten Polling-Zyklus zu warten).
    (`SyncImportService`).
 4. **Phase 3 (umgesetzt) — Import Bereich B/C/D:** Stammdaten-/Historien-/
    Lern-Merge beim Einlesen fremder `export.json`-Dateien.
-   - **3a (umgesetzt):** Stammdaten (`GeschaeftTyp`, `ArtikelKategorie`,
+   - **3a (umgesetzt):** Stammdaten (`GeschaeftTyp`, `Abteilung`,
      `Geschaeft`, `Artikel`, `Einkaufsliste`) via `SyncSnapshotImportService` +
      `SyncEntitaetsAlias` (fremde↔lokale ID bei Namens-Matches).
    - **3b (umgesetzt):** Historie/Lernen (`Einkaufsvorgang` ID-basiert,
@@ -579,7 +579,7 @@ bewusste Architekturentscheidung nötig machten:
 
 1. **Gelöschte Bereich-B-Entitäten kamen zurück.** Der additive Bereich-B-Merge
    ("nie destruktiv", Abschnitt 5.1) kannte keine Löschsemantik — löschte ein
-   Gerät ein `Geschaeft`/`Artikel`/`ArtikelKategorie`/`Einkaufsliste`, brachte
+   Gerät ein `Geschaeft`/`Artikel`/`Abteilung`/`Einkaufsliste`, brachte
    jeder Peer, der es noch in seinem eigenen Snapshot führte, es beim
    nächsten Sync unwissentlich zurück.
 2. **Bereich A (Events) hatte kein Sicherheitsnetz.** Anders als Bereich B
@@ -611,21 +611,21 @@ nächsten Testlauf neu aufgesetzt.
   Aufgabe der `artikelEntfernt`-Events — dieser Teil ist bewusst nie
   destruktiv.
 - **`SyncTombstone`** (neues Modell) — merkt absichtliche Löschungen von
-  `Geschaeft`/`Artikel`/`ArtikelKategorie`/`Einkaufsliste`/`KaufEintrag` vor,
+  `Geschaeft`/`Artikel`/`Abteilung`/`Einkaufsliste`/`KaufEintrag` vor,
   wird im Snapshot mitgeführt (`SyncSnapshot.tombstones`) und beim Import
   zuerst verarbeitet (`mergeTombstones`): löscht ein dadurch als entfernt
   markiertes, lokal noch vorhandenes Objekt, und verhindert (über
   `SyncTombstoneService.geloeschteIDs`), dass die nachfolgenden
   Merge-Schritte es aus einem veralteten Peer-Snapshot neu anlegen. Alle
   UI-Löschstellen (`GeschaeftListView`, `ArtikelListView`,
-  `KategorienVerwaltungView`, `EinkaufslistenVerwaltungView`,
+  `AbteilungenVerwaltungView`, `EinkaufslistenVerwaltungView`,
   `GeschaeftPreisUebersichtView`) rufen `SyncTombstoneService.markiereGeloescht(...)`
   vor dem eigentlichen `context.delete(...)` auf.
-- **`SyncEntitaetsAlias`-Erweiterung auf `Geschaeft`/`ArtikelKategorie`** —
+- **`SyncEntitaetsAlias`-Erweiterung auf `Geschaeft`/`Abteilung`** —
   Voraussetzung dafür, dass ein Tombstone für ein per Namens-/
   Koordinatenmatching zusammengeführtes Objekt überhaupt auf die richtige
   lokale ID aufgelöst werden kann (vorher nur für `Artikel`/`Einkaufsliste`
-  registriert). `Geschaeft`/`ArtikelKategorie` übernehmen jetzt außerdem
+  registriert). `Geschaeft`/`Abteilung` übernehmen jetzt außerdem
   konsequent die Remote-ID beim Neuanlegen (vorher bekam ein neu erzeugtes
   `Geschaeft` immer eine zufällige, vom Original abweichende ID).
 - **`SyncPeerInfo.zuletztGesehen` + `SyncSnapshotImportService.maximalesSnapshotAlter`**
@@ -730,12 +730,12 @@ BESTEHENDEN Eintrag auf dem ursprünglichen Vorgang finden und werden bewusst
 nicht umgeleitet (Code-Review-Fund: eine Umleitung ließ sie sonst still ins
 Leere laufen, während das Event trotzdem als erledigt galt). Zusätzlich
 bekommt ein so oder per Snapshot-Merge (`mergeKaufEintraege`) fremd
-materialisierter `KaufEintrag` bewusst **keinen** `kategorieBesuchsIndex` — er
+materialisierter `KaufEintrag` bewusst **keinen** `abteilungBesuchsIndex` — er
 beschreibt die Laufreihenfolge des SENDENDEN Geräts, nicht die dieses
 Geräts, und würde `AbteilungsDistanzService` sonst mit einer erfundenen
-Besuchsposition füttern; `Einkaufsvorgang.naechsterKategorieBesuchsIndex`
+Besuchsposition füttern; `Einkaufsvorgang.naechsterAbteilungBesuchsIndex`
 ignoriert solche indexlosen Einträge bei der Suche nach einem bereits
-vorhandenen Index, um keinen Duplikat-Index für dieselbe Kategorie zu
+vorhandenen Index, um keinen Duplikat-Index für dieselbe Abteilung zu
 vergeben.
 
 **Dieselbe Lücke bestand unadressiert auch im Bereich-A-„Sicherheitsnetz"**
@@ -759,7 +759,7 @@ Geschäfts-Zuordnung eines per Umleitung materialisierten `KaufEintrag`
 `SyncEntitaetsAlias`s „einmal geschrieben, eingefroren"-Semantik passt nicht
 zu einer mehrfach rotierenden Umleitung; kein Ursprungsgerät-Feld auf
 `KaufEintrag` (zwei unabhängige, nicht typsicher erzwungene Stellen
-unterdrücken `kategorieBesuchsIndex`); store-loser Umleitungs-Fallback bei
+unterdrücken `abteilungBesuchsIndex`); store-loser Umleitungs-Fallback bei
 zwei konkurrierenden Einkäufen ohne Geschäft-Treffer.
 
 ## 12. Restrisiko: unerreichbare Vorgeschichte vor Einführung dieses Features
@@ -1142,7 +1142,7 @@ Abschnitt 16-Umfeld) zeigte: `export.json` wurde auf einem Testgerät
 praktisch bei **jedem** Zyklus (5–60s) neu geschrieben, über Stunden hinweg,
 ohne erkennbare Nutzeraktivität — der `geschaefte`-Teilbereich hatte bei
 fast jedem Zyklus einen anderen Kurz-Fingerabdruck, obwohl Anzahl und
-Kategorien/Artikel/Kaufeinträge über mehrere Zyklen hinweg stabil blieben.
+Abteilungen/Artikel/Kaufeinträge über mehrere Zyklen hinweg stabil blieben.
 Das deutete auf ein sich kontinuierlich veränderndes Feld innerhalb
 `GeschaeftSnapshot` hin.
 
@@ -1217,16 +1217,16 @@ Ein weiterer Live-Test nach den Abschnitten 16/17 zeigte: `export.json`
 wurde weiterhin praktisch bei jedem Zyklus neu geschrieben
 (`sync_snapshot_geschrieben` statt `sync_snapshot_unveraendert_uebersprungen`),
 obwohl `einkaufsvorgaenge`/`artikel`/`kaufEintraege`-Anzahlen über viele
-Zyklen hinweg stabil blieben — nur `geschaefte` (und `artikelKategorien`,
+Zyklen hinweg stabil blieben — nur `geschaefte` (und `abteilungen`,
 `artikel`) zeigten bei jedem Zyklus einen anderen Kurz-Fingerabdruck.
 
 **Ursache:** ``SyncSnapshotExportService/normalisiertFuerVergleich(_:)``
 (Abschnitt 14) sortierte bisher nur die ÄUSSEREN Arrays (ein Eintrag je
 Entität) nach ihrer `UUID`. Die ID-Arrays INNERHALB eines einzelnen
-Eintrags — `GeschaeftSnapshot/typIDs`/`kategorieIDs`/
-`ausgeschlosseneKategorieIDs`/`alternativeNamen`/`ignorierteArtikelNamen`,
-``ArtikelKategorieSnapshot/geschaeftsTypIDs``,
-``ArtikelSnapshot/kategorieIDs`` — sind ebenfalls aus SwiftData-
+Eintrags — `GeschaeftSnapshot/typIDs`/`abteilungIDs`/
+`ausgeschlosseneAbteilungIDs`/`alternativeNamen`/`ignorierteArtikelNamen`,
+``AbteilungSnapshot/geschaeftsTypIDs``,
+``ArtikelSnapshot/abteilungIDs`` — sind ebenfalls aus SwiftData-
 `@Relationship`-Sammlungen abgeleitet und unterliegen derselben fehlenden
 Fetch-Reihenfolgen-Garantie wie der äußere `FetchDescriptor`. Ohne
 Sortierung dieser inneren Arrays erschien praktisch jeder Zyklus fälschlich
@@ -1246,7 +1246,7 @@ nachzustellen.
 **Verifikationsstand:** `xcodebuild build`/`build-for-testing` grün. Neuer
 Test in `SyncSnapshotExportServiceTests` — zwei Snapshots mit identischem
 fachlichen Inhalt, aber unterschiedlicher Reihenfolge sowohl der äußeren
-Geschäfte-Liste als auch der inneren `typIDs`/`kategorieIDs`/
+Geschäfte-Liste als auch der inneren `typIDs`/`abteilungIDs`/
 `alternativeNamen`/`ignorierteArtikelNamen` ergeben denselben Fingerabdruck.
 Noch nicht mit echten Geräten nachverifiziert.
 
@@ -1267,7 +1267,7 @@ nicht bloß eine Diagnose-Artefakt-Fetch-Reihenfolge.
 `GeschaeftTyp.mitNamen` (unsortierter `FetchDescriptor` mit `fetchLimit = 1`)
 bei lokalen Namens-Duplikaten nichtdeterministisch zwischen zwei
 unterschiedlichen `GeschaeftTyp`-Objekten hin- und herwechseln könnte — anders
-als `ArtikelKategorie`/`Geschaeft`/`Artikel` hat `GeschaeftTyp` kein
+als `Abteilung`/`Geschaeft`/`Artikel` hat `GeschaeftTyp` kein
 Alias-Register für Namenstreffer mit abweichender ID. Ein direkter Abgleich
 der beiden vom Nutzer bereitgestellten `export.json`-Dateien (Endzustand nach
 dem Test) zeigt jedoch: auf jedem Gerät exakt 11 `GeschaeftTyp`-Einträge ohne
@@ -1306,9 +1306,9 @@ weiter oben, warum genau das schon einmal echte, noch nicht angekommene
 Syncs zerstört hat.
 
 **Zusätzlich gefunden und behoben, beim Prüfen der Merge-Logik auf diese
-Fragestellung hin:** ``mergeArtikelKategorien``/``mergeGeschaefte``/
-``vervollstaendige`` wiesen `lokal.typen`/`lokal.kategorien`/
-`lokal.ausgeschlosseneKategorien`/`lokal.geschaeftsTypen` bislang UNBEDINGT
+Fragestellung hin:** ``mergeAbteilungen``/``mergeGeschaefte``/
+``vervollstaendige`` wiesen `lokal.typen`/`lokal.abteilungen`/
+`lokal.ausgeschlosseneAbteilungen`/`lokal.geschaeftsTypen` bislang UNBEDINGT
 das Ergebnis von `vereinigtGeordnet(...)` zu — auch dann, wenn sich dadurch
 inhaltlich nichts änderte. Eine SwiftData-`@Relationship`-Eigenschaft gilt bei
 jeder Zuweisung als verändert, unabhängig davon, ob der neue Wert inhaltlich
@@ -1436,7 +1436,7 @@ gelöscht) bleibt direkt daneben als Rückgängig-Option sichtbar.
 (``DatenintegritaetsService``):** Die bestehende Prüfung auf baumelnde
 Referenzen (``istBaumelnd``) erkennt eine baumelnde `persistentModelID`
 (Absturzrisiko), nicht aber einen gültigen `nil`-Bezug — genau das, was
-Abschnitt 20 als eigentliche Fehlerkategorie „orphaned" (semantisch
+Abschnitt 20 als eigentliche Fehlerabteilung „orphaned" (semantisch
 unerreichbar, aber crash-sicher) identifiziert hat. ``pruefe(context:)``
 prüft jetzt zusätzlich auf ``Einkaufsvorgang``e ohne ``Einkaufsliste`` — als
 EINE aggregierte Zeile (nicht eine je betroffenem Vorgang, damit ein
@@ -1660,17 +1660,17 @@ bleibt. Neuer Test
   „stadtweite" Distanz) — anders als bei `Einkaufsvorgang.einkaufsliste`
   bedeutet `nil` hier keine Kaputtheit, sondern einen echten fachlichen
   Zustand. Kein Bug.
-- `mergeGeschaefte`/`mergeArtikel`/`mergeArtikelKategorien`/
+- `mergeGeschaefte`/`mergeArtikel`/`mergeAbteilungen`/
   `mergeEinkaufslisten`: alle vier Entitätstypen sind IMMER eigenständig
   über ihre jeweilige Verwaltungsansicht erreichbar (keine „braucht X, um
   sichtbar zu sein"-Abhängigkeit wie bei `Einkaufsvorgang`) — ein „neu
   anlegen" ohne vollständige Zusatzdaten erzeugt hier höchstens ein
   unvollständiges, aber niemals ein unerreichbares Objekt.
-- `mergeKaufEintraege`: `artikel`/`geschaeft`/`kategorie`/`einkaufsvorgang`
+- `mergeKaufEintraege`: `artikel`/`geschaeft`/`abteilung`/`einkaufsvorgang`
   dürfen alle `nil` sein (behält dafür bewusst die Schnappschuss-Namen) —
   bleibt trotzdem in der Preishistorie sichtbar, keine Unerreichbarkeit.
 - `mergeWarengruppenDistanzen`s „neu anlegen"-Zweig validiert bereits
-  korrekt VOR dem Anlegen (`guard let kategorieA = ..., let kategorieB = ...
+  korrekt VOR dem Anlegen (`guard let abteilungA = ..., let abteilungB = ...
   else { continue }`) — ein bereits existierendes gutes Beispiel für
   Kriterium 1, an dem sich der Abschnitt-20-Fix orientiert hat.
 - Alle `vereinigeGeordnetFallsNoetig`-Aufrufstellen (Kriterium 3) wurden
@@ -1895,7 +1895,7 @@ Tombstones mit `vorgaenge.json`. Erneute Durchsicht von
 `SyncSnapshotImportService.merge` zeigte: `mergeTombstones` muss laut
 bestehendem Kommentar „bewusst zuerst" laufen, VOR jedem Stammdaten-Merge —
 Tombstones gelten aber nicht nur für Bereich C (Einkaufsvorgang/KaufEintrag/
-Preispunkt), sondern auch für Geschäft/Artikel/ArtikelKategorie/Einkaufsliste
+Preispunkt), sondern auch für Geschäft/Artikel/Abteilung/Einkaufsliste
 (Stammdaten). In `vorgaenge.json` gebündelt wären sie erst NACH `stamm.json`
 gelesen worden — zu spät. Fix: eigene, immer zuerst gelesene `tombstones.json`.
 Dem Nutzer vor der weiteren Umsetzung vorgelegt und bestätigt, statt still
@@ -2182,7 +2182,7 @@ zeichnet beim lokalen Abhaken `self.geschaeft?.id` mit auf.
 (über den Bereich-B-Alias, GitHub #86) zu einem lokalen `Geschaeft?` auf und
 übergibt sie als Override an
 `artikelAbhakenOhneEventAufzeichnung(...:geschaeft:)` — analog dem bereits
-bestehenden `kategorie`-Override, aber bewusst doppelt optional (`Geschaeft??`),
+bestehenden `abteilung`-Override, aber bewusst doppelt optional (`Geschaeft??`),
 um „kein Override" von „Override auf explizit kein Geschäft" zu
 unterscheiden. `geschaeftNameSnapshot` (bei `KaufEintrag`-Anlage aus
 demselben Parameter abgeleitet) wird dadurch automatisch mitkorrigiert, ohne
@@ -2244,7 +2244,7 @@ Doppelzählung im Besuchszähler/-protokoll verhindert; `kanonischer(unter:)`
 bleibt ebenfalls bestehen (jetzt für `offenerTreffer` und den lokalen Anker
 `aktuellerEinkauf`, nicht mehr für die Live-Sichtbarkeit).
 
-`EinkaufenView.umschalten(_:kategorie:)`/`entferneDauerhaft(_:)` mussten dafür
+`EinkaufenView.umschalten(_:abteilung:)`/`entferneDauerhaft(_:)` mussten dafür
 zusätzlich angepasst werden: sie dürfen die Mutation nicht mehr blind auf dem
 lokalen Anker-Vorgang aufrufen, sondern müssen per frischem, liste- und
 zeitfenster-beschränktem Fetch den tatsächlichen Besitzer-Vorgang des
@@ -2302,7 +2302,7 @@ belegt: die Löschung fand nie tatsächlich statt (kein Event wurde je
 aufgezeichnet), unabhängig vom Sync selbst.
 
 **Root Cause:** Der in Abschnitt 35 eingeführte „frische, zeitfenster-
-beschränkte Fetch“ in `EinkaufenView.umschalten(_:kategorie:)`/
+beschränkte Fetch“ in `EinkaufenView.umschalten(_:abteilung:)`/
 `entferneDauerhaft(_:)` (siehe dort) filterte nach
 `$0.datum >= zeitfensterStart`, wobei `zeitfensterStart =
 einkaufsvorgang.startZeit` — die Startzeit des GERADE ANGEZEIGTEN Vorgangs.
@@ -2325,7 +2325,7 @@ Funktionen ermitteln den zu mutierenden `KaufEintrag` jetzt direkt über
 bestimmt (dedupliziert bereits korrekt aus ``abgehakteKaufEintraege``, ohne
 Zeitfenster-Annahme). Ein ``ModelReference<KaufEintrag>`` sichert diese
 Identität über die `await`-Grenze des Micro-Lease hinweg (analog Artikel/
-Vorgang/Kategorie). Da diese Anzeige-Quelle per Konstruktion IMMER exakt den
+Vorgang/Abteilung). Da diese Anzeige-Quelle per Konstruktion IMMER exakt den
 Eintrag liefert, der auch als „abgehakt“ gerendert wurde, kann die Mutation
 nicht mehr von dem abweichen, was der Anwender tatsächlich sieht.
 
@@ -2413,7 +2413,7 @@ alle offenen Vorgänge gilt (Abschnitt 35/37), konnte derselbe Artikel
 unabhängig unter zwei unterschiedlichen, beide offenen Vorgängen (hier: zwei
 Geschäften, „Edeka" und „Rewe") abgehakt werden — das erzeugte ZWEI separate
 `KaufEintrag`e für denselben Artikel. Die Anzeige zeigte trotzdem nur eine
-(deduplizierte) Zeile, aber `EinkaufenView.umschalten(_:kategorie:)`/
+(deduplizierte) Zeile, aber `EinkaufenView.umschalten(_:abteilung:)`/
 `kaufEintrag(fuer:)` griffen nur auf den per `.first` zufällig ERSTEN Treffer
 zu — ein „Abwählen" entfernte nur einen der beiden Einträge, der andere
 blieb bestehen, der Artikel erschien weiterhin „abgehakt". Aus Nutzersicht:
@@ -2431,7 +2431,7 @@ Tippen auf „Abwählen" schien wirkungslos.
    dabei mit der `bezugsID` des TATSÄCHLICHEN Besitzer-Vorgangs abgefragt,
    nicht mehr blind mit `self.id`.
 2. **Selbstheilend gegen bereits bestehende Duplikate:**
-   `EinkaufenView.umschalten(_:kategorie:)`/`entferneDauerhaft(_:)` nutzen
+   `EinkaufenView.umschalten(_:abteilung:)`/`entferneDauerhaft(_:)` nutzen
    jetzt `alleAbgehaktenEintraege(fuer:)` (statt `kaufEintrag(fuer:)`, das nur
    den ersten Treffer liefert) und wirken auf ALLE gefundenen Einträge — ein
    einzelner Tap räumt damit auch schon bestehende Duplikate (z.B. aus der
@@ -2850,12 +2850,12 @@ offen.
 ## 44. GitHub #68: `KaufEintrag.ursprungsGeraeteID` — Ursprungs-Unterdrückung zentral im Typ statt an zwei Call-Sites
 
 **Ausgangslage:** Die Regel „ein von einem anderen Gerät materialisierter/
-gemergter `KaufEintrag` bekommt nie einen `kategorieBesuchsIndex`" (siehe
+gemergter `KaufEintrag` bekommt nie einen `abteilungBesuchsIndex`" (siehe
 Abschnitt oben zu `SyncEventNutzlast.geschaeftID`/GitHub #66, sowie
 `docs/DATENSYNCHRONISATION.md`) war nur an zwei unabhängigen, von Hand
 gepflegten Call-Sites umgesetzt: `SyncImportService.materialisiere`
 (`indexFuerDistanzlernen: false`) und `SyncSnapshotImportService.
-mergeKaufEintraege` (hartcodiertes `kategorieBesuchsIndex: nil`). `KaufEintrag`
+mergeKaufEintraege` (hartcodiertes `abteilungBesuchsIndex: nil`). `KaufEintrag`
 selbst führte — anders als `SyncEvent.autorGeraeteID` — keine Information
 darüber, ob er lokal oder remote entstanden ist. Bei Prüfung des Issues
 zeigte sich, dass die befürchtete Gefahr ("ein künftiger dritter
@@ -2863,13 +2863,13 @@ Entstehungsweg vergisst die Regel") bereits eingetreten war: `BelegScanView`
 legt seit einer früheren Änderung einen dritten, direkten
 `KaufEintrag(...)`-Konstruktionsort an, der außerhalb beider bekannten
 Unterdrückungsstellen liegt (zufällig unschädlich, da kein
-`kategorieBesuchsIndex`-Argument übergeben wurde).
+`abteilungBesuchsIndex`-Argument übergeben wurde).
 
 **Fix:** Neues additiv-optionales Attribut `KaufEintrag.ursprungsGeraeteID:
 String?` (`nil` = lokal entstanden, sonst die Geräte-ID des Peers, von dem
 der Eintrag per Sync-Event oder Snapshot übernommen wurde — analog
 `SyncEvent.autorGeraeteID`). `KaufEintrag.init` erzwingt jetzt zentral:
-`kategorieBesuchsIndex` wird verworfen, sobald `ursprungsGeraeteID != nil`,
+`abteilungBesuchsIndex` wird verworfen, sobald `ursprungsGeraeteID != nil`,
 unabhängig davon, was der Aufrufer übergibt. Die beiden bisherigen
 Call-Sites übergeben jetzt die tatsächliche Urheber-Geräte-ID
 (`SyncEventExportDarstellung.autorGeraeteID` bzw. `manifest.geraeteID`/
@@ -3712,7 +3712,7 @@ erwarteten „2 von 6" — zwei Artikel, die Bernhard bereits abgehakt hatte,
 standen auf Backup gleichzeitig noch offen auf der Liste.
 
 **Ursache:** Das lokale Abhaken
-(``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:kategorie:geschaeft:)``)
+(``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:abteilung:geschaeft:)``)
 löscht explizit den zugehörigen `EinkaufslistenEintrag`, sobald ein
 `KaufEintrag` entsteht. `mergeKaufEintraege` (Bereich C, legt `KaufEintrag`e
 direkt aus einem Peer-Snapshot an, ohne über jene Funktion zu laufen) tat das

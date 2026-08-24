@@ -29,10 +29,10 @@ nicht gleichzeitig mit unterschiedlicher Menge auf zwei Listen stehen.
   (`EinkaufenView.aktuellerEinkauf`).
 - **`EinkaufenView`** bekommt einen zweiten Picker (Menü, `.topBarLeading`) zur
   Auswahl der aktiven Liste, mit einer „Neue Liste …“-Schnellaktion direkt darin.
-  Eine vollständige Verwaltung (Umbenennen/Löschen) liegt wie bei Kategorien in den
+  Eine vollständige Verwaltung (Umbenennen/Löschen) liegt wie bei Abteilungen in den
   Einstellungen (`EinkaufslistenVerwaltungView`).
 - **Fetch-or-Create-Idiom** `Einkaufsliste.standard(context:)` (analog
-  `ArtikelKategorie.sonstige(context:)`) legt beim allerersten Öffnen von „Einkaufen“
+  `Abteilung.sonstige(context:)`) legt beim allerersten Öffnen von „Einkaufen“
   automatisch eine erste Liste namens „Einkaufsliste“ an, damit der Nutzer nicht ohne
   Liste dasteht.
 - **Abhaken** (`Einkaufsvorgang.artikelAbhaken`) übernimmt die Menge aus dem
@@ -62,7 +62,7 @@ nicht darunter.
 vor diesem Update auf der (damals einzigen, globalen) Liste stehenden Artikel in die
 neu angelegte Standardliste — wer beim Update Artikel angehakt hatte, muss sie einmalig
 erneut hinzufügen. Wurde bewusst so entschieden, da es sich um rein ephemeren
-„aktueller Warenkorb“-Zustand handelt (kein Verlust von Artikel-Katalog, Kategorien,
+„aktueller Warenkorb“-Zustand handelt (kein Verlust von Artikel-Katalog, Abteilungen,
 Geschäften oder Kaufhistorie/Preisen) und eine echte Datenübernahme eine eingefrorene
 `SchemaV2` samt `MigrationStage` vorausgesetzt hätte — der in `docs/DECISIONS.md`
 dokumentierte, für dieses Projekt (flache Modell-Klassen statt versionierter Typen)

@@ -81,22 +81,22 @@ enum DatenintegritaetsService {
         let gueltigeGeschaeftIDs = Set(((try? context.fetch(FetchDescriptor<Geschaeft>())) ?? []).map(\.persistentModelID))
         let gueltigeArtikelIDs = Set(((try? context.fetch(FetchDescriptor<Artikel>())) ?? []).map(\.persistentModelID))
         let gueltigeProduktIDs = Set(((try? context.fetch(FetchDescriptor<Produkt>())) ?? []).map(\.persistentModelID))
-        let gueltigeKategorieIDs = Set(((try? context.fetch(FetchDescriptor<ArtikelKategorie>())) ?? []).map(\.persistentModelID))
+        let gueltigeAbteilungIDs = Set(((try? context.fetch(FetchDescriptor<Abteilung>())) ?? []).map(\.persistentModelID))
         let gueltigeEinkaufslistenIDs = Set(((try? context.fetch(FetchDescriptor<Einkaufsliste>())) ?? []).map(\.persistentModelID))
         let gueltigeEinkaufsvorgangIDs = Set(((try? context.fetch(FetchDescriptor<Einkaufsvorgang>())) ?? []).map(\.persistentModelID))
 
         var befunde: [Befund] = []
 
         for artikel in (try? context.fetch(FetchDescriptor<Artikel>())) ?? [] {
-            guard istBaumelnd(artikel.kategorie, gueltigeIDs: gueltigeKategorieIDs) else { continue }
-            befunde.append(Befund(beschreibung: "Artikel „\(artikel.name)“: veraltete Einzelkategorie-Referenz zeigt auf eine nicht mehr existierende Abteilung"))
+            guard istBaumelnd(artikel.abteilung, gueltigeIDs: gueltigeAbteilungIDs) else { continue }
+            befunde.append(Befund(beschreibung: "Artikel „\(artikel.name)“: veraltete Einzelabteilung-Referenz zeigt auf eine nicht mehr existierende Abteilung"))
         }
 
         for eintrag in (try? context.fetch(FetchDescriptor<KaufEintrag>())) ?? [] {
             var betroffeneFelder: [String] = []
             if istBaumelnd(eintrag.artikel, gueltigeIDs: gueltigeArtikelIDs) { betroffeneFelder.append("Artikel") }
             if istBaumelnd(eintrag.geschaeft, gueltigeIDs: gueltigeGeschaeftIDs) { betroffeneFelder.append("Geschäft") }
-            if istBaumelnd(eintrag.kategorie, gueltigeIDs: gueltigeKategorieIDs) { betroffeneFelder.append("Abteilung") }
+            if istBaumelnd(eintrag.abteilung, gueltigeIDs: gueltigeAbteilungIDs) { betroffeneFelder.append("Abteilung") }
             if istBaumelnd(eintrag.einkaufsvorgang, gueltigeIDs: gueltigeEinkaufsvorgangIDs) { betroffeneFelder.append("Einkaufsvorgang") }
             guard !betroffeneFelder.isEmpty else { continue }
             // Bewusst `artikelNameSnapshot`/`geschaeftNameSnapshot` statt
@@ -178,7 +178,7 @@ enum DatenintegritaetsService {
         // als eine baumelnde `persistentModelID`. Trotzdem ist ein
         // ``Einkaufsvorgang`` ohne Liste für die gesamte App unerreichbar
         // (``EinkaufenView/aktuellerEinkauf`` verlangt immer eine konkrete
-        // Liste) — eine eigene, andere Fehlerkategorie („orphaned" statt
+        // Liste) — eine eigene, andere Fehlerabteilung („orphaned" statt
         // „dangling"), die ohne diese Prüfung monatelang unbemerkt
         // akkumulieren kann. Als EINE aggregierte Zeile statt einer je
         // betroffenem Vorgang, damit ein künftiger ähnlicher Bug den Bericht
@@ -205,9 +205,9 @@ enum DatenintegritaetsService {
         }
 
         for distanz in (try? context.fetch(FetchDescriptor<WarengruppenDistanz>())) ?? [] {
-            let kategorienBaumelnd = istBaumelnd(distanz.kategorieA, gueltigeIDs: gueltigeKategorieIDs)
-                || istBaumelnd(distanz.kategorieB, gueltigeIDs: gueltigeKategorieIDs)
-            if kategorienBaumelnd {
+            let abteilungenBaumelnd = istBaumelnd(distanz.abteilungA, gueltigeIDs: gueltigeAbteilungIDs)
+                || istBaumelnd(distanz.abteilungB, gueltigeIDs: gueltigeAbteilungIDs)
+            if abteilungenBaumelnd {
                 befunde.append(Befund(beschreibung: "Gelernter Abteilungs-Abstand: beteiligte Abteilung zeigt auf nicht mehr Existierendes"))
             } else if istBaumelnd(distanz.geschaeft, gueltigeIDs: gueltigeGeschaeftIDs) {
                 befunde.append(Befund(beschreibung: "Gelernter Abteilungs-Abstand: Geschäftsbezug zeigt auf nicht mehr Existierendes"))
@@ -308,7 +308,7 @@ enum DatenintegritaetsService {
     /// diesen Backfill hätte ein Bestandsgerät für JEDEN zum
     /// Update-Zeitpunkt bereits offenen Artikel zunächst kein Faktum, bis er
     /// das nächste Mal lokal oder per Sync bewegt wird (siehe
-    /// ``SyncSnapshotImportService/mergeKaufEintraege(_:artikelZuordnung:einkaufsvorgangZuordnung:geschaeftZuordnung:kategorieZuordnung:peerGeraeteID:context:)``s
+    /// ``SyncSnapshotImportService/mergeKaufEintraege(_:artikelZuordnung:einkaufsvorgangZuordnung:geschaeftZuordnung:abteilungZuordnung:peerGeraeteID:context:)``s
     /// konservativen `nil`-Fallback dafür).
     @MainActor
     static func migriereArtikelListenKaeufeFallsNoetig(context: ModelContext) {
@@ -339,9 +339,9 @@ enum DatenintegritaetsService {
     /// SELBEN ``Einkaufsvorgang`` abbilden — strukturell IMMER ein Fehler
     /// (ein Artikel wird pro Einkaufsvorgang höchstens einmal gekauft, siehe
     /// den lokalen `bereitsVorhanden`-Schutz in
-    /// ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:produkt:context:ursprungsGeraeteID:kategorie:geschaeft:)``).
+    /// ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:produkt:context:ursprungsGeraeteID:abteilung:geschaeft:)``).
     /// Dieser Schutz greift nur beim direkten lokalen Abhaken —
-    /// ``SyncSnapshotImportService/mergeKaufEintraege(_:artikelZuordnung:einkaufsvorgangZuordnung:geschaeftZuordnung:kategorieZuordnung:peerGeraeteID:context:)``
+    /// ``SyncSnapshotImportService/mergeKaufEintraege(_:artikelZuordnung:einkaufsvorgangZuordnung:geschaeftZuordnung:abteilungZuordnung:peerGeraeteID:context:)``
     /// legt `KaufEintrag`e aus einem Bereich-C-Snapshot ohne dieselbe Prüfung
     /// an und konnte dadurch, kombiniert mit dem inzwischen behobenen
     /// fehlenden Tombstoning bei

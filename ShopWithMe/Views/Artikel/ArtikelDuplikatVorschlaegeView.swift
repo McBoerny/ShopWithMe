@@ -6,8 +6,8 @@ import SwiftData
 /// (alternativer Name) oder als konkretes ``Produkt`` des primären Artikels
 /// aufgelöst wird — GitHub #133, aufgerufen aus ``ArtikelListView``.
 ///
-/// Anfrage läuft **je Kategorie** (nicht über den gesamten Bestand in einer
-/// Anfrage) — Dubletten/Varianten liegen praktisch immer in derselben Kategorie,
+/// Anfrage läuft **je Abteilung** (nicht über den gesamten Bestand in einer
+/// Anfrage) — Dubletten/Varianten liegen praktisch immer in derselben Abteilung,
 /// das hält den KI-Kontext klein und die Trefferqualität hoch (siehe
 /// ``AISuggestionService/artikelBeziehungsVorschlaege(fuerArtikelNamen:)``).
 struct ArtikelDuplikatVorschlaegeView: View {
@@ -43,7 +43,7 @@ struct ArtikelDuplikatVorschlaegeView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         if gesamtGruppenAnzahl > 0 {
                             ProgressView(value: Double(geprueftGruppenAnzahl), total: Double(gesamtGruppenAnzahl))
-                            Text("Apple Intelligence sucht nach Dubletten… (\(geprueftGruppenAnzahl) von \(gesamtGruppenAnzahl) Kategorien)")
+                            Text("Apple Intelligence sucht nach Dubletten… (\(geprueftGruppenAnzahl) von \(gesamtGruppenAnzahl) Abteilungen)")
                         } else {
                             HStack {
                                 ProgressView()
@@ -143,7 +143,7 @@ struct ArtikelDuplikatVorschlaegeView: View {
         }
 
         let gruppen = Dictionary(grouping: alleArtikel) { artikel in
-            artikel.effektiveKategorien(context: modelContext).first?.persistentModelID
+            artikel.effektiveAbteilungen(context: modelContext).first?.persistentModelID
         }
         let zuPruefendeGruppen = gruppen.values.filter { $0.count > 1 }
         gesamtGruppenAnzahl = zuPruefendeGruppen.count
@@ -205,5 +205,5 @@ struct ArtikelDuplikatVorschlaegeView: View {
 
 #Preview {
     ArtikelDuplikatVorschlaegeView()
-        .modelContainer(for: [Artikel.self, ArtikelKategorie.self, GeschaeftTyp.self, Produkt.self], inMemory: true)
+        .modelContainer(for: [Artikel.self, Abteilung.self, GeschaeftTyp.self, Produkt.self], inMemory: true)
 }

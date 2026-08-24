@@ -12,18 +12,18 @@ import SwiftData
 /// 3. switch-Fall in ``body`` ergänzen
 /// 4. Einstellungs-Section in ``EinkaufslisteDarstellungsSettingsView`` ergänzen
 struct EinkaufslisteDarstellungsView: View {
-    let gruppen: [KategorieGruppe]
+    let gruppen: [AbteilungGruppe]
     let offeneEintraegeAnzahl: Int
     let abgehakteArtikel: [Artikel]
     let einkaufslistenName: String
-    let istAbgehakt: (KategorieGruppe.Element) -> Bool
-    let menge: (KategorieGruppe.Element) -> Double
-    let mehrfachKategorisiert: (KategorieGruppe.Element) -> Bool
-    let abhaken: (KategorieGruppe.Element, ArtikelKategorie) -> Void
-    let mengeErhoehen: (KategorieGruppe.Element) -> Void
-    let mengeVerringern: (KategorieGruppe.Element) -> Void
-    let dauerhaftEntfernen: (KategorieGruppe.Element) -> Void
-    let entferneVonListe: (KategorieGruppe.Element) -> Void
+    let istAbgehakt: (AbteilungGruppe.Element) -> Bool
+    let menge: (AbteilungGruppe.Element) -> Double
+    let mehrfachKategorisiert: (AbteilungGruppe.Element) -> Bool
+    let abhaken: (AbteilungGruppe.Element, Abteilung) -> Void
+    let mengeErhoehen: (AbteilungGruppe.Element) -> Void
+    let mengeVerringern: (AbteilungGruppe.Element) -> Void
+    let dauerhaftEntfernen: (AbteilungGruppe.Element) -> Void
+    let entferneVonListe: (AbteilungGruppe.Element) -> Void
 
     @AppStorage(DarstellungsKey.modus) private var modus = EinkaufslisteDarstellungsModus.liste
 
@@ -66,26 +66,26 @@ struct EinkaufslisteDarstellungsView: View {
 /// Chips klein — jeweils wahlweise mit Akkordeon, Fortschrittsbalken und
 /// Farbstreifen (nur Klassisch).
 private struct ListenInhaltView: View {
-    let gruppen: [KategorieGruppe]
+    let gruppen: [AbteilungGruppe]
     let offeneEintraegeAnzahl: Int
     let abgehakteArtikel: [Artikel]
     let einkaufslistenName: String
-    let istAbgehakt: (KategorieGruppe.Element) -> Bool
-    let menge: (KategorieGruppe.Element) -> Double
-    let mehrfachKategorisiert: (KategorieGruppe.Element) -> Bool
-    let abhaken: (KategorieGruppe.Element, ArtikelKategorie) -> Void
-    let mengeErhoehen: (KategorieGruppe.Element) -> Void
-    let mengeVerringern: (KategorieGruppe.Element) -> Void
-    let dauerhaftEntfernen: (KategorieGruppe.Element) -> Void
-    let entferneVonListe: (KategorieGruppe.Element) -> Void
+    let istAbgehakt: (AbteilungGruppe.Element) -> Bool
+    let menge: (AbteilungGruppe.Element) -> Double
+    let mehrfachKategorisiert: (AbteilungGruppe.Element) -> Bool
+    let abhaken: (AbteilungGruppe.Element, Abteilung) -> Void
+    let mengeErhoehen: (AbteilungGruppe.Element) -> Void
+    let mengeVerringern: (AbteilungGruppe.Element) -> Void
+    let dauerhaftEntfernen: (AbteilungGruppe.Element) -> Void
+    let entferneVonListe: (AbteilungGruppe.Element) -> Void
 
     @AppStorage(DarstellungsKey.listenTyp)    private var listenTyp        = ListenAnzeigeTyp.klassisch
     @AppStorage(DarstellungsKey.akkordeon)    private var akkordeon        = false
     @AppStorage(DarstellungsKey.fortschritt)  private var zeigeFortschritt = false
     @AppStorage(DarstellungsKey.farbstreifen) private var zeigeFarbstreifen = false
 
-    /// Speichert geschlossene Kategorien; leere Menge = alle Kategorien offen (Startzustand).
-    @State private var geschlosseneKategorien: Set<PersistentIdentifier> = []
+    /// Speichert geschlossene Abteilungen; leere Menge = alle Abteilungen offen (Startzustand).
+    @State private var geschlosseneAbteilungen: Set<PersistentIdentifier> = []
 
     private var fortschrittswert: Double {
         let total = offeneEintraegeAnzahl + abgehakteArtikel.count
@@ -126,8 +126,8 @@ private struct ListenInhaltView: View {
     }
 
     @ViewBuilder
-    private func flacheSektion(gruppe: KategorieGruppe) -> some View {
-        let kategorie = gruppe.kategorie
+    private func flacheSektion(gruppe: AbteilungGruppe) -> some View {
+        let abteilung = gruppe.abteilung
         Section {
             ForEach(gruppe.elemente) { element in
                 ArtikelAbhakZeile(
@@ -136,30 +136,30 @@ private struct ListenInhaltView: View {
                     mengeAnzeige: menge(element),
                     istAbgehakt: istAbgehakt(element),
                     mehrfachKategorisiert: mehrfachKategorisiert(element),
-                    kategoriefarbe: zeigeFarbstreifen ? Color(hex: kategorie.standardFarbeHex) : nil,
-                    abhaken: { abhaken(element, kategorie) },
+                    abteilungfarbe: zeigeFarbstreifen ? Color(hex: abteilung.standardFarbeHex) : nil,
+                    abhaken: { abhaken(element, abteilung) },
                     mengeErhoehen: { mengeErhoehen(element) },
                     mengeVerringern: { mengeVerringern(element) },
                     dauerhaftEntfernen: istAbgehakt(element) ? { dauerhaftEntfernen(element) } : { entferneVonListe(element) }
                 )
             }
         } header: {
-            EinkaufslistenSektionHeader(kategorie: gruppe.kategorie)
+            EinkaufslistenSektionHeader(abteilung: gruppe.abteilung)
         }
     }
 
     @ViewBuilder
-    private func akkordeonSektion(gruppe: KategorieGruppe) -> some View {
-        let kategorie = gruppe.kategorie
+    private func akkordeonSektion(gruppe: AbteilungGruppe) -> some View {
+        let abteilung = gruppe.abteilung
         let offenCount = gruppe.elemente.filter { $0.eintrag != nil }.count
         DisclosureGroup(
             isExpanded: Binding(
-                get: { !geschlosseneKategorien.contains(kategorie.persistentModelID) },
+                get: { !geschlosseneAbteilungen.contains(abteilung.persistentModelID) },
                 set: { offen in
                     if offen {
-                        geschlosseneKategorien.remove(kategorie.persistentModelID)
+                        geschlosseneAbteilungen.remove(abteilung.persistentModelID)
                     } else {
-                        geschlosseneKategorien.insert(kategorie.persistentModelID)
+                        geschlosseneAbteilungen.insert(abteilung.persistentModelID)
                     }
                 }
             )
@@ -171,31 +171,31 @@ private struct ListenInhaltView: View {
                     mengeAnzeige: menge(element),
                     istAbgehakt: istAbgehakt(element),
                     mehrfachKategorisiert: mehrfachKategorisiert(element),
-                    kategoriefarbe: zeigeFarbstreifen ? Color(hex: kategorie.standardFarbeHex) : nil,
-                    abhaken: { abhaken(element, kategorie) },
+                    abteilungfarbe: zeigeFarbstreifen ? Color(hex: abteilung.standardFarbeHex) : nil,
+                    abhaken: { abhaken(element, abteilung) },
                     mengeErhoehen: { mengeErhoehen(element) },
                     mengeVerringern: { mengeVerringern(element) },
                     dauerhaftEntfernen: istAbgehakt(element) ? { dauerhaftEntfernen(element) } : { entferneVonListe(element) }
                 )
             }
         } label: {
-            akkordeonHeader(kategorie: kategorie, offenCount: offenCount)
+            akkordeonHeader(abteilung: abteilung, offenCount: offenCount)
         }
     }
 
     @ViewBuilder
-    private func akkordeonHeader(kategorie: ArtikelKategorie, offenCount: Int) -> some View {
+    private func akkordeonHeader(abteilung: Abteilung, offenCount: Int) -> some View {
         HStack(spacing: 8) {
-            Image(systemName: kategorie.standardSymbol)
-                .foregroundStyle(Color(hex: kategorie.standardFarbeHex))
+            Image(systemName: abteilung.standardSymbol)
+                .foregroundStyle(Color(hex: abteilung.standardFarbeHex))
                 .frame(width: 20)
-            Text(kategorie.name).font(.headline)
+            Text(abteilung.name).font(.headline)
             Spacer()
             if offenCount > 0 {
                 Text("\(offenCount)")
                     .font(.caption.bold()).foregroundStyle(Color.white)
                     .padding(.horizontal, 7).padding(.vertical, 2)
-                    .background(Color(hex: kategorie.standardFarbeHex))
+                    .background(Color(hex: abteilung.standardFarbeHex))
                     .clipShape(Capsule())
             } else {
                 Image(systemName: "checkmark.seal.fill")
@@ -220,19 +220,19 @@ private struct ListenInhaltView: View {
     }
 
     @ViewBuilder
-    private func chipsSektion(gruppe: KategorieGruppe, gross: Bool) -> some View {
-        let kategorie = gruppe.kategorie
-        let farbe = Color(hex: kategorie.standardFarbeHex)
+    private func chipsSektion(gruppe: AbteilungGruppe, gross: Bool) -> some View {
+        let abteilung = gruppe.abteilung
+        let farbe = Color(hex: abteilung.standardFarbeHex)
         VStack(alignment: .leading, spacing: 8) {
             if akkordeon {
                 DisclosureGroup(
                     isExpanded: Binding(
-                        get: { !geschlosseneKategorien.contains(kategorie.persistentModelID) },
+                        get: { !geschlosseneAbteilungen.contains(abteilung.persistentModelID) },
                         set: { offen in
                             if offen {
-                                geschlosseneKategorien.remove(kategorie.persistentModelID)
+                                geschlosseneAbteilungen.remove(abteilung.persistentModelID)
                             } else {
-                                geschlosseneKategorien.insert(kategorie.persistentModelID)
+                                geschlosseneAbteilungen.insert(abteilung.persistentModelID)
                             }
                         }
                     )
@@ -240,28 +240,28 @@ private struct ListenInhaltView: View {
                     chipFlow(gruppe: gruppe, farbe: farbe, gross: gross)
                         .padding(.top, 4)
                 } label: {
-                    chipSektionLabel(kategorie: kategorie, farbe: farbe)
+                    chipSektionLabel(abteilung: abteilung, farbe: farbe)
                 }
             } else {
-                chipSektionLabel(kategorie: kategorie, farbe: farbe)
+                chipSektionLabel(abteilung: abteilung, farbe: farbe)
                 chipFlow(gruppe: gruppe, farbe: farbe, gross: gross)
             }
         }
     }
 
-    private func chipSektionLabel(kategorie: ArtikelKategorie, farbe: Color) -> some View {
-        Label(kategorie.name, systemImage: kategorie.standardSymbol)
+    private func chipSektionLabel(abteilung: Abteilung, farbe: Color) -> some View {
+        Label(abteilung.name, systemImage: abteilung.standardSymbol)
             .font(.subheadline.bold())
             .foregroundStyle(farbe)
     }
 
-    private func chipFlow(gruppe: KategorieGruppe, farbe: Color, gross: Bool) -> some View {
+    private func chipFlow(gruppe: AbteilungGruppe, farbe: Color, gross: Bool) -> some View {
         ChipFlowLayout(abstand: 8) {
             ForEach(gruppe.elemente) { element in
                 let erledigt = istAbgehakt(element)
                 Button {
                     withAnimation(.easeInOut(duration: 0.15)) {
-                        abhaken(element, gruppe.kategorie)
+                        abhaken(element, gruppe.abteilung)
                     }
                 } label: {
                     if gross {
@@ -275,7 +275,7 @@ private struct ListenInhaltView: View {
         }
     }
 
-    private func kleinerChip(element: KategorieGruppe.Element, farbe: Color, erledigt: Bool) -> some View {
+    private func kleinerChip(element: AbteilungGruppe.Element, farbe: Color, erledigt: Bool) -> some View {
         HStack(spacing: 5) {
             if erledigt { Image(systemName: "checkmark").font(.caption2.bold()) }
             Text(element.artikel.name).font(.subheadline).strikethrough(erledigt)
@@ -287,9 +287,9 @@ private struct ListenInhaltView: View {
         .overlay(Capsule().stroke(farbe.opacity(erledigt ? 0.2 : 0.4), lineWidth: 1))
     }
 
-    // Großer Chip bewusst OHNE Kategorie-Icon — bessere Lesbarkeit bei mehreren Chips
+    // Großer Chip bewusst OHNE Abteilung-Icon — bessere Lesbarkeit bei mehreren Chips
     // pro Zeile; das Abhak-Symbol übernimmt die Statuskommunikation.
-    private func grosserChip(element: KategorieGruppe.Element, farbe: Color, erledigt: Bool) -> some View {
+    private func grosserChip(element: AbteilungGruppe.Element, farbe: Color, erledigt: Bool) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(element.artikel.name)
                 .font(.subheadline.weight(.medium))
@@ -355,22 +355,22 @@ private struct ListenInhaltView: View {
 // MARK: - Kachel-Renderer
 
 /// Rendert alle Artikel als 2- oder 3-spaltiges Kachel-Raster — flat ohne
-/// Kategoriesektionen, wahlweise mit Kategorie-Farbhintergrund.
+/// Abteilungsektionen, wahlweise mit Abteilung-Farbhintergrund.
 private struct KachelInhaltView: View {
-    let gruppen: [KategorieGruppe]
+    let gruppen: [AbteilungGruppe]
     let offeneEintraegeAnzahl: Int
     let abgehakteArtikel: [Artikel]
     let einkaufslistenName: String
-    let istAbgehakt: (KategorieGruppe.Element) -> Bool
-    let menge: (KategorieGruppe.Element) -> Double
-    let abhaken: (KategorieGruppe.Element, ArtikelKategorie) -> Void
+    let istAbgehakt: (AbteilungGruppe.Element) -> Bool
+    let menge: (AbteilungGruppe.Element) -> Double
+    let abhaken: (AbteilungGruppe.Element, Abteilung) -> Void
 
     @AppStorage(DarstellungsKey.spalten) private var spaltenRaw = KachelSpaltenanzahl.zwei.rawValue
     @AppStorage(DarstellungsKey.farbig)  private var farbig = false
 
     private struct KachelItem: Identifiable {
-        let element: KategorieGruppe.Element
-        let kategorie: ArtikelKategorie
+        let element: AbteilungGruppe.Element
+        let abteilung: Abteilung
         let farbe: Color
         let symbol: String
         var id: PersistentIdentifier { element.id }
@@ -383,9 +383,9 @@ private struct KachelInhaltView: View {
                 guard gesehen.insert(element.artikel.persistentModelID).inserted else { return nil }
                 return KachelItem(
                     element: element,
-                    kategorie: gruppe.kategorie,
-                    farbe: Color(hex: gruppe.kategorie.standardFarbeHex),
-                    symbol: gruppe.kategorie.standardSymbol
+                    abteilung: gruppe.abteilung,
+                    farbe: Color(hex: gruppe.abteilung.standardFarbeHex),
+                    symbol: gruppe.abteilung.standardSymbol
                 )
             }
         }
@@ -407,7 +407,7 @@ private struct KachelInhaltView: View {
                         let erledigt = istAbgehakt(item.element)
                         Button {
                             withAnimation(.spring(response: 0.25, dampingFraction: 0.7)) {
-                                abhaken(item.element, item.kategorie)
+                                abhaken(item.element, item.abteilung)
                             }
                         } label: {
                             kachelLabel(item: item, erledigt: erledigt)

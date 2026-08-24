@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Hex-Farb-Konvertierung, da ``Artikel`` und ``ArtikelKategorie`` Farben als
+/// Hex-Farb-Konvertierung, da ``Artikel`` und ``Abteilung`` Farben als
 /// Hex-String (z.B. `"#34C759"`) speichern, um sie unabhängig vom Farbraum/Schema
 /// persistieren zu können.
 extension Color {
@@ -24,7 +24,7 @@ extension Color {
         self.init(red: r, green: g, blue: b)
     }
 
-    /// Standard-Farbpalette zur Auswahl für Artikel/Kategorien.
+    /// Standard-Farbpalette zur Auswahl für Artikel/Abteilungen.
     static let artikelPalette: [String] = [
         "#FF3B30", "#FF9500", "#FFCC00", "#34C759", "#00C7BE",
         "#30B0C7", "#007AFF", "#5856D6", "#AF52DE", "#FF2D55",

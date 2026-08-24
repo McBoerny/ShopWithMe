@@ -14,7 +14,7 @@ struct DebugLogWriterTests {
     @Test
     func protokolliertEreignisImEinheitlichenZeilenformat() async throws {
         let dateiURL = macheTempDateiURL()
-        let writer = DebugLogWriter(kategorie: "Test", dateiURL: dateiURL)
+        let writer = DebugLogWriter(abteilung: "Test", dateiURL: dateiURL)
 
         await writer.protokolliere(ereignis: "lease_acquire_success", details: "micro", geraeteName: "Test-iPhone")
 
@@ -29,7 +29,7 @@ struct DebugLogWriterTests {
     func rotiertBeiUeberschreitenDerGroessengrenze() async throws {
         let dateiURL = macheTempDateiURL()
         // Sehr kleine Grenze, damit schon wenige Zeilen die Rotation auslösen.
-        let writer = DebugLogWriter(kategorie: "Test", dateiURL: dateiURL, maxGroesse: 50)
+        let writer = DebugLogWriter(abteilung: "Test", dateiURL: dateiURL, maxGroesse: 50)
 
         for index in 0..<20 {
             await writer.protokolliere(ereignis: "save_success", details: "Eintrag \(index)", geraeteName: "Test-iPhone")
@@ -44,7 +44,7 @@ struct DebugLogWriterTests {
     @Test
     func leerenEntferntBeideDateien() async throws {
         let dateiURL = macheTempDateiURL()
-        let writer = DebugLogWriter(kategorie: "Test", dateiURL: dateiURL, maxGroesse: 50)
+        let writer = DebugLogWriter(abteilung: "Test", dateiURL: dateiURL, maxGroesse: 50)
 
         for index in 0..<20 {
             await writer.protokolliere(ereignis: "save_success", details: "Eintrag \(index)", geraeteName: "Test-iPhone")

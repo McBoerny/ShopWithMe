@@ -31,9 +31,9 @@ struct EinkaufslisteDarstellungsSettingsView: View {
             } footer: {
                 switch modus {
                 case .liste:
-                    Text("Artikel in Kategoriesektionen, wahlweise als Zeilen oder Chips.")
+                    Text("Artikel in Abteilungsektionen, wahlweise als Zeilen oder Chips.")
                 case .kacheln:
-                    Text("Alle Artikel als Kachelraster ohne Kategoriesektionen.")
+                    Text("Alle Artikel als Kachelraster ohne Abteilungsektionen.")
                 }
             }
 
@@ -71,7 +71,7 @@ struct EinkaufslisteDarstellungsSettingsView: View {
                     .pickerStyle(.segmented)
 
                     Toggle(isOn: $farbig) {
-                        Label("Kategorie-Farbhintergrund", systemImage: "paintpalette.fill")
+                        Label("Abteilung-Farbhintergrund", systemImage: "paintpalette.fill")
                     }
                 }
             }

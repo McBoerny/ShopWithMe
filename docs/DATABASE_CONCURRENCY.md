@@ -201,10 +201,10 @@ Das Micro-Lease-Verfahren oben passt zu **diskreten Einzelaktionen** (ein Tap
 = ein abgeschlossener Zustandswechsel), wie beim Artikel-Abhaken. Für
 **Geschäfte-Bearbeitung** trifft das nicht zu: Code-Prüfung zeigt,
 dass diese Bildschirme (`GeschaeftStammdatenEditView`,
-`GeschaeftDetailView` inkl. Kategorie-Zuordnung,
-`KategorieHinzufuegenSheet`) per `@Bindable` **live und ungebündelt** an das
-SwiftData-Modell binden — jeder Tastenanschlag, jeder Kategorie-Toggle, jede
-Kategorie-Entfernen mutiert das Modell sofort, ohne natürlichen
+`GeschaeftDetailView` inkl. Abteilung-Zuordnung,
+`AbteilungHinzufuegenSheet`) per `@Bindable` **live und ungebündelt** an das
+SwiftData-Modell binden — jeder Tastenanschlag, jeder Abteilung-Toggle, jede
+Abteilung-Entfernen mutiert das Modell sofort, ohne natürlichen
 Abschlusspunkt einzelner Aktionen. Ein Micro-Lease pro Tastenanschlag wäre
 Overkill (ständiges Erwerben/Freigeben beim Tippen).
 
@@ -226,9 +226,9 @@ Entwurfs-Zustand oder ein entprellter (debounced) Save-Mechanismus (beide als
 Alternativen geprüft, aber nicht gewählt).
 
 **Betroffene Bildschirme (Session-Lease-Geltungsbereich):**
-`GeschaeftDetailView` (inkl. Kategorie-Zuordnung direkt
+`GeschaeftDetailView` (inkl. Abteilung-Zuordnung direkt
 auf dem Bildschirm), `GeschaeftStammdatenEditView`,
-`KategorieHinzufuegenSheet`. `NeueKategorieSheet` ist bereits als Ausnahme mit
+`AbteilungHinzufuegenSheet`. `NeueAbteilungSheet` ist bereits als Ausnahme mit
 echtem Entwurfs-Zustand (lokale `@State`, erst bei „Sichern" per
 `modelContext.insert(...)` übernommen) umgesetzt — hier reicht ein
 Micro-Lease genau um diesen einen `insert`+Save-Moment, kein Session-Lease
@@ -252,7 +252,7 @@ Fällen (Artikel-Abhaken, Geschäfte-Bearbeitung):
 „Sichern") als auch fürs **Bearbeiten bestehender Objekte** (Live-`@Bindable`,
 siehe oben) verwendet. Beide Modi brauchen unterschiedliche Behandlung je
 `istNeu`-Flag: Anlegen → Micro-Lease genau um den `insert`-Moment (wie
-`NeueKategorieSheet`); Bearbeiten eines bestehenden Objekts → Session-Lease
+`NeueAbteilungSheet`); Bearbeiten eines bestehenden Objekts → Session-Lease
 wie oben beschrieben.
 
 **Diskrete Einzelaktionen (Micro-Lease, konsistent mit Artikel-Abhaken):**
@@ -261,7 +261,7 @@ wie oben beschrieben.
 - `ArtikelHinzufuegenView.hinzufuegen` (einzelne Eigenschafts-Änderung
   `istAufEinkaufsliste = true`).
 - `Einkaufsvorgang.artikelAbwaehlen`, `Einkaufsvorgang.artikelDauerhaftEntfernen`
-  — gleiche Kategorie wie das bereits behandelte `artikelAbhaken`.
+  — gleiche Abteilung wie das bereits behandelte `artikelAbhaken`.
 - Einkaufsvorgang **starten** (`EinkaufenView.einkaufSicherstellen`, automatisch
   beim Betreten des Einkaufen-Bildschirms statt per Tap ausgelöst): fällt
   ebenfalls unter Micro-Lease — die automatische Auslösung ändert nichts an
@@ -269,19 +269,19 @@ wie oben beschrieben.
   leeren `Einkaufsvorgang`s). Bei einem seltenen Zusammentreffen mit einem
   fremden Micro-Lease gilt dieselbe „kurz zurückstellen"-Behandlung wie
   überall sonst.
-- Kategorie-Einzelaktionen *innerhalb* von `GeschaeftDetailView`
+- Abteilung-Einzelaktionen *innerhalb* von `GeschaeftDetailView`
   (`regalHinzufuegen`, `regalLoeschen`, `regalVerschieben`,
-  `kategorieEntfernen`) benötigen **keine eigene** Lease-Behandlung — sie
+  `abteilungEntfernen`) benötigen **keine eigene** Lease-Behandlung — sie
   passieren, während die Session-Lease dieses Bildschirms ohnehin schon
   gehalten wird.
 - `EinkaufenView.standortFuerGeschaeftUebernehmen`/`adresseGeocodierenUndUebernehmen`
   und `AdresseEingebenSheet.sichern` (Koordinaten/Adresse nachträglich an einem
   bereits bestehenden `Geschaeft` ergänzen, siehe `docs/GESCHAEFTSERKENNUNG.md` →
   „Standort nachträglich für ein bereits genutztes Geschäft ergänzen“) — gleiche
-  Kategorie wie `ignorierenVorschlag`.
+  Abteilung wie `ignorierenVorschlag`.
 - `BelegScanView.artikelDauerhaftIgnorieren` (Wischen nach rechts auf einer
   Belegposition, siehe `docs/BELEGSCAN.md` → „Dauerhaft ignorierte Artikel pro
-  Geschäft“) — gleiche Kategorie wie `ignorierenVorschlag`.
+  Geschäft“) — gleiche Abteilung wie `ignorierenVorschlag`.
 
 **Gebündelte Aktionen (teilen sich einen Lease statt einen eigenen zu bekommen):**
 - Einkaufsvorgang **abschließen** (`endZeit` setzen) und der direkt im selben
@@ -294,7 +294,7 @@ wie oben beschrieben.
 | Fall | Wert | Begründung |
 |---|---|---|
 | `BelegScanView.uebernehmen()` (mehrere Belegpositionen in einer Schleife, ein Tap „Preise übernehmen") | **Ein Micro-Lease um den gesamten Vorgang**, nicht pro Position | Fachlich eine einzige Aktion; mehrere kleinere Sperren pro Zeile hätten keinen Vorteil, da die ganze Aktion ohnehin kurz bleibt (Bruchteile bis wenige Sekunden je nach Beleglänge). |
-| `SeedData.seedeStandarddatenFallsLeer` (Race bei zeitgleichem Erst-Start zweier Geräte gegen einen leeren, noch nicht synchronisierten Store) | **Nicht extra abgesichert** | Sehr seltener Randfall (setzt exakt zeitgleichen Erst-Start zweier Geräte gegen denselben leeren Ordner voraus). Folge wären rein kosmetische doppelte Standard-Kategorien, kein Datenverlust, keine Korruption — im Zweifel manuell löschbar. Zusatzaufwand steht in keinem Verhältnis zum Risiko. |
+| `SeedData.seedeStandarddatenFallsLeer` (Race bei zeitgleichem Erst-Start zweier Geräte gegen einen leeren, noch nicht synchronisierten Store) | **Nicht extra abgesichert** | Sehr seltener Randfall (setzt exakt zeitgleichen Erst-Start zweier Geräte gegen denselben leeren Ordner voraus). Folge wären rein kosmetische doppelte Standard-Abteilungen, kein Datenverlust, keine Korruption — im Zweifel manuell löschbar. Zusatzaufwand steht in keinem Verhältnis zum Risiko. |
 
 **Rein lesend, keine Lease-Betrachtung nötig:** `AISuggestionService` schreibt
 nichts direkt — Vorschläge werden nur als In-Memory-Struct zurückgegeben, die
@@ -407,9 +407,9 @@ gespeicherte, kaputte Daten** handelte.
 **Ursache:** Acht Relationship-Eigenschaften im Datenmodell hatten keine
 `@Relationship(inverse:)`-Deklaration auf der Gegenseite:
 `Einkaufsvorgang.geschaeft`, `Einkaufsvorgang.einkaufsliste`,
-`KaufEintrag.artikel`, `KaufEintrag.kategorie`, `WarengruppenDistanz.geschaeft`,
-`WarengruppenDistanz.kategorieA`, `WarengruppenDistanz.kategorieB` und
-`Geschaeft.ausgeschlosseneKategorien`. Ohne diese Deklaration entfernt/nullifiziert
+`KaufEintrag.artikel`, `KaufEintrag.abteilung`, `WarengruppenDistanz.geschaeft`,
+`WarengruppenDistanz.abteilungA`, `WarengruppenDistanz.abteilungB` und
+`Geschaeft.ausgeschlosseneAbteilungen`. Ohne diese Deklaration entfernt/nullifiziert
 SwiftData eine solche Relationship beim Löschen des referenzierten Objekts
 **nicht zuverlässig** — die Referenz bleibt als "baumelnder" Verweis auf eine
 nicht mehr existierende Store-Zeile bestehen. Jeder spätere Zugriff auf eine
@@ -421,7 +421,7 @@ ist dagegen unauffällig, da SwiftData sie zunächst nur als Fault-Proxy liefert
 
 1. **Zukünftige Korruption verhindern:** Alle acht fehlenden `inverse:`-Paare in
    `Geschaeft.swift`, `Einkaufsliste.swift`, `Artikel.swift` und
-   `ArtikelKategorie.swift` ergänzt, jeweils mit passendem `deleteRule`
+   `Abteilung.swift` ergänzt, jeweils mit passendem `deleteRule`
    (`.nullify`, wo die referenzierende Historie erhalten bleiben soll, z.B.
    `Einkaufsvorgang` nach Löschen seines `Geschaeft`s; `.cascade`, wo der
    referenzierende Datensatz ohne sein Ziel bedeutungslos wird, z.B.
@@ -467,7 +467,7 @@ Debug-Menü öffnet):
    App-Start (`ShopWithMeApp.init()`, vor `SyncPollingService`). Baut wie
    `SyncSnapshotExportService` für jeden betroffenen Modelltyp ein
    `Set<PersistentIdentifier>` gültiger Objekte und **erkennt** jede baumelnde
-   Referenz: `KaufEintrag.artikel`/`.geschaeft`/`.kategorie`/`.einkaufsvorgang`,
+   Referenz: `KaufEintrag.artikel`/`.geschaeft`/`.abteilung`/`.einkaufsvorgang`,
    `Preispunkt.produkt`/`.geschaeft`, `Einkaufsvorgang.geschaeft`/`.einkaufsliste`,
    `EinkaufslistenEintrag.artikel`/`.einkaufsliste` (Nutzerbericht 2026-08-10 —
    trotz `@Relationship(deleteRule: .cascade, inverse:)` auf beiden Seiten über
@@ -475,7 +475,7 @@ Debug-Menü öffnet):
    von vor dieser Deklaration weiterhin live beobachtet; unentdeckt ließ
    `SyncSnapshotExportService/sichereID(_:gueltigeIDs:)` den betroffenen
    Eintrag beim Export stillschweigend komplett weg, siehe
-   `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 51), `Artikel.kategorie`
+   `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 51), `Artikel.abteilung`
    (veraltetes Einzelwert-Feld), `WarengruppenDistanz`.
 2. **`DebuggingView` → Sektion „Datenintegrität"** — zeigt den beim letzten
    Start erzeugten Bericht (persistiert über `DatenintegritaetsService.letzterBericht`),
@@ -690,10 +690,10 @@ Alle Punkte umgesetzt und per `xcodebuild build`/`test` verifiziert:
 3. Explizite, Lease-geschützte `save()`-Aufrufe an allen Stellen aus
    „Vollständiger Schreibvorgang-Katalog" ergänzt (Micro-Lease-Callsites in
    `Einkaufsvorgang`/`EinkaufenView`/`BelegScanView`/`ArtikelListView`/
-   `GeschaeftListView`/`ArtikelHinzufuegenView`/`NeueKategorieSheet`/
+   `GeschaeftListView`/`ArtikelHinzufuegenView`/`NeueAbteilungSheet`/
    `ArtikelEditView`/`GeschaeftStammdatenEditView`; Session-Lease über
    `Views/SessionLeaseGate.swift` in `GeschaeftDetailView`/
-   `KategorieHinzufuegenSheet`/den Bearbeiten-Pfaden von `ArtikelEditView` und
+   `AbteilungHinzufuegenSheet`/den Bearbeiten-Pfaden von `ArtikelEditView` und
    `GeschaeftStammdatenEditView`). `SeedData` erhielt ebenfalls einen expliziten
    `save()` (ohne Lease, siehe „Vollständiger Schreibvorgang-Katalog").
 4. Dedupe-Prüfung in `Einkaufsvorgang.artikelAbhaken` (fetchCount vor dem

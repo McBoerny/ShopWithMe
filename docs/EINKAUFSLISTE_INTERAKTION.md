@@ -4,7 +4,7 @@ Status: **Umgesetzt** (`Views/Einkaufen/EinkaufenView.swift`).
 
 ## Ausgangslage
 
-`EinkaufslistenSektionHeader` zeigte bislang neben dem Regal-/Kategorienamen
+`EinkaufslistenSektionHeader` zeigte bislang neben dem Regal-/Abteilungsnamen
 zusätzlich einen Fortschrittszähler `abgehakt/gesamt` je Sektion.
 `ArtikelAbhakZeile` änderte die Menge eines Artikels über eine Tap-Gesten-
 Kaskade auf der ganzen Zeile (Einfach-Tap = erhöhen, Doppel-Tap = verringern,
@@ -13,7 +13,7 @@ Long-Press = Sheet für exakte Menge + Notiz).
 ## Entscheidung
 
 - **Sektions-Zähler entfernt.** `EinkaufslistenSektionHeader` zeigt nur noch
-  Titel (und bei Kategorie-Sektionen Icon/Farbe), keine `abgehakt/gesamt`-
+  Titel (und bei Abteilung-Sektionen Icon/Farbe), keine `abgehakt/gesamt`-
   Anzeige mehr.
 - **Tap auf die Mengenangabe öffnet direkt `MengenNotizSheet`** (exakte Menge +
   temporäre Notiz) — statt vorher per Long-Press auf die ganze Zeile.

@@ -81,7 +81,7 @@ enum SyncKaeufeExportService {
         let gueltigeArtikelIDs = Set((try? context.fetch(FetchDescriptor<Artikel>()))?.map(\.persistentModelID) ?? [])
         let gueltigeGeschaeftIDs = Set((try? context.fetch(FetchDescriptor<Geschaeft>()))?.map(\.persistentModelID) ?? [])
         let gueltigeEinkaufsvorgangIDs = Set((try? context.fetch(FetchDescriptor<Einkaufsvorgang>()))?.map(\.persistentModelID) ?? [])
-        let gueltigeKategorieIDs = Set((try? context.fetch(FetchDescriptor<ArtikelKategorie>()))?.map(\.persistentModelID) ?? [])
+        let gueltigeAbteilungIDs = Set((try? context.fetch(FetchDescriptor<Abteilung>()))?.map(\.persistentModelID) ?? [])
 
         for eintrag in fehlende {
             let zielURL = ordner.appendingPathComponent("\(eintrag.id.uuidString).json")
@@ -90,12 +90,12 @@ enum SyncKaeufeExportService {
                 artikelID: SyncSnapshotExportService.sichereID(eintrag.artikel, gueltigeIDs: gueltigeArtikelIDs),
                 einkaufsvorgangID: SyncSnapshotExportService.sichereID(eintrag.einkaufsvorgang, gueltigeIDs: gueltigeEinkaufsvorgangIDs),
                 geschaeftID: SyncSnapshotExportService.sichereID(eintrag.geschaeft, gueltigeIDs: gueltigeGeschaeftIDs),
-                kategorieID: SyncSnapshotExportService.sichereID(eintrag.kategorie, gueltigeIDs: gueltigeKategorieIDs),
+                abteilungID: SyncSnapshotExportService.sichereID(eintrag.abteilung, gueltigeIDs: gueltigeAbteilungIDs),
                 artikelNameSnapshot: eintrag.artikelNameSnapshot,
                 geschaeftNameSnapshot: eintrag.geschaeftNameSnapshot,
                 datum: eintrag.datum,
                 menge: eintrag.menge,
-                kategorieBesuchsIndex: eintrag.kategorieBesuchsIndex
+                abteilungBesuchsIndex: eintrag.abteilungBesuchsIndex
             )
             guard let daten = try? SyncSnapshotExportService.encoder.encode(snapshot) else { continue }
             _ = SyncSnapshotExportService.schreibeBlocking(daten, nach: zielURL)

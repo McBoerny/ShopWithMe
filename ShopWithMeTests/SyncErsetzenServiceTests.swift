@@ -46,7 +46,7 @@ struct SyncErsetzenServiceTests {
     private func leererSnapshot(geraeteID: String, geraeteName: String = "Fremdes iPhone") -> SyncSnapshot {
         SyncSnapshot(
             formatVersion: SyncSnapshot.aktuelleFormatVersion, erzeugtAm: Date(), geraeteID: geraeteID, geraeteName: geraeteName,
-            geschaeftsTypen: [], artikelKategorien: [], geschaefte: [], artikel: [],
+            geschaeftsTypen: [], abteilungen: [], geschaefte: [], artikel: [],
             einkaufslisten: [], einkaufslistenEintraege: [], einkaufsvorgaenge: [], kaufEintraege: [],
             preispunkte: [],
             warengruppenDistanzen: [], tombstones: []
@@ -66,7 +66,7 @@ struct SyncErsetzenServiceTests {
             geraeteID: snapshot.geraeteID, geraeteName: snapshot.geraeteName
         )
         let stamm = SyncStammSnapshot(
-            geschaeftsTypen: snapshot.geschaeftsTypen, artikelKategorien: snapshot.artikelKategorien,
+            geschaeftsTypen: snapshot.geschaeftsTypen, abteilungen: snapshot.abteilungen,
             geschaefte: snapshot.geschaefte, artikel: snapshot.artikel, einkaufslisten: snapshot.einkaufslisten
         )
         let listen = SyncListenSnapshot(einkaufslistenEintraege: snapshot.einkaufslistenEintraege)
@@ -95,7 +95,7 @@ struct SyncErsetzenServiceTests {
     private func leerenGeschaeftSnapshot(name: String) -> GeschaeftSnapshot {
         GeschaeftSnapshot(
             id: UUID(), name: name, typIDs: [], adresse: nil, breitengrad: nil, laengengrad: nil,
-            erkennungsradius: nil, kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
+            erkennungsradius: nil, abteilungIDs: [], ausgeschlosseneAbteilungIDs: [], alternativeNamen: [],
             ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
         )
     }
@@ -581,7 +581,7 @@ struct SyncErsetzenServiceTests {
         #expect(zusammenfassung.nachher.geschaefte == 1)
     }
 
-    /// Härtung (Kategorie-3-Review, GitHub-Diskussion 2026-08-03): ein
+    /// Härtung (Abteilung-3-Review, GitHub-Diskussion 2026-08-03): ein
     /// Neuaufbau, der eindeutig fehlschlägt (hier: kein einziger erreichbarer
     /// Peer, `peers`-Ordner bleibt leer), darf NICHT als leerer Datenbestand
     /// stehen bleiben, sondern muss automatisch auf den Vorher-Stand aus dem

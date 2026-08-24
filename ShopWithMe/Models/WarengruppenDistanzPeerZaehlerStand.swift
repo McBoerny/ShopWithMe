@@ -11,9 +11,9 @@ import SwiftData
 ///
 /// `distanzID` ist die BEREITS LOKAL AUFGELÖSTE ``WarengruppenDistanz/id``
 /// (nicht die vom Peer gemeldete, unabhängig entstandene ID — jedes Gerät legt
-/// eine ``WarengruppenDistanz``-Zeile für ein Kategorie-Paar unabhängig mit
-/// eigener ID an, das Matching läuft über den (Geschäft, KategorieA,
-/// KategorieB)-Schlüssel, siehe ``SyncSnapshotImportService``).
+/// eine ``WarengruppenDistanz``-Zeile für ein Abteilung-Paar unabhängig mit
+/// eigener ID an, das Matching läuft über den (Geschäft, AbteilungA,
+/// AbteilungB)-Schlüssel, siehe ``SyncSnapshotImportService``).
 @Model
 final class WarengruppenDistanzPeerZaehlerStand {
     var id: UUID

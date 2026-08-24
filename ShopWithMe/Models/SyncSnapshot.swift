@@ -110,7 +110,7 @@ struct SyncSnapshot: Codable {
     var geraeteName: String
 
     var geschaeftsTypen: [GeschaeftTypSnapshot]
-    var artikelKategorien: [ArtikelKategorieSnapshot]
+    var abteilungen: [AbteilungSnapshot]
     var geschaefte: [GeschaeftSnapshot]
     var artikel: [ArtikelSnapshot]
     var einkaufslisten: [EinkaufslisteSnapshot]
@@ -135,7 +135,7 @@ struct SyncSnapshot: Codable {
     /// Seit Version 7, siehe ``ArtikelListenKauf``.
     var artikelListenKaeufe: [ArtikelListenKaufSnapshot] = []
     /// Absichtliche Löschungen von Bereich-B-Entitäten (``Geschaeft``,
-    /// ``Artikel``, ``ArtikelKategorie``, ``Einkaufsliste``, ``KaufEintrag``,
+    /// ``Artikel``, ``Abteilung``, ``Einkaufsliste``, ``KaufEintrag``,
     /// ``Preispunkt``), siehe ``SyncTombstone``.
     var tombstones: [SyncTombstoneSnapshot]
     /// Seit Version 8, siehe ``Produkt``.
@@ -159,19 +159,19 @@ struct GeschaeftTypSnapshot: Codable {
     var lamportZaehler: UInt64 = 0
 }
 
-struct ArtikelKategorieSnapshot: Codable {
+struct AbteilungSnapshot: Codable {
     var id: UUID
     var name: String
     var standardSymbol: String
     var standardFarbeHex: String
     var sortIndex: Int
-    /// ``GeschaeftTypSnapshot/id``s, für die diese Kategorie als typische
+    /// ``GeschaeftTypSnapshot/id``s, für die diese Abteilung als typische
     /// Abteilung gilt (GitHub #5) — einseitig hier kodiert, nicht zusätzlich
     /// auf ``GeschaeftTypSnapshot`` gespiegelt (dieselbe Relationship, keine
     /// redundante Doppelspeicherung).
     var geschaeftsTypIDs: [UUID]
     /// Additiv-optional statt Versionssprung — siehe
-    /// ``ArtikelKategorie/lamportZaehler``.
+    /// ``Abteilung/lamportZaehler``.
     var lamportZaehler: UInt64 = 0
 }
 
@@ -187,8 +187,8 @@ struct GeschaeftSnapshot: Codable {
     /// ``Geschaeft/erkennungsradius``) — der Fallback-Standardwert soll sich
     /// künftig ändern können, ohne alte Snapshots zu verfälschen.
     var erkennungsradius: Double?
-    var kategorieIDs: [UUID]
-    var ausgeschlosseneKategorieIDs: [UUID]
+    var abteilungIDs: [UUID]
+    var ausgeschlosseneAbteilungIDs: [UUID]
     var alternativeNamen: [String]
     /// Markenname der Kette (z.B. „Rewe") — analog zu ``Geschaeft/markenname``.
     var markenname: String?
@@ -225,7 +225,7 @@ struct ArtikelSnapshot: Codable {
     var name: String
     var symbolName: String
     var farbeHex: String
-    var kategorieIDs: [UUID]
+    var abteilungIDs: [UUID]
     var notiz: String?
     var einheit: String
     var mengenSchritt: Double
@@ -283,19 +283,19 @@ struct KaufEintragSnapshot: Codable {
     var artikelID: UUID?
     var einkaufsvorgangID: UUID?
     var geschaeftID: UUID?
-    var kategorieID: UUID?
+    var abteilungID: UUID?
     var artikelNameSnapshot: String
     var geschaeftNameSnapshot: String
     var datum: Date
     var menge: Double
-    var kategorieBesuchsIndex: Int?
+    var abteilungBesuchsIndex: Int?
 }
 
 struct WarengruppenDistanzSnapshot: Codable {
     var id: UUID
     var geschaeftID: UUID?
-    var kategorieAID: UUID
-    var kategorieBID: UUID
+    var abteilungAID: UUID
+    var abteilungBID: UUID
     var distanz: Double
     /// NUR der rein lokal auf dem exportierenden Gerät entstandene Anteil von
     /// ``WarengruppenDistanz/beobachtungsAnzahl`` (``WarengruppenDistanz/eigeneBeobachtungsAnzahl``)
@@ -446,13 +446,13 @@ struct SyncPeerManifest: Codable {
 /// (bei jedem Abhaken/Hinzufügen/Entfernen auf einer Einkaufsliste) und riss
 /// dadurch bislang bei JEDER dieser sehr häufigen Aktionen einen kompletten
 /// Neuaufbau/-schrieb der eigentlich seltenen echten Stammdaten
-/// (Geschäftstypen/Kategorien/Geschäfte/Artikel/Listen/Produkte) mit sich, weil
+/// (Geschäftstypen/Abteilungen/Geschäfte/Artikel/Listen/Produkte) mit sich, weil
 /// der Fingerabdruck-Vergleich die gesamte Struktur als eine Einheit
 /// behandelt — analog der bereits bestehenden Begründung für die Trennung von
 /// ``SyncVorgaengeSnapshot``/``SyncPreisSnapshot`` unten.
 struct SyncStammSnapshot: Codable {
     var geschaeftsTypen: [GeschaeftTypSnapshot]
-    var artikelKategorien: [ArtikelKategorieSnapshot]
+    var abteilungen: [AbteilungSnapshot]
     var geschaefte: [GeschaeftSnapshot]
     var artikel: [ArtikelSnapshot]
     var einkaufslisten: [EinkaufslisteSnapshot]

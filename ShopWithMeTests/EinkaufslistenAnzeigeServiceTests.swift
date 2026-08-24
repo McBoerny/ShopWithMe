@@ -6,7 +6,7 @@ import Testing
 /// Tests für ``EinkaufslistenAnzeigeService`` (GitHub #107/#110, extrahiert aus
 /// `EinkaufenView.swift`s privater `EinkaufslisteView`) — reines
 /// Struktur-Refactoring ohne historischen Live-Test-Bug, Fokus liegt auf der
-/// Komposition der drei Funktionen (Verfügbarkeitsfilter, Mehrfachkategorie-
+/// Komposition der drei Funktionen (Verfügbarkeitsfilter, Mehrfachabteilung-
 /// Anzeige, Gruppierung/Sortierung), nicht auf einer erneuten Prüfung der
 /// bereits anderswo getesteten ``AbteilungsDistanzService``-Sortieralgorithmen.
 @MainActor
@@ -45,14 +45,14 @@ struct EinkaufslistenAnzeigeServiceTests {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
-        let kategorieA = ArtikelKategorie(name: "A", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
-        let kategorieB = ArtikelKategorie(name: "B", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
-        context.insert(kategorieA)
-        context.insert(kategorieB)
-        let artikel = Artikel(name: "Zahnpasta", symbolName: "sparkles", farbeHex: "#000000", kategorien: [kategorieB])
+        let abteilungA = Abteilung(name: "A", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        let abteilungB = Abteilung(name: "B", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
+        context.insert(abteilungA)
+        context.insert(abteilungB)
+        let artikel = Artikel(name: "Zahnpasta", symbolName: "sparkles", farbeHex: "#000000", abteilungen: [abteilungB])
         context.insert(artikel)
         let geschaeft = Geschaeft(name: "Rewe", typen: [lebensmittelTyp()])
-        geschaeft.kategorien = [kategorieA] // Zahnpasta (Kategorie B) NICHT im Geschäft verfügbar
+        geschaeft.abteilungen = [abteilungA] // Zahnpasta (Abteilung B) NICHT im Geschäft verfügbar
         context.insert(geschaeft)
         let liste = Einkaufsliste(name: "Wocheneinkauf")
         context.insert(liste)
@@ -71,20 +71,20 @@ struct EinkaufslistenAnzeigeServiceTests {
     }
 
     @Test
-    func verfuegbarkeitsgefiltertLaesstNurArtikelDerGeschaeftsKategorienDurch() throws {
+    func verfuegbarkeitsgefiltertLaesstNurArtikelDerGeschaeftsAbteilungenDurch() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
-        let kategorieA = ArtikelKategorie(name: "A", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
-        let kategorieB = ArtikelKategorie(name: "B", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
-        context.insert(kategorieA)
-        context.insert(kategorieB)
-        let artikelVerfuegbar = Artikel(name: "Karotte", symbolName: "carrot", farbeHex: "#000000", kategorien: [kategorieA])
-        let artikelNicht = Artikel(name: "Zahnpasta", symbolName: "sparkles", farbeHex: "#000000", kategorien: [kategorieB])
+        let abteilungA = Abteilung(name: "A", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        let abteilungB = Abteilung(name: "B", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
+        context.insert(abteilungA)
+        context.insert(abteilungB)
+        let artikelVerfuegbar = Artikel(name: "Karotte", symbolName: "carrot", farbeHex: "#000000", abteilungen: [abteilungA])
+        let artikelNicht = Artikel(name: "Zahnpasta", symbolName: "sparkles", farbeHex: "#000000", abteilungen: [abteilungB])
         context.insert(artikelVerfuegbar)
         context.insert(artikelNicht)
         let geschaeft = Geschaeft(name: "Rewe", typen: [lebensmittelTyp()])
-        geschaeft.kategorien = [kategorieA]
+        geschaeft.abteilungen = [abteilungA]
         context.insert(geschaeft)
         let liste = Einkaufsliste(name: "Wocheneinkauf")
         context.insert(liste)
@@ -100,99 +100,99 @@ struct EinkaufslistenAnzeigeServiceTests {
         #expect(ergebnis == [eintragVerfuegbar])
     }
 
-    // MARK: - kategorienFuerAnzeige
+    // MARK: - abteilungenFuerAnzeige
 
     @Test
-    func kategorienFuerAnzeigeOhneGeschaeftLiefertAlleZugeordneten() throws {
+    func abteilungenFuerAnzeigeOhneGeschaeftLiefertAlleZugeordneten() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
-        let kategorieA = ArtikelKategorie(name: "A", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
-        let kategorieB = ArtikelKategorie(name: "B", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
-        context.insert(kategorieA)
-        context.insert(kategorieB)
-        let artikel = Artikel(name: "Ohropax", symbolName: "sparkles", farbeHex: "#000000", kategorien: [kategorieA, kategorieB])
+        let abteilungA = Abteilung(name: "A", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        let abteilungB = Abteilung(name: "B", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
+        context.insert(abteilungA)
+        context.insert(abteilungB)
+        let artikel = Artikel(name: "Ohropax", symbolName: "sparkles", farbeHex: "#000000", abteilungen: [abteilungA, abteilungB])
         context.insert(artikel)
 
-        let ergebnis = EinkaufslistenAnzeigeService.kategorienFuerAnzeige(
+        let ergebnis = EinkaufslistenAnzeigeService.abteilungenFuerAnzeige(
             artikel, geschaeft: nil, zeigeAlleArtikel: false, context: context
         )
 
-        #expect(Set(ergebnis) == Set([kategorieA, kategorieB]))
+        #expect(Set(ergebnis) == Set([abteilungA, abteilungB]))
     }
 
     @Test
-    func kategorienFuerAnzeigeMitGelernterKategorieReduziertAufEine() throws {
+    func abteilungenFuerAnzeigeMitGelernterAbteilungReduziertAufEine() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
-        let kategorieA = ArtikelKategorie(name: "A", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
-        let kategorieB = ArtikelKategorie(name: "B", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
-        context.insert(kategorieA)
-        context.insert(kategorieB)
-        let artikel = Artikel(name: "Ohropax", symbolName: "sparkles", farbeHex: "#000000", kategorien: [kategorieA, kategorieB])
+        let abteilungA = Abteilung(name: "A", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        let abteilungB = Abteilung(name: "B", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
+        context.insert(abteilungA)
+        context.insert(abteilungB)
+        let artikel = Artikel(name: "Ohropax", symbolName: "sparkles", farbeHex: "#000000", abteilungen: [abteilungA, abteilungB])
         context.insert(artikel)
         let geschaeft = Geschaeft(name: "Rewe", typen: [lebensmittelTyp()])
         context.insert(geschaeft)
-        // 5 Käufe, davon 5/5 (>= 80%-Schwelle) unter Kategorie A → "gelernt".
+        // 5 Käufe, davon 5/5 (>= 80%-Schwelle) unter Abteilung A → "gelernt".
         for _ in 0..<5 {
-            let eintrag = KaufEintrag(artikel: artikel, geschaeft: geschaeft, kategorie: kategorieA)
+            let eintrag = KaufEintrag(artikel: artikel, geschaeft: geschaeft, abteilung: abteilungA)
             context.insert(eintrag)
         }
 
-        let ergebnis = EinkaufslistenAnzeigeService.kategorienFuerAnzeige(
+        let ergebnis = EinkaufslistenAnzeigeService.abteilungenFuerAnzeige(
             artikel, geschaeft: geschaeft, zeigeAlleArtikel: false, context: context
         )
 
-        #expect(ergebnis == [kategorieA])
+        #expect(ergebnis == [abteilungA])
     }
 
     @Test
-    func kategorienFuerAnzeigeLernmodusUmgehtGelernteKategorie() throws {
+    func abteilungenFuerAnzeigeLernmodusUmgehtGelernteAbteilung() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
-        let kategorieA = ArtikelKategorie(name: "A", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
-        let kategorieB = ArtikelKategorie(name: "B", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
-        context.insert(kategorieA)
-        context.insert(kategorieB)
-        let artikel = Artikel(name: "Ohropax", symbolName: "sparkles", farbeHex: "#000000", kategorien: [kategorieA, kategorieB])
+        let abteilungA = Abteilung(name: "A", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        let abteilungB = Abteilung(name: "B", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
+        context.insert(abteilungA)
+        context.insert(abteilungB)
+        let artikel = Artikel(name: "Ohropax", symbolName: "sparkles", farbeHex: "#000000", abteilungen: [abteilungA, abteilungB])
         context.insert(artikel)
         let geschaeft = Geschaeft(name: "Rewe", typen: [lebensmittelTyp()])
         context.insert(geschaeft)
         for _ in 0..<5 {
-            let eintrag = KaufEintrag(artikel: artikel, geschaeft: geschaeft, kategorie: kategorieA)
+            let eintrag = KaufEintrag(artikel: artikel, geschaeft: geschaeft, abteilung: abteilungA)
             context.insert(eintrag)
         }
 
-        let ergebnis = EinkaufslistenAnzeigeService.kategorienFuerAnzeige(
+        let ergebnis = EinkaufslistenAnzeigeService.abteilungenFuerAnzeige(
             artikel, geschaeft: geschaeft, zeigeAlleArtikel: true, context: context
         )
 
-        #expect(Set(ergebnis) == Set([kategorieA, kategorieB]))
+        #expect(Set(ergebnis) == Set([abteilungA, abteilungB]))
     }
 
-    // MARK: - kategorieGruppen
+    // MARK: - abteilungGruppen
 
     @Test
-    func kategorieGruppenDupliziertArtikelMitMehrerenKategorien() throws {
+    func abteilungGruppenDupliziertArtikelMitMehrerenAbteilungen() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
-        let kategorieA = ArtikelKategorie(name: "A", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
-        let kategorieB = ArtikelKategorie(name: "B", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
-        context.insert(kategorieA)
-        context.insert(kategorieB)
-        let artikel = Artikel(name: "Ohropax", symbolName: "sparkles", farbeHex: "#000000", kategorien: [kategorieA, kategorieB])
+        let abteilungA = Abteilung(name: "A", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        let abteilungB = Abteilung(name: "B", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
+        context.insert(abteilungA)
+        context.insert(abteilungB)
+        let artikel = Artikel(name: "Ohropax", symbolName: "sparkles", farbeHex: "#000000", abteilungen: [abteilungA, abteilungB])
         context.insert(artikel)
         let liste = Einkaufsliste(name: "Wocheneinkauf")
         context.insert(liste)
         let eintrag = EinkaufslistenEintrag(einkaufsliste: liste, artikel: artikel, menge: 1)
         context.insert(eintrag)
 
-        let gruppen = EinkaufslistenAnzeigeService.kategorieGruppen(
+        let gruppen = EinkaufslistenAnzeigeService.abteilungGruppen(
             offeneEintraege: [eintrag], abgehakteArtikel: [], zeigeAbgehakteArtikel: false,
-            zeigeAlleArtikel: false, geschaeft: nil, zuletztAbgehakteKategorie: nil, context: context
+            zeigeAlleArtikel: false, geschaeft: nil, zuletztAbgehakteAbteilung: nil, context: context
         )
 
         #expect(gruppen.count == 2)
@@ -200,22 +200,22 @@ struct EinkaufslistenAnzeigeServiceTests {
     }
 
     @Test
-    func kategorieGruppenBlendetAbgehakteArtikelNurBeiFlagEin() throws {
+    func abteilungGruppenBlendetAbgehakteArtikelNurBeiFlagEin() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
-        let kategorie = ArtikelKategorie(name: "A", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
-        context.insert(kategorie)
-        let artikel = Artikel(name: "Zahnpasta", symbolName: "sparkles", farbeHex: "#000000", kategorien: [kategorie])
+        let abteilung = Abteilung(name: "A", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        context.insert(abteilung)
+        let artikel = Artikel(name: "Zahnpasta", symbolName: "sparkles", farbeHex: "#000000", abteilungen: [abteilung])
         context.insert(artikel)
 
-        let ohneAbgehakt = EinkaufslistenAnzeigeService.kategorieGruppen(
+        let ohneAbgehakt = EinkaufslistenAnzeigeService.abteilungGruppen(
             offeneEintraege: [], abgehakteArtikel: [artikel], zeigeAbgehakteArtikel: false,
-            zeigeAlleArtikel: false, geschaeft: nil, zuletztAbgehakteKategorie: nil, context: context
+            zeigeAlleArtikel: false, geschaeft: nil, zuletztAbgehakteAbteilung: nil, context: context
         )
-        let mitAbgehakt = EinkaufslistenAnzeigeService.kategorieGruppen(
+        let mitAbgehakt = EinkaufslistenAnzeigeService.abteilungGruppen(
             offeneEintraege: [], abgehakteArtikel: [artikel], zeigeAbgehakteArtikel: true,
-            zeigeAlleArtikel: false, geschaeft: nil, zuletztAbgehakteKategorie: nil, context: context
+            zeigeAlleArtikel: false, geschaeft: nil, zuletztAbgehakteAbteilung: nil, context: context
         )
 
         #expect(ohneAbgehakt.isEmpty)
@@ -224,16 +224,16 @@ struct EinkaufslistenAnzeigeServiceTests {
     }
 
     @Test
-    func kategorieGruppenOhneGeschaeftSortiertAlphabetisch() throws {
+    func abteilungGruppenOhneGeschaeftSortiertAlphabetisch() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
-        let kategorieZ = ArtikelKategorie(name: "Zoo", standardSymbol: "pawprint", standardFarbeHex: "#34C759")
-        let kategorieA = ArtikelKategorie(name: "Ananas", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
-        context.insert(kategorieZ)
-        context.insert(kategorieA)
-        let artikelZ = Artikel(name: "Zebra-Artikel", symbolName: "sparkles", farbeHex: "#000000", kategorien: [kategorieZ])
-        let artikelA = Artikel(name: "Ananas-Artikel", symbolName: "sparkles", farbeHex: "#000000", kategorien: [kategorieA])
+        let abteilungZ = Abteilung(name: "Zoo", standardSymbol: "pawprint", standardFarbeHex: "#34C759")
+        let abteilungA = Abteilung(name: "Ananas", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
+        context.insert(abteilungZ)
+        context.insert(abteilungA)
+        let artikelZ = Artikel(name: "Zebra-Artikel", symbolName: "sparkles", farbeHex: "#000000", abteilungen: [abteilungZ])
+        let artikelA = Artikel(name: "Ananas-Artikel", symbolName: "sparkles", farbeHex: "#000000", abteilungen: [abteilungA])
         context.insert(artikelZ)
         context.insert(artikelA)
         let liste = Einkaufsliste(name: "Wocheneinkauf")
@@ -243,11 +243,11 @@ struct EinkaufslistenAnzeigeServiceTests {
         context.insert(eintragZ)
         context.insert(eintragA)
 
-        let gruppen = EinkaufslistenAnzeigeService.kategorieGruppen(
+        let gruppen = EinkaufslistenAnzeigeService.abteilungGruppen(
             offeneEintraege: [eintragZ, eintragA], abgehakteArtikel: [], zeigeAbgehakteArtikel: false,
-            zeigeAlleArtikel: false, geschaeft: nil, zuletztAbgehakteKategorie: nil, context: context
+            zeigeAlleArtikel: false, geschaeft: nil, zuletztAbgehakteAbteilung: nil, context: context
         )
 
-        #expect(gruppen.map(\.kategorie.name) == ["Ananas", "Zoo"])
+        #expect(gruppen.map(\.abteilung.name) == ["Ananas", "Zoo"])
     }
 }

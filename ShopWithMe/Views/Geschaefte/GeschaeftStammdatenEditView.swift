@@ -93,7 +93,7 @@ struct GeschaeftStammdatenEditView: View {
                 }
 
                 // Nur beim erstmaligen Anlegen (GitHub #56) — bei einem bestehenden
-                // Geschäft bleibt die Kategorien-Verwaltung ausschließlich in
+                // Geschäft bleibt die Abteilungen-Verwaltung ausschließlich in
                 // ``GeschaeftDetailView``, um sie nicht doppelt anzuzeigen.
                 if istNeu {
                     GeschaeftAbteilungenSektion(geschaeft: geschaeft)

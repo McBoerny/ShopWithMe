@@ -10,7 +10,7 @@ import Testing
 @MainActor
 struct ModelReferenceTests {
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {
-        let schema = Schema([Artikel.self, ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self])
+        let schema = Schema([Artikel.self, Abteilung.self, Geschaeft.self, GeschaeftTyp.self])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
         return (container, container.mainContext)

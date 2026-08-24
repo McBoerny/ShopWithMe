@@ -76,10 +76,10 @@ Artikel weiterhin ohne festgelegtes Produkt auf der Liste.
 
 Ist Apple Intelligence verfügbar, findest du in der Artikelliste (Einstellungen
 → Artikel) oben rechts einen **„Dubletten finden"**-Knopf (Funkeln-Symbol). Er
-durchsucht deinen gesamten Artikelbestand kategorieweise nach potenziellen
+durchsucht deinen gesamten Artikelbestand abteilungweise nach potenziellen
 Dubletten (z.B. „Cola" und „Coca Cola" als derselbe generische Artikel) und
 Varianten (z.B. „Persil" als konkrete Marke von „Waschmittel") — ein
-Fortschrittsbalken zeigt dabei an, wie viele Kategorien schon geprüft sind —
+Fortschrittsbalken zeigt dabei an, wie viele Abteilungen schon geprüft sind —
 und zeigt die Treffer dir zur Bestätigung. Zu jedem Vorschlag wählst du, ob
 der zweite Artikel als
 **Alias** (alternativer Name des ersten) oder als **Produkt** (konkrete Marke
@@ -178,17 +178,17 @@ automatisch beim Öffnen des Tabs, kein manueller Start nötig.
 Der Bildschirmtitel zeigt neben dem Listennamen deinen Fortschritt für diesen
 Einkauf, Format „<Name> (<abgehakt>/<gesamt>)", z.B. „Wocheneinkauf (3/8)".
 
-Ein Artikel, der mehreren Kategorien zugeordnet ist, erscheint zunächst in
+Ein Artikel, der mehreren Abteilungen zugeordnet ist, erscheint zunächst in
 jedem passenden Abschnitt der Liste — erkennbar am kleinen Symbol neben dem
 Namen. Der Fortschritt im Titel zählt jeden Artikel trotzdem nur einmal; die
 Anzahl sichtbarer Zeilen kann in diesem Fall also höher sein als die Zahl
 nach dem Schrägstrich. Sobald du diesen Artikel in einem bestimmten Geschäft
-überwiegend aus derselben Kategorie abgehakt hast, merkt sich die App das und
-zeigt ihn dort künftig nur noch in dieser einen Kategorie — das Symbol
+überwiegend aus derselben Abteilung abgehakt hast, merkt sich die App das und
+zeigt ihn dort künftig nur noch in dieser einen Abteilung — das Symbol
 verschwindet dann wieder. Kauf ihn dort später doch mal aus einem anderen
 Abschnitt, blendet sich die Mehrfachanzeige bei Bedarf automatisch wieder
 ein. Im Lernmodus (siehe unten) siehst du immer alle zugeordneten
-Kategorien, auch wenn die App sich schon auf eine festgelegt hat — praktisch,
+Abteilungen, auch wenn die App sich schon auf eine festgelegt hat — praktisch,
 um eine falsch gelernte Zuordnung zu korrigieren.
 
 Die Liste sortiert sich mit der Zeit selbst: ShopWithMe lernt aus der
@@ -247,9 +247,9 @@ dem Abschließen ein kurzer Hinweis, dass sich die App automatisch anpasst.
   Menge, Einheit und Notiz wie beim Einkaufen selbst.
 - **Darstellung anpassen:** Einstellungen → „Listendarstellung" — wählt zwischen
   klassischer Gruppenliste, Chips (groß oder klein) und Kacheln (2 oder 3 Spalten).
-  Je Modus konfigurierbar: Akkordeon-Kategorien, Fortschrittsbalken und
-  Kategorie-Farbstreifen (nur klassisch) lassen sich einzeln ein- oder ausschalten;
-  Kacheln können farbig nach Kategorie hinterlegt werden.
+  Je Modus konfigurierbar: Akkordeon-Abteilungen, Fortschrittsbalken und
+  Abteilung-Farbstreifen (nur klassisch) lassen sich einzeln ein- oder ausschalten;
+  Kacheln können farbig nach Abteilung hinterlegt werden.
 
 ## Belegscan & Preisschild-Scan
 
@@ -270,7 +270,7 @@ Lokale KI erkennt Geschäft, Datum, Artikel und Preise (Foto, aus der
 Fotomediathek oder aus den Dateien) und trägt sie in die passenden Positionen ein. Jede Position zeigt
 oben einen editierbaren **Produktnamen** (konkreter Klarname, z.B. „Sebamed
 Urea 5%" — von der KI vorbelegt) und darunter einen antippe-baren
-**Artikel-Button** (generische Kategorie, z.B. „Shampoo"). Der auf dem Bon
+**Artikel-Button** (generische Abteilung, z.B. „Shampoo"). Der auf dem Bon
 gedruckte, oft abgekürzte Originaltext bleibt separat erhalten und erscheint klein
 darunter, sofern er vom Produktnamen abweicht. Für jede Position versucht die App
 automatisch, den Bon-Text einem deiner vorhandenen Artikel zuzuordnen — gelingt
@@ -322,13 +322,13 @@ Teilen-Funktion eines anderen Apps (z.B. eine per Chat empfangene Datei per „T
 → „ShopWithMe"). Der Eintrag findet sich sowohl in der Einkaufslisten-Verwaltung
 (Einstellungen) als auch direkt in der Toolbar einer geöffneten Einkaufsliste — im
 zweiten Fall ist die Zielliste bereits auf die gerade geöffnete Liste vorbelegt. In
-der Vorschau siehst du je MilkForUs-Kategorie, ob eine bestehende Abteilung
+der Vorschau siehst du je MilkForUs-Abteilung, ob eine bestehende Abteilung
 automatisch erkannt wurde (exakter Name oder KI-Vorschlag), oder ob eine neue
 angelegt würde — per Antippen lässt sich das auf eine andere bestehende Abteilung
 oder „Sonstiges" umstellen. Bereits vorhandene Artikel oder Produkte werden nur auf
 die gewählte Liste gesetzt, nie dupliziert; einzelne Artikel lassen sich vor dem
 Übernehmen per Wischgeste aus dem Import ausschließen. Bei sehr großen Listen zeigt
-sowohl der Kategorieabgleich als auch das abschließende Übernehmen einen
+sowohl der Abteilungsabgleich als auch das abschließende Übernehmen einen
 Fortschrittsbalken mit Zähler.
 
 ## Datensynchronisation (gemeinsam einkaufen)
@@ -470,7 +470,7 @@ werden ausgetauscht.
 - **Listendarstellung** — wählt den Anzeigemodus der Einkaufsliste: klassische
   Gruppenliste, Chips (groß oder klein) oder Kacheln (2 oder 3 Spalten). Jeder
   Modus ist separat konfigurierbar (Akkordeon, Fortschrittsbalken, Farbstreifen
-  bzw. Spaltenanzahl und Kategorie-Farbhintergrund bei Kacheln).
+  bzw. Spaltenanzahl und Abteilung-Farbhintergrund bei Kacheln).
 - **Preishistorie** — Aufbewahrungsdauer/Bereinigung alter Preiseinträge; räumt ab
   derselben Frist zusätzlich alte, abgeschlossene Einkäufe ohne verbleibende
   Preiseinträge mit auf. Zusätzlich die Schwellwerte der automatischen

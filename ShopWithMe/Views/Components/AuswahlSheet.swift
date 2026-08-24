@@ -54,7 +54,7 @@ struct AuswahlSheet<Item: Identifiable & Hashable, NeuAnlegenContent: View>: Vie
     /// Schnellnavigation an der rechten Kante (Issue-Vorgabe: „größer 100
     /// Einträgen").
     var schnellnavigationAbAnzahl: Int = 100
-    /// Optionales SF-Symbol je Eintrag (z.B. `ArtikelKategorie/standardSymbol`)
+    /// Optionales SF-Symbol je Eintrag (z.B. `Abteilung/standardSymbol`)
     /// — `nil` (Default) zeigt reinen Text ohne Icon.
     var symbol: ((Item) -> String?)? = nil
     /// Zusätzliche, kleinere Sekundärzeile je Eintrag (z.B. Kurzadresse) —

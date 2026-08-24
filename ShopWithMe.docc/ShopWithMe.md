@@ -5,7 +5,7 @@ Einkaufsreihenfolge.
 
 ## Übersicht
 
-ShopWithMe verwaltet Artikel mit Kategorien, Geschäfte mit eigenen Regalen und hilft
+ShopWithMe verwaltet Artikel mit Abteilungen, Geschäfte mit eigenen Regalen und hilft
 beim Einkaufen mit einer Regal-Reihenfolge, die sich manuell festlegen oder aus der
 Einkaufshistorie lernen lässt. Details zu den Anforderungen und der Architektur stehen
 in `docs/PRODUCT_SPEC.md` und `docs/ARCHITECTURE.md` im Projekt-Root.
@@ -15,7 +15,7 @@ in `docs/PRODUCT_SPEC.md` und `docs/ARCHITECTURE.md` im Projekt-Root.
 ### Datenmodell
 
 - ``Artikel``
-- ``ArtikelKategorie``
+- ``Abteilung``
 - ``Regal``
 - ``Geschaeft``
 - ``Einkaufsvorgang``

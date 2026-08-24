@@ -126,5 +126,5 @@ struct PreispunktZuordnenSheet: View {
     let eintrag = Preispunkt(produkt: produkt, geschaeft: geschaeft, preis: 2.49)
     eintrag.produktName = "COL-ZAH"
     return PreispunktZuordnenSheet(eintrag: eintrag)
-        .modelContainer(for: [Artikel.self, ArtikelKategorie.self, GeschaeftTyp.self, Preispunkt.self, Produkt.self, Produktname.self], inMemory: true)
+        .modelContainer(for: [Artikel.self, Abteilung.self, GeschaeftTyp.self, Preispunkt.self, Produkt.self, Produktname.self], inMemory: true)
 }

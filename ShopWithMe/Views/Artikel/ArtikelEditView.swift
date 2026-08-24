@@ -4,7 +4,7 @@ import SwiftData
 /// Anlegen/Bearbeiten eines ``Artikel``s.
 ///
 /// Bei einem neuen Artikel (`istNeu == true`) wird er erst beim Sichern in den
-/// Model-Context eingefügt (Abbrechen verwirft ihn folgenlos). Die Kategorien
+/// Model-Context eingefügt (Abbrechen verwirft ihn folgenlos). Die Abteilungen
 /// (Mehrfachauswahl möglich) sind sowohl beim Anlegen als auch danach frei
 /// wählbar.
 struct ArtikelEditView: View {
@@ -13,13 +13,13 @@ struct ArtikelEditView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @Query(sort: \ArtikelKategorie.sortIndex) private var kategorien: [ArtikelKategorie]
+    @Query(sort: \Abteilung.sortIndex) private var abteilungen: [Abteilung]
     @Query private var produkte: [Produkt]
     @Query private var alleArtikel: [Artikel]
 
     @State private var kiVorschlagLaeuft = false
     @State private var kiFehlermeldung: String?
-    @State private var zeigeKategorieHinzufuegen = false
+    @State private var zeigeAbteilungHinzufuegen = false
     @State private var neuerAlternativerName = ""
     @State private var neuesProduktEntwurf: Produkt?
     @State private var bearbeitetesProdukt: Produkt?
@@ -77,7 +77,7 @@ struct ArtikelEditView: View {
         NavigationStack {
             Form {
                 nameSektion
-                kategorienSektion
+                abteilungenSektion
                 mengeUndEinheitSektion
                 notizSektion
                 if !istNeu {
@@ -121,10 +121,10 @@ struct ArtikelEditView: View {
                 }
             }
             .task(id: artikel.name) {
-                await kategorieAutomatischVorschlagen()
+                await abteilungAutomatischVorschlagen()
             }
-            .sheet(isPresented: $zeigeKategorieHinzufuegen) {
-                KategorieHinzufuegenSheet(artikel: artikel)
+            .sheet(isPresented: $zeigeAbteilungHinzufuegen) {
+                AbteilungZuArtikelHinzufuegenSheet(artikel: artikel)
             }
             .sheet(item: $neuesProduktEntwurf) { entwurf in
                 ProduktEditView(produkt: entwurf, istNeu: true)
@@ -188,15 +188,15 @@ struct ArtikelEditView: View {
         }
     }
 
-    private var kategorienSektion: some View {
+    private var abteilungenSektion: some View {
         Section {
-            ForEach(artikel.kategorien) { kategorie in
-                Label(kategorie.name, systemImage: kategorie.standardSymbol)
+            ForEach(artikel.abteilungen) { abteilung in
+                Label(abteilung.name, systemImage: abteilung.standardSymbol)
             }
-            .onDelete(perform: kategorieEntfernen)
+            .onDelete(perform: abteilungEntfernen)
 
             Button {
-                zeigeKategorieHinzufuegen = true
+                zeigeAbteilungHinzufuegen = true
             } label: {
                 Label("Abteilung hinzufügen", systemImage: "plus")
             }
@@ -416,27 +416,27 @@ struct ArtikelEditView: View {
         }
     }
 
-    private func kategorieEntfernen(at indexSet: IndexSet) {
-        var aktuelle = artikel.kategorien
+    private func abteilungEntfernen(at indexSet: IndexSet) {
+        var aktuelle = artikel.abteilungen
         for index in indexSet.sorted(by: >) {
             aktuelle.remove(at: index)
         }
-        artikel.kategorien = aktuelle
+        artikel.abteilungen = aktuelle
     }
 
-    /// Bestimmt automatisch (ohne manuellen Anstoß) eine Kategorie für einen neuen
+    /// Bestimmt automatisch (ohne manuellen Anstoß) eine Abteilung für einen neuen
     /// Artikel, sobald Apple Intelligence verfügbar ist — entprellt um 600ms, damit
     /// nicht bei jedem Tastenanschlag ein KI-Aufruf losgeschickt wird. SwiftUI
     /// storniert diesen Task automatisch, sobald sich `artikel.name` erneut ändert
     /// (`.task(id:)`). Überschreibt niemals eine bereits (manuell oder von einem
-    /// vorherigen Durchlauf) gesetzte Kategorie.
-    private func kategorieAutomatischVorschlagen() async {
-        guard istNeu, AISuggestionService.istVerfuegbar, artikel.kategorien.isEmpty else { return }
+    /// vorherigen Durchlauf) gesetzte Abteilung.
+    private func abteilungAutomatischVorschlagen() async {
+        guard istNeu, AISuggestionService.istVerfuegbar, artikel.abteilungen.isEmpty else { return }
         let name = artikel.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return }
 
         try? await Task.sleep(for: .milliseconds(600))
-        guard !Task.isCancelled, artikel.kategorien.isEmpty else { return }
+        guard !Task.isCancelled, artikel.abteilungen.isEmpty else { return }
 
         kiVorschlagLaeuft = true
         kiFehlermeldung = nil
@@ -445,14 +445,14 @@ struct ArtikelEditView: View {
         do {
             let vorschlag = try await AISuggestionService.vorschlag(
                 fuerArtikelName: name,
-                bekannteKategorien: kategorien.map(\.name)
+                bekannteAbteilungen: abteilungen.map(\.name)
             )
-            guard !Task.isCancelled, artikel.kategorien.isEmpty else { return }
+            guard !Task.isCancelled, artikel.abteilungen.isEmpty else { return }
 
-            if let passendeKategorie = kategorien.first(where: {
-                $0.name.localizedCaseInsensitiveCompare(vorschlag.kategorieName) == .orderedSame
+            if let passendeAbteilung = abteilungen.first(where: {
+                $0.name.localizedCaseInsensitiveCompare(vorschlag.abteilungName) == .orderedSame
             }) {
-                artikel.kategorien = [passendeKategorie]
+                artikel.abteilungen = [passendeAbteilung]
             }
         } catch {
             kiFehlermeldung = "KI-Vorschlag nicht verfügbar: \(error.localizedDescription)"
@@ -460,29 +460,29 @@ struct ArtikelEditView: View {
     }
 }
 
-/// Sheet zum Zuordnen bestehender ``ArtikelKategorie``n zu ``artikel`` — analog
+/// Sheet zum Zuordnen bestehender ``Abteilung``en zu ``artikel`` — analog
 /// ``ArtikelZuAbteilungHinzufuegenSheet`` (dort umgekehrte Richtung: Artikel zu
-/// einer Kategorie zuordnen). Tippen auf eine Abteilung ordnet sie sofort zu
+/// einer Abteilung zuordnen). Tippen auf eine Abteilung ordnet sie sofort zu
 /// (kein zusätzlicher Bestätigungsschritt), das Sheet bleibt offen, um mehrere
 /// Abteilungen nacheinander hinzufügen zu können — nutzt die generische
 /// ``AuswahlSheet`` (GitHub #130) analog ``AbteilungHinzufuegenSheet``.
-private struct KategorieHinzufuegenSheet: View {
+private struct AbteilungZuArtikelHinzufuegenSheet: View {
     @Bindable var artikel: Artikel
 
-    @Query(sort: \ArtikelKategorie.sortIndex) private var alleKategorien: [ArtikelKategorie]
+    @Query(sort: \Abteilung.sortIndex) private var alleAbteilungen: [Abteilung]
     /// Die eigentliche Zuordnung passiert verzögert über ``onChange(of:)``
     /// statt direkt im Binding-Setter — siehe ausführliche Begründung in
-    /// ``AbteilungHinzufuegenSheet`` (Live-Fund: Sheet flackerte auf/zu).
-    @State private var geradeAusgewaehlt: Set<ArtikelKategorie.ID> = []
+    /// ``AbteilungZuArtikelHinzufuegenSheet`` (Live-Fund: Sheet flackerte auf/zu).
+    @State private var geradeAusgewaehlt: Set<Abteilung.ID> = []
 
-    private var nichtZugeordneteKategorien: [ArtikelKategorie] {
-        alleKategorien.filter { !artikel.kategorien.contains($0) }
+    private var nichtZugeordneteAbteilungen: [Abteilung] {
+        alleAbteilungen.filter { !artikel.abteilungen.contains($0) }
     }
 
     var body: some View {
         AuswahlSheet(
             titel: "Abteilung hinzufügen",
-            items: nichtZugeordneteKategorien,
+            items: nichtZugeordneteAbteilungen,
             name: \.name,
             modus: .mehrfach($geradeAusgewaehlt),
             suchPrompt: "Abteilung suchen",
@@ -490,17 +490,17 @@ private struct KategorieHinzufuegenSheet: View {
             neuAnlegenTitel: { _ in "Neue Abteilung anlegen" },
             neuAnlegenNurBeiFehlendemTreffer: false,
             neuAnlegenInhalt: { _, gesichert in
-                NeueAbteilungSheet(naechsterSortIndex: (alleKategorien.map(\.sortIndex).max() ?? -1) + 1) { kategorie in
-                    artikel.kategorien.append(kategorie)
-                    gesichert(kategorie)
+                NeueAbteilungSheet(naechsterSortIndex: (alleAbteilungen.map(\.sortIndex).max() ?? -1) + 1) { abteilung in
+                    artikel.abteilungen.append(abteilung)
+                    gesichert(abteilung)
                 }
             }
         )
         .onChange(of: geradeAusgewaehlt) { _, neu in
             guard !neu.isEmpty else { return }
             for id in neu {
-                if let kategorie = nichtZugeordneteKategorien.first(where: { $0.id == id }) {
-                    artikel.kategorien.append(kategorie)
+                if let abteilung = nichtZugeordneteAbteilungen.first(where: { $0.id == id }) {
+                    artikel.abteilungen.append(abteilung)
                 }
             }
             geradeAusgewaehlt = []
@@ -513,5 +513,5 @@ private struct KategorieHinzufuegenSheet: View {
         artikel: Artikel(name: "Vollmilch", symbolName: "refrigerator.fill", farbeHex: "#5AC8FA"),
         istNeu: true
     )
-    .modelContainer(for: [Artikel.self, ArtikelKategorie.self, GeschaeftTyp.self, Einkaufsliste.self, EinkaufslistenEintrag.self, Produkt.self, Produktname.self], inMemory: true)
+    .modelContainer(for: [Artikel.self, Abteilung.self, GeschaeftTyp.self, Einkaufsliste.self, EinkaufslistenEintrag.self, Produkt.self, Produktname.self], inMemory: true)
 }

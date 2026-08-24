@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 
 /// Sheet zum Anlegen eines benutzerdefinierten ``GeschaeftTyp`` (GitHub #25) —
-/// analog ``NeueAbteilungSheet`` für ``ArtikelKategorie``. Aufrufbar sowohl aus der
+/// analog ``NeueAbteilungSheet`` für ``Abteilung``. Aufrufbar sowohl aus der
 /// zentralen Typ-Verwaltung (``GeschaeftsTypenVerwaltungView``) als auch direkt aus
 /// der Typ-Auswahl beim Anlegen/Bearbeiten eines Geschäfts
 /// (``GeschaeftStammdatenEditView``), falls der gewünschte Typ dort noch fehlt.

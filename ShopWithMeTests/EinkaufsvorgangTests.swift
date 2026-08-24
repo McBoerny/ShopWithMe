@@ -7,7 +7,7 @@ import Testing
 struct EinkaufsvorgangTests {
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {
         let schema = Schema([
-            Artikel.self, ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self,
+            Artikel.self, Abteilung.self, Geschaeft.self, GeschaeftTyp.self,
             Einkaufsvorgang.self, KaufEintrag.self,
             Einkaufsliste.self, EinkaufslistenEintrag.self, SyncEvent.self, ArtikelGeschaeftVerfuegbarkeit.self,
             ArtikelListenKauf.self,
@@ -24,13 +24,13 @@ struct EinkaufsvorgangTests {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
-        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        let obst = Abteilung(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
         context.insert(obst)
         let geschaeft = Geschaeft(name: "Testladen", typen: [lebensmittelTyp()])
         context.insert(geschaeft)
         let liste = Einkaufsliste(name: "Einkaufsliste")
         context.insert(liste)
-        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst], einheit: .stueck, mengenSchritt: 3)
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", abteilungen: [obst], einheit: .stueck, mengenSchritt: 3)
         context.insert(apfel)
         liste.artikelHinzufuegen(apfel, context: context)
 
@@ -45,28 +45,28 @@ struct EinkaufsvorgangTests {
 
         #expect(liste.enthaelt(apfel) == false)
         #expect(einkauf.kaufEintraege.count == 1)
-        #expect(einkauf.kaufEintraege.first?.kategorie == obst)
-        #expect(einkauf.kaufEintraege.first?.kategorieBesuchsIndex == 0)
+        #expect(einkauf.kaufEintraege.first?.abteilung == obst)
+        #expect(einkauf.kaufEintraege.first?.abteilungBesuchsIndex == 0)
         #expect(einkauf.kaufEintraege.first?.preis == nil)
         #expect(einkauf.kaufEintraege.first?.menge == 3)
     }
 
     @Test
-    func gleicheKategorieTeiltSichDenBesuchsIndex() throws {
+    func gleicheAbteilungTeiltSichDenBesuchsIndex() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
-        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
-        let drogerie = ArtikelKategorie(name: "Drogerie", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
+        let obst = Abteilung(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        let drogerie = Abteilung(name: "Drogerie", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
         context.insert(obst)
         context.insert(drogerie)
 
         let geschaeft = Geschaeft(name: "Testladen", typen: [lebensmittelTyp()])
         context.insert(geschaeft)
 
-        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst])
-        let birne = Artikel(name: "Birne", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst])
-        let shampoo = Artikel(name: "Shampoo", symbolName: "sparkles", farbeHex: "#AF52DE", kategorien: [drogerie])
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", abteilungen: [obst])
+        let birne = Artikel(name: "Birne", symbolName: "carrot.fill", farbeHex: "#34C759", abteilungen: [obst])
+        let shampoo = Artikel(name: "Shampoo", symbolName: "sparkles", farbeHex: "#AF52DE", abteilungen: [drogerie])
         context.insert(apfel)
         context.insert(birne)
         context.insert(shampoo)
@@ -82,9 +82,9 @@ struct EinkaufsvorgangTests {
         let birneEintrag = einkauf.kaufEintraege.first { $0.artikel == birne }
         let shampooEintrag = einkauf.kaufEintraege.first { $0.artikel == shampoo }
 
-        #expect(apfelEintrag?.kategorieBesuchsIndex == 0)
-        #expect(birneEintrag?.kategorieBesuchsIndex == 0)
-        #expect(shampooEintrag?.kategorieBesuchsIndex == 1)
+        #expect(apfelEintrag?.abteilungBesuchsIndex == 0)
+        #expect(birneEintrag?.abteilungBesuchsIndex == 0)
+        #expect(shampooEintrag?.abteilungBesuchsIndex == 1)
     }
 
     @Test
@@ -92,28 +92,28 @@ struct EinkaufsvorgangTests {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
-        let sonstiges = ArtikelKategorie(name: "Sonstiges", standardSymbol: "shippingbox.fill", standardFarbeHex: "#8E8E93")
+        let sonstiges = Abteilung(name: "Sonstiges", standardSymbol: "shippingbox.fill", standardFarbeHex: "#8E8E93")
         context.insert(sonstiges)
         let geschaeft = Geschaeft(name: "Testladen", typen: [lebensmittelTyp()])
         context.insert(geschaeft)
-        let ohneKategorie = Artikel(name: "Mysteriöses Ding", symbolName: "questionmark", farbeHex: "#8E8E93")
-        let explizitSonstiges = Artikel(name: "Kerzen", symbolName: "flame.fill", farbeHex: "#8E8E93", kategorien: [sonstiges])
-        context.insert(ohneKategorie)
+        let ohneAbteilung = Artikel(name: "Mysteriöses Ding", symbolName: "questionmark", farbeHex: "#8E8E93")
+        let explizitSonstiges = Artikel(name: "Kerzen", symbolName: "flame.fill", farbeHex: "#8E8E93", abteilungen: [sonstiges])
+        context.insert(ohneAbteilung)
         context.insert(explizitSonstiges)
 
         let einkauf = Einkaufsvorgang(geschaeft: geschaeft)
         context.insert(einkauf)
 
-        einkauf.artikelAbhaken(ohneKategorie, context: context)
+        einkauf.artikelAbhaken(ohneAbteilung, context: context)
         einkauf.artikelAbhaken(explizitSonstiges, context: context)
 
-        let ohneKategorieEintrag = einkauf.kaufEintraege.first { $0.artikel == ohneKategorie }
+        let ohneAbteilungEintrag = einkauf.kaufEintraege.first { $0.artikel == ohneAbteilung }
         let sonstigesEintrag = einkauf.kaufEintraege.first { $0.artikel == explizitSonstiges }
 
-        #expect(ohneKategorieEintrag?.kategorie == sonstiges)
-        #expect(ohneKategorieEintrag?.kategorieBesuchsIndex == 0)
-        #expect(sonstigesEintrag?.kategorieBesuchsIndex == 0)
-        #expect(try context.fetchCount(FetchDescriptor<ArtikelKategorie>()) == 1)
+        #expect(ohneAbteilungEintrag?.abteilung == sonstiges)
+        #expect(ohneAbteilungEintrag?.abteilungBesuchsIndex == 0)
+        #expect(sonstigesEintrag?.abteilungBesuchsIndex == 0)
+        #expect(try context.fetchCount(FetchDescriptor<Abteilung>()) == 1)
     }
 
     @Test
@@ -121,13 +121,13 @@ struct EinkaufsvorgangTests {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
-        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        let obst = Abteilung(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
         context.insert(obst)
         let geschaeft = Geschaeft(name: "Testladen", typen: [lebensmittelTyp()])
         context.insert(geschaeft)
         let liste = Einkaufsliste(name: "Einkaufsliste")
         context.insert(liste)
-        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst], mengenSchritt: 2)
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", abteilungen: [obst], mengenSchritt: 2)
         context.insert(apfel)
         let listenEintrag = liste.artikelHinzufuegen(apfel, context: context)
 
@@ -156,13 +156,13 @@ struct EinkaufsvorgangTests {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
-        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        let obst = Abteilung(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
         context.insert(obst)
         let geschaeft = Geschaeft(name: "Testladen", typen: [lebensmittelTyp()])
         context.insert(geschaeft)
         let liste = Einkaufsliste(name: "Einkaufsliste")
         context.insert(liste)
-        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst])
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", abteilungen: [obst])
         context.insert(apfel)
         liste.artikelHinzufuegen(apfel, context: context)
 
@@ -255,7 +255,7 @@ struct EinkaufsvorgangTests {
     /// Ein per Sync-Import materialisiertes Abhaken (siehe
     /// `SyncImportService.materialisiere`) beschreibt die Laufreihenfolge des
     /// SENDENDEN Geräts, nicht die dieses Geräts — es darf deshalb keinen
-    /// ``KaufEintrag/kategorieBesuchsIndex`` bekommen, sonst würde
+    /// ``KaufEintrag/abteilungBesuchsIndex`` bekommen, sonst würde
     /// ``AbteilungsDistanzService`` mit einer erfundenen Besuchsposition für
     /// diesen Nutzer gefüttert (siehe Typ-Doku
     /// ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:)``).
@@ -264,13 +264,13 @@ struct EinkaufsvorgangTests {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
-        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        let obst = Abteilung(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
         context.insert(obst)
         let geschaeft = Geschaeft(name: "Testladen", typen: [lebensmittelTyp()])
         context.insert(geschaeft)
         let liste = Einkaufsliste(name: "Einkaufsliste")
         context.insert(liste)
-        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst])
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", abteilungen: [obst])
         context.insert(apfel)
         liste.artikelHinzufuegen(apfel, context: context)
 
@@ -282,8 +282,8 @@ struct EinkaufsvorgangTests {
         // `context.delete()` spiegelt sich in `liste.eintraege` erst nach `save()`.
         try context.save()
 
-        #expect(einkauf.kaufEintraege.first?.kategorieBesuchsIndex == nil)
-        #expect(einkauf.kaufEintraege.first?.kategorie == obst)
+        #expect(einkauf.kaufEintraege.first?.abteilungBesuchsIndex == nil)
+        #expect(einkauf.kaufEintraege.first?.abteilung == obst)
         #expect(liste.enthaelt(apfel) == false)
     }
 
@@ -329,26 +329,26 @@ struct EinkaufsvorgangTests {
     }
 
     /// GitHub-Nachfolgefund zu #36: ``EinkaufenView`` zeigt einen Artikel mit
-    /// mehreren Kategorien jetzt gleichzeitig in allen zugehörigen Abschnitten
+    /// mehreren Abteilungen jetzt gleichzeitig in allen zugehörigen Abschnitten
     /// an (statt nur in einer "führenden") und übergibt beim Abhaken die
-    /// tatsächlich getappte Kategorie — Grundlage dafür, dass
+    /// tatsächlich getappte Abteilung — Grundlage dafür, dass
     /// ``AbteilungsDistanzService`` pro Geschäft lernen kann, in welcher der
-    /// mehreren Kategorien ein Artikel dort tatsächlich steht (z.B. Sojasauce
+    /// mehreren Abteilungen ein Artikel dort tatsächlich steht (z.B. Sojasauce
     /// bei Edeka unter "Soßen", bei Aldi unter "Asia"), statt einer für den
     /// Artikel global geratenen.
     @Test
-    func explizitUebergebeneKategorieUeberschreibtFuehrendeKategorie() throws {
+    func explizitUebergebeneAbteilungUeberschreibtFuehrendeAbteilung() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
-        let sossen = ArtikelKategorie(name: "Soßen", standardSymbol: "drop.fill", standardFarbeHex: "#FF9500")
-        let asia = ArtikelKategorie(name: "Asia", standardSymbol: "fork.knife", standardFarbeHex: "#FF3B30")
+        let sossen = Abteilung(name: "Soßen", standardSymbol: "drop.fill", standardFarbeHex: "#FF9500")
+        let asia = Abteilung(name: "Asia", standardSymbol: "fork.knife", standardFarbeHex: "#FF3B30")
         context.insert(sossen)
         context.insert(asia)
         let geschaeft = Geschaeft(name: "Aldi", typen: [lebensmittelTyp()])
         context.insert(geschaeft)
         let sojasauce = Artikel(
-            name: "Sojasauce", symbolName: "drop.fill", farbeHex: "#FF9500", kategorien: [sossen, asia]
+            name: "Sojasauce", symbolName: "drop.fill", farbeHex: "#FF9500", abteilungen: [sossen, asia]
         )
         context.insert(sojasauce)
 
@@ -357,63 +357,63 @@ struct EinkaufsvorgangTests {
 
         // Getappt aus dem "Asia"-Abschnitt, nicht aus dem (ggf. "führenden")
         // "Soßen"-Abschnitt.
-        einkauf.artikelAbhaken(sojasauce, context: context, kategorie: asia)
+        einkauf.artikelAbhaken(sojasauce, context: context, abteilung: asia)
 
-        #expect(einkauf.kaufEintraege.first?.kategorie == asia)
+        #expect(einkauf.kaufEintraege.first?.abteilung == asia)
     }
 
-    /// Ohne explizite Kategorie (Belegscan, Preisschild-Scan, Sync-Import) bleibt
-    /// das bisherige Verhalten über ``Artikel/fuehrendeKategorie(inGeschaeft:context:)``
+    /// Ohne explizite Abteilung (Belegscan, Preisschild-Scan, Sync-Import) bleibt
+    /// das bisherige Verhalten über ``Artikel/fuehrendeAbteilung(inGeschaeft:context:)``
     /// erhalten.
     @Test
-    func ohneExpliziteKategorieWirdWeiterhinDieFuehrendeVerwendet() throws {
+    func ohneExpliziteAbteilungWirdWeiterhinDieFuehrendeVerwendet() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
-        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        let obst = Abteilung(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
         context.insert(obst)
         let geschaeft = Geschaeft(name: "Testladen", typen: [lebensmittelTyp()])
         context.insert(geschaeft)
-        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst])
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", abteilungen: [obst])
         context.insert(apfel)
         let einkauf = Einkaufsvorgang(geschaeft: geschaeft)
         context.insert(einkauf)
 
         einkauf.artikelAbhaken(apfel, context: context)
 
-        #expect(einkauf.kaufEintraege.first?.kategorie == obst)
+        #expect(einkauf.kaufEintraege.first?.abteilung == obst)
     }
 
     /// Regressionstest für die Ursache des "Anzeige springt hin und her"-Bugs:
-    /// ``Artikel/kategorien`` ist eine ungeordnete SwiftData-Relationship, deren
+    /// ``Artikel/abteilungen`` ist eine ungeordnete SwiftData-Relationship, deren
     /// Enumerationsreihenfolge sich zwischen Fetches/Sync-Merges ändern kann.
-    /// ``Artikel/fuehrendeKategorie(inGeschaeft:context:)`` muss deshalb
+    /// ``Artikel/fuehrendeAbteilung(inGeschaeft:context:)`` muss deshalb
     /// unabhängig von der Initialisierungs-/Zuweisungsreihenfolge immer
-    /// dieselbe Kategorie liefern (hier: niedrigerer ``ArtikelKategorie/sortIndex``
+    /// dieselbe Abteilung liefern (hier: niedrigerer ``Abteilung/sortIndex``
     /// gewinnt).
     @Test
-    func fuehrendeKategorieIstUnabhaengigVonDerZuweisungsreihenfolge() throws {
+    func fuehrendeAbteilungIstUnabhaengigVonDerZuweisungsreihenfolge() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
-        let drogerie = ArtikelKategorie(name: "Drogerie", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE", sortIndex: 0)
-        let reise = ArtikelKategorie(name: "Reisebedarf", standardSymbol: "airplane", standardFarbeHex: "#5AC8FA", sortIndex: 1)
+        let drogerie = Abteilung(name: "Drogerie", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE", sortIndex: 0)
+        let reise = Abteilung(name: "Reisebedarf", standardSymbol: "airplane", standardFarbeHex: "#5AC8FA", sortIndex: 1)
         context.insert(drogerie)
         context.insert(reise)
 
-        let ohropaxA = Artikel(name: "Ohropax A", symbolName: "sparkles", farbeHex: "#AF52DE", kategorien: [drogerie, reise])
-        let ohropaxB = Artikel(name: "Ohropax B", symbolName: "sparkles", farbeHex: "#AF52DE", kategorien: [reise, drogerie])
+        let ohropaxA = Artikel(name: "Ohropax A", symbolName: "sparkles", farbeHex: "#AF52DE", abteilungen: [drogerie, reise])
+        let ohropaxB = Artikel(name: "Ohropax B", symbolName: "sparkles", farbeHex: "#AF52DE", abteilungen: [reise, drogerie])
         context.insert(ohropaxA)
         context.insert(ohropaxB)
 
-        #expect(ohropaxA.fuehrendeKategorie(inGeschaeft: nil, context: context) == drogerie)
-        #expect(ohropaxB.fuehrendeKategorie(inGeschaeft: nil, context: context) == drogerie)
+        #expect(ohropaxA.fuehrendeAbteilung(inGeschaeft: nil, context: context) == drogerie)
+        #expect(ohropaxB.fuehrendeAbteilung(inGeschaeft: nil, context: context) == drogerie)
     }
 
     /// Regressionstest (Code-Review-Fund): eine remote materialisierte
     /// `KaufEintrag` ohne Index (`ursprungsGeraeteID: "test-peer"`, siehe
-    /// `SyncImportService`) darf `naechsterKategorieBesuchsIndex` nicht dazu
-    /// verleiten, für eine Kategorie, die bereits einen echten Index hat,
+    /// `SyncImportService`) darf `naechsterAbteilungBesuchsIndex` nicht dazu
+    /// verleiten, für eine Abteilung, die bereits einen echten Index hat,
     /// einen zweiten (Duplikat-)Index zu vergeben — sonst zerfällt eine
     /// Abteilung in der ``AbteilungsDistanzService``-Distanzmatrix in zwei
     /// Besuchs-Slots. Der ohne-Index-Eintrag wird bewusst ZUERST angelegt,
@@ -421,17 +421,17 @@ struct EinkaufsvorgangTests {
     /// SwiftData-Relationship, folgt vor jedem Save/Fetch typischerweise der
     /// Einfüge-Reihenfolge) ihn zuerst träfe, wäre der Nil-Filter nicht da.
     @Test
-    func naechsterKategorieBesuchsIndexIgnoriertEintraegeOhneIndex() throws {
+    func naechsterAbteilungBesuchsIndexIgnoriertEintraegeOhneIndex() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
-        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        let obst = Abteilung(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
         context.insert(obst)
         let geschaeft = Geschaeft(name: "Testladen", typen: [lebensmittelTyp()])
         context.insert(geschaeft)
-        let birne = Artikel(name: "Birne", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst])
-        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst])
-        let kirsche = Artikel(name: "Kirsche", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst])
+        let birne = Artikel(name: "Birne", symbolName: "carrot.fill", farbeHex: "#34C759", abteilungen: [obst])
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", abteilungen: [obst])
+        let kirsche = Artikel(name: "Kirsche", symbolName: "carrot.fill", farbeHex: "#34C759", abteilungen: [obst])
         context.insert(birne)
         context.insert(apfel)
         context.insert(kirsche)
@@ -441,15 +441,15 @@ struct EinkaufsvorgangTests {
 
         // Reihenfolge ist Teil der Regression: Birne zuerst (kein Index), dann
         // Apfel (bekommt den ersten echten Index, 0), dann Kirsche — muss
-        // ebenfalls 0 bekommen (dieselbe Kategorie), nicht fälschlich 1.
+        // ebenfalls 0 bekommen (dieselbe Abteilung), nicht fälschlich 1.
         einkauf.artikelAbhakenOhneEventAufzeichnung(birne, context: context, ursprungsGeraeteID: "test-peer")
         einkauf.artikelAbhaken(apfel, context: context)
         einkauf.artikelAbhaken(kirsche, context: context)
 
         let apfelEintrag = einkauf.kaufEintraege.first { $0.artikel == apfel }
         let kirscheEintrag = einkauf.kaufEintraege.first { $0.artikel == kirsche }
-        #expect(apfelEintrag?.kategorieBesuchsIndex == 0)
-        #expect(kirscheEintrag?.kategorieBesuchsIndex == 0)
+        #expect(apfelEintrag?.abteilungBesuchsIndex == 0)
+        #expect(kirscheEintrag?.abteilungBesuchsIndex == 0)
     }
 
     /// GitHub #67-Erweiterung: Zwei gleichzeitig offene Vorgänge für dieselbe

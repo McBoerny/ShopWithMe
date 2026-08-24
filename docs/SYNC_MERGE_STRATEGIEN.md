@@ -25,11 +25,11 @@ Vollständigkeit); Zeilen 1–18 decken Bereich B/C/D ab.
 | 0 | `SyncKonfliktAufloesung.gewinnt(_:ueber:)` | — | **Priority-LWW**: „Entfernen schlägt alles" > „Abwählen schlägt Abhaken" > höherer Lamport-Zähler | A | Keine (reine Vergleichsfunktion) |
 | 1 | `mergePaket(...)` | 374 | **Orchestrator** (Paket-Eingabeform seit #82): ruft alle Domain-Funktionen in Abhängigkeitsreihenfolge auf; keine eigene Merge-Logik | B/C/D | `SyncPeerInfo` aktualisieren |
 | 2 | `merge(_ snapshot:...)` | 440 | **Orchestrator** (Legacy-Eingabeform, nur lokaler Backup-/Wiederherstellungspfad via `SyncErsetzenService`): identische Aufrufreihenfolge wie `mergePaket`, aber Einzel-`SyncSnapshot` statt Pakete | B/C/D | `SyncPeerInfo` aktualisieren |
-| 3 | `mergeTombstones` | 497 | **Tombstone-gated-delete**: für jeden Remote-Tombstone lokalen Tombstone registrieren + Objekt löschen falls vorhanden; Alias-Auflösung vorgeschaltet | B | Löscht lokale Objekte (`Geschaeft`, `Artikel`, `ArtikelKategorie`, `Einkaufsliste`, `KaufEintrag`) |
+| 3 | `mergeTombstones` | 497 | **Tombstone-gated-delete**: für jeden Remote-Tombstone lokalen Tombstone registrieren + Objekt löschen falls vorhanden; Alias-Auflösung vorgeschaltet | B | Löscht lokale Objekte (`Geschaeft`, `Artikel`, `Abteilung`, `Einkaufsliste`, `KaufEintrag`) |
 | 4 | `mergeGeschaeftsTypen` | 594 | **Identity-Key fetch-or-create by Name**: kein Feld-Reconciliation — `GeschaeftTyp` existiert oder wird neu angelegt, kein Merge-Inhalt | B | — |
-| 5 | `mergeArtikelKategorien` | 649 | **Name/ID-Match + Set-Union** (`geschaeftsTypen`): bestehende Kategorie bekommt Typen-Vereinigung; Alias-Auflösung | B | — |
-| 6 | `mergeGeschaefte` | 687 | **Komplex**: Nil-Fill ×4 (`lat`/`lon`/`adresse`/`webseite`) + Set-Union ×5 (Kategorien, Typen, Öffnungszeiten…) + G-Counter (`SyncPeerZaehlerStand`) + OR-Merge (`umbauVerdacht`) + bewusst nicht gemergtes Feld (`unauffaelligeEinkaeufeInFolge`) + Ambiguitäts-Deferral | B | `SyncAbgleichKandidat` anlegen bei Ambiguität |
-| 7 | `mergeArtikel` | 800 | **Name-Match + Set-Union** (`kategorien`) + Nil-Fill (`notiz`) + Ambiguitäts-Deferral | B | `SyncAbgleichKandidat` anlegen bei Ambiguität |
+| 5 | `mergeAbteilungen` | 649 | **Name/ID-Match + Set-Union** (`geschaeftsTypen`): bestehende Abteilung bekommt Typen-Vereinigung; Alias-Auflösung | B | — |
+| 6 | `mergeGeschaefte` | 687 | **Komplex**: Nil-Fill ×4 (`lat`/`lon`/`adresse`/`webseite`) + Set-Union ×5 (Abteilungen, Typen, Öffnungszeiten…) + G-Counter (`SyncPeerZaehlerStand`) + OR-Merge (`umbauVerdacht`) + bewusst nicht gemergtes Feld (`unauffaelligeEinkaeufeInFolge`) + Ambiguitäts-Deferral | B | `SyncAbgleichKandidat` anlegen bei Ambiguität |
+| 7 | `mergeArtikel` | 800 | **Name-Match + Set-Union** (`abteilungen`) + Nil-Fill (`notiz`) + Ambiguitäts-Deferral | B | `SyncAbgleichKandidat` anlegen bei Ambiguität |
 | 8 | `mergeProdukte` | 886 | **Match innerhalb `Artikel`** + zweistufiger Nil-Fill (`elternProdukt`, rekursiv); bewusst *kein* Ambiguitäts-Deferral (Produkte werden selten manuell angelegt, kein UX-Klärungsbedarf) | B | — |
 | 9 | `mergeProduktnamen` | 930 | **Tupel-Union** nach (`produkt`, `geschaeft`, `name`): Existenz-Fakt, kein Inhalt zu mergen | B | — |
 | 10 | `mergeEinkaufslisten` | 963 | **Name-Match** (seit #52 statt ID-Match) + Ambiguitäts-Deferral | B | `SyncAbgleichKandidat` anlegen bei Ambiguität |
@@ -55,7 +55,7 @@ geschäftsunabhängige Semantik trägt.
 
 Drei Funktionen (Zeilen 6, 7, 10) lösen Konflikte **nicht automatisch auf**, sondern
 legen einen `SyncAbgleichKandidat` für eine manuelle Nutzerbestätigung in
-`SyncOrdnerSettingsView` an. Das ist keine CRDT-Kategorie im engeren Sinn, sondern
+`SyncOrdnerSettingsView` an. Das ist keine CRDT-Abteilung im engeren Sinn, sondern
 ein bewusstes Human-in-the-Loop-Muster: wenn ein automatisches Merge zu einem falschen
 Ergebnis führen könnte (z.B. zwei `Einkaufsliste "Wocheneinkauf"` auf verschiedenen
 Geräten, die tatsächlich verschiedene Listen meinen), ist die Deferral-Entscheidung

@@ -105,7 +105,7 @@ umgesetzt — nur die Lösch-Logik oben (damals noch auf `KaufEintrag`).
 1. Preishistorie-Datensatz (Anzeige in `ArtikelEditView`/`PreisHistorieZeile`/
    `GeschaeftDetailView`).
 2. Operative Grundlage des laufenden `Einkaufsvorgang`s — `artikel`, `geschaeft`,
-   `kategorie` und `einkaufsvorgang` sind echte SwiftData-`@Relationship`s
+   `abteilung` und `einkaufsvorgang` sind echte SwiftData-`@Relationship`s
    (`Einkaufsvorgang.kaufEintraege` z.B. mit `deleteRule: .cascade`).
 
 SwiftData unterstützt keine `@Relationship`s, deren Zielobjekt in einem *anderen*

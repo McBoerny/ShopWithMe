@@ -7,7 +7,7 @@ import Testing
 struct ArtikelVerfuegbarkeitServiceTests {
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {
         let schema = Schema([
-            Artikel.self, ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self,
+            Artikel.self, Abteilung.self, Geschaeft.self, GeschaeftTyp.self,
             Einkaufsvorgang.self, KaufEintrag.self,
             Einkaufsliste.self, EinkaufslistenEintrag.self, SyncEvent.self,
             ArtikelGeschaeftVerfuegbarkeit.self, ArtikelListenKauf.self,
@@ -21,21 +21,21 @@ struct ArtikelVerfuegbarkeitServiceTests {
     private func sonstigesTyp() -> GeschaeftTyp { GeschaeftTyp(name: "Sonstiges", symbolName: "shippingbox.fill") }
 
     @Test
-    func geschaeftMitDirektZugeordneterKategorie() throws {
+    func geschaeftMitDirektZugeordneterAbteilung() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
-        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
-        let drogerie = ArtikelKategorie(name: "Drogerie", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
+        let obst = Abteilung(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        let drogerie = Abteilung(name: "Drogerie", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
         context.insert(obst)
         context.insert(drogerie)
 
         let geschaeft = Geschaeft(name: "Rewe", typen: [lebensmittelTyp()])
         context.insert(geschaeft)
-        geschaeft.kategorien = [obst]
+        geschaeft.abteilungen = [obst]
 
-        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst])
-        let shampoo = Artikel(name: "Shampoo", symbolName: "sparkles", farbeHex: "#AF52DE", kategorien: [drogerie])
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", abteilungen: [obst])
+        let shampoo = Artikel(name: "Shampoo", symbolName: "sparkles", farbeHex: "#AF52DE", abteilungen: [drogerie])
         context.insert(apfel)
         context.insert(shampoo)
 
@@ -48,13 +48,13 @@ struct ArtikelVerfuegbarkeitServiceTests {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
-        let sonstiges = ArtikelKategorie(name: "Sonstiges", standardSymbol: "shippingbox.fill", standardFarbeHex: "#8E8E93")
+        let sonstiges = Abteilung(name: "Sonstiges", standardSymbol: "shippingbox.fill", standardFarbeHex: "#8E8E93")
         context.insert(sonstiges)
 
         let kiosk = Geschaeft(name: "Kiosk", typen: [sonstigesTyp()])
         context.insert(kiosk)
 
-        let kaugummi = Artikel(name: "Kaugummi", symbolName: "shippingbox.fill", farbeHex: "#8E8E93", kategorien: [sonstiges])
+        let kaugummi = Artikel(name: "Kaugummi", symbolName: "shippingbox.fill", farbeHex: "#8E8E93", abteilungen: [sonstiges])
         context.insert(kaugummi)
 
         #expect(!ArtikelVerfuegbarkeitService.istVerfuegbar(kaugummi, in: kiosk, context: context))
@@ -71,7 +71,7 @@ struct ArtikelVerfuegbarkeitServiceTests {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
-        let sonstiges = ArtikelKategorie(name: "Sonstiges", standardSymbol: "shippingbox.fill", standardFarbeHex: "#8E8E93")
+        let sonstiges = Abteilung(name: "Sonstiges", standardSymbol: "shippingbox.fill", standardFarbeHex: "#8E8E93")
         context.insert(sonstiges)
 
         let kiosk = Geschaeft(name: "Kiosk", typen: [sonstigesTyp()])
@@ -79,7 +79,7 @@ struct ArtikelVerfuegbarkeitServiceTests {
         context.insert(kiosk)
         context.insert(anderesGeschaeft)
 
-        let kaugummi = Artikel(name: "Kaugummi", symbolName: "shippingbox.fill", farbeHex: "#8E8E93", kategorien: [sonstiges])
+        let kaugummi = Artikel(name: "Kaugummi", symbolName: "shippingbox.fill", farbeHex: "#8E8E93", abteilungen: [sonstiges])
         context.insert(kaugummi)
 
         let einkauf = Einkaufsvorgang(geschaeft: anderesGeschaeft)
@@ -100,11 +100,11 @@ struct ArtikelVerfuegbarkeitServiceTests {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
-        let sonstiges = ArtikelKategorie(name: "Sonstiges", standardSymbol: "shippingbox.fill", standardFarbeHex: "#8E8E93")
+        let sonstiges = Abteilung(name: "Sonstiges", standardSymbol: "shippingbox.fill", standardFarbeHex: "#8E8E93")
         context.insert(sonstiges)
         let kiosk = Geschaeft(name: "Kiosk", typen: [sonstigesTyp()])
         context.insert(kiosk)
-        let kaugummi = Artikel(name: "Kaugummi", symbolName: "shippingbox.fill", farbeHex: "#8E8E93", kategorien: [sonstiges])
+        let kaugummi = Artikel(name: "Kaugummi", symbolName: "shippingbox.fill", farbeHex: "#8E8E93", abteilungen: [sonstiges])
         context.insert(kaugummi)
 
         let liste = Einkaufsliste(name: "Urlaub")

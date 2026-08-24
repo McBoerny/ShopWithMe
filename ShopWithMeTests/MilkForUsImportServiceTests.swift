@@ -9,7 +9,7 @@ struct MilkForUsImportServiceTests {
     /// den Container selbst am Leben halten, solange der Context benutzt wird.
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {
         let schema = Schema([
-            Artikel.self, ArtikelKategorie.self, Geschaeft.self,
+            Artikel.self, Abteilung.self, Geschaeft.self,
             Einkaufsvorgang.self, KaufEintrag.self,
             Einkaufsliste.self, EinkaufslistenEintrag.self, SyncEvent.self,
             Produkt.self, Produktname.self,
@@ -57,22 +57,22 @@ struct MilkForUsImportServiceTests {
         #expect(eintraege[1].kategorieName == "Kategorie")
     }
 
-    // MARK: - Kategorie-Zuordnung
+    // MARK: - Abteilung-Zuordnung
 
     @Test
     func exakterNamensTrefferWirdVerwendet() async throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
-        let getraenke = ArtikelKategorie(name: "Getränke", standardSymbol: "waterbottle.fill", standardFarbeHex: "#007AFF")
+        let getraenke = Abteilung(name: "Getränke", standardSymbol: "waterbottle.fill", standardFarbeHex: "#007AFF")
         context.insert(getraenke)
 
-        let zuordnung = await MilkForUsImportService.vorschlag(fuerKategorieName: "getränke", bestehendeKategorien: [getraenke])
+        let zuordnung = await MilkForUsImportService.vorschlag(fuerAbteilungName: "getränke", bestehendeAbteilungen: [getraenke])
         #expect(zuordnung == .bestehend(getraenke))
     }
 
     @Test
     func leererKategoriennameWirdSofortAufSonstigesGelegt() async throws {
-        let zuordnung = await MilkForUsImportService.vorschlag(fuerKategorieName: "", bestehendeKategorien: [])
+        let zuordnung = await MilkForUsImportService.vorschlag(fuerAbteilungName: "", bestehendeAbteilungen: [])
         #expect(zuordnung == .sonstige)
     }
 
@@ -83,7 +83,7 @@ struct MilkForUsImportServiceTests {
         // FoundationModels auf dem Testsystem verfügbar ist. Deterministischer
         // als ein Test, der eine bestimmte KI-Antwort voraussetzt (die KI ist z.B.
         // im Simulator durchaus verfügbar und liefert dann reale Antworten).
-        let zuordnung = await MilkForUsImportService.vorschlag(fuerKategorieName: "Frühstück", bestehendeKategorien: [])
+        let zuordnung = await MilkForUsImportService.vorschlag(fuerAbteilungName: "Frühstück", bestehendeAbteilungen: [])
         #expect(zuordnung == .neuAnlegen(name: "Frühstück"))
     }
 
@@ -103,13 +103,13 @@ struct MilkForUsImportServiceTests {
         )
         await MilkForUsImportService.uebernehmen(gruppen: [gruppe], in: liste, context: context)
 
-        let kategorien = try context.fetch(FetchDescriptor<ArtikelKategorie>())
-        #expect(kategorien.map(\.name) == ["Frühstück"])
+        let abteilungen = try context.fetch(FetchDescriptor<Abteilung>())
+        #expect(abteilungen.map(\.name) == ["Frühstück"])
 
         let artikel = try context.fetch(FetchDescriptor<Artikel>())
         #expect(artikel.count == 1)
         #expect(artikel[0].name == "Nutella")
-        #expect(artikel[0].kategorie?.name == "Frühstück")
+        #expect(artikel[0].abteilung?.name == "Frühstück")
         #expect(liste.eintraege.count == 1)
     }
 
@@ -117,9 +117,9 @@ struct MilkForUsImportServiceTests {
     func bestehenderArtikelWirdNurZurListeHinzugefuegtOhneDuplikat() async throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
-        let milchprodukte = ArtikelKategorie(name: "Milchprodukte & Eier", standardSymbol: "refrigerator.fill", standardFarbeHex: "#5AC8FA")
+        let milchprodukte = Abteilung(name: "Milchprodukte & Eier", standardSymbol: "refrigerator.fill", standardFarbeHex: "#5AC8FA")
         context.insert(milchprodukte)
-        let bestehenderArtikel = Artikel(name: "Gouda", symbolName: "cart.fill", farbeHex: "#FF3B30", kategorien: [milchprodukte])
+        let bestehenderArtikel = Artikel(name: "Gouda", symbolName: "cart.fill", farbeHex: "#FF3B30", abteilungen: [milchprodukte])
         context.insert(bestehenderArtikel)
         let liste = Einkaufsliste(name: "Test")
         context.insert(liste)
@@ -133,7 +133,7 @@ struct MilkForUsImportServiceTests {
 
         let artikel = try context.fetch(FetchDescriptor<Artikel>())
         #expect(artikel.count == 1)
-        #expect(artikel[0].kategorie === milchprodukte)
+        #expect(artikel[0].abteilung === milchprodukte)
         #expect(liste.eintraege.count == 1)
     }
 
@@ -146,9 +146,9 @@ struct MilkForUsImportServiceTests {
     func produktnameTrefferVerwendetBestehendenArtikelStattDuplikat() async throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
-        let milchprodukte = ArtikelKategorie(name: "Milchprodukte & Eier", standardSymbol: "refrigerator.fill", standardFarbeHex: "#5AC8FA")
+        let milchprodukte = Abteilung(name: "Milchprodukte & Eier", standardSymbol: "refrigerator.fill", standardFarbeHex: "#5AC8FA")
         context.insert(milchprodukte)
-        let bestehenderArtikel = Artikel(name: "Kindermilch", symbolName: "cart.fill", farbeHex: "#FF3B30", kategorien: [milchprodukte])
+        let bestehenderArtikel = Artikel(name: "Kindermilch", symbolName: "cart.fill", farbeHex: "#FF3B30", abteilungen: [milchprodukte])
         context.insert(bestehenderArtikel)
         let produkt = Produkt(name: "Alete Kindermilch 3", artikel: bestehenderArtikel)
         context.insert(produkt)
@@ -187,7 +187,7 @@ struct MilkForUsImportServiceTests {
         await MilkForUsImportService.uebernehmen(gruppen: [gruppe], in: liste, context: context)
 
         #expect(liste.eintraege.count == 1)
-        // Die Kategorie darf beim zweiten Durchlauf nicht erneut angelegt werden,
+        // Die Abteilung darf beim zweiten Durchlauf nicht erneut angelegt werden,
         // obwohl `.neuAnlegen` weiterhin der Zuordnungsvorschlag ist — die erste
         // Übernahme hat sie ja bereits erstellt. Da `uebernehmen` den Vorschlag
         // unverändert respektiert, wird hier ganz bewusst geprüft, dass zumindest
@@ -209,13 +209,13 @@ struct MilkForUsImportServiceTests {
         )
         await MilkForUsImportService.uebernehmen(gruppen: [leereGruppe], in: liste, context: context)
 
-        #expect(try context.fetchCount(FetchDescriptor<ArtikelKategorie>()) == 0)
+        #expect(try context.fetchCount(FetchDescriptor<Abteilung>()) == 0)
         #expect(liste.eintraege.isEmpty)
     }
 
     /// Regressionstest für die Chunk-Verarbeitung (Performance-/Fortschritts-Fund
     /// 2026-08-24, sehr große MilkForUs-Listen): eine einzelne `.neuAnlegen`-Gruppe
-    /// mit mehr Artikeln als die interne `chunkGroesse` (25) darf ihre Kategorie
+    /// mit mehr Artikeln als die interne `chunkGroesse` (25) darf ihre Abteilung
     /// trotz Aufteilung auf mehrere Micro-Lease-Chunks nur EINMAL anlegen.
     @Test
     func neuanlegenGruppeUeberMehrereChunksLegtKategorieNurEinmalAn() async throws {
@@ -232,8 +232,8 @@ struct MilkForUsImportServiceTests {
         )
         await MilkForUsImportService.uebernehmen(gruppen: [gruppe], in: liste, context: context)
 
-        let kategorien = try context.fetch(FetchDescriptor<ArtikelKategorie>())
-        #expect(kategorien.map(\.name) == ["Große Abteilung"])
+        let abteilungen = try context.fetch(FetchDescriptor<Abteilung>())
+        #expect(abteilungen.map(\.name) == ["Große Abteilung"])
         #expect(try context.fetchCount(FetchDescriptor<Artikel>()) == 60)
         #expect(liste.eintraege.count == 60)
     }
@@ -276,7 +276,7 @@ struct MilkForUsImportServiceTests {
         var meldungen: [(Int, Int)] = []
         let gruppen = await MilkForUsImportService.gruppenMitVorschlag(
             aus: eintraege,
-            bestehendeKategorien: [],
+            bestehendeAbteilungen: [],
             fortschritt: { erledigt, gesamt in
                 meldungen.append((erledigt, gesamt))
             }

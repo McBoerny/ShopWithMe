@@ -4,11 +4,11 @@ import SwiftData
 /// Verwaltung der Standard-Abteilungen je ``GeschaeftTyp`` (GitHub #5) —
 /// aufrufbar aus ``SettingsView``.
 ///
-/// Eine hier markierte ``ArtikelKategorie`` gilt automatisch für jedes ``Geschaeft``
+/// Eine hier markierte ``Abteilung`` gilt automatisch für jedes ``Geschaeft``
 /// mit passendem Typ als verfügbar (siehe
-/// ``Geschaeft/verfuegbareKategorien(alleKategorien:)``), ohne dass sie dem
+/// ``Geschaeft/verfuegbareAbteilungen(alleAbteilungen:)``), ohne dass sie dem
 /// einzelnen Geschäft manuell zugeordnet werden muss. Die manuelle Zuordnung
-/// einzelner Kategorien zu einem konkreten Geschäft (``AbteilungHinzufuegenSheet``)
+/// einzelner Abteilungen zu einem konkreten Geschäft (``AbteilungHinzufuegenSheet``)
 /// bleibt davon unabhängig weiterhin möglich.
 struct GeschaeftsTypenVerwaltungView: View {
     @Environment(\.modelContext) private var modelContext
@@ -23,7 +23,7 @@ struct GeschaeftsTypenVerwaltungView: View {
         List {
             AlphabetischeListenSektion(sortierteTypen, name: \.name) { typ in
                 NavigationLink {
-                    GeschaeftsTypKategorienView(typ: typ)
+                    GeschaeftsTypAbteilungenView(typ: typ)
                 } label: {
                     Label(typ.name, systemImage: typ.symbolName)
                 }
@@ -48,36 +48,36 @@ struct GeschaeftsTypenVerwaltungView: View {
 
 /// Bearbeitet Name, Symbol und Farbe eines ``GeschaeftTyp`` (GitHub #40) sowie die
 /// ihm zugeordneten Standard-Abteilungen — Checkmark markiert die aktuell
-/// zugeordneten Kategorien, analog dem Mehrfachauswahl-Muster in
+/// zugeordneten Abteilungen, analog dem Mehrfachauswahl-Muster in
 /// ``ArtikelEditView``. Zeigt die Liste alphabetisch, mit bereits ausgewählten
-/// Kategorien zuerst (``sortierteKategorien``). Kategorien, die im laufenden
+/// Abteilungen zuerst (``sortierteAbteilungen``). Abteilungen, die im laufenden
 /// Aufruf von ``kiVorschlagAnfordern()`` markiert wurden, sind zusätzlich mit
 /// „KI-Vorschlag" gekennzeichnet — bewusst nur für die Dauer dieser Sitzung
-/// (``kiVorgeschlageneKategorieIDs``), kein zusätzliches persistentes Feld.
-private struct GeschaeftsTypKategorienView: View {
+/// (``kiVorgeschlageneAbteilungIDs``), kein zusätzliches persistentes Feld.
+private struct GeschaeftsTypAbteilungenView: View {
     @Bindable var typ: GeschaeftTyp
 
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \ArtikelKategorie.sortIndex) private var alleKategorien: [ArtikelKategorie]
-    @State private var zeigeNeueKategorie = false
+    @Query(sort: \Abteilung.sortIndex) private var alleAbteilungen: [Abteilung]
+    @State private var zeigeNeueAbteilung = false
     @State private var kiVorschlagLaeuft = false
     @State private var kiFehlermeldung: String?
-    @State private var kiVorgeschlageneKategorieIDs: Set<PersistentIdentifier> = []
+    @State private var kiVorgeschlageneAbteilungIDs: Set<PersistentIdentifier> = []
 
-    /// ``alleKategorien`` alphabetisch, aber mit den für ``typ`` bereits
-    /// ausgewählten Kategorien zuerst — eine sich beim Umschalten sofort dynamisch
+    /// ``alleAbteilungen`` alphabetisch, aber mit den für ``typ`` bereits
+    /// ausgewählten Abteilungen zuerst — eine sich beim Umschalten sofort dynamisch
     /// anpassende Liste, in der auf einen Blick erkennbar ist, welche Abteilungen
     /// diesem Geschäftstyp bereits zugeordnet sind (GitHub #14).
-    private var sortierteKategorien: [ArtikelKategorie] {
-        let (ausgewaehlt, uebrige) = alleKategorien.reduce(into: ([ArtikelKategorie](), [ArtikelKategorie]())) { ergebnis, kategorie in
-            if kategorie.geschaeftsTypen.contains(typ) {
-                ergebnis.0.append(kategorie)
+    private var sortierteAbteilungen: [Abteilung] {
+        let (ausgewaehlt, uebrige) = alleAbteilungen.reduce(into: ([Abteilung](), [Abteilung]())) { ergebnis, abteilung in
+            if abteilung.geschaeftsTypen.contains(typ) {
+                ergebnis.0.append(abteilung)
             } else {
-                ergebnis.1.append(kategorie)
+                ergebnis.1.append(abteilung)
             }
         }
-        func alphabetisch(_ kategorien: [ArtikelKategorie]) -> [ArtikelKategorie] {
-            kategorien.sorted { $0.name.vergleicheAlphabetisch(mit: $1.name) == .orderedAscending }
+        func alphabetisch(_ abteilungen: [Abteilung]) -> [Abteilung] {
+            abteilungen.sorted { $0.name.vergleicheAlphabetisch(mit: $1.name) == .orderedAscending }
         }
         return alphabetisch(ausgewaehlt) + alphabetisch(uebrige)
     }
@@ -95,20 +95,20 @@ private struct GeschaeftsTypKategorienView: View {
             }
 
             Section {
-                ForEach(sortierteKategorien) { kategorie in
+                ForEach(sortierteAbteilungen) { abteilung in
                     Button {
-                        kategorieToggeln(kategorie)
+                        abteilungToggeln(abteilung)
                     } label: {
                         HStack {
-                            Label(kategorie.name, systemImage: kategorie.standardSymbol)
+                            Label(abteilung.name, systemImage: abteilung.standardSymbol)
                                 .foregroundStyle(.primary)
-                            if kiVorgeschlageneKategorieIDs.contains(kategorie.persistentModelID) {
+                            if kiVorgeschlageneAbteilungIDs.contains(abteilung.persistentModelID) {
                                 Text("KI-Vorschlag")
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
-                            if kategorie.geschaeftsTypen.contains(typ) {
+                            if abteilung.geschaeftsTypen.contains(typ) {
                                 Image(systemName: "checkmark")
                                     .foregroundStyle(Color.accentColor)
                             }
@@ -121,7 +121,7 @@ private struct GeschaeftsTypKategorienView: View {
                 }
 
                 Button {
-                    zeigeNeueKategorie = true
+                    zeigeNeueAbteilung = true
                 } label: {
                     Label("Neue Abteilung anlegen", systemImage: "plus")
                 }
@@ -156,28 +156,28 @@ private struct GeschaeftsTypKategorienView: View {
         .onChange(of: typ.name) { _, _ in typ.markiereGeaendert() }
         .onChange(of: typ.symbolName) { _, _ in typ.markiereGeaendert() }
         .onChange(of: typ.farbeHex) { _, _ in typ.markiereGeaendert() }
-        .sheet(isPresented: $zeigeNeueKategorie) {
-            NeueAbteilungSheet(naechsterSortIndex: (alleKategorien.map(\.sortIndex).max() ?? -1) + 1) { kategorie in
-                kategorie.geschaeftsTypen = kategorie.geschaeftsTypen + [typ]
+        .sheet(isPresented: $zeigeNeueAbteilung) {
+            NeueAbteilungSheet(naechsterSortIndex: (alleAbteilungen.map(\.sortIndex).max() ?? -1) + 1) { abteilung in
+                abteilung.geschaeftsTypen = abteilung.geschaeftsTypen + [typ]
             }
         }
     }
 
-    private func kategorieToggeln(_ kategorie: ArtikelKategorie) {
-        var aktuelle = kategorie.geschaeftsTypen
+    private func abteilungToggeln(_ abteilung: Abteilung) {
+        var aktuelle = abteilung.geschaeftsTypen
         if let index = aktuelle.firstIndex(of: typ) {
             aktuelle.remove(at: index)
         } else {
             aktuelle.append(typ)
         }
-        kategorie.geschaeftsTypen = aktuelle
+        abteilung.geschaeftsTypen = aktuelle
     }
 
     /// Fragt
-    /// ``AISuggestionService/vorschlag(fuerGeschaeftsTypName:bekannteKategorien:)``
-    /// an und markiert die vorgeschlagenen Kategorien für ``typ`` — vorhandene
+    /// ``AISuggestionService/vorschlag(fuerGeschaeftsTypName:bekannteAbteilungen:)``
+    /// an und markiert die vorgeschlagenen Abteilungen für ``typ`` — vorhandene
     /// Namen werden wiederverwendet (case-insensitiver Abgleich), sonst wird eine
-    /// neue ``ArtikelKategorie`` angelegt.
+    /// neue ``Abteilung`` angelegt.
     private func kiVorschlagAnfordern() {
         kiFehlermeldung = nil
         kiVorschlagLaeuft = true
@@ -186,23 +186,23 @@ private struct GeschaeftsTypKategorienView: View {
             do {
                 let vorschlag = try await AISuggestionService.vorschlag(
                     fuerGeschaeftsTypName: typ.name,
-                    bekannteKategorien: alleKategorien.map(\.name)
+                    bekannteAbteilungen: alleAbteilungen.map(\.name)
                 )
                 // Lokale Kopie statt der `@Query`-Momentaufnahme direkt zu lesen:
                 // die aktualisiert sich erst beim nächsten View-Update, nicht
                 // synchron nach `modelContext.insert(...)` — bei einem doppelten
                 // oder sehr ähnlichen Namen im KI-Vorschlag (nichts erzwingt
                 // Eindeutigkeit) würde die zweite Fundstelle die gerade erst
-                // angelegte Kategorie sonst nicht sehen und ein Duplikat anlegen.
-                var bekannteKategorien = alleKategorien
+                // angelegte Abteilung sonst nicht sehen und ein Duplikat anlegen.
+                var bekannteAbteilungen = alleAbteilungen
                 // Nur die Vorschläge DIESES Aufrufs markieren, nicht mit einer
                 // eventuell früheren Markierung derselben Sitzung vermischen
                 // (GitHub #40) — rein session-lokal, kein persistentes Feld.
                 var neuVorgeschlagen: Set<PersistentIdentifier> = []
-                for name in vorschlag.kategorieNamen {
+                for name in vorschlag.abteilungNamen {
                     let getrimmt = name.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !getrimmt.isEmpty else { continue }
-                    if let bestehende = bekannteKategorien.first(where: {
+                    if let bestehende = bekannteAbteilungen.first(where: {
                         $0.name.localizedCaseInsensitiveCompare(getrimmt) == .orderedSame
                     }) {
                         if !bestehende.geschaeftsTypen.contains(typ) {
@@ -210,8 +210,8 @@ private struct GeschaeftsTypKategorienView: View {
                         }
                         neuVorgeschlagen.insert(bestehende.persistentModelID)
                     } else {
-                        let naechsterIndex = (bekannteKategorien.map(\.sortIndex).max() ?? -1) + 1
-                        let neue = ArtikelKategorie(
+                        let naechsterIndex = (bekannteAbteilungen.map(\.sortIndex).max() ?? -1) + 1
+                        let neue = Abteilung(
                             name: getrimmt,
                             standardSymbol: "shippingbox.fill",
                             standardFarbeHex: Color.artikelPalette[0],
@@ -219,11 +219,11 @@ private struct GeschaeftsTypKategorienView: View {
                         )
                         neue.geschaeftsTypen = [typ]
                         modelContext.insert(neue)
-                        bekannteKategorien.append(neue)
+                        bekannteAbteilungen.append(neue)
                         neuVorgeschlagen.insert(neue.persistentModelID)
                     }
                 }
-                kiVorgeschlageneKategorieIDs = neuVorgeschlagen
+                kiVorgeschlageneAbteilungIDs = neuVorgeschlagen
             } catch {
                 kiFehlermeldung = "KI-Vorschlag fehlgeschlagen."
             }
@@ -235,5 +235,5 @@ private struct GeschaeftsTypKategorienView: View {
     NavigationStack {
         GeschaeftsTypenVerwaltungView()
     }
-    .modelContainer(for: [ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self], inMemory: true)
+    .modelContainer(for: [Abteilung.self, Geschaeft.self, GeschaeftTyp.self], inMemory: true)
 }

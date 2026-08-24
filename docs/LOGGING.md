@@ -76,10 +76,10 @@ Um zu vermeiden, dass jeder künftige Mechanismus Dateischreiben, Rotation,
 `os.Logger`-Spiegelung und Share-Sheet-Export neu implementiert, ist ein
 gemeinsamer, mechanismus-unabhängiger `DebugLogWriter`-Baustein vorgesehen:
 
-- Nimmt Ereignisse entgegen (`Kategorie`, `Ereignistyp`, `Details`-String),
+- Nimmt Ereignisse entgegen (`Abteilung`, `Ereignistyp`, `Details`-String),
   unabhängig davon, welcher Mechanismus sie erzeugt.
 - Kapselt: Zwei-Datei-Rotation bei fester Größengrenze, Spiegelung nach
-  `os.Logger` (Subsystem = Bundle-ID, `Category` = übergebene Kategorie, z.B.
+  `os.Logger` (Subsystem = Bundle-ID, `Category` = übergebene Abteilung, z.B.
   `DatabaseConcurrency`), Schreiben auf einer eigenen Queue/einem eigenen
   Actor.
 - Jeder Mechanismus (z.B. `DatabaseDebugLogger`) ist dann ein dünner,
@@ -128,7 +128,7 @@ Live-Test mit mehreren Geräten ausgewertet werden können.
   „Debug-Modus", aktuelle Log-Dateigröße, Button „Log teilen" (Share Sheet),
   Button „Log leeren".
 - **`DatabaseDebugLogger`:** fachlicher Wrapper um den gemeinsamen
-  `DebugLogWriter` (Kategorie `DatabaseConcurrency`), aufgerufen von
+  `DebugLogWriter` (Abteilung `DatabaseConcurrency`), aufgerufen von
   `DatabaseLeaseService`/`DatabaseLocationService` aus an den unten gelisteten
   Ereignis-Punkten.
 
@@ -241,7 +241,7 @@ Annahmen nachjustiert werden können.
   aktuelle Log-Dateigröße, Button „Protokoll teilen" (Share Sheet), Button
   „Protokoll leeren".
 - **`SyncDebugLogger`:** fachlicher Wrapper um den gemeinsamen
-  `DebugLogWriter` (Kategorie `Datensynchronisation`), aufgerufen von
+  `DebugLogWriter` (Abteilung `Datensynchronisation`), aufgerufen von
   `SyncPollingService`, `SyncImportService`, `SyncSnapshotImportService`,
   `SyncExportService` und `SyncSnapshotExportService` an den unten gelisteten
   Ereignis-Punkten.
@@ -288,7 +288,7 @@ aufgegeben statt weiter versucht, siehe `docs/DATENSYNCHRONISATION_VERLAUF.md`
 Abschnitt 15), `sync_snapshot_unveraendert_uebersprungen`/`sync_snapshot_geschrieben`
 (GitHub #70-Nachfolgefrage „welche Änderung löst tatsächlich ein Schreiben
 von `export.json` aus": Details bei beiden ein Diagnose-Text `bereich=Anzahl/KurzHash`
-je Teil-Bereich — `geschaeftsTypen`, `artikelKategorien`, `geschaefte`,
+je Teil-Bereich — `geschaeftsTypen`, `abteilungen`, `geschaefte`,
 `artikel`, `einkaufslisten`, `einkaufslistenEintraege`, `einkaufsvorgaenge`,
 `kaufEintraege`, `warengruppenDistanzen`, `tombstones`; zusätzlich bei
 `sync_snapshot_geschrieben` `vorher=…` mit den ersten 8 Zeichen des zuvor
@@ -452,7 +452,7 @@ GitHub #84" unten) — warum dann noch zwei Log-*Dateien* statt einer?
   eine Protokoll lesen, ohne die Zeilen des jeweils anderen Mechanismus
   manuell herausfiltern zu müssen.
 - **Eine gemeinsame Datei würde neue Kosten verursachen, ohne bestehende
-  Dopplung abzubauen:** entweder ein Kategorie-Präfix je Zeile zum
+  Dopplung abzubauen:** entweder ein Abteilung-Präfix je Zeile zum
   nachträglichen Filtern (zusätzliche Lese-Logik) oder Verzicht auf die
   getrennte Größenrotation je Mechanismus — dann könnte ein sehr aktiver
   Mechanismus (z.B. `sync_snapshot_unveraendert_uebersprungen`, feuert 6× pro
@@ -485,7 +485,7 @@ unabhängig von einer laufenden Debug-Sitzung nachvollziehbar bleiben sollen.
 ### Bausteine
 
 - **`DatenintegritaetsLogger`:** dünner, immer aktiver Wrapper um
-  `DebugLogWriter` (Kategorie `Datenintegritaet`, Datei `datenintegritaet.log`),
+  `DebugLogWriter` (Abteilung `Datenintegritaet`, Datei `datenintegritaet.log`),
   ohne eigenen Schalter.
 - **`DatenintegritaetsService.repariereFallsNoetig(context:)`:** läuft bei
   jedem App-Start, protokolliert jede vorgenommene Reparatur als

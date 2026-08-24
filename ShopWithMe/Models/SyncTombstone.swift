@@ -3,7 +3,7 @@ import SwiftData
 
 /// Merkt eine absichtliche Löschung einer Bereich-B-Entität vor
 /// (Architektur-Revision „Alternative A", Folge aus GitHub #39: gelöschte
-/// ``Geschaeft``e/``Artikel``/``ArtikelKategorie``n kamen zurück, weil der
+/// ``Geschaeft``e/``Artikel``/``Abteilung``en kamen zurück, weil der
 /// additive Bereich-B-Merge nie destruktiv ist — ein Peer, der die Entität
 /// noch in seinem eigenen Snapshot führt, legt sie beim nächsten Sync
 /// unwissentlich neu an).

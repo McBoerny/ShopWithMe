@@ -8,7 +8,7 @@ import SwiftUI
 /// Monolithen, siehe `docs/EXPORT_PAKET_UMBAU.md` und
 /// ``mergePaket(tombstones:stamm:lernen:vorgaenge:preise:kaeufe:geraeteName:peerGeraeteID:erzeugtAm:context:)``)
 /// aus allen fremden Peer-Ordnern und merged Stammdaten (``GeschaeftTyp``,
-/// ``ArtikelKategorie``, ``Geschaeft``, ``Artikel``, ``Einkaufsliste``,
+/// ``Abteilung``, ``Geschaeft``, ``Artikel``, ``Einkaufsliste``,
 /// Bereich B), Historie (``Einkaufsvorgang``, ``KaufEintrag``, Bereich C) und
 /// Lernen (``WarengruppenDistanz``, Bereich D) dependency-geordnet in den
 /// lokalen Bestand — Matching-Bausteine für Bereich B wiederverwendet aus
@@ -24,7 +24,7 @@ import SwiftUI
 /// überschrieben (es gibt keine feldweise Zeitstempel-/Lamport-Ordnung für
 /// Bereich B, die entscheiden könnte, welcher Wert "neuer" ist) — stattdessen
 /// werden nur fehlende Werte ergänzt (`nil` → Remote-Wert) und Mengen
-/// (Kategorien, Typen, ignorierte Artikel, alternative Namen) vereinigt statt
+/// (Abteilungen, Typen, ignorierte Artikel, alternative Namen) vereinigt statt
 /// ersetzt. Die additiven Zähler auf ``Geschaeft`` (Abschnitt 4.2a) haben eine
 /// eigene, dedizierte Regel, siehe ``SyncPeerZaehlerStand``.
 ///
@@ -48,7 +48,7 @@ import SwiftUI
 ///    fehlenden Stand beim nächsten Snapshot-Import nach, statt für immer
 ///    einen Rückstand zu behalten.
 /// 2. ``mergeTombstones(_:context:)`` verhindert, dass ein gelöschtes
-///    ``Geschaeft``/``Artikel``/``ArtikelKategorie``/``Einkaufsliste`` von
+///    ``Geschaeft``/``Artikel``/``Abteilung``/``Einkaufsliste`` von
 ///    einem Peer, der es noch in seinem eigenen Snapshot führt, unwissentlich
 ///    wiederbelebt wird — der bislang rein additive Merge kannte keine
 ///    Löschsemantik.
@@ -207,7 +207,7 @@ enum SyncSnapshotImportService {
             let stamm = await ladeTeil(
                 SyncStammSnapshot.self, von: SyncSnapshotExportService.stammURL(fuerPeer: peerName, in: syncOrdner)
             ) ?? SyncStammSnapshot(
-                geschaeftsTypen: [], artikelKategorien: [], geschaefte: [], artikel: [],
+                geschaeftsTypen: [], abteilungen: [], geschaefte: [], artikel: [],
                 einkaufslisten: [], produkte: [], produktnamen: []
             )
             // GitHub #85: aus `stamm.json` herausgelöst — `nil`/leer bedeutet
@@ -318,7 +318,7 @@ enum SyncSnapshotImportService {
             let neu = Einkaufsliste(name: kandidat.fremderName)
             neu.id = kandidat.fremdeID
             context.insert(neu)
-        case .artikelKategorie, .geschaeftTyp, .einkaufsvorgang, .kaufEintrag, .preispunkt, .produkt, nil:
+        case .abteilung, .geschaeftTyp, .einkaufsvorgang, .kaufEintrag, .preispunkt, .produkt, nil:
             // Nur die drei per Ambiguitäts-Rückstellung erzeugbaren
             // Kandidaten-Arten (siehe ``SyncAbgleichKandidat``) sind hier
             // strukturell erreichbar — die übrigen bleiben explizit
@@ -349,7 +349,7 @@ enum SyncSnapshotImportService {
             var deskriptor = FetchDescriptor<Einkaufsliste>(predicate: #Predicate { $0.id == lokaleID })
             deskriptor.fetchLimit = 1
             (try? context.fetch(deskriptor))?.first?.name = name
-        case .artikelKategorie, .geschaeftTyp, .einkaufsvorgang, .kaufEintrag, .preispunkt, .produkt:
+        case .abteilung, .geschaeftTyp, .einkaufsvorgang, .kaufEintrag, .preispunkt, .produkt:
             // Nur die drei per Ambiguitäts-Rückstellung abgleichbaren
             // Bereich-B-Typen (siehe ``SyncAbgleichKandidat``) können hier
             // ankommen — die übrigen sind strukturell unerreichbar, bleiben
@@ -425,7 +425,7 @@ enum SyncSnapshotImportService {
     /// „Tombstones zuerst" erhalten (siehe Typ-Doku „Architektur-Revision
     /// Alternative A"): `tombstones.json` gilt bewusst nicht nur für Bereich C
     /// (Einkaufsvorgang/KaufEintrag/Preispunkt), sondern auch für
-    /// Stammdaten-Tombstones (Geschäft/Artikel/ArtikelKategorie/Einkaufsliste)
+    /// Stammdaten-Tombstones (Geschäft/Artikel/Abteilung/Einkaufsliste)
     /// — deshalb eine eigene, immer zuerst gelesene Datei statt Bündelung mit
     /// `vorgaenge.json`.
     @MainActor
@@ -452,12 +452,12 @@ enum SyncSnapshotImportService {
         mergeTombstones(tombstones, aliase: aliase, context: context)
 
         let typZuordnung = mergeGeschaeftsTypen(stamm.geschaeftsTypen, context: context)
-        let kategorieZuordnung = mergeArtikelKategorien(stamm.artikelKategorien, typZuordnung: typZuordnung, aliase: aliase, context: context)
+        let abteilungZuordnung = mergeAbteilungen(stamm.abteilungen, typZuordnung: typZuordnung, aliase: aliase, context: context)
         let geschaeftZuordnung = mergeGeschaefte(
-            stamm.geschaefte, typZuordnung: typZuordnung, kategorieZuordnung: kategorieZuordnung,
+            stamm.geschaefte, typZuordnung: typZuordnung, abteilungZuordnung: abteilungZuordnung,
             peerGeraeteID: peerGeraeteID, aliase: aliase, context: context
         )
-        let artikelZuordnung = mergeArtikel(stamm.artikel, kategorieZuordnung: kategorieZuordnung, peerGeraeteID: peerGeraeteID, aliase: aliase, context: context)
+        let artikelZuordnung = mergeArtikel(stamm.artikel, abteilungZuordnung: abteilungZuordnung, peerGeraeteID: peerGeraeteID, aliase: aliase, context: context)
         let produktZuordnung = mergeProdukte(stamm.produkte, artikelZuordnung: artikelZuordnung, aliase: aliase, context: context)
         let listeZuordnung = mergeEinkaufslisten(stamm.einkaufslisten, peerGeraeteID: peerGeraeteID, aliase: aliase, context: context)
         mergeEinkaufslistenEintraege(
@@ -469,7 +469,7 @@ enum SyncSnapshotImportService {
         )
         mergeKaufEintraege(
             kaeufe, artikelZuordnung: artikelZuordnung, einkaufsvorgangZuordnung: einkaufsvorgangZuordnung,
-            geschaeftZuordnung: geschaeftZuordnung, kategorieZuordnung: kategorieZuordnung, peerGeraeteID: peerGeraeteID, context: context
+            geschaeftZuordnung: geschaeftZuordnung, abteilungZuordnung: abteilungZuordnung, peerGeraeteID: peerGeraeteID, context: context
         )
         mergePreispunkte(
             preise.preispunkte, produktZuordnung: produktZuordnung,
@@ -477,7 +477,7 @@ enum SyncSnapshotImportService {
         )
         mergeProduktnamen(stamm.produktnamen, produktZuordnung: produktZuordnung, geschaeftZuordnung: geschaeftZuordnung, context: context)
         mergeWarengruppenDistanzen(
-            lernen.warengruppenDistanzen, geschaeftZuordnung: geschaeftZuordnung, kategorieZuordnung: kategorieZuordnung,
+            lernen.warengruppenDistanzen, geschaeftZuordnung: geschaeftZuordnung, abteilungZuordnung: abteilungZuordnung,
             peerGeraeteID: peerGeraeteID, context: context
         )
         mergeArtikelGeschaeftVerfuegbarkeiten(
@@ -508,12 +508,12 @@ enum SyncSnapshotImportService {
         mergeTombstones(snapshot.tombstones, aliase: aliase, context: context)
 
         let typZuordnung = mergeGeschaeftsTypen(snapshot.geschaeftsTypen, context: context)
-        let kategorieZuordnung = mergeArtikelKategorien(snapshot.artikelKategorien, typZuordnung: typZuordnung, aliase: aliase, context: context)
+        let abteilungZuordnung = mergeAbteilungen(snapshot.abteilungen, typZuordnung: typZuordnung, aliase: aliase, context: context)
         let geschaeftZuordnung = mergeGeschaefte(
-            snapshot.geschaefte, typZuordnung: typZuordnung, kategorieZuordnung: kategorieZuordnung,
+            snapshot.geschaefte, typZuordnung: typZuordnung, abteilungZuordnung: abteilungZuordnung,
             peerGeraeteID: peerGeraeteID, aliase: aliase, context: context
         )
-        let artikelZuordnung = mergeArtikel(snapshot.artikel, kategorieZuordnung: kategorieZuordnung, peerGeraeteID: peerGeraeteID, aliase: aliase, context: context)
+        let artikelZuordnung = mergeArtikel(snapshot.artikel, abteilungZuordnung: abteilungZuordnung, peerGeraeteID: peerGeraeteID, aliase: aliase, context: context)
         let produktZuordnung = mergeProdukte(snapshot.produkte, artikelZuordnung: artikelZuordnung, aliase: aliase, context: context)
         let listeZuordnung = mergeEinkaufslisten(snapshot.einkaufslisten, peerGeraeteID: peerGeraeteID, aliase: aliase, context: context)
         mergeEinkaufslistenEintraege(
@@ -525,7 +525,7 @@ enum SyncSnapshotImportService {
         )
         mergeKaufEintraege(
             snapshot.kaufEintraege, artikelZuordnung: artikelZuordnung, einkaufsvorgangZuordnung: einkaufsvorgangZuordnung,
-            geschaeftZuordnung: geschaeftZuordnung, kategorieZuordnung: kategorieZuordnung, peerGeraeteID: peerGeraeteID, context: context
+            geschaeftZuordnung: geschaeftZuordnung, abteilungZuordnung: abteilungZuordnung, peerGeraeteID: peerGeraeteID, context: context
         )
         mergePreispunkte(
             snapshot.preispunkte, produktZuordnung: produktZuordnung,
@@ -533,7 +533,7 @@ enum SyncSnapshotImportService {
         )
         mergeProduktnamen(snapshot.produktnamen, produktZuordnung: produktZuordnung, geschaeftZuordnung: geschaeftZuordnung, context: context)
         mergeWarengruppenDistanzen(
-            snapshot.warengruppenDistanzen, geschaeftZuordnung: geschaeftZuordnung, kategorieZuordnung: kategorieZuordnung,
+            snapshot.warengruppenDistanzen, geschaeftZuordnung: geschaeftZuordnung, abteilungZuordnung: abteilungZuordnung,
             peerGeraeteID: peerGeraeteID, context: context
         )
         mergeArtikelGeschaeftVerfuegbarkeiten(
@@ -575,8 +575,8 @@ enum SyncSnapshotImportService {
             var deskriptor = FetchDescriptor<Artikel>(predicate: #Predicate { $0.id == id })
             deskriptor.fetchLimit = 1
             if let objekt = try? context.fetch(deskriptor).first { context.delete(objekt) }
-        case .artikelKategorie:
-            var deskriptor = FetchDescriptor<ArtikelKategorie>(predicate: #Predicate { $0.id == id })
+        case .abteilung:
+            var deskriptor = FetchDescriptor<Abteilung>(predicate: #Predicate { $0.id == id })
             deskriptor.fetchLimit = 1
             if let objekt = try? context.fetch(deskriptor).first { context.delete(objekt) }
         case .einkaufsliste:
@@ -633,7 +633,7 @@ enum SyncSnapshotImportService {
     /// tatsächlich etwas ändert (Live-Test-Nachfolgefund, Abschnitt 19): eine
     /// SwiftData-`@Relationship`-Eigenschaft gilt bei JEDER Zuweisung als
     /// verändert, auch wenn der neue Wert inhaltlich identisch zum alten ist —
-    /// die bisherige unbedingte Zuweisung bei ``mergeArtikelKategorien``/
+    /// die bisherige unbedingte Zuweisung bei ``mergeAbteilungen``/
     /// ``mergeGeschaefte``/``vervollstaendige`` erzwang dadurch bei praktisch
     /// jedem Sync-Zyklus ein `context.hasChanges == true` und damit einen
     /// echten `context.save()`, selbst wenn kein Peer tatsächlich etwas Neues
@@ -686,7 +686,7 @@ enum SyncSnapshotImportService {
     }
 
     /// Bündelt den „lokalen Bestand einmal vorab fetchen, bei Neuanlage sofort
-    /// nachführen"-Cache, der sich in ``mergeArtikelKategorien``,
+    /// nachführen"-Cache, der sich in ``mergeAbteilungen``,
     /// ``mergeGeschaefte``, ``mergeArtikel`` und ``mergeEinkaufslisten``
     /// wortgleich wiederholte (GitHub #105) — ohne das Nachführen nach einer
     /// Neuanlage würde ein zweiter passender Remote-Eintrag im selben Batch
@@ -729,31 +729,31 @@ enum SyncSnapshotImportService {
         }
     }
 
-    // MARK: - ArtikelKategorie
+    // MARK: - Abteilung
 
     @MainActor
-    private static func mergeArtikelKategorien(
-        _ remote: [ArtikelKategorieSnapshot], typZuordnung: [UUID: GeschaeftTyp], aliase: [String: [UUID: UUID]], context: ModelContext
-    ) -> [UUID: ArtikelKategorie] {
-        var zuordnung: [UUID: ArtikelKategorie] = [:]
-        var cache = LokalerBestandCache<ArtikelKategorie>(context: context)
-        let geloeschteIDs = SyncTombstoneService.geloeschteIDs(art: SyncEntitaetsArt.artikelKategorie, context: context)
+    private static func mergeAbteilungen(
+        _ remote: [AbteilungSnapshot], typZuordnung: [UUID: GeschaeftTyp], aliase: [String: [UUID: UUID]], context: ModelContext
+    ) -> [UUID: Abteilung] {
+        var zuordnung: [UUID: Abteilung] = [:]
+        var cache = LokalerBestandCache<Abteilung>(context: context)
+        let geloeschteIDs = SyncTombstoneService.geloeschteIDs(art: SyncEntitaetsArt.abteilung, context: context)
         for eintrag in remote {
-            let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(fuer: eintrag.id, art: SyncEntitaetsArt.artikelKategorie, in: aliase)
-            let lokal: ArtikelKategorie
+            let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(fuer: eintrag.id, art: SyncEntitaetsArt.abteilung, in: aliase)
+            let lokal: Abteilung
             if let bekannte = cache[aufgeloesteID] {
                 lokal = bekannte
             } else if let namensTreffer = cache.alle.first(where: { $0.name.localizedCaseInsensitiveCompare(eintrag.name) == .orderedSame }) {
                 if namensTreffer.id != eintrag.id {
                     SyncEntitaetsAliasService.registriere(
-                        entitaetsArt: SyncEntitaetsArt.artikelKategorie, fremdeID: eintrag.id, lokaleID: namensTreffer.id, context: context
+                        entitaetsArt: SyncEntitaetsArt.abteilung, fremdeID: eintrag.id, lokaleID: namensTreffer.id, context: context
                     )
                 }
                 lokal = namensTreffer
             } else {
                 guard !geloeschteIDs.contains(aufgeloesteID) else { continue }
                 let naechsterIndex = (cache.alle.map(\.sortIndex).max() ?? -1) + 1
-                lokal = ArtikelKategorie(
+                lokal = Abteilung(
                     name: eintrag.name, standardSymbol: eintrag.standardSymbol,
                     standardFarbeHex: eintrag.standardFarbeHex, sortIndex: naechsterIndex
                 )
@@ -765,7 +765,7 @@ enum SyncSnapshotImportService {
                 cache.nachfuehren(lokal)
             }
             vereinigeGeordnetFallsNoetig(&lokal.geschaeftsTypen, mit: eintrag.geschaeftsTypIDs.compactMap { typZuordnung[$0] })
-            // Ersetzend statt additiv, siehe ``ArtikelKategorie/lamportZaehler``.
+            // Ersetzend statt additiv, siehe ``Abteilung/lamportZaehler``.
             if eintrag.lamportZaehler > lokal.lamportZaehler {
                 lokal.name = eintrag.name
                 lokal.standardSymbol = eintrag.standardSymbol
@@ -782,7 +782,7 @@ enum SyncSnapshotImportService {
 
     @MainActor
     private static func mergeGeschaefte(
-        _ remote: [GeschaeftSnapshot], typZuordnung: [UUID: GeschaeftTyp], kategorieZuordnung: [UUID: ArtikelKategorie],
+        _ remote: [GeschaeftSnapshot], typZuordnung: [UUID: GeschaeftTyp], abteilungZuordnung: [UUID: Abteilung],
         peerGeraeteID: String, aliase: [String: [UUID: UUID]], context: ModelContext
     ) -> [UUID: Geschaeft] {
         var zuordnung: [UUID: Geschaeft] = [:]
@@ -861,9 +861,9 @@ enum SyncSnapshotImportService {
             if lokal.markenname == nil, let marke = eintrag.markenname { lokal.markenname = marke }
 
             vereinigeGeordnetFallsNoetig(&lokal.typen, mit: eintrag.typIDs.compactMap { typZuordnung[$0] })
-            vereinigeGeordnetFallsNoetig(&lokal.kategorien, mit: eintrag.kategorieIDs.compactMap { kategorieZuordnung[$0] })
+            vereinigeGeordnetFallsNoetig(&lokal.abteilungen, mit: eintrag.abteilungIDs.compactMap { abteilungZuordnung[$0] })
             vereinigeGeordnetFallsNoetig(
-                &lokal.ausgeschlosseneKategorien, mit: eintrag.ausgeschlosseneKategorieIDs.compactMap { kategorieZuordnung[$0] }
+                &lokal.ausgeschlosseneAbteilungen, mit: eintrag.ausgeschlosseneAbteilungIDs.compactMap { abteilungZuordnung[$0] }
             )
             for name in eintrag.alternativeNamen {
                 lokal.alternativenNamenLernen(name)
@@ -906,7 +906,7 @@ enum SyncSnapshotImportService {
 
     @MainActor
     private static func mergeArtikel(
-        _ remote: [ArtikelSnapshot], kategorieZuordnung: [UUID: ArtikelKategorie], peerGeraeteID: String,
+        _ remote: [ArtikelSnapshot], abteilungZuordnung: [UUID: Abteilung], peerGeraeteID: String,
         aliase: [String: [UUID: UUID]], context: ModelContext
     ) -> [UUID: Artikel] {
         var zuordnung: [UUID: Artikel] = [:]
@@ -915,7 +915,7 @@ enum SyncSnapshotImportService {
         for eintrag in remote {
             let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(fuer: eintrag.id, art: SyncEntitaetsArt.artikel, in: aliase)
             if let bekannter = cache[aufgeloesteID] {
-                vervollstaendige(bekannter, mit: eintrag, kategorieZuordnung: kategorieZuordnung)
+                vervollstaendige(bekannter, mit: eintrag, abteilungZuordnung: abteilungZuordnung)
                 zuordnung[eintrag.id] = bekannter
                 continue
             }
@@ -923,7 +923,7 @@ enum SyncSnapshotImportService {
                 SyncEntitaetsAliasService.registriere(
                     entitaetsArt: SyncEntitaetsArt.artikel, fremdeID: eintrag.id, lokaleID: namensTreffer.id, context: context
                 )
-                vervollstaendige(namensTreffer, mit: eintrag, kategorieZuordnung: kategorieZuordnung)
+                vervollstaendige(namensTreffer, mit: eintrag, abteilungZuordnung: abteilungZuordnung)
                 zuordnung[eintrag.id] = namensTreffer
                 continue
             }
@@ -950,7 +950,7 @@ enum SyncSnapshotImportService {
             }
             let neuer = Artikel(
                 name: eintrag.name, symbolName: eintrag.symbolName, farbeHex: eintrag.farbeHex,
-                kategorien: eintrag.kategorieIDs.compactMap { kategorieZuordnung[$0] },
+                abteilungen: eintrag.abteilungIDs.compactMap { abteilungZuordnung[$0] },
                 notiz: eintrag.notiz, einheit: Einheit(rawValue: eintrag.einheit) ?? .stueck, mengenSchritt: eintrag.mengenSchritt
             )
             neuer.id = eintrag.id
@@ -967,9 +967,9 @@ enum SyncSnapshotImportService {
     }
 
     private static func vervollstaendige(
-        _ lokal: Artikel, mit eintrag: ArtikelSnapshot, kategorieZuordnung: [UUID: ArtikelKategorie]
+        _ lokal: Artikel, mit eintrag: ArtikelSnapshot, abteilungZuordnung: [UUID: Abteilung]
     ) {
-        vereinigeGeordnetFallsNoetig(&lokal.kategorien, mit: eintrag.kategorieIDs.compactMap { kategorieZuordnung[$0] })
+        vereinigeGeordnetFallsNoetig(&lokal.abteilungen, mit: eintrag.abteilungIDs.compactMap { abteilungZuordnung[$0] })
         if lokal.notiz == nil { lokal.notiz = eintrag.notiz }
         for name in eintrag.alternativeNamen {
             lokal.alternativenNamenLernen(name)
@@ -986,7 +986,7 @@ enum SyncSnapshotImportService {
 
     // MARK: - Produkt (Bereich B, GitHub #47 Schritt 2/5)
 
-    /// Analog ``mergeArtikel(_:kategorieZuordnung:peerGeraeteID:aliase:context:)``
+    /// Analog ``mergeArtikel(_:abteilungZuordnung:peerGeraeteID:aliase:context:)``
     /// (ID/Alias → exakter Name → Neuanlage), aber der Namensabgleich läuft
     /// **innerhalb desselben, bereits aufgelösten Artikels** statt global —
     /// zwei Produkte mit gleichem Namen unter verschiedenen Artikeln sind
@@ -1183,7 +1183,7 @@ enum SyncSnapshotImportService {
         let istAusDerZeitGefallen = SyncAktualitaetsService.istAusDerZeitGefallen(context: context)
         // GitHub #99: dauerhaftes Faktum, siehe ``ArtikelListenKauf``. Spiegelt
         // den Bestand zu Beginn DIESES Durchlaufs — ein im selben Zyklus per
-        // ``mergeKaufEintraege(_:artikelZuordnung:einkaufsvorgangZuordnung:geschaeftZuordnung:kategorieZuordnung:peerGeraeteID:context:)``/
+        // ``mergeKaufEintraege(_:artikelZuordnung:einkaufsvorgangZuordnung:geschaeftZuordnung:abteilungZuordnung:peerGeraeteID:context:)``/
         // ``mergeArtikelListenKaeufe(_:artikelZuordnung:listeZuordnung:context:)``
         // (beide bewusst SPÄTER in der Aufrufreihenfolge, siehe dortige
         // Typ-Doku) neu eintreffender Beleg wirkt sich erst im nächsten Zyklus
@@ -1713,11 +1713,11 @@ enum SyncSnapshotImportService {
     /// ein fehlender einfach übernommen (Referenzen auf die per Bereich-B
     /// gemergten lokalen Gegenstücke umgebogen).
     ///
-    /// **`kategorieBesuchsIndex` wird bewusst NICHT aus dem Snapshot
+    /// **`abteilungBesuchsIndex` wird bewusst NICHT aus dem Snapshot
     /// übernommen** (analog ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:)``
     /// für den entsprechenden Bereich-A-Fall) — durchgesetzt über
     /// ``KaufEintrag/ursprungsGeraeteID`` (`peerGeraeteID`), das
-    /// ``KaufEintrag/init(artikel:geschaeft:kategorie:preis:menge:datum:kategorieBesuchsIndex:ursprungsGeraeteID:)``
+    /// ``KaufEintrag/init(artikel:geschaeft:abteilung:preis:menge:datum:abteilungBesuchsIndex:ursprungsGeraeteID:)``
     /// zentral im Typ selbst nullt (GitHub #68): jeder hier neu hinzukommende
     /// Eintrag stammt per Konstruktion von einem ANDEREN Gerät. Referenziert er
     /// (über ``mergeEinkaufsvorgaenge(_:geschaeftZuordnung:listeZuordnung:context:)``,
@@ -1746,7 +1746,7 @@ enum SyncSnapshotImportService {
     @MainActor
     private static func mergeKaufEintraege(
         _ remote: [KaufEintragSnapshot], artikelZuordnung: [UUID: Artikel], einkaufsvorgangZuordnung: [UUID: Einkaufsvorgang],
-        geschaeftZuordnung: [UUID: Geschaeft], kategorieZuordnung: [UUID: ArtikelKategorie], peerGeraeteID: String, context: ModelContext
+        geschaeftZuordnung: [UUID: Geschaeft], abteilungZuordnung: [UUID: Abteilung], peerGeraeteID: String, context: ModelContext
     ) {
         let geloeschteIDs = SyncTombstoneService.geloeschteIDs(art: SyncEntitaetsArt.kaufEintrag, context: context)
         let bekannteIDs = Set(((try? context.fetch(FetchDescriptor<KaufEintrag>())) ?? []).map(\.id))
@@ -1781,7 +1781,7 @@ enum SyncSnapshotImportService {
             let neuer = KaufEintrag(
                 artikel: eintrag.artikelID.flatMap { artikelZuordnung[$0] },
                 geschaeft: eintrag.geschaeftID.flatMap { geschaeftZuordnung[$0] },
-                kategorie: eintrag.kategorieID.flatMap { kategorieZuordnung[$0] },
+                abteilung: eintrag.abteilungID.flatMap { abteilungZuordnung[$0] },
                 menge: eintrag.menge,
                 datum: eintrag.datum,
                 ursprungsGeraeteID: peerGeraeteID
@@ -1796,7 +1796,7 @@ enum SyncSnapshotImportService {
 
             if let artikel = neuer.artikel, let einkaufsliste = neuer.einkaufsvorgang?.einkaufsliste {
                 // Nutzerbericht (2026-08-10): anders als das lokale Abhaken
-                // (``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:kategorie:geschaeft:)``,
+                // (``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:abteilung:geschaeft:)``,
                 // löscht dort explizit den offenen `EinkaufslistenEintrag``)
                 // entfernte dieser Zweig den entsprechenden offenen Listen-
                 // Eintrag ursprünglich NIE — ein Gerät, das den Artikel noch
@@ -1920,7 +1920,7 @@ enum SyncSnapshotImportService {
     // MARK: - WarengruppenDistanz (Bereich D)
 
     /// Gewichteter Mittelwert statt naiver 50/50-Mittelung (GitHub #87):
-    /// dieselbe G-Counter-Herleitung wie ``mergeGeschaefte(_:typZuordnung:kategorieZuordnung:peerGeraeteID:aliase:context:)``
+    /// dieselbe G-Counter-Herleitung wie ``mergeGeschaefte(_:typZuordnung:abteilungZuordnung:peerGeraeteID:aliase:context:)``
     /// für ``WarengruppenDistanz/beobachtungsAnzahl`` — merkt sich nur den von
     /// `peerGeraeteID` gemeldeten EIGENEN Beobachtungsanteil
     /// (``WarengruppenDistanzPeerZaehlerStand``), nie dessen bereits gemergten
@@ -1942,24 +1942,24 @@ enum SyncSnapshotImportService {
     /// ``WarengruppenDistanz/maximaleMergeGewichtung`` gedeckelt (siehe dort).
     @MainActor
     private static func mergeWarengruppenDistanzen(
-        _ remote: [WarengruppenDistanzSnapshot], geschaeftZuordnung: [UUID: Geschaeft], kategorieZuordnung: [UUID: ArtikelKategorie],
+        _ remote: [WarengruppenDistanzSnapshot], geschaeftZuordnung: [UUID: Geschaeft], abteilungZuordnung: [UUID: Abteilung],
         peerGeraeteID: String, context: ModelContext
     ) {
         let alleLokalen = (try? context.fetch(FetchDescriptor<WarengruppenDistanz>())) ?? []
         for eintrag in remote {
-            guard let kategorieA = kategorieZuordnung[eintrag.kategorieAID],
-                  let kategorieB = kategorieZuordnung[eintrag.kategorieBID]
+            guard let abteilungA = abteilungZuordnung[eintrag.abteilungAID],
+                  let abteilungB = abteilungZuordnung[eintrag.abteilungBID]
             else { continue }
             let geschaeft = eintrag.geschaeftID.flatMap { geschaeftZuordnung[$0] }
-            let (kanonA, kanonB) = WarengruppenDistanz.kanonischesPaar(kategorieA, kategorieB)
+            let (kanonA, kanonB) = WarengruppenDistanz.kanonischesPaar(abteilungA, abteilungB)
 
             let vorhandener: WarengruppenDistanz
             if let treffer = alleLokalen.first(where: {
-                $0.geschaeft == geschaeft && $0.kategorieA == kanonA && $0.kategorieB == kanonB
+                $0.geschaeft == geschaeft && $0.abteilungA == kanonA && $0.abteilungB == kanonB
             }) {
                 vorhandener = treffer
             } else {
-                vorhandener = WarengruppenDistanz(geschaeft: geschaeft, kategorieA: kanonA, kategorieB: kanonB, distanz: WarengruppenDistanz.initialwert)
+                vorhandener = WarengruppenDistanz(geschaeft: geschaeft, abteilungA: kanonA, abteilungB: kanonB, distanz: WarengruppenDistanz.initialwert)
                 vorhandener.eigeneBeobachtungsAnzahl = 0
                 context.insert(vorhandener)
             }

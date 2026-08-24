@@ -40,7 +40,7 @@ struct LamportClockTests {
 struct SyncEventTests {
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {
         let schema = Schema([
-            Artikel.self, ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self,
+            Artikel.self, Abteilung.self, Geschaeft.self, GeschaeftTyp.self,
             Einkaufsvorgang.self, KaufEintrag.self,
             Einkaufsliste.self, EinkaufslistenEintrag.self, SyncEvent.self, ArtikelGeschaeftVerfuegbarkeit.self,
             ArtikelListenKauf.self,

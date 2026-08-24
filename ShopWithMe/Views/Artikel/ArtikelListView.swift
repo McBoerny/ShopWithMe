@@ -6,8 +6,8 @@ private enum ArtikelSortierung: String, CaseIterable, Identifiable {
     /// Alphabetisch — ab 50 Artikeln automatisch nach Anfangsbuchstaben gruppiert
     /// mit iOS A–Z-Schnellscrollleiste.
     case alphabetisch
-    /// Nach ``ArtikelKategorie`` gruppiert (Reihenfolge nach
-    /// ``ArtikelKategorie/sortIndex``), innerhalb einer Kategorie alphabetisch.
+    /// Nach ``Abteilung`` gruppiert (Reihenfolge nach
+    /// ``Abteilung/sortIndex``), innerhalb einer Abteilung alphabetisch.
     case abteilung
 
     var id: String { rawValue }
@@ -34,10 +34,10 @@ struct ArtikelListView: View {
     @State private var suchtext = ""
     @State private var zeigeDuplikatVorschlaege = false
 
-    private struct KategorieGruppe: Identifiable {
-        let kategorie: ArtikelKategorie
+    private struct AbteilungGruppe: Identifiable {
+        let abteilung: Abteilung
         var artikel: [Artikel]
-        var id: PersistentIdentifier { kategorie.persistentModelID }
+        var id: PersistentIdentifier { abteilung.persistentModelID }
     }
 
     /// ``artikel``, alphabetisch sortiert und ggf. nach ``suchtext`` gefiltert
@@ -52,16 +52,16 @@ struct ArtikelListView: View {
         suchtext.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var kategorieGruppen: [KategorieGruppe] {
-        var nachKategorie: [PersistentIdentifier: KategorieGruppe] = [:]
+    private var abteilungGruppen: [AbteilungGruppe] {
+        var nachAbteilung: [PersistentIdentifier: AbteilungGruppe] = [:]
         for eintrag in alphabetischSortiert {
-            let kategorie = eintrag.effektiveKategorien(context: modelContext)[0]
-            nachKategorie[kategorie.persistentModelID, default: KategorieGruppe(kategorie: kategorie, artikel: [])].artikel.append(eintrag)
+            let abteilung = eintrag.effektiveAbteilungen(context: modelContext)[0]
+            nachAbteilung[abteilung.persistentModelID, default: AbteilungGruppe(abteilung: abteilung, artikel: [])].artikel.append(eintrag)
         }
-        return nachKategorie.values.sorted {
-            $0.kategorie.sortIndex == $1.kategorie.sortIndex
-                ? $0.kategorie.name.vergleicheAlphabetisch(mit: $1.kategorie.name) == .orderedAscending
-                : $0.kategorie.sortIndex < $1.kategorie.sortIndex
+        return nachAbteilung.values.sorted {
+            $0.abteilung.sortIndex == $1.abteilung.sortIndex
+                ? $0.abteilung.name.vergleicheAlphabetisch(mit: $1.abteilung.name) == .orderedAscending
+                : $0.abteilung.sortIndex < $1.abteilung.sortIndex
         }
     }
 
@@ -151,8 +151,8 @@ struct ArtikelListView: View {
                     artikelZeile(eintrag)
                 }
             case .abteilung:
-                ForEach(kategorieGruppen) { gruppe in
-                    Section(gruppe.kategorie.name) {
+                ForEach(abteilungGruppen) { gruppe in
+                    Section(gruppe.abteilung.name) {
                         ForEach(gruppe.artikel) { eintrag in
                             artikelZeile(eintrag)
                         }
@@ -219,8 +219,8 @@ private struct ArtikelZeile: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(artikel.name.isEmpty ? "Unbenannt" : artikel.name)
                     .foregroundStyle(.primary)
-                if !artikel.kategorien.isEmpty {
-                    Text(artikel.kategorien.map(\.name).joined(separator: ", "))
+                if !artikel.abteilungen.isEmpty {
+                    Text(artikel.abteilungen.map(\.name).joined(separator: ", "))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -235,5 +235,5 @@ private struct ArtikelZeile: View {
     NavigationStack {
         ArtikelListView()
     }
-    .modelContainer(for: [Artikel.self, ArtikelKategorie.self, GeschaeftTyp.self, Einkaufsliste.self, EinkaufslistenEintrag.self], inMemory: true)
+    .modelContainer(for: [Artikel.self, Abteilung.self, GeschaeftTyp.self, Einkaufsliste.self, EinkaufslistenEintrag.self], inMemory: true)
 }

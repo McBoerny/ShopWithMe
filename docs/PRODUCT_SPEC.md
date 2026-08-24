@@ -10,34 +10,34 @@ Geschäfte und den Einkaufsvorgang selbst intelligent unterstützt.
 
 ## Kernkonzepte
 
-- **Artikel**: hat Name, eine oder mehrere **Kategorien** (jederzeit änderbar,
+- **Artikel**: hat Name, eine oder mehrere **Abteilungen** (jederzeit änderbar,
   Mehrfachauswahl) sowie **Menge** und **Einheit** (Gewicht: kg/g, Volumen: ltr/ml,
   oder Stück) — die beim Anlegen festgelegte Menge ist zugleich die
   Standard-Schrittweite für Erhöhen/Verringern auf der Einkaufsliste. Hat ein Artikel
-  mehrere Kategorien, erscheint er beim Einkaufen gleichzeitig in JEDEM zugehörigen
+  mehrere Abteilungen, erscheint er beim Einkaufen gleichzeitig in JEDEM zugehörigen
   Abschnitt (GitHub-Nachfolgefund zu #36 — vorherige Architektur-Revision entschied
-  noch pro Geschäft eine einzelne „führende" Kategorie und duplizierte den Artikel
+  noch pro Geschäft eine einzelne „führende" Abteilung und duplizierte den Artikel
   bewusst nicht; das hing zusätzlich von der nicht ordnungsgarantierten
-  `kategorien`-Relationship ab und ließ den Artikel bei Sync-Zyklen sichtbar
+  `abteilungen`-Relationship ab und ließ den Artikel bei Sync-Zyklen sichtbar
   zwischen Abschnitten springen). Abgehakt wird er dabei überall zugleich; aus
-  welchem Abschnitt tatsächlich abgehakt wurde, geht als Kategorie in den
+  welchem Abschnitt tatsächlich abgehakt wurde, geht als Abteilung in den
   `KaufEintrag` ein — Grundlage dafür, dass `AbteilungsDistanzService` pro
-  Geschäft lernt, in welcher der mehreren Kategorien ein Artikel dort tatsächlich
+  Geschäft lernt, in welcher der mehreren Abteilungen ein Artikel dort tatsächlich
   steht (z.B. Sojasauce bei Edeka unter „Soßen", bei Aldi unter „Asia"), statt einer
-  global geratenen. `Artikel/fuehrendeKategorie(inGeschaeft:context:)` bleibt als
+  global geratenen. `Artikel/fuehrendeAbteilung(inGeschaeft:context:)` bleibt als
   Fallback für Kontexte ohne konkret getappten Abschnitt (Belegscan,
   Preisschild-Scan, Sync-Import empfangener Events) — bevorzugt eine im Geschäft
-  verfügbare Kategorie, sonst die erste (deterministisch nach `sortIndex`
+  verfügbare Abteilung, sonst die erste (deterministisch nach `sortIndex`
   sortierte) zugeordnete. Symbol/Farbe existieren weiterhin als Datenfelder, werden
   aber in keiner UI mehr angezeigt oder vom Anwender/der KI gesetzt.
-- **Artikelkategorie**: z.B. Obst, Milchprodukte, Drogerieartikel. Kategorien sind global,
+- **Abteilung**: z.B. Obst, Milchprodukte, Drogerieartikel. Abteilungen sind global,
   nicht pro Geschäft.
 - **Geschäft**: hat einen oder mehrere Typen (Lebensmittel, Drogerie, Baumarkt,
   Apotheke, …, z.B. Drogerie + Lebensmittel bei einem dm) sowie eigene
-  **Kategorien**: ein Geschäft kann Kategorien direkt zugeordnet bekommen — nur
-  diese (bzw. über den Geschäftstyp automatisch verfügbaren) Kategorien werden
+  **Abteilungen**: ein Geschäft kann Abteilungen direkt zugeordnet bekommen — nur
+  diese (bzw. über den Geschäftstyp automatisch verfügbaren) Abteilungen werden
   beim Einkaufen für dieses Geschäft angezeigt. Eine automatisch über den
-  Geschäftstyp verfügbare Kategorie lässt sich zusätzlich für ein einzelnes
+  Geschäftstyp verfügbare Abteilung lässt sich zusätzlich für ein einzelnes
   Geschäft ausschließen (Negativliste), ohne sie generell vom Geschäftstyp zu
   entfernen (GitHub #43). Die Reihenfolge, in der sie beim Einkaufen erscheinen,
   wird nicht manuell festgelegt, sondern automatisch aus dem Abhakverhalten
@@ -46,12 +46,12 @@ Geschäfte und den Einkaufsvorgang selbst intelligent unterstützt.
 ## Artikel-Anlage mit KI-Unterstützung
 
 Beim Anlegen eines neuen Artikels bestimmt eine lokale Apple-KI (FoundationModels /
-"Apple Intelligence") automatisch eine passende Kategorie — ganz ohne manuellen
+"Apple Intelligence") automatisch eine passende Abteilung — ganz ohne manuellen
 Anstoß: sobald der Anwender einen Namen eingibt (entprellt, damit nicht bei jedem
-Tastenanschlag ein KI-Aufruf losgeschickt wird), wird die Kategorie vorgeschlagen,
-sofern noch keine gewählt wurde. Eine bereits manuell gewählte Kategorie wird dabei
+Tastenanschlag ein KI-Aufruf losgeschickt wird), wird die Abteilung vorgeschlagen,
+sofern noch keine gewählt wurde. Eine bereits manuell gewählte Abteilung wird dabei
 nie überschrieben. Ist auf
-dem Gerät keine Apple Intelligence verfügbar, bleibt die Kategorie einfach leer (dann
+dem Gerät keine Apple Intelligence verfügbar, bleibt die Abteilung einfach leer (dann
 "Sonstiges") — reine manuelle Auswahl bleibt immer möglich.
 
 Artikel werden ausschließlich aus der Einkaufsliste-Ansicht heraus neu angelegt und
@@ -76,18 +76,18 @@ auf die Einkaufsliste kommt.
 ## Einkaufsvorgang
 
 - Die App lernt automatisch aus dem Abhakverhalten vergangener Einkäufe, welche
-  Artikelkategorien in einem Geschäft räumlich nah beieinanderliegen (paarweise
+  Abteilungen in einem Geschäft räumlich nah beieinanderliegen (paarweise
   Distanzmatrix, `AbteilungsDistanzService`), und sortiert die Einkaufsliste
   danach dynamisch — nach jeder Abhakung neu, ausgehend vom aktuellen (impliziten)
   Standort. Details in `docs/ARCHITEKTURVORSCHLAG_ADAPTIVE_SORTIERUNG.md`.
 - Die Einkaufsliste ist global und nicht von einem Geschäft abhängig. Optional kann der
-  Anwender ein Geschäft wählen, wonach die Liste nach Artikelkategorie gruppiert und
+  Anwender ein Geschäft wählen, wonach die Liste nach Abteilung gruppiert und
   sortiert wird.
 - Ein Einkauf startet automatisch beim Öffnen des Einkaufen-Tabs (für das gewählte
   Geschäft, bzw. ohne Geschäft) — kein manueller „Start“ nötig.
 - Beim Einkaufen werden standardmäßig nur die im gewählten Geschäft verfügbaren Artikel
-  angezeigt. Verfügbarkeit ergibt sich entweder aus den Kategorien des Geschäfts oder —
-  besitzt es keine eigenen Kategorien — aus der Kaufhistorie
+  angezeigt. Verfügbarkeit ergibt sich entweder aus den Abteilungen des Geschäfts oder —
+  besitzt es keine eigenen Abteilungen — aus der Kaufhistorie
   (``ArtikelVerfuegbarkeitService``): ein Artikel gilt als verfügbar, sobald er dort
   einmal gekauft wurde. Der Anwender kann diesen Filter jederzeit direkt im laufenden
   Einkauf per Umschalter übergehen, um alle Artikel der Einkaufsliste zu sehen — das

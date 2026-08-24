@@ -5,7 +5,7 @@
 - **SwiftUI**, iOS-only (kein macOS/Catalyst-Target), min. Deployment-Target iOS 26.0.
 - **SwiftData** für Persistenz (kein Core Data, kein iCloud/CloudKit).
 - **FoundationModels** (Apple Intelligence, on-device) für automatische
-  Kategorie-Vorschläge beim Artikel-Anlegen und für die Beleg-Extraktion.
+  Abteilung-Vorschläge beim Artikel-Anlegen und für die Beleg-Extraktion.
 - **Vision** (`VNRecognizeTextRequest`) für Beleg-OCR.
 - **XcodeGen** erzeugt das `.xcodeproj` aus `project.yml` — das Projektfile selbst wird
   nicht versioniert, nur `project.yml`. Neu auschecken: `xcodegen generate`.
@@ -37,15 +37,15 @@ ShopWithMe/
 ## Datenmodell
 
 ```
-ArtikelKategorie                     GeschaeftTyp               Geschaeft
+Abteilung                     GeschaeftTyp               Geschaeft
 ────────────────                     ────────────               ─────────
 id: UUID                             id: UUID                   id: UUID
 name: String                         name: String               name: String
 standardSymbol: String               symbolName: String         typenModelle: [GeschaeftTyp]
 standardFarbeHex: String             sortIndex: Int              (→ typen, fuehrenderTyp = typen.first)
 sortIndex: Int                       geschaefte: [Geschaeft]     adresse: String?
-┌─geschaeftsTypModelle:               standardKategorien:         breitengrad/laengengrad: Double?
-│  [GeschaeftTyp] (→geschaeftsTypen)   [ArtikelKategorie]          kategorien: [ArtikelKategorie]
+┌─geschaeftsTypModelle:               standardAbteilungen:         breitengrad/laengengrad: Double?
+│  [GeschaeftTyp] (→geschaeftsTypen)   [Abteilung]          abteilungen: [Abteilung]
 └─geschaefte: [Geschaeft]                                         alternativeNamenRaw: String?
   (many-to-many, direkt)                                          anzahlEinkaufsvorgaengeRaw: Int?
                                                                    umbauVerdachtRaw: Bool?
@@ -61,9 +61,9 @@ id: UUID                             id: UUID                   id: UUID
 name: String                         geschaeft: Geschaeft?      artikel: Artikel?
 symbolName: String (UI-los)          einkaufsliste: Einkaufsliste? einkaufsvorgang: Einkaufsvorgang?
 farbeHex: String (UI-los)            startZeit: Date            geschaeft: Geschaeft?  (denormalisiert)
-kategorie: ArtikelKategorie? (führend) endZeit: Date?           datum: Date
-kategorienRaw: [ArtikelKategorie] (→kategorien)                  menge: Double
-erstelltAm: Date                     kaufEintraege: [KaufEintrag]  kategorieBesuchsIndex: Int?
+abteilung: Abteilung? (führend) endZeit: Date?           datum: Date
+abteilungenRaw: [Abteilung] (→abteilungen)                  menge: Double
+erstelltAm: Date                     kaufEintraege: [KaufEintrag]  abteilungBesuchsIndex: Int?
 notiz: String?                                                     ursprungsGeraeteID: String?
                                                                       (nil = lokal, GitHub #68)
 einheitRaw: String?                  Preispunkt (GitHub #76 — Preishistorie, unabhängig vom Einkaufsvorgang)
@@ -107,8 +107,8 @@ WarengruppenDistanz                       IgnorierterGeschaeftsVorschlag
 ───────────────────                       ──────────────────────────────
 id: UUID                                  name: String
 geschaeft: Geschaeft?                     breitengrad/laengengrad: Double?
-kategorieA: ArtikelKategorie?             ignoriertAm: Date
-kategorieB: ArtikelKategorie?             (keine Relationship zu Geschaeft —
+abteilungA: Abteilung?             ignoriertAm: Date
+abteilungB: Abteilung?             (keine Relationship zu Geschaeft —
 distanz: Double (0=nah, 1=fern)            Name/Koordinaten genügen für den
                                             Abgleich, siehe unten)
 
@@ -155,34 +155,34 @@ wertvollen Ableitungen bereits beim Abhaken/Abschließen unabhängig von der
 Liste festschreiben.
 
 Design-Entscheidung (siehe `docs/DECISIONS.md`): Ein `Geschaeft` bekommt
-`ArtikelKategorie`n direkt zugeordnet (`Geschaeft.kategorien`) — das ist der einzige
-Weg, eine Kategorie verfügbar zu machen. Die Reihenfolge beim Einkaufen ist keine
+`Abteilung`en direkt zugeordnet (`Geschaeft.abteilungen`) — das ist der einzige
+Weg, eine Abteilung verfügbar zu machen. Die Reihenfolge beim Einkaufen ist keine
 manuell gepflegte Struktur (früher: `Regal`), sondern wird von
 `AbteilungsDistanzService` aus dem Abhakverhalten gelernt (paarweise Distanz je
-Kategorie-Paar und Geschäft, siehe
+Abteilung-Paar und Geschäft, siehe
 `docs/ARCHITEKTURVORSCHLAG_ADAPTIVE_SORTIERUNG.md`).
 
-Ein Artikel mit mehreren Kategorien erscheint beim Einkaufen zunächst
-gleichzeitig in JEDEM zugehörigen Abschnitt (`EinkaufenView.kategorieGruppen(fuer:)`,
+Ein Artikel mit mehreren Abteilungen erscheint beim Einkaufen zunächst
+gleichzeitig in JEDEM zugehörigen Abschnitt (`EinkaufenView.abteilungGruppen(fuer:)`,
 v0.9, GitHub-Nachfolgefund zu #36) — keine Duplizierung mehr vermeidende
 Einzelauswahl. Abgehakt wird überall zugleich (ein `KaufEintrag`); die
-Kategorie des tatsächlich getappten Abschnitts wird explizit an
-`Einkaufsvorgang.artikelAbhaken(_:context:kategorie:)` übergeben und im
+Abteilung des tatsächlich getappten Abschnitts wird explizit an
+`Einkaufsvorgang.artikelAbhaken(_:context:abteilung:)` übergeben und im
 `KaufEintrag` gespeichert.
 
-Seit v0.11 (GitHub #93) wertet `AbteilungsDistanzService.gelernteKategorie(fuer:in:context:)`
+Seit v0.11 (GitHub #93) wertet `AbteilungsDistanzService.gelernteAbteilung(fuer:in:context:)`
 genau diese Historie aus: liegen für (Artikel, Geschäft) mindestens 5 Käufe mit
-mindestens 80% Mehrheit für eine Kategorie vor (z.B. Sojasauce bei Edeka unter
+mindestens 80% Mehrheit für eine Abteilung vor (z.B. Sojasauce bei Edeka unter
 „Soßen", bei Aldi unter „Asia"), zeigt `EinkaufenView` (über
-`kategorienFuerAnzeige(_:)`) nur noch diese eine Kategorie statt aller
+`abteilungenFuerAnzeige(_:)`) nur noch diese eine Abteilung statt aller
 zugeordneten — die Mehrfachanzeige bleibt der Fallback für noch nicht
 eindeutig gelernte Artikel, die geschäftsunabhängige Ansicht, sowie den
 aktiven Lernmodus (`zeigeAlleArtikel`, bewusst immer ungefiltert, damit eine
 falsch gelernte Zuordnung sichtbar korrigierbar bleibt). Details inkl. der
 statistischen Herleitung der Schwellenwerte:
 `docs/ARCHITEKTURVORSCHLAG_ADAPTIVE_SORTIERUNG.md` Abschnitt 14.
-`Artikel.fuehrendeKategorie(inGeschaeft:context:)` nutzt dieselbe gelernte
-Kategorie jetzt ebenfalls als Top-Priorität, bevor sie auf den
+`Artikel.fuehrendeAbteilung(inGeschaeft:context:)` nutzt dieselbe gelernte
+Abteilung jetzt ebenfalls als Top-Priorität, bevor sie auf den
 deterministisch sortierten Fallback für Kontexte ohne konkret getappten
 Abschnitt zurückfällt (Belegscan, Preisschild-Scan, Sync-Import).
 
@@ -190,10 +190,10 @@ Abschnitt zurückfällt (Belegscan, Preisschild-Scan, Sync-Import).
 
 - **AISuggestionService**: prüft `SystemLanguageModel.default.availability`; nutzt bei
   Verfügbarkeit `LanguageModelSession` mit einem `@Generable`-Ergebnistyp, um eine
-  Kategorie vorzuschlagen. Bekommt bestehende Kategorienamen als Kontext, damit
+  Abteilung vorzuschlagen. Bekommt bestehende Abteilungsnamen als Kontext, damit
   bevorzugt bestehende Werte wiederverwendet werden. Wird in `ArtikelEditView`
   automatisch (entprellt per `.task(id: artikel.name)`) aufgerufen, sobald ein neuer
-  Artikel noch keine Kategorie hat — kein manueller Button mehr.
+  Artikel noch keine Abteilung hat — kein manueller Button mehr.
 - **ReceiptScanService** (Protokoll): Implementierung `VisionFoundationModelsReceiptScanner`
   kombiniert Vision-OCR mit FoundationModels-Extraktion. Als Protokoll gekapselt, damit
   eine spätere, spezifischere On-Device-API (z.B. eine künftige System-Beleg-Scan-API)
@@ -224,20 +224,20 @@ Abschnitt zurückfällt (Belegscan, Preisschild-Scan, Sync-Import).
   feststehend mitbringt (z.B. nachträglich zuhause gescannter Beleg) — Details in
   `docs/BELEGSCAN.md` → „Automatischer Geschäfts-Abgleich".
 - **AbteilungsDistanzService**: lernt nach jedem abgeschlossenen `Einkaufsvorgang`
-  aus der Abhakreihenfolge eine paarweise Distanz zwischen Artikelkategorien je
+  aus der Abhakreihenfolge eine paarweise Distanz zwischen Abteilungen je
   Geschäft (`WarengruppenDistanz`) und sortiert die Einkaufsliste danach dynamisch
   neu (Greedy-Nearest-Neighbor + 2-opt) — Details in
   `docs/ARCHITEKTURVORSCHLAG_ADAPTIVE_SORTIERUNG.md`.
 - **MilkForUsImportService**: importiert eine aus der Shopping-App "MilkForUs"
-  exportierte Textdatei (Kategorien + Artikel) — Kategorie-Abgleich per exaktem
-  Namenstreffer, sonst KI-Best-Match (`AISuggestionService.kategorieMatch`) gegen den
-  bestehenden Kategoriebestand, sonst Vorschlag zur Neuanlage. Zwei Einstiegspunkte:
+  exportierte Textdatei (Abteilungen + Artikel) — Abteilung-Abgleich per exaktem
+  Namenstreffer, sonst KI-Best-Match (`AISuggestionService.abteilungMatch`) gegen den
+  bestehenden Abteilungsbestand, sonst Vorschlag zur Neuanlage. Zwei Einstiegspunkte:
   manueller Datei-Picker (`MilkForUsImportView`, aus der Einkaufslisten-Verwaltung)
   und eine eigene Share Extension (`ShopWithMeShareExtension`) für die iOS-
   Teilen-Funktion. Details in `docs/MILKFORUS_IMPORT.md`.
 - **ArtikelVerfuegbarkeitService**: bestimmt, ob ein `Artikel` in einem `Geschaeft`
-  verfügbar ist — über `Geschaeft.verfuegbareKategorien`, oder (besitzt das Geschäft
-  keine eigenen Kategorien) gelernt aus `ArtikelGeschaeftVerfuegbarkeit` (seit v0.12
+  verfügbar ist — über `Geschaeft.verfuegbareAbteilungen`, oder (besitzt das Geschäft
+  keine eigenen Abteilungen) gelernt aus `ArtikelGeschaeftVerfuegbarkeit` (seit v0.12
   ein eigenes, dauerhaftes Aggregat statt eines Live-Scans über `KaufEintrag`, siehe
   `docs/GESCHAEFTS_AGGREGATE.md`). Grundlage für den Verfügbarkeitsfilter beim
   Einkaufen, den der Anwender per Umschalter direkt im laufenden Einkauf übergehen
@@ -255,7 +255,7 @@ Abschnitt zurückfällt (Belegscan, Preisschild-Scan, Sync-Import).
   als modularer Dispatcher vor `EinkaufslisteView` — wählt je nach
   `@AppStorage(DarstellungsKey.modus)` zwischen `ListenInhaltView` (klassisch,
   Chips groß/klein — optional Akkordeon/Fortschrittsbalken/Farbstreifen) und
-  `KachelInhaltView` (2- oder 3-spaltiges Raster, optional Kategorie-Farbhintergrund).
+  `KachelInhaltView` (2- oder 3-spaltiges Raster, optional Abteilung-Farbhintergrund).
   `ChipFlowLayout: Layout` als shared Flow-Layout in `DesignSystem/`. Neue
   Einstellungsseite `EinkaufslisteDarstellungsSettingsView` über
   `SettingsNavigationsziel.listendarstellung`. Vollständiges Design:
@@ -358,7 +358,7 @@ Referenz für Architektur und Funktionsweise:** `docs/DATENSYNCHRONISATION.md`.
 Entstehungsgeschichte, jeder Live-Test-Fund und jeder Bugfix (u.a. die
 `offenerNachfolger`-Umleitung für per Event empfangenes Abhaken auf einen
 zwischenzeitlich abgeschlossenen `Einkaufsvorgang`, die
-`kategorieBesuchsIndex`-Sonderbehandlung fremd materialisierter Käufe, und
+`abteilungBesuchsIndex`-Sonderbehandlung fremd materialisierter Käufe, und
 das Bereich-A-Sicherheitsnetz für bereits abgehakte Artikel) in
 `docs/DATENSYNCHRONISATION_VERLAUF.md`.
 

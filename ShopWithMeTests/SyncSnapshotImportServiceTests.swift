@@ -8,7 +8,7 @@ import Testing
 struct SyncSnapshotImportServiceTests {
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {
         let schema = Schema([
-            Artikel.self, ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self,
+            Artikel.self, Abteilung.self, Geschaeft.self, GeschaeftTyp.self,
             Einkaufsvorgang.self, KaufEintrag.self, WarengruppenDistanz.self, WarengruppenDistanzPeerZaehlerStand.self,
             Einkaufsliste.self, EinkaufslistenEintrag.self, IgnorierterArtikel.self,
             SyncEvent.self, SyncEntitaetsAlias.self, SyncPeerZaehlerStand.self, SyncPeerInfo.self,
@@ -29,7 +29,7 @@ struct SyncSnapshotImportServiceTests {
     private func leererSnapshot(geraeteID: String, geraeteName: String = "Fremdes iPhone") -> SyncSnapshot {
         SyncSnapshot(
             formatVersion: SyncSnapshot.aktuelleFormatVersion, erzeugtAm: Date(), geraeteID: geraeteID, geraeteName: geraeteName,
-            geschaeftsTypen: [], artikelKategorien: [], geschaefte: [], artikel: [],
+            geschaeftsTypen: [], abteilungen: [], geschaefte: [], artikel: [],
             einkaufslisten: [], einkaufslistenEintraege: [], einkaufsvorgaenge: [], kaufEintraege: [],
             preispunkte: [],
             warengruppenDistanzen: [], tombstones: []
@@ -49,7 +49,7 @@ struct SyncSnapshotImportServiceTests {
             geraeteID: snapshot.geraeteID, geraeteName: snapshot.geraeteName
         )
         let stamm = SyncStammSnapshot(
-            geschaeftsTypen: snapshot.geschaeftsTypen, artikelKategorien: snapshot.artikelKategorien,
+            geschaeftsTypen: snapshot.geschaeftsTypen, abteilungen: snapshot.abteilungen,
             geschaefte: snapshot.geschaefte, artikel: snapshot.artikel, einkaufslisten: snapshot.einkaufslisten,
             produkte: snapshot.produkte, produktnamen: snapshot.produktnamen
         )
@@ -186,7 +186,7 @@ struct SyncSnapshotImportServiceTests {
     /// ``geschaeftMitAehnlichemNamenAberNaheKoordinatenWirdNichtGemergt`` für
     /// den davon abgegrenzten Negativfall).
     @Test
-    func geschaeftWirdPerNameUndKoordinateGematchtUndKategorienVereinigt() async throws {
+    func geschaeftWirdPerNameUndKoordinateGematchtUndAbteilungenVereinigt() async throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
         let syncOrdner = macheTempSyncOrdner()
@@ -195,19 +195,19 @@ struct SyncSnapshotImportServiceTests {
 
         let typ = GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")
         context.insert(typ)
-        let eigeneKategorie = ArtikelKategorie(name: "Obst", standardSymbol: "carrot", standardFarbeHex: "#34C759")
-        context.insert(eigeneKategorie)
+        let eigeneAbteilung = Abteilung(name: "Obst", standardSymbol: "carrot", standardFarbeHex: "#34C759")
+        context.insert(eigeneAbteilung)
         let lokal = Geschaeft(name: "Rewe", typen: [typ])
         lokal.breitengrad = 52.5200
         lokal.laengengrad = 13.4050
-        lokal.kategorien = [eigeneKategorie]
+        lokal.abteilungen = [eigeneAbteilung]
         context.insert(lokal)
         try context.save()
 
-        let remoteKategorieID = UUID()
+        let remoteAbteilungID = UUID()
         var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
-        snapshot.artikelKategorien = [
-            ArtikelKategorieSnapshot(id: remoteKategorieID, name: "Milchprodukte", standardSymbol: "drop", standardFarbeHex: "#007AFF", sortIndex: 0, geschaeftsTypIDs: []),
+        snapshot.abteilungen = [
+            AbteilungSnapshot(id: remoteAbteilungID, name: "Milchprodukte", standardSymbol: "drop", standardFarbeHex: "#007AFF", sortIndex: 0, geschaeftsTypIDs: []),
         ]
         snapshot.geschaefte = [
             GeschaeftSnapshot(
@@ -216,7 +216,7 @@ struct SyncSnapshotImportServiceTests {
                 // reicht ein reiner Koordinatentreffer mit abweichendem Namen nicht mehr.
                 id: UUID(), name: "REWE", typIDs: [], adresse: nil,
                 breitengrad: 52.5201, laengengrad: 13.4051, erkennungsradius: 120,
-                kategorieIDs: [remoteKategorieID], ausgeschlosseneKategorieIDs: [], alternativeNamen: ["Rewe Center"],
+                abteilungIDs: [remoteAbteilungID], ausgeschlosseneAbteilungIDs: [], alternativeNamen: ["Rewe Center"],
                 ignorierteArtikelNamen: ["Pfand"], eigeneAnzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
             ),
         ]
@@ -228,17 +228,17 @@ struct SyncSnapshotImportServiceTests {
         #expect(alleGeschaefte.count == 1)
         #expect(lokal.name == "Rewe") // Name bleibt lokal, nicht überschrieben.
         #expect(lokal.erkennungsradiusRaw == 120) // War lokal nil -> von Remote übernommen.
-        #expect(lokal.kategorien.map(\.name).sorted() == ["Milchprodukte", "Obst"])
+        #expect(lokal.abteilungen.map(\.name).sorted() == ["Milchprodukte", "Obst"])
         #expect(lokal.alternativeNamen.contains("Rewe Center"))
         #expect(lokal.ignorierteArtikel.map(\.erkannterName) == ["Pfand"])
     }
 
-    /// Stale-Lookup-Nachfolgefund (Session 2026-08-04): ``mergeArtikelKategorien``
+    /// Stale-Lookup-Nachfolgefund (Session 2026-08-04): ``mergeAbteilungen``
     /// fetchte den lokalen Bestand einmalig vor der Merge-Schleife und führte
     /// ihn nie nach — ein zweiter gleichnamiger Remote-Eintrag im selben Batch
     /// fand den gerade erst angelegten ersten nicht und legte eine Dublette an.
     @Test
-    func artikelKategorieMitGleichemNamenImSelbenBatchWirdNichtDupliziert() async throws {
+    func abteilungMitGleichemNamenImSelbenBatchWirdNichtDupliziert() async throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
         let syncOrdner = macheTempSyncOrdner()
@@ -246,11 +246,11 @@ struct SyncSnapshotImportServiceTests {
         defer { SyncOrdnerService.ordnerEntfernen() }
 
         var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
-        snapshot.artikelKategorien = [
-            ArtikelKategorieSnapshot(
+        snapshot.abteilungen = [
+            AbteilungSnapshot(
                 id: UUID(), name: "Milchprodukte", standardSymbol: "drop", standardFarbeHex: "#007AFF", sortIndex: 0, geschaeftsTypIDs: []
             ),
-            ArtikelKategorieSnapshot(
+            AbteilungSnapshot(
                 id: UUID(), name: "Milchprodukte", standardSymbol: "drop", standardFarbeHex: "#007AFF", sortIndex: 1, geschaeftsTypIDs: []
             ),
         ]
@@ -258,11 +258,11 @@ struct SyncSnapshotImportServiceTests {
 
         await SyncSnapshotImportService.importiereSnapshots(context: context)
 
-        #expect(try context.fetch(FetchDescriptor<ArtikelKategorie>()).count == 1)
+        #expect(try context.fetch(FetchDescriptor<Abteilung>()).count == 1)
     }
 
     /// Stale-Lookup-Nachfolgefund (Session 2026-08-04): derselbe Bug wie bei
-    /// ``mergeArtikelKategorien`` — zwei gleichnamige, koordinatengleiche
+    /// ``mergeAbteilungen`` — zwei gleichnamige, koordinatengleiche
     /// Remote-Geschäfte im selben Batch erzeugten vor dem Fix zwei lokale
     /// Dubletten statt eines Namens-/Koordinaten-Treffers.
     @Test
@@ -277,7 +277,7 @@ struct SyncSnapshotImportServiceTests {
             GeschaeftSnapshot(
                 id: UUID(), name: "Aldi", typIDs: [], adresse: nil,
                 breitengrad: 52.5, laengengrad: 13.4, erkennungsradius: 100,
-                kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
+                abteilungIDs: [], ausgeschlosseneAbteilungIDs: [], alternativeNamen: [],
                 ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
             )
         }
@@ -324,7 +324,7 @@ struct SyncSnapshotImportServiceTests {
             GeschaeftSnapshot(
                 id: remoteID, name: "Rewe Nord", typIDs: [], adresse: nil,
                 breitengrad: 52.5201, laengengrad: 13.4051, erkennungsradius: nil,
-                kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
+                abteilungIDs: [], ausgeschlosseneAbteilungIDs: [], alternativeNamen: [],
                 ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
             ),
         ]
@@ -376,7 +376,7 @@ struct SyncSnapshotImportServiceTests {
             snapshot.geschaefte = [
                 GeschaeftSnapshot(
                     id: remoteID, name: "Rewe", typIDs: [], adresse: nil, breitengrad: 52.5201, laengengrad: 13.4051,
-                    erkennungsradius: nil, kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
+                    erkennungsradius: nil, abteilungIDs: [], ausgeschlosseneAbteilungIDs: [], alternativeNamen: [],
                     ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: wert, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
                 ),
             ]
@@ -486,7 +486,7 @@ struct SyncSnapshotImportServiceTests {
         snapshot.artikel = [
             ArtikelSnapshot(
                 id: remoteArtikelID, name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759",
-                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+                abteilungIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
             ),
         ]
         try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
@@ -532,7 +532,7 @@ struct SyncSnapshotImportServiceTests {
         func macheArtikelSnapshot() -> ArtikelSnapshot {
             ArtikelSnapshot(
                 id: UUID(), name: "Brot", symbolName: "birthday.cake", farbeHex: "#8E5B3A",
-                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+                abteilungIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
             )
         }
         var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
@@ -648,7 +648,7 @@ struct SyncSnapshotImportServiceTests {
         veralteterSnapshot.geschaefte = [
             GeschaeftSnapshot(
                 id: geschaeftID, name: "Netto", typIDs: [], adresse: nil, breitengrad: nil, laengengrad: nil,
-                erkennungsradius: nil, kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
+                erkennungsradius: nil, abteilungIDs: [], ausgeschlosseneAbteilungIDs: [], alternativeNamen: [],
                 ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
             ),
         ]
@@ -720,9 +720,9 @@ struct SyncSnapshotImportServiceTests {
         var veralteterKaufEintragSnapshot = leererSnapshot(geraeteID: "veralteter-peer")
         veralteterKaufEintragSnapshot.kaufEintraege = [
             KaufEintragSnapshot(
-                id: kaufEintragID, artikelID: nil, einkaufsvorgangID: nil, geschaeftID: nil, kategorieID: nil,
+                id: kaufEintragID, artikelID: nil, einkaufsvorgangID: nil, geschaeftID: nil, abteilungID: nil,
                 artikelNameSnapshot: "Milch", geschaeftNameSnapshot: "Netto",
-                datum: .distantPast, menge: 1, kategorieBesuchsIndex: nil
+                datum: .distantPast, menge: 1, abteilungBesuchsIndex: nil
             ),
         ]
         try schreibeFremdenSnapshot(veralteterKaufEintragSnapshot, fremdeGeraeteID: "veralteter-peer", in: syncOrdner)
@@ -751,7 +751,7 @@ struct SyncSnapshotImportServiceTests {
         snapshot.artikel = [
             ArtikelSnapshot(
                 id: lokalerArtikel.id, name: "Milch", symbolName: "drop.fill", farbeHex: "#34C759",
-                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+                abteilungIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
             ),
         ]
         snapshot.einkaufslistenEintraege = [
@@ -795,7 +795,7 @@ struct SyncSnapshotImportServiceTests {
         snapshot.artikel = [
             ArtikelSnapshot(
                 id: artikel.id, name: "Milch", symbolName: "drop.fill", farbeHex: "#34C759",
-                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+                abteilungIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
             ),
         ]
         snapshot.einkaufslistenEintraege = [
@@ -847,7 +847,7 @@ struct SyncSnapshotImportServiceTests {
         snapshot.artikel = [
             ArtikelSnapshot(
                 id: artikel.id, name: "Milch", symbolName: "drop.fill", farbeHex: "#34C759",
-                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+                abteilungIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
             ),
         ]
         let peerErstelltAm = letzterKauf.addingTimeInterval(3600)
@@ -944,7 +944,7 @@ struct SyncSnapshotImportServiceTests {
         alterSnapshot.artikel = [
             ArtikelSnapshot(
                 id: artikelB.id, name: "Blume", symbolName: "leaf.fill", farbeHex: "#34C759",
-                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+                abteilungIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
             ),
         ]
         alterSnapshot.einkaufslistenEintraege = [
@@ -1006,7 +1006,7 @@ struct SyncSnapshotImportServiceTests {
         snapshot.artikel = [
             ArtikelSnapshot(
                 id: artikel.id, name: "Milch", symbolName: "drop.fill", farbeHex: "#34C759",
-                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+                abteilungIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
             ),
         ]
         snapshot.einkaufslistenEintraege = [
@@ -1061,7 +1061,7 @@ struct SyncSnapshotImportServiceTests {
         snapshot.artikel = [
             ArtikelSnapshot(
                 id: artikel.id, name: "Milch", symbolName: "drop.fill", farbeHex: "#34C759",
-                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+                abteilungIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
             ),
         ]
         snapshot.einkaufslistenEintraege = [
@@ -1092,7 +1092,7 @@ struct SyncSnapshotImportServiceTests {
         snapshot.geschaefte = [
             GeschaeftSnapshot(
                 id: UUID(), name: "Sollte ignoriert werden", typIDs: [], adresse: nil, breitengrad: nil, laengengrad: nil,
-                erkennungsradius: nil, kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
+                erkennungsradius: nil, abteilungIDs: [], ausgeschlosseneAbteilungIDs: [], alternativeNamen: [],
                 ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
             ),
         ]
@@ -1175,7 +1175,7 @@ struct SyncSnapshotImportServiceTests {
         snapshot.geschaefte = [
             GeschaeftSnapshot(
                 id: geschaeft.id, name: "Rewe", typIDs: [], adresse: nil, breitengrad: nil, laengengrad: nil,
-                erkennungsradius: nil, kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
+                erkennungsradius: nil, abteilungIDs: [], ausgeschlosseneAbteilungIDs: [], alternativeNamen: [],
                 ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
             ),
         ]
@@ -1742,7 +1742,7 @@ struct SyncSnapshotImportServiceTests {
         snapshot.artikel = [
             ArtikelSnapshot(
                 id: apfel.id, name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759",
-                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+                abteilungIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
             ),
         ]
         snapshot.einkaufsvorgaenge = [
@@ -1750,9 +1750,9 @@ struct SyncSnapshotImportServiceTests {
         ]
         snapshot.kaufEintraege = [
             KaufEintragSnapshot(
-                id: UUID(), artikelID: apfel.id, einkaufsvorgangID: alterVorgang.id, geschaeftID: nil, kategorieID: nil,
+                id: UUID(), artikelID: apfel.id, einkaufsvorgangID: alterVorgang.id, geschaeftID: nil, abteilungID: nil,
                 artikelNameSnapshot: "Apfel", geschaeftNameSnapshot: "Rewe",
-                datum: Date(), menge: 1, kategorieBesuchsIndex: nil
+                datum: Date(), menge: 1, abteilungBesuchsIndex: nil
             ),
         ]
         try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
@@ -1791,7 +1791,7 @@ struct SyncSnapshotImportServiceTests {
         snapshot.geschaefte = [
             GeschaeftSnapshot(
                 id: remoteGeschaeftID, name: "Rewe", typIDs: [], adresse: nil, breitengrad: 52.5201, laengengrad: 13.4051,
-                erkennungsradius: nil, kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
+                erkennungsradius: nil, abteilungIDs: [], ausgeschlosseneAbteilungIDs: [], alternativeNamen: [],
                 ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 1, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
             ),
         ]
@@ -1834,15 +1834,15 @@ struct SyncSnapshotImportServiceTests {
         snapshot.artikel = [
             ArtikelSnapshot(
                 id: apfel.id, name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759",
-                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+                abteilungIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
             ),
         ]
         let kaufEintragID = UUID()
         snapshot.kaufEintraege = [
             KaufEintragSnapshot(
-                id: kaufEintragID, artikelID: apfel.id, einkaufsvorgangID: nil, geschaeftID: nil, kategorieID: nil,
+                id: kaufEintragID, artikelID: apfel.id, einkaufsvorgangID: nil, geschaeftID: nil, abteilungID: nil,
                 artikelNameSnapshot: "Apfel", geschaeftNameSnapshot: "",
-                datum: Date(), menge: 3, kategorieBesuchsIndex: nil
+                datum: Date(), menge: 3, abteilungBesuchsIndex: nil
             ),
         ]
         try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
@@ -1860,7 +1860,7 @@ struct SyncSnapshotImportServiceTests {
     /// legte den vom Peer gemeldeten Kauf zwar korrekt als `KaufEintrag` an,
     /// entfernte aber NIE den entsprechenden noch offenen `EinkaufslistenEintrag`
     /// — anders als das lokale Abhaken
-    /// (``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:kategorie:geschaeft:)``,
+    /// (``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:abteilung:geschaeft:)``,
     /// das genau das tut). Der Artikel blieb dadurch dauerhaft gleichzeitig
     /// „offen" UND „abgehakt" — der schon vor GitHub #52 bekannte Zustand
     /// (siehe ``EinkaufenView/offeneArtikel``), der dort zwar aus der Anzeige
@@ -1891,7 +1891,7 @@ struct SyncSnapshotImportServiceTests {
         snapshot.artikel = [
             ArtikelSnapshot(
                 id: artikel.id, name: "Milch", symbolName: "drop.fill", farbeHex: "#34C759",
-                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+                abteilungIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
             ),
         ]
         snapshot.einkaufslisten = [EinkaufslisteSnapshot(id: liste.id, name: "Einkaufsliste", erstelltAm: liste.erstelltAm)]
@@ -1900,9 +1900,9 @@ struct SyncSnapshotImportServiceTests {
         ]
         snapshot.kaufEintraege = [
             KaufEintragSnapshot(
-                id: UUID(), artikelID: artikel.id, einkaufsvorgangID: remoteVorgangID, geschaeftID: nil, kategorieID: nil,
+                id: UUID(), artikelID: artikel.id, einkaufsvorgangID: remoteVorgangID, geschaeftID: nil, abteilungID: nil,
                 artikelNameSnapshot: "Milch", geschaeftNameSnapshot: "",
-                datum: Date(), menge: 1, kategorieBesuchsIndex: nil
+                datum: Date(), menge: 1, abteilungBesuchsIndex: nil
             ),
         ]
         try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
@@ -1954,7 +1954,7 @@ struct SyncSnapshotImportServiceTests {
         snapshot.artikel = [
             ArtikelSnapshot(
                 id: artikel.id, name: "Bananen", symbolName: "drop.fill", farbeHex: "#34C759",
-                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date().addingTimeInterval(-864000)
+                abteilungIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date().addingTimeInterval(-864000)
             ),
         ]
         snapshot.einkaufslisten = [EinkaufslisteSnapshot(id: liste.id, name: "Einkaufsliste", erstelltAm: liste.erstelltAm)]
@@ -1967,9 +1967,9 @@ struct SyncSnapshotImportServiceTests {
         ]
         snapshot.kaufEintraege = [
             KaufEintragSnapshot(
-                id: UUID(), artikelID: artikel.id, einkaufsvorgangID: remoteVorgangID, geschaeftID: nil, kategorieID: nil,
+                id: UUID(), artikelID: artikel.id, einkaufsvorgangID: remoteVorgangID, geschaeftID: nil, abteilungID: nil,
                 artikelNameSnapshot: "Bananen", geschaeftNameSnapshot: "",
-                datum: historischeKaufzeit, menge: 1, kategorieBesuchsIndex: nil
+                datum: historischeKaufzeit, menge: 1, abteilungBesuchsIndex: nil
             ),
         ]
         try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
@@ -2001,7 +2001,7 @@ struct SyncSnapshotImportServiceTests {
         snapshot.artikel = [
             ArtikelSnapshot(
                 id: apfel.id, name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759",
-                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+                abteilungIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
             ),
         ]
         // Produkt-Pflicht (GitHub #131): ``SyncSnapshotImportService`` legt einen
@@ -2052,13 +2052,13 @@ struct SyncSnapshotImportServiceTests {
         snapshot.artikel = [
             ArtikelSnapshot(
                 id: apfel.id, name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759",
-                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+                abteilungIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
             ),
         ]
         snapshot.geschaefte = [
             GeschaeftSnapshot(
                 id: rewe.id, name: "Rewe", typIDs: [], adresse: nil, breitengrad: nil, laengengrad: nil,
-                erkennungsradius: nil, kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
+                erkennungsradius: nil, abteilungIDs: [], ausgeschlosseneAbteilungIDs: [], alternativeNamen: [],
                 ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
             ),
         ]
@@ -2095,7 +2095,7 @@ struct SyncSnapshotImportServiceTests {
         snapshot.artikel = [
             ArtikelSnapshot(
                 id: apfel.id, name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759",
-                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+                abteilungIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
             ),
         ]
         snapshot.einkaufslisten = [EinkaufslisteSnapshot(id: liste.id, name: "Urlaub", erstelltAm: liste.erstelltAm)]
@@ -2135,7 +2135,7 @@ struct SyncSnapshotImportServiceTests {
         ersterSnapshot.artikel = [
             ArtikelSnapshot(
                 id: apfel.id, name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759",
-                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+                abteilungIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
             ),
         ]
         ersterSnapshot.einkaufslisten = [EinkaufslisteSnapshot(id: liste.id, name: "Urlaub", erstelltAm: liste.erstelltAm)]
@@ -2222,7 +2222,7 @@ struct SyncSnapshotImportServiceTests {
         snapshot.artikel = [
             ArtikelSnapshot(
                 id: artikel.id, name: "Sonnencreme", symbolName: "sun.max.fill", farbeHex: "#FFCC00",
-                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+                abteilungIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
             ),
         ]
         snapshot.einkaufslistenEintraege = [
@@ -2255,7 +2255,7 @@ struct SyncSnapshotImportServiceTests {
         snapshot.geschaefte = [
             GeschaeftSnapshot(
                 id: rewe.id, name: "Rewe", typIDs: [], adresse: nil, breitengrad: nil, laengengrad: nil,
-                erkennungsradius: nil, kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
+                erkennungsradius: nil, abteilungIDs: [], ausgeschlosseneAbteilungIDs: [], alternativeNamen: [],
                 ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
             ),
         ]
@@ -2278,7 +2278,7 @@ struct SyncSnapshotImportServiceTests {
     }
 
     /// Ein per Snapshot gemergter (also per Konstruktion von einem ANDEREN
-    /// Gerät stammender) ``KaufEintrag`` darf seinen `kategorieBesuchsIndex`
+    /// Gerät stammender) ``KaufEintrag`` darf seinen `abteilungBesuchsIndex`
     /// NICHT aus dem Snapshot übernehmen — sonst würde ein später auf diesem
     /// Gerät abgeschlossener, mit dem fremden Vorgang zusammengeführter
     /// Einkauf (``mergeEinkaufsvorgaenge``) die Laufreihenfolge des anderen
@@ -2300,14 +2300,14 @@ struct SyncSnapshotImportServiceTests {
         snapshot.artikel = [
             ArtikelSnapshot(
                 id: apfel.id, name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759",
-                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+                abteilungIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
             ),
         ]
         snapshot.kaufEintraege = [
             KaufEintragSnapshot(
-                id: UUID(), artikelID: apfel.id, einkaufsvorgangID: nil, geschaeftID: nil, kategorieID: nil,
+                id: UUID(), artikelID: apfel.id, einkaufsvorgangID: nil, geschaeftID: nil, abteilungID: nil,
                 artikelNameSnapshot: "Apfel", geschaeftNameSnapshot: "",
-                datum: Date(), menge: 1, kategorieBesuchsIndex: 3
+                datum: Date(), menge: 1, abteilungBesuchsIndex: 3
             ),
         ]
         try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
@@ -2315,7 +2315,7 @@ struct SyncSnapshotImportServiceTests {
         await SyncSnapshotImportService.importiereSnapshots(context: context)
 
         let eintrag = try #require(try context.fetch(FetchDescriptor<KaufEintrag>()).first)
-        #expect(eintrag.kategorieBesuchsIndex == nil)
+        #expect(eintrag.abteilungBesuchsIndex == nil)
         #expect(eintrag.ursprungsGeraeteID == "fremdes-geraet")
     }
 
@@ -2343,7 +2343,7 @@ struct SyncSnapshotImportServiceTests {
         snapshot.artikel = [
             ArtikelSnapshot(
                 id: apfel.id, name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759",
-                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+                abteilungIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
             ),
         ]
         // Bewusst KEIN passender Eintrag in `snapshot.einkaufsvorgaenge` — simuliert
@@ -2352,9 +2352,9 @@ struct SyncSnapshotImportServiceTests {
         // führt und seine `KaufEintrag`e weiterhin referenziert.
         snapshot.kaufEintraege = [
             KaufEintragSnapshot(
-                id: UUID(), artikelID: apfel.id, einkaufsvorgangID: UUID(), geschaeftID: nil, kategorieID: nil,
+                id: UUID(), artikelID: apfel.id, einkaufsvorgangID: UUID(), geschaeftID: nil, abteilungID: nil,
                 artikelNameSnapshot: "Apfel", geschaeftNameSnapshot: "",
-                datum: Date(), menge: 1, kategorieBesuchsIndex: nil
+                datum: Date(), menge: 1, abteilungBesuchsIndex: nil
             ),
         ]
         try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
@@ -2365,45 +2365,45 @@ struct SyncSnapshotImportServiceTests {
     }
 
     /// Aufbau-Helfer für die folgenden drei Tests (GitHub #87): legt Geschäft
-    /// und ein kanonisches Kategorie-Paar an und liefert eine
+    /// und ein kanonisches Abteilung-Paar an und liefert eine
     /// `WarengruppenDistanzSnapshot`-Fabrik für dasselbe Paar.
     private func machtWarengruppenDistanzSzenario(context: ModelContext) throws -> (
-        geschaeft: Geschaeft, kategorieA: ArtikelKategorie, kategorieB: ArtikelKategorie,
+        geschaeft: Geschaeft, abteilungA: Abteilung, abteilungB: Abteilung,
         macheSnapshot: (SyncSnapshot, Double, Int) -> SyncSnapshot
     ) {
         let typ = GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")
         context.insert(typ)
         let geschaeft = Geschaeft(name: "Rewe", typen: [typ])
         context.insert(geschaeft)
-        let kategorieA = ArtikelKategorie(name: "Obst", standardSymbol: "carrot", standardFarbeHex: "#34C759")
-        let kategorieB = ArtikelKategorie(name: "Milchprodukte", standardSymbol: "drop", standardFarbeHex: "#007AFF")
-        context.insert(kategorieA)
-        context.insert(kategorieB)
+        let abteilungA = Abteilung(name: "Obst", standardSymbol: "carrot", standardFarbeHex: "#34C759")
+        let abteilungB = Abteilung(name: "Milchprodukte", standardSymbol: "drop", standardFarbeHex: "#007AFF")
+        context.insert(abteilungA)
+        context.insert(abteilungB)
         try context.save()
 
         func macheSnapshot(_ basis: SyncSnapshot, _ distanz: Double, _ eigeneAnzahlBeobachtungen: Int) -> SyncSnapshot {
             var snapshot = basis
             snapshot.geschaeftsTypen = [GeschaeftTypSnapshot(id: UUID(), name: "Lebensmittel", symbolName: "cart.fill", farbeHex: "#8E8E93", sortIndex: 0)]
-            snapshot.artikelKategorien = [
-                ArtikelKategorieSnapshot(id: kategorieA.id, name: "Obst", standardSymbol: "carrot", standardFarbeHex: "#34C759", sortIndex: 0, geschaeftsTypIDs: []),
-                ArtikelKategorieSnapshot(id: kategorieB.id, name: "Milchprodukte", standardSymbol: "drop", standardFarbeHex: "#007AFF", sortIndex: 1, geschaeftsTypIDs: []),
+            snapshot.abteilungen = [
+                AbteilungSnapshot(id: abteilungA.id, name: "Obst", standardSymbol: "carrot", standardFarbeHex: "#34C759", sortIndex: 0, geschaeftsTypIDs: []),
+                AbteilungSnapshot(id: abteilungB.id, name: "Milchprodukte", standardSymbol: "drop", standardFarbeHex: "#007AFF", sortIndex: 1, geschaeftsTypIDs: []),
             ]
             snapshot.geschaefte = [
                 GeschaeftSnapshot(
                     id: geschaeft.id, name: "Rewe", typIDs: [], adresse: nil, breitengrad: nil, laengengrad: nil,
-                    erkennungsradius: nil, kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
+                    erkennungsradius: nil, abteilungIDs: [], ausgeschlosseneAbteilungIDs: [], alternativeNamen: [],
                     ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
                 ),
             ]
             snapshot.warengruppenDistanzen = [
                 WarengruppenDistanzSnapshot(
-                    id: UUID(), geschaeftID: geschaeft.id, kategorieAID: kategorieA.id, kategorieBID: kategorieB.id,
+                    id: UUID(), geschaeftID: geschaeft.id, abteilungAID: abteilungA.id, abteilungBID: abteilungB.id,
                     distanz: distanz, eigeneAnzahlBeobachtungen: eigeneAnzahlBeobachtungen
                 ),
             ]
             return snapshot
         }
-        return (geschaeft, kategorieA, kategorieB, macheSnapshot)
+        return (geschaeft, abteilungA, abteilungB, macheSnapshot)
     }
 
     /// Gleich viele Beobachtungen auf beiden Seiten (je 1) — Kontrollfall, in
@@ -2417,9 +2417,9 @@ struct SyncSnapshotImportServiceTests {
         try SyncOrdnerService.ordnerFestlegen(syncOrdner)
         defer { SyncOrdnerService.ordnerEntfernen() }
 
-        let (geschaeft, kategorieA, kategorieB, macheSnapshot) = try machtWarengruppenDistanzSzenario(context: context)
-        let (kanonA, kanonB) = WarengruppenDistanz.kanonischesPaar(kategorieA, kategorieB)
-        context.insert(WarengruppenDistanz(geschaeft: geschaeft, kategorieA: kanonA, kategorieB: kanonB, distanz: 0.2))
+        let (geschaeft, abteilungA, abteilungB, macheSnapshot) = try machtWarengruppenDistanzSzenario(context: context)
+        let (kanonA, kanonB) = WarengruppenDistanz.kanonischesPaar(abteilungA, abteilungB)
+        context.insert(WarengruppenDistanz(geschaeft: geschaeft, abteilungA: kanonA, abteilungB: kanonB, distanz: 0.2))
         try context.save()
 
         let snapshot = macheSnapshot(leererSnapshot(geraeteID: "fremdes-geraet"), 0.8, 1)
@@ -2445,9 +2445,9 @@ struct SyncSnapshotImportServiceTests {
         try SyncOrdnerService.ordnerFestlegen(syncOrdner)
         defer { SyncOrdnerService.ordnerEntfernen() }
 
-        let (geschaeft, kategorieA, kategorieB, macheSnapshot) = try machtWarengruppenDistanzSzenario(context: context)
-        let (kanonA, kanonB) = WarengruppenDistanz.kanonischesPaar(kategorieA, kategorieB)
-        let bestehendeDistanz = WarengruppenDistanz(geschaeft: geschaeft, kategorieA: kanonA, kategorieB: kanonB, distanz: 0.2)
+        let (geschaeft, abteilungA, abteilungB, macheSnapshot) = try machtWarengruppenDistanzSzenario(context: context)
+        let (kanonA, kanonB) = WarengruppenDistanz.kanonischesPaar(abteilungA, abteilungB)
+        let bestehendeDistanz = WarengruppenDistanz(geschaeft: geschaeft, abteilungA: kanonA, abteilungB: kanonB, distanz: 0.2)
         bestehendeDistanz.eigeneBeobachtungsAnzahl = 5
         context.insert(bestehendeDistanz)
         try context.save()
@@ -2476,9 +2476,9 @@ struct SyncSnapshotImportServiceTests {
         try SyncOrdnerService.ordnerFestlegen(syncOrdner)
         defer { SyncOrdnerService.ordnerEntfernen() }
 
-        let (geschaeft, kategorieA, kategorieB, macheSnapshot) = try machtWarengruppenDistanzSzenario(context: context)
-        let (kanonA, kanonB) = WarengruppenDistanz.kanonischesPaar(kategorieA, kategorieB)
-        context.insert(WarengruppenDistanz(geschaeft: geschaeft, kategorieA: kanonA, kategorieB: kanonB, distanz: 0.2))
+        let (geschaeft, abteilungA, abteilungB, macheSnapshot) = try machtWarengruppenDistanzSzenario(context: context)
+        let (kanonA, kanonB) = WarengruppenDistanz.kanonischesPaar(abteilungA, abteilungB)
+        context.insert(WarengruppenDistanz(geschaeft: geschaeft, abteilungA: kanonA, abteilungB: kanonB, distanz: 0.2))
         try context.save()
 
         let snapshot = macheSnapshot(leererSnapshot(geraeteID: "fremdes-geraet"), 0.8, 1)
@@ -2552,21 +2552,21 @@ struct SyncSnapshotImportServiceTests {
         snapshot.artikel = [
             ArtikelSnapshot(
                 id: apfel.id, name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759",
-                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+                abteilungIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
             ),
         ]
         let neueID = UUID()
         snapshot.kaufEintraege = (bekannteIDs.map {
             KaufEintragSnapshot(
-                id: $0, artikelID: apfel.id, einkaufsvorgangID: nil, geschaeftID: nil, kategorieID: nil,
+                id: $0, artikelID: apfel.id, einkaufsvorgangID: nil, geschaeftID: nil, abteilungID: nil,
                 artikelNameSnapshot: "Apfel (fremd, darf nicht übernommen werden)", geschaeftNameSnapshot: "",
-                datum: Date(), menge: 1, kategorieBesuchsIndex: nil
+                datum: Date(), menge: 1, abteilungBesuchsIndex: nil
             )
         }) + [
             KaufEintragSnapshot(
-                id: neueID, artikelID: apfel.id, einkaufsvorgangID: nil, geschaeftID: nil, kategorieID: nil,
+                id: neueID, artikelID: apfel.id, einkaufsvorgangID: nil, geschaeftID: nil, abteilungID: nil,
                 artikelNameSnapshot: "Apfel", geschaeftNameSnapshot: "",
-                datum: Date(), menge: 1, kategorieBesuchsIndex: nil
+                datum: Date(), menge: 1, abteilungBesuchsIndex: nil
             ),
         ]
         try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
@@ -2606,7 +2606,7 @@ struct SyncSnapshotImportServiceTests {
         snapshot.artikel = [
             ArtikelSnapshot(
                 id: apfel.id, name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759",
-                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+                abteilungIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
             ),
         ]
         // Produkt-Pflicht (GitHub #131), siehe Begründung in
@@ -2659,8 +2659,8 @@ struct SyncSnapshotImportServiceTests {
         snapshot.erzeugtAm = Date().addingTimeInterval(-120)
         snapshot.kaufEintraege = [
             KaufEintragSnapshot(
-                id: UUID(), artikelID: nil, einkaufsvorgangID: nil, geschaeftID: nil, kategorieID: nil,
-                artikelNameSnapshot: "Apfel", geschaeftNameSnapshot: "", datum: Date(), menge: 1, kategorieBesuchsIndex: nil
+                id: UUID(), artikelID: nil, einkaufsvorgangID: nil, geschaeftID: nil, abteilungID: nil,
+                artikelNameSnapshot: "Apfel", geschaeftNameSnapshot: "", datum: Date(), menge: 1, abteilungBesuchsIndex: nil
             ),
         ]
         try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "altes-geraet", in: syncOrdner)
@@ -2711,7 +2711,7 @@ struct SyncSnapshotImportServiceTests {
         snapshot.geschaefte = [
             GeschaeftSnapshot(
                 id: remoteID, name: "Rewe", typIDs: [], adresse: nil, breitengrad: nil, laengengrad: nil,
-                erkennungsradius: nil, kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
+                erkennungsradius: nil, abteilungIDs: [], ausgeschlosseneAbteilungIDs: [], alternativeNamen: [],
                 ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 3, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
             ),
         ]
@@ -2755,7 +2755,7 @@ struct SyncSnapshotImportServiceTests {
         snapshot.geschaefte = [
             GeschaeftSnapshot(
                 id: remoteID, name: "REWE Nord", typIDs: [], adresse: nil, breitengrad: nil, laengengrad: nil,
-                erkennungsradius: nil, kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
+                erkennungsradius: nil, abteilungIDs: [], ausgeschlosseneAbteilungIDs: [], alternativeNamen: [],
                 ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 4, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
             ),
         ]
@@ -2801,7 +2801,7 @@ struct SyncSnapshotImportServiceTests {
         snapshot.geschaefte = [
             GeschaeftSnapshot(
                 id: remoteID, name: "Rewe", typIDs: [], adresse: nil, breitengrad: nil, laengengrad: nil,
-                erkennungsradius: nil, kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
+                erkennungsradius: nil, abteilungIDs: [], ausgeschlosseneAbteilungIDs: [], alternativeNamen: [],
                 ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
             ),
         ]
@@ -2843,7 +2843,7 @@ struct SyncSnapshotImportServiceTests {
         var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
         snapshot.artikel = [
             ArtikelSnapshot(
-                id: remoteID, name: "H-Milch", symbolName: "drop.fill", farbeHex: "#34C759", kategorieIDs: [],
+                id: remoteID, name: "H-Milch", symbolName: "drop.fill", farbeHex: "#34C759", abteilungIDs: [],
                 notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
             ),
         ]

@@ -33,13 +33,13 @@ final class AuswahlSheetRegressionUITests: XCTestCase {
         XCTAssertTrue(abteilungenRow.waitForExistence(timeout: 5))
         abteilungenRow.tap()
 
-        // "Sonstiges" ist die einzige Kategorie, die per SeedData bei jedem
-        // frischen App-Start garantiert existiert (ArtikelKategorie.sonstigesName).
-        let ersteKategorieRow = app.buttons.matching(
-            NSPredicate(format: "identifier BEGINSWITH %@", "abteilungenVerwaltung.kategorieRow.")
+        // "Sonstiges" ist die einzige Abteilung, die per SeedData bei jedem
+        // frischen App-Start garantiert existiert (Abteilung.sonstigesName).
+        let ersteAbteilungRow = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "abteilungenVerwaltung.abteilungRow.")
         ).firstMatch
-        XCTAssertTrue(ersteKategorieRow.waitForExistence(timeout: 5))
-        ersteKategorieRow.tap()
+        XCTAssertTrue(ersteAbteilungRow.waitForExistence(timeout: 5))
+        ersteAbteilungRow.tap()
 
         let artikelHinzufuegenButton = app.buttons["abteilungBearbeiten.artikelHinzufuegenButton"]
         XCTAssertTrue(artikelHinzufuegenButton.waitForExistence(timeout: 5))

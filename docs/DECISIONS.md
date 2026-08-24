@@ -24,22 +24,22 @@ das generierte `.xcodeproj` wird bewusst **nicht** committet (`.gitignore`) und 
   `xcode-select -s`-Umstellung (vermeidet sudo/Passwort-Interaktion, kein Nebeneffekt
   außerhalb dieses Projekts).
 
-## Kategorien wichtiger als Regale: direkte Geschäft-Kategorie-Zuordnung (ab v0.1, Build 23)
+## Abteilungen wichtiger als Regale: direkte Geschäft-Abteilung-Zuordnung (ab v0.1, Build 23)
 
-**Ursprüngliche Entscheidung (bis Build 22):** Kein separates "Kategorie pro Geschäft
-verfügbar"-Modell — die Zuordnung Kategorie → Regal (pro Geschäft) implizierte bereits
-die Verfügbarkeit der Kategorie in diesem Geschäft, um Inkonsistenzen zu vermeiden
-(z.B. Kategorie am Regal, aber nicht separat als "verfügbar" markiert).
+**Ursprüngliche Entscheidung (bis Build 22):** Kein separates "Abteilung pro Geschäft
+verfügbar"-Modell — die Zuordnung Abteilung → Regal (pro Geschäft) implizierte bereits
+die Verfügbarkeit der Abteilung in diesem Geschäft, um Inkonsistenzen zu vermeiden
+(z.B. Abteilung am Regal, aber nicht separat als "verfügbar" markiert).
 
-**Korrektur (Nutzervorgabe):** Regale sind optional, Kategorien nicht. Ein Geschäft
-kann Kategorien jetzt direkt zugeordnet bekommen (`Geschaeft.kategorien`), unabhängig
-davon, ob überhaupt ein Regal existiert. `Geschaeft.verfuegbareKategorien` ist die
-Vereinigung aus dieser direkten Zuordnung und den über Regale zugeordneten Kategorien
-(`Regal.kategorien`). Ein Regal organisiert damit nur noch, in welcher Reihenfolge
-bereits verfügbare Kategorien beim Einkaufen abgelaufen werden — es ist keine
+**Korrektur (Nutzervorgabe):** Regale sind optional, Abteilungen nicht. Ein Geschäft
+kann Abteilungen jetzt direkt zugeordnet bekommen (`Geschaeft.abteilungen`), unabhängig
+davon, ob überhaupt ein Regal existiert. `Geschaeft.verfuegbareAbteilungen` ist die
+Vereinigung aus dieser direkten Zuordnung und den über Regale zugeordneten Abteilungen
+(`Regal.abteilungen`). Ein Regal organisiert damit nur noch, in welcher Reihenfolge
+bereits verfügbare Abteilungen beim Einkaufen abgelaufen werden — es ist keine
 Voraussetzung mehr für Verfügbarkeit. Die eingangs befürchtete Inkonsistenz
-(Kategorie doppelt als verfügbar markiert, direkt und über ein Regal) ist unkritisch,
-da `verfuegbareKategorien` dedupliziert.
+(Abteilung doppelt als verfügbar markiert, direkt und über ein Regal) ist unkritisch,
+da `verfuegbareAbteilungen` dedupliziert.
 
 ## "iOS 27"-Funktionen
 
@@ -85,7 +85,7 @@ der Einkaufsliste — der Preis ist an dieser Stelle noch unbekannt und wird ers
 den späteren Belegscan (v0.7) nachgetragen. `preis` wurde daher auf `Decimal?`
 geändert. Zusätzlich wurde `KaufEintrag.regal` ergänzt, damit die Regal-Zuordnung zum
 Kaufzeitpunkt dauerhaft festgehalten wird (unabhängig von späteren Änderungen der
-Regal-Kategorie-Zuordnung) — Grundlage für den Lern-Algorithmus (v0.5).
+Regal-Abteilung-Zuordnung) — Grundlage für den Lern-Algorithmus (v0.5).
 
 ## KI-Regalvorschlag ist rein informativ
 
@@ -205,6 +205,28 @@ mehr). Die obigen Lektionen (additiv vs. strukturell, Checksum-Kollisionen,
 weiterhin uneingeschränkt gültig — nur die konkret zitierten `SchemaV1`/
 `SchemaV2`-Dateien von damals existieren nicht mehr.
 
+**Nachtrag (2026-08-24, GitHub #88) — `ArtikelKategorie` → `Abteilung`, ohne
+Migrationsplan:** Direkte Folge des Schema-Resets oben: da `SchemaV1` seit
+2026-08-22 ohnehin nur die aktuellen, lebenden Modell-Typen referenziert (kein
+`SchemaMigrationPlan`), ließ sich die schon länger zurückgestellte
+Modell-Umbenennung (`ArtikelKategorie` → `Abteilung`, Rest von #62) ohne neue
+`VersionedSchema`-Stufe umsetzen — einfach den Typ samt aller referenzierenden
+Relationship-/Attributnamen in `SchemaV1` direkt umbenennen. Nutzervorgabe:
+keine Migration bauen, App befindet sich noch in Entwicklung, nur ein eigenes
+Gerät mit Testdaten betroffen — ein bestehender lokaler Store muss nicht
+erhalten bleiben.
+
+Bewusster Kompatibilitätsbruch im Sync-Wire-Format (betrifft nur einen
+Mischbetrieb alter/neuer App-Version über denselben Sync-Ordner, aktuell nicht
+gegeben): `SyncEntitaetsArt`s Wire-String wechselt von `"ArtikelKategorie"` zu
+`"Abteilung"` (`Models/SyncEntitaetsAlias.swift`), und `SyncSnapshot`s Felder
+werden mit umbenannt (`artikelKategorien`→`abteilungen`,
+`ArtikelKategorieSnapshot`→`AbteilungSnapshot`, `kategorieID(s)`→`abteilungID(s)`)
+— kein `CodingKeys`-Kompatibilitätslayer. Kommt später ein zweites Sync-Gerät
+hinzu, muss dessen geteilter Sync-Ordner beim Erstkontakt mit dieser Version
+einmalig geleert werden, sonst schlägt der erste Import fehl (Decode-Fehler
+auf dem gesamten `SyncSnapshot`, nicht nur auf den Abteilungs-Teil).
+
 ## Git-Autor (lokal, nur dieses Repo)
 
 `user.name`/`user.email` wurden nur lokal für dieses Repo gesetzt (nicht global), da
@@ -213,30 +235,30 @@ anpassen.
 
 ## Regal-Entfernung: adaptive Sortierung ersetzt manuelle Zwischenschicht (v0.6, GitHub #35)
 
-**Rückblick:** `Regal` wurde in v0.3 eingeführt, um Kategorien innerhalb eines
+**Rückblick:** `Regal` wurde in v0.3 eingeführt, um Abteilungen innerhalb eines
 Geschäfts zu einer Sortiereinheit zu bündeln (manuelle Reihenfolge oder ab v0.5 ein
 gelernter Durchschnittswert je Regal, `ShelfOrderLearningService`/
-`KategorieBesuchsStatistik`). Die frühere Entscheidung oben („Kategorien wichtiger als
+`AbteilungBesuchsStatistik`). Die frühere Entscheidung oben („Abteilungen wichtiger als
 Regale“) hatte `Regal` bereits auf eine rein optionale Sortier-Hilfsstruktur reduziert,
 ohne Einfluss auf Verfügbarkeit.
 
 **Auslöser der Entfernung:** Mit der in Build 95 eingeführten
 `AbteilungsDistanzService`-Sortierung (paarweise gelernte Distanz je
-Kategorie-Paar und Geschäft statt eines einzelnen Skalars je Kategorie, siehe
+Abteilung-Paar und Geschäft statt eines einzelnen Skalars je Abteilung, siehe
 `docs/ARCHITEKTURVORSCHLAG_ADAPTIVE_SORTIERUNG.md`) deckt die automatische Sortierung
 dasselbe Problem feiner und ganz ohne manuellen Pflegeaufwand ab. `Regal` als
 zusätzliche, vom Anwender anzulegende und zu benennende Zwischenschicht hatte damit
-keinen Zweck mehr. Da `ShelfOrderLearningService` und `KategorieBesuchsStatistik`
+keinen Zweck mehr. Da `ShelfOrderLearningService` und `AbteilungBesuchsStatistik`
 ausschließlich von `Regal` aus aufgerufen wurden, waren beide nach dessen Entfernung
 selbst verwaist und wurden im selben Zug entfernt (Nutzerentscheidung, alle drei
 zusammen statt schrittweise zu entfernen).
 
-**Konsequenz für bestehende Daten:** `Regal` und `KategorieBesuchsStatistik` wurden
+**Konsequenz für bestehende Daten:** `Regal` und `AbteilungBesuchsStatistik` wurden
 aus `SchemaDefinition.swift`s Modell-Liste entfernt. SwiftDatas automatische
 Lightweight-Migration verwirft dadurch beim nächsten Start jede bereits gespeicherte
-Regal- bzw. Kategorie-Besuchsstatistik-Zeile unwiderruflich — anders als bei rein
+Regal- bzw. Abteilung-Besuchsstatistik-Zeile unwiderruflich — anders als bei rein
 additiven Attributänderungen (siehe Abschnitt oben) ist das hier bewusst in Kauf
 genommen, da die entfernten Tabellen ohne die zugehörigen Modelltypen ohnehin nicht
 mehr lesbar wären und ihr einziger Zweck (Regal-Zuordnung/-Reihenfolge) mit der
-Entfernung selbst entfällt. `Geschaeft`/`ArtikelKategorie`/`KaufEintrag` und alle
+Entfernung selbst entfällt. `Geschaeft`/`Abteilung`/`KaufEintrag` und alle
 sonstigen Daten bleiben unverändert erhalten.

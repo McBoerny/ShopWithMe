@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Kuratierte SF-Symbole für die Symbolauswahl bei Artikeln und Kategorien. Der
+/// Kuratierte SF-Symbole für die Symbolauswahl bei Artikeln und Abteilungen. Der
 /// Anwender kann zusätzlich einen eigenen SF-Symbol-Namen eingeben, falls das
 /// gewünschte Symbol nicht in der kuratierten Liste enthalten ist.
 enum SymbolPalette {

@@ -10,7 +10,7 @@ struct ModelTests {
     /// den Container selbst am Leben halten, solange der Context benutzt wird.
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {
         let schema = Schema([
-            Artikel.self, ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self,
+            Artikel.self, Abteilung.self, Geschaeft.self, GeschaeftTyp.self,
             Einkaufsvorgang.self, KaufEintrag.self, WarengruppenDistanz.self,
             Einkaufsliste.self, EinkaufslistenEintrag.self, IgnorierterArtikel.self,
             SyncEvent.self, SyncPeerZaehlerStand.self, Preispunkt.self,
@@ -36,82 +36,82 @@ struct ModelTests {
         SeedData.seedeStandarddatenFallsLeer(context: context)
         SeedData.seedeStandarddatenFallsLeer(context: context)
 
-        let anzahl = try context.fetchCount(FetchDescriptor<ArtikelKategorie>())
-        #expect(anzahl == SeedData.standardKategorien.count)
+        let anzahl = try context.fetchCount(FetchDescriptor<Abteilung>())
+        #expect(anzahl == SeedData.standardAbteilungen.count)
     }
 
     @Test
-    func verfuegbareKategorienEnthaeltDirektZugeordneteKategorien() throws {
+    func verfuegbareAbteilungenEnthaeltDirektZugeordneteAbteilungen() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
-        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        let obst = Abteilung(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
         context.insert(obst)
 
         let geschaeft = Geschaeft(name: "Testladen", typen: [lebensmittelTyp()])
         context.insert(geschaeft)
-        geschaeft.kategorien = [obst]
+        geschaeft.abteilungen = [obst]
 
-        #expect(geschaeft.verfuegbareKategorien.map(\.name) == ["Obst"])
+        #expect(geschaeft.verfuegbareAbteilungen.map(\.name) == ["Obst"])
     }
 
     @Test
-    func verfuegbareKategorienMitAlleKategorienEnthaeltTypBasierteAbteilungen() throws {
-        // GitHub #5: eine Kategorie ohne jede manuelle Zuordnung zum Geschäft gilt
+    func verfuegbareAbteilungenMitAlleAbteilungenEnthaeltTypBasierteAbteilungen() throws {
+        // GitHub #5: eine Abteilung ohne jede manuelle Zuordnung zum Geschäft gilt
         // trotzdem als verfügbar, sobald sie einem der Geschäftstypen zugeordnet ist.
         let (container, context) = try machtLeerenContainer()
         _ = container
         let drogerie = drogerieTyp()
-        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        let obst = Abteilung(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
         context.insert(obst)
-        let zahnpasta = ArtikelKategorie(name: "Zahnpasta", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
+        let zahnpasta = Abteilung(name: "Zahnpasta", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
         zahnpasta.geschaeftsTypen = [drogerie]
         context.insert(zahnpasta)
-        let werkzeug = ArtikelKategorie(name: "Werkzeug", standardSymbol: "hammer.fill", standardFarbeHex: "#8E8E93")
+        let werkzeug = Abteilung(name: "Werkzeug", standardSymbol: "hammer.fill", standardFarbeHex: "#8E8E93")
         werkzeug.geschaeftsTypen = [baumarktTyp()]
         context.insert(werkzeug)
 
         let geschaeft = Geschaeft(name: "Testladen", typen: [lebensmittelTyp(), drogerie])
         context.insert(geschaeft)
-        geschaeft.kategorien = [obst]
+        geschaeft.abteilungen = [obst]
 
-        let alleKategorien = [obst, zahnpasta, werkzeug]
-        #expect(geschaeft.verfuegbareKategorien(alleKategorien: alleKategorien).map(\.name) == ["Obst", "Zahnpasta"])
+        let alleAbteilungen = [obst, zahnpasta, werkzeug]
+        #expect(geschaeft.verfuegbareAbteilungen(alleAbteilungen: alleAbteilungen).map(\.name) == ["Obst", "Zahnpasta"])
         // Die parameterlose Variante bleibt unverändert rein manuell:
-        #expect(geschaeft.verfuegbareKategorien.map(\.name) == ["Obst"])
+        #expect(geschaeft.verfuegbareAbteilungen.map(\.name) == ["Obst"])
     }
 
     @Test
-    func kategorieDirektEntferntMachtSieNichtMehrVerfuegbar() throws {
-        // Spiegelt `GeschaeftDetailView.kategorieEntfernen`: eine zugeordnete
-        // Kategorie wird über `Geschaeft.kategorien` entfernt.
+    func abteilungDirektEntferntMachtSieNichtMehrVerfuegbar() throws {
+        // Spiegelt `GeschaeftDetailView.abteilungEntfernen`: eine zugeordnete
+        // Abteilung wird über `Geschaeft.abteilungen` entfernt.
         let (container, context) = try machtLeerenContainer()
         _ = container
-        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        let obst = Abteilung(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
         context.insert(obst)
 
         let geschaeft = Geschaeft(name: "Testladen", typen: [lebensmittelTyp()])
         context.insert(geschaeft)
-        geschaeft.kategorien = [obst]
+        geschaeft.abteilungen = [obst]
 
-        #expect(geschaeft.verfuegbareKategorien.map(\.name) == ["Obst"])
+        #expect(geschaeft.verfuegbareAbteilungen.map(\.name) == ["Obst"])
 
-        geschaeft.kategorien.removeAll { $0 == obst }
+        geschaeft.abteilungen.removeAll { $0 == obst }
 
-        #expect(geschaeft.verfuegbareKategorien.isEmpty)
+        #expect(geschaeft.verfuegbareAbteilungen.isEmpty)
     }
 
     @Test
-    func sonstigeKategorieWirdBeiBedarfAngelegtUndWiederverwendet() throws {
+    func sonstigeAbteilungWirdBeiBedarfAngelegtUndWiederverwendet() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
 
-        let angelegt = ArtikelKategorie.sonstige(context: context)
+        let angelegt = Abteilung.sonstige(context: context)
         #expect(angelegt.name == "Sonstiges")
-        #expect(try context.fetchCount(FetchDescriptor<ArtikelKategorie>()) == 1)
+        #expect(try context.fetchCount(FetchDescriptor<Abteilung>()) == 1)
 
-        let wiederverwendet = ArtikelKategorie.sonstige(context: context)
+        let wiederverwendet = Abteilung.sonstige(context: context)
         #expect(wiederverwendet.persistentModelID == angelegt.persistentModelID)
-        #expect(try context.fetchCount(FetchDescriptor<ArtikelKategorie>()) == 1)
+        #expect(try context.fetchCount(FetchDescriptor<Abteilung>()) == 1)
     }
 
     @Test
@@ -190,77 +190,77 @@ struct ModelTests {
     }
 
     @Test
-    func kategorienSetzenHaeltKategorieAlsFuehrendeKategorieSynchron() {
-        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
-        let drogerie = ArtikelKategorie(name: "Drogerie", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
+    func abteilungenSetzenHaeltAbteilungAlsFuehrendeAbteilungSynchron() {
+        let obst = Abteilung(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        let drogerie = Abteilung(name: "Drogerie", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
         let artikel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759")
-        #expect(artikel.kategorie == nil)
+        #expect(artikel.abteilung == nil)
 
-        artikel.kategorien = [obst, drogerie]
-        #expect(artikel.kategorien == [obst, drogerie])
-        #expect(artikel.kategorie == obst)
+        artikel.abteilungen = [obst, drogerie]
+        #expect(artikel.abteilungen == [obst, drogerie])
+        #expect(artikel.abteilung == obst)
     }
 
     @Test
-    func effektiveKategorienFaelltAufAlteKategorieDannAufSonstigesZurueck() throws {
+    func effektiveAbteilungenFaelltAufAlteAbteilungDannAufSonstigesZurueck() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
-        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        let obst = Abteilung(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
         context.insert(obst)
 
-        let mitMehrfachauswahl = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst])
-        #expect(mitMehrfachauswahl.effektiveKategorien(context: context) == [obst])
+        let mitMehrfachauswahl = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", abteilungen: [obst])
+        #expect(mitMehrfachauswahl.effektiveAbteilungen(context: context) == [obst])
 
         // Simuliert einen vor der Mehrfachauswahl angelegten Artikel: nur die alte,
-        // einzelwertige `kategorie` ist gesetzt, `kategorien` bleibt leer.
+        // einzelwertige `abteilung` ist gesetzt, `abteilungen` bleibt leer.
         let legacyArtikel = Artikel(name: "Birne", symbolName: "carrot.fill", farbeHex: "#34C759")
-        legacyArtikel.kategorie = obst
-        #expect(legacyArtikel.kategorien.isEmpty)
-        #expect(legacyArtikel.effektiveKategorien(context: context) == [obst])
+        legacyArtikel.abteilung = obst
+        #expect(legacyArtikel.abteilungen.isEmpty)
+        #expect(legacyArtikel.effektiveAbteilungen(context: context) == [obst])
 
-        let ohneKategorie = Artikel(name: "Nudeln", symbolName: "carrot.fill", farbeHex: "#34C759")
-        #expect(ohneKategorie.effektiveKategorien(context: context).map(\.name) == ["Sonstiges"])
+        let ohneAbteilung = Artikel(name: "Nudeln", symbolName: "carrot.fill", farbeHex: "#34C759")
+        #expect(ohneAbteilung.effektiveAbteilungen(context: context).map(\.name) == ["Sonstiges"])
     }
 
     @Test
-    func fuehrendeKategorieNutztVerfuegbareKategorieImGeschaeft() throws {
+    func fuehrendeAbteilungNutztVerfuegbareAbteilungImGeschaeft() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
-        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
-        let drogerie = ArtikelKategorie(name: "Drogerie", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
+        let obst = Abteilung(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        let drogerie = Abteilung(name: "Drogerie", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE")
         context.insert(obst)
         context.insert(drogerie)
 
         let geschaeft = Geschaeft(name: "Testladen", typen: [lebensmittelTyp()])
         context.insert(geschaeft)
-        geschaeft.kategorien = [drogerie]
+        geschaeft.abteilungen = [drogerie]
 
-        let artikel = Artikel(name: "Duschgel", symbolName: "sparkles", farbeHex: "#AF52DE", kategorien: [obst, drogerie])
-        #expect(artikel.fuehrendeKategorie(inGeschaeft: geschaeft, context: context) == drogerie)
+        let artikel = Artikel(name: "Duschgel", symbolName: "sparkles", farbeHex: "#AF52DE", abteilungen: [obst, drogerie])
+        #expect(artikel.fuehrendeAbteilung(inGeschaeft: geschaeft, context: context) == drogerie)
     }
 
     @Test
-    func fuehrendeKategorieFaelltOhneJedenTrefferAufErsteKategorieZurueck() throws {
+    func fuehrendeAbteilungFaelltOhneJedenTrefferAufErsteAbteilungZurueck() throws {
         let (container, context) = try machtLeerenContainer()
         _ = container
         // Explizit unterschiedliche sortIndex-Werte statt beide beim Default (0) zu
-        // belassen: `fuehrendeKategorie` sortiert Kandidaten seit v0.9 deterministisch
+        // belassen: `fuehrendeAbteilung` sortiert Kandidaten seit v0.9 deterministisch
         // nach sortIndex (dann `id` als Tiebreaker) statt sich auf die nicht
-        // ordnungsgarantierte `kategorien`-Relationship-Reihenfolge zu verlassen —
+        // ordnungsgarantierte `abteilungen`-Relationship-Reihenfolge zu verlassen —
         // bei gleichem sortIndex wäre der "erste" Kandidat sonst von der (zufälligen)
         // UUID-Reihenfolge abhängig, nicht von der hier absichtlich getesteten
-        // "erste zugeordnete Kategorie gewinnt"-Fallback-Regel.
-        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759", sortIndex: 0)
-        let drogerie = ArtikelKategorie(name: "Drogerie", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE", sortIndex: 1)
+        // "erste zugeordnete Abteilung gewinnt"-Fallback-Regel.
+        let obst = Abteilung(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759", sortIndex: 0)
+        let drogerie = Abteilung(name: "Drogerie", standardSymbol: "sparkles", standardFarbeHex: "#AF52DE", sortIndex: 1)
         context.insert(obst)
         context.insert(drogerie)
 
         let geschaeft = Geschaeft(name: "Testladen", typen: [lebensmittelTyp()])
         context.insert(geschaeft)
 
-        let artikel = Artikel(name: "Duschgel", symbolName: "sparkles", farbeHex: "#AF52DE", kategorien: [obst, drogerie])
-        #expect(artikel.fuehrendeKategorie(inGeschaeft: geschaeft, context: context) == obst)
-        #expect(artikel.fuehrendeKategorie(inGeschaeft: nil, context: context) == obst)
+        let artikel = Artikel(name: "Duschgel", symbolName: "sparkles", farbeHex: "#AF52DE", abteilungen: [obst, drogerie])
+        #expect(artikel.fuehrendeAbteilung(inGeschaeft: geschaeft, context: context) == obst)
+        #expect(artikel.fuehrendeAbteilung(inGeschaeft: nil, context: context) == obst)
     }
 
     @Test

@@ -17,9 +17,9 @@ die übrige Doku aktualisiert wird): `docs/BUILD_WORKFLOW.md`.
 - [x] **v0.2** — Artikel-Verwaltung: Liste/Anlegen/Bearbeiten inkl. Symbol-/Farb-Picker,
   Liquid-Glass-Designsystem-Basis.
 - [x] **v0.3** — Geschäfte-Verwaltung: Liste/Anlegen/Bearbeiten, Regal-Verwaltung pro
-  Geschäft, Kategorie-zu-Regal-Zuordnung.
+  Geschäft, Abteilung-zu-Regal-Zuordnung.
 - [x] **v0.4** — Einkaufen-Flow: Einkaufsliste pro Geschäft (nur zugeordnete
-  Kategorien, gruppiert nach Regal), Einkaufsvorgang starten/abschließen, manuelle
+  Abteilungen, gruppiert nach Regal), Einkaufsvorgang starten/abschließen, manuelle
   Regal-Reihenfolge editierbar.
 - [x] **v0.5** — Lern-Algorithmus für automatische Regal-Reihenfolge
   (`ShelfOrderLearningService`) + Vorschlag in der UI.
@@ -72,12 +72,12 @@ die übrige Doku aktualisiert wird): `docs/BUILD_WORKFLOW.md`.
   (`DebugEinstellungen`, `#if DEBUG`, kein Teil des Release-Binaries). Siehe
   `docs/GESCHAEFTSERKENNUNG.md`.
 
-- [x] **v0.9** — Mehrfachkategorien-Anzeige: ein Artikel mit mehreren Kategorien
+- [x] **v0.9** — Mehrfachabteilungen-Anzeige: ein Artikel mit mehreren Abteilungen
   erscheint beim Einkaufen jetzt gleichzeitig in allen zugehörigen Abschnitten
   statt nur in einer „führenden“ (GitHub-Nachfolgefund zu #36); die getappte
-  Kategorie fließt explizit in den `KaufEintrag` ein, sodass
+  Abteilung fließt explizit in den `KaufEintrag` ein, sodass
   `AbteilungsDistanzService` pro Geschäft lernen kann, in welcher der
-  mehreren Kategorien ein Artikel dort tatsächlich steht. Dazu mehrere
+  mehreren Abteilungen ein Artikel dort tatsächlich steht. Dazu mehrere
   Sync-Robustheits-Fixes (dangling `Einkaufsvorgang` nach „Einkauf
   abschließen“, Distanzlern-Isolation gegen fremd abgehakte Artikel) — siehe
   `docs/ARCHITECTURE.md` → „v0.9-Robustheits-Fixes“.
@@ -179,14 +179,16 @@ vollständig umgesetzt; weitere Ideen siehe „Zukünftig“ unten.
   `docs/SYNC_CONNECTOR_ARCHITEKTUR.md` Abschnitt 11.
 - ~~**`export.json` als Paket statt Monolith**~~ ([#82](https://github.com/McBoerny/ShopWithMe/issues/82))
   — umgesetzt, siehe `docs/EXPORT_PAKET_UMBAU.md`.
-- **`ArtikelKategorie` → `Abteilung`, vollständige Modell-Umbenennung**
-  ([#62](https://github.com/McBoerny/ShopWithMe/issues/62), Rest nach
-  GUI-/Bezeichner-Umbenennung 2026-08-02): der `@Model`-Typ selbst sowie alle
-  davon persistierten Relationship-/Attribut-Namen bleiben bewusst
-  unverändert, bis eine echte strukturelle SwiftData-Migration geplant wird —
-  wegen der Relationship-Kopplung zu `Artikel`, `Geschaeft`, `KaufEintrag`,
-  `WarengruppenDistanz` und `GeschaeftTyp` müssten mindestens sechs
-  Modelltypen pro Schema-Version eingefroren werden (erste echte strukturelle
-  Migration dieses Projekts überhaupt, siehe `docs/DECISIONS.md` →
-  „Duplicate version checksums"-Vorfall). Größerer, eigenständiger Umbau,
-  nicht Teil des laufenden Betriebs.
+- ~~**`ArtikelKategorie` → `Abteilung`, vollständige Modell-Umbenennung**~~
+  ([#88](https://github.com/McBoerny/ShopWithMe/issues/88), Rest nach
+  GUI-/Bezeichner-Umbenennung 2026-08-02, [#62](https://github.com/McBoerny/ShopWithMe/issues/62))
+  — umgesetzt (2026-08-24): der `@Model`-Typ selbst sowie alle davon
+  persistierten Relationship-/Attribut-Namen sind jetzt `Abteilung`-benannt.
+  Der ursprünglich hier notierte Vorbehalt (echte `VersionedSchema`-Migration
+  mit mindestens sechs eingefrorenen Modelltypen nötig) entfiel durch den
+  Schema-Historie-Reset vom 2026-08-22 (GitHub #128/#129, siehe
+  `docs/DECISIONS.md`) — `SchemaV1` referenziert ohnehin nur lebende Typen,
+  eine neue Version musste nicht eingefroren werden, direkte Umbenennung in
+  derselben Schema-Version reichte. Bewusster Sync-Wire-Format-Bruch
+  (`SyncEntitaetsArt`-String, `SyncSnapshot`-Feldnamen) dokumentiert in
+  `docs/DECISIONS.md`.

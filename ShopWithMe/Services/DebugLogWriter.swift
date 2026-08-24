@@ -128,11 +128,11 @@ actor DebugLogWriter {
     private let maxGroesse: Int
     private let osLogger: Logger
 
-    init(kategorie: String, dateiURL: URL, maxGroesse: Int = 1_000_000) {
+    init(abteilung: String, dateiURL: URL, maxGroesse: Int = 1_000_000) {
         self.dateiURL = dateiURL
         self.vorherigeDateiURL = dateiURL.deletingPathExtension().appendingPathExtension("previous.log")
         self.maxGroesse = maxGroesse
-        self.osLogger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "ShopWithMe", category: kategorie)
+        self.osLogger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "ShopWithMe", category: abteilung)
     }
 
     /// Schreibt ein Ereignis im projektweit einheitlichen Zeilenformat (siehe

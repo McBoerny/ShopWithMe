@@ -20,8 +20,8 @@ final class GeschaeftTyp {
     /// Geschäfte, die diesem Typ zugeordnet sind — inverse zu ``Geschaeft/typen``.
     var geschaefte: [Geschaeft] = []
     /// Abteilungen, die für diesen Typ als Standard gelten — inverse zu
-    /// ``ArtikelKategorie/geschaeftsTypen`` (GitHub #5).
-    var standardKategorien: [ArtikelKategorie] = []
+    /// ``Abteilung/geschaeftsTypen`` (GitHub #5).
+    var standardAbteilungen: [Abteilung] = []
     /// Rohspeicher für ``farbeHex`` — additiv optional, damit vor GitHub #40
     /// angelegte Geschäftstypen (inkl. der zehn vorinstallierten Standardtypen)
     /// ohne Migration einen sinnvollen Fallback erhalten.
@@ -37,7 +37,7 @@ final class GeschaeftTyp {
     /// ``markiereGeaendert()``).
     private var lamportZaehlerRaw: UInt64?
     /// Logischer Zeitstempel der letzten Änderung an ``name``/``symbolName``/
-    /// ``farbeHex`` (nicht an ``standardKategorien``/``geschaefte`` — diese
+    /// ``farbeHex`` (nicht an ``standardAbteilungen``/``geschaefte`` — diese
     /// bleiben additiv gemergt). Grundlage dafür, dass eine Umbenennung/
     /// Farbänderung auf einem Gerät auch bereits synchronisierte Geräte
     /// erreicht (`SyncSnapshotImportService.mergeGeschaeftsTypen`) — ohne
@@ -97,7 +97,7 @@ extension GeschaeftTyp {
         return neuer
     }
 
-    /// Findet die „Sonstiges“-Kategorie (wird normalerweise über ``SeedData``
+    /// Findet die „Sonstiges“-Abteilung (wird normalerweise über ``SeedData``
     /// angelegt) oder legt sie an, falls sie ausnahmsweise noch nicht existiert.
     static func sonstiges(context: ModelContext) -> GeschaeftTyp {
         mitNamen(sonstigesName, context: context)
@@ -107,7 +107,7 @@ extension GeschaeftTyp {
     /// `"lebensmittel"`, `"buchUndSchreibwaren"`) auf den Anzeigenamen des
     /// entsprechenden vorinstallierten ``GeschaeftTyp`` ab — Grundlage für
     /// ``Geschaeft/typenMigrierenFallsNoetig(context:)`` und
-    /// ``ArtikelKategorie/geschaeftsTypenMigrierenFallsNoetig(context:)``. `nil`
+    /// ``Abteilung/geschaeftsTypenMigrierenFallsNoetig(context:)``. `nil`
     /// bei unbekanntem Rohwert.
     static func legacyName(fuerRohwert rohwert: String) -> String? {
         legacyRohwerteZuNamen[rohwert]

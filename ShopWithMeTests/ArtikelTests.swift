@@ -6,7 +6,7 @@ import Testing
 @MainActor
 struct ArtikelTests {
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {
-        let schema = Schema([Artikel.self, ArtikelKategorie.self])
+        let schema = Schema([Artikel.self, Abteilung.self])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
         return (container, container.mainContext)

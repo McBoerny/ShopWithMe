@@ -56,7 +56,7 @@ Zwei Kanäle mit unterschiedlicher Frequenz/Konfliktsemantik:
 | Bereich | Inhalt | Kanal | Konfliktregel |
 |---|---|---|---|
 | **A — zeitkritisch** | Einkaufslisten-Mitgliedschaft, Abhaken/Abwählen | `SyncEvent`, jeder Sync-Zyklus | Lamport-Uhr + `SyncKonfliktAufloesung` (Abschnitt 3) |
-| **B — Stammdaten** | `GeschaeftTyp`, `ArtikelKategorie`, `Geschaeft`, `Artikel` (inkl. `alternativeNamen`), `Einkaufsliste`, `Produkt` (inkl. `alternativeKlarnamen`), `Produktname` (seit v0.14, GitHub #47; `ArtikelAlias` seit GitHub #128 abgelöst) | `SyncSnapshot`, jeder Sync-Zyklus | additiv/nie destruktiv (Abschnitt 4) |
+| **B — Stammdaten** | `GeschaeftTyp`, `Abteilung`, `Geschaeft`, `Artikel` (inkl. `alternativeNamen`), `Einkaufsliste`, `Produkt` (inkl. `alternativeKlarnamen`), `Produktname` (seit v0.14, GitHub #47; `ArtikelAlias` seit GitHub #128 abgelöst) | `SyncSnapshot`, jeder Sync-Zyklus | additiv/nie destruktiv (Abschnitt 4) |
 | **C — Historie** | `Einkaufsvorgang`, `KaufEintrag`, `Preispunkt` | `SyncSnapshot` | Union nach `id` |
 | **D — Lernen** | `WarengruppenDistanz`, `ArtikelListenKauf` (seit GitHub #99) | `SyncSnapshot` | gewichteter Mittelwert bzw. Union (Abschnitt 4.7) |
 
@@ -158,7 +158,7 @@ siehe `docs/GESCHAEFTS_AGGREGATE.md`.
 Ein bestehender lokaler Wert wird **nie** durch einen abweichenden
 Remote-Wert überschrieben, sofern kein Lamport-Zähler entscheidet (siehe
 Ausnahme unten und 4.1a). Merge ergänzt nur fehlende Werte (`nil` →
-Remote-Wert) und vereinigt Mengen (Kategorien, Typen, ignorierte Artikel,
+Remote-Wert) und vereinigt Mengen (Abteilungen, Typen, ignorierte Artikel,
 alternative Namen), statt sie zu ersetzen. Diese additive Regel ist
 absichtlich beibehalten worden, auch nachdem Beobachtbarkeits-Werkzeuge
 (Abschnitt 7) einen Großteil ihres ursprünglichen
@@ -170,7 +170,7 @@ Abwägung).
 
 **Ausnahmen von „additiv":**
 - **Tombstones** (`SyncTombstone`, Bereich B: `Geschaeft`/`Artikel`/
-  `ArtikelKategorie`/`Einkaufsliste`/`KaufEintrag`) — merken eine absichtliche
+  `Abteilung`/`Einkaufsliste`/`KaufEintrag`) — merken eine absichtliche
   Löschung vor, werden zuerst gemergt (`mergeTombstones`) und verhindern,
   dass ein Peer mit veraltetem Snapshot das gelöschte Objekt zurückbringt.
   Jede UI-Löschstelle ruft `SyncTombstoneService.markiereGeloescht(...)` vor
@@ -179,7 +179,7 @@ Abwägung).
   Überschreiben, sondern ein echtes G-Counter-CRDT-Muster (Abschnitt 4.4).
 - **`Einkaufsvorgang`/`KaufEintrag`** — Historie, Union nach `id`, siehe 4.3.
 - **Skalare mit echter Bearbeitungssemantik** (`GeschaeftTyp`/
-  `ArtikelKategorie`/`Geschaeft`/`Artikel`/`Produkt`) — Lamport-Zähler statt
+  `Abteilung`/`Geschaeft`/`Artikel`/`Produkt`) — Lamport-Zähler statt
   additiv, siehe 4.1a.
 
 ### 4.1a Ersetzend mit Lamport-Zähler — Ausnahme für Skalare mit echter Bearbeitungssemantik
@@ -201,7 +201,7 @@ Merge gewinnt der höhere Zähler **ganzheitlich für alle „ersetzenden" Felde
 dieser Entität zusammen** (Whole-Object-Last-Writer-Wins, kein
 Feld-für-Feld-Vergleich — bewusste Vereinfachung, siehe Abwägung unten).
 Umgesetzt für `GeschaeftTyp.name/symbolName/farbeHex`,
-`ArtikelKategorie.name/standardSymbol/standardFarbeHex`, `Geschaeft.name`,
+`Abteilung.name/standardSymbol/standardFarbeHex`, `Geschaeft.name`,
 `Artikel.name/einheit/mengenSchritt`, `Produkt.name` — jeweils die Felder mit
 tatsächlichem UI-Bearbeitungspfad für einen bereits bestehenden Datensatz.
 
@@ -245,7 +245,7 @@ an `mitNamen`.
 **Verbleibende, aktuell folgenlose Gaps** (Feld wird nur bei Neuanlage
 gesetzt, hat aber keinen UI-Bearbeitungspfad für einen bestehenden
 Datensatz, daher kein Live-Bug): `GeschaeftTyp.sortIndex`,
-`ArtikelKategorie.sortIndex`, `Artikel.symbolName`/`farbeHex`,
+`Abteilung.sortIndex`, `Artikel.symbolName`/`farbeHex`,
 `Produkt.istStandard`, `Produktname.barcode`, `Einkaufsliste.erstelltAm`
 (letzteres zusätzlich unkritisch, weil semantisch unveränderlich).
 
@@ -267,7 +267,7 @@ haben. Matching-Strategie je Typ:
 | Modell | Matching | Bemerkung |
 |---|---|---|
 | `GeschaeftTyp` | Name (`GeschaeftTyp.mitNamen(_:symbolName:context:)`, fetch-or-create) | kein Alias-Register — Name ist bereits das eindeutige Merkmal |
-| `ArtikelKategorie` | case-insensitiver Name | Alias bei abweichender ID |
+| `Abteilung` | case-insensitiver Name | Alias bei abweichender ID |
 | `Geschaeft` | Name UND Koordinaten (`GeschaeftErkennungService.istGleicherOrtFuerSyncMerge`, GitHub #86 — strenger als die interaktiven Aufrufer von `istGleicherOrt`) | Alias bei abweichender ID |
 | `Artikel` | case-insensitiver Name | Alias bei abweichender ID |
 | `Einkaufsliste` | case-insensitiver Name | Alias bei abweichender ID — **nicht** ID-basiert (siehe Grund unten) |
@@ -276,7 +276,7 @@ haben. Matching-Strategie je Typ:
 | `Preispunkt` (seit v4, GitHub #76) | ID (unveränderliche Historie, nie gemergt, nur ergänzt) | Absender hat SCD-Kompression bereits vorgenommen (`PreispunktService`) |
 | `Produkt` (seit v8, GitHub #47) | ID/Alias, sonst case-insensitiver Name **innerhalb desselben Artikels** | Alias bei abweichender ID; bewusst ohne Ambiguitäts-Rückstellung (noch keine Verwaltungs-UI, siehe `docs/ARTIKEL_PRODUKT_MODELL.md`) |
 | `Produktname` (seit v8, GitHub #47; seit v9/GitHub #128 zusätzlich die Rolle des abgelösten `ArtikelAlias` bei `geschaeft == nil`) | (Produkt, Geschäft, case-insensitiver Name) | nie destruktiv — kein Alias-Register |
-| `WarengruppenDistanz` | (Geschäft, KategorieA, KategorieB) | gewichteter Mittelwert bei Treffer |
+| `WarengruppenDistanz` | (Geschäft, AbteilungA, AbteilungB) | gewichteter Mittelwert bei Treffer |
 
 **`Einkaufsliste` bewusst namensbasiert statt ID-basiert:** Jedes Gerät legt
 beim allerersten Start automatisch eine eigene Standardliste namens
@@ -317,12 +317,12 @@ ID-Fast-Path). Ohne Nutzerreaktion bleibt der Eintrag einfach in der
 Warteschlange stehen — kein erneutes Anlegen bei jedem weiteren Sync-Zyklus,
 kein automatischer Ähnlichkeits-Merge (Fehleranfälligkeit dafür weiterhin
 höher als der Nutzen). Manuelles Zusammenführen über die vorhandene
-Kategorien-/Artikel-Verwaltung bleibt zusätzlich möglich, für den Fall, dass
+Abteilungen-/Artikel-Verwaltung bleibt zusätzlich möglich, für den Fall, dass
 die Ambiguitäts-Regel selbst keinen Treffer findet (z.B. „Milch" vs.
 „Vollmilch", kein Teilstring).
 
 **Abhängigkeitsreihenfolge beim Merge** (spätere Schritte brauchen die
-Zuordnungstabellen früherer): `GeschaeftTyp` → `ArtikelKategorie` →
+Zuordnungstabellen früherer): `GeschaeftTyp` → `Abteilung` →
 `Geschaeft` → `Artikel` → `Produkt` (GitHub #47, einzige Abhängigkeit:
 `Artikel`) → `Einkaufsliste` → `EinkaufslistenEintrag` →
 `Einkaufsvorgang` → `KaufEintrag` → `Preispunkt` → `Produktname` (GitHub #47,
@@ -435,15 +435,15 @@ der Liste einbezieht. Damit lösen sich `.artikelAbgehakt` und
 ID-/Alias-Lookup, kein Sonderfall mehr).
 
 Ein so oder per Snapshot-Merge fremd materialisierter `KaufEintrag` bekommt
-bewusst **keinen** `kategorieBesuchsIndex` — er beschreibt die Laufreihenfolge
+bewusst **keinen** `abteilungBesuchsIndex` — er beschreibt die Laufreihenfolge
 des SENDENDEN Geräts durchs Geschäft, nicht die dieses Geräts, und würde
 `AbteilungsDistanzService` sonst mit einer erfundenen Position füttern.
-`Einkaufsvorgang.naechsterKategorieBesuchsIndex` ignoriert indexlose Einträge
-bei der Suche nach einem bereits vergebenen Index für dieselbe Kategorie.
+`Einkaufsvorgang.naechsterAbteilungBesuchsIndex` ignoriert indexlose Einträge
+bei der Suche nach einem bereits vergebenen Index für dieselbe Abteilung.
 Seit GitHub #68 ist das keine reine Call-Site-Disziplin mehr: `KaufEintrag`
 trägt dafür ein eigenes `ursprungsGeraeteID: String?` (`nil` = lokal
 entstanden, sonst die Geräte-ID des Peers), und `KaufEintrag.init` löscht
-`kategorieBesuchsIndex` zentral im Typ selbst, sobald `ursprungsGeraeteID`
+`abteilungBesuchsIndex` zentral im Typ selbst, sobald `ursprungsGeraeteID`
 gesetzt ist — unabhängig davon, was ein (auch künftiger) Aufrufer übergibt.
 
 **Geschäft kommt aus der Nutzlast, nicht aus dem Container-Vorgang (GitHub
@@ -456,7 +456,7 @@ an dem der Kauf tatsächlich stattfand — z.B. wenn „Einkauf abschließen" di
 Geschäftsauswahl zurücksetzt (GitHub #51) oder der Container-Vorgang an einem
 anderen Geschäft läuft. `geschaeft geschaeftUeberschreibung: Geschaeft??`
 (bewusst doppelt optional, analog dem bereits bestehenden
-`kategorie`-Override) unterscheidet „kein Override, `self.geschaeft` gilt"
+`abteilung`-Override) unterscheidet „kein Override, `self.geschaeft` gilt"
 (Standardfall beim lokalen Abhaken) von „Override auf explizit KEIN
 Geschäft" (Sender hatte keins ausgewählt) — beides muss unterscheidbar
 bleiben. Diese Korrektur bleibt auch nach der Entkopplung nötig, unabhängig

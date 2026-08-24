@@ -21,7 +21,7 @@ enum SchemaV1: VersionedSchema {
     static var models: [any PersistentModel.Type] {
         [
             Artikel.self,
-            ArtikelKategorie.self,
+            Abteilung.self,
             Geschaeft.self,
             GeschaeftTyp.self,
             Einkaufsvorgang.self,

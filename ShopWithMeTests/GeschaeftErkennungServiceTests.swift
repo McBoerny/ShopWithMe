@@ -7,7 +7,7 @@ import Testing
 @MainActor
 struct GeschaeftErkennungServiceTests {
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {
-        let schema = Schema([Geschaeft.self, GeschaeftTyp.self, ArtikelKategorie.self, SyncEvent.self])
+        let schema = Schema([Geschaeft.self, GeschaeftTyp.self, Abteilung.self, SyncEvent.self])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
         return (container, container.mainContext)
@@ -154,7 +154,7 @@ struct GeschaeftErkennungServiceTests {
         context.insert(rewe)
 
         // Zwei Apple-Maps-Einträge für denselben physischen Laden (z.B. unter
-        // leicht unterschiedlichen POI-Kategorien) — beide matchen `rewe`.
+        // leicht unterschiedlichen POI-Abteilungen) — beide matchen `rewe`.
         let eintraege = [
             GeschaeftInDerNaeheEintrag(vorschlag: .bekannt(rewe), istIgnoriert: false),
             GeschaeftInDerNaeheEintrag(vorschlag: .bekannt(rewe), istIgnoriert: true),

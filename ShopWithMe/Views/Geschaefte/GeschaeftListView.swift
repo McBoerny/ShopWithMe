@@ -288,5 +288,5 @@ private struct GeschaeftZeile: View {
     NavigationStack {
         GeschaeftListView()
     }
-    .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self, ArtikelKategorie.self, Einkaufsvorgang.self], inMemory: true)
+    .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self, Abteilung.self, Einkaufsvorgang.self], inMemory: true)
 }

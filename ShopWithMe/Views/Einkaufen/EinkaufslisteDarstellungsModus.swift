@@ -19,7 +19,7 @@ enum EinkaufslisteDarstellungsModus: String, CaseIterable {
 }
 
 /// Untertyp der Listendarstellung — bestimmt, wie einzelne Artikel
-/// innerhalb jeder Kategorie-Sektion dargestellt werden.
+/// innerhalb jeder Abteilung-Sektion dargestellt werden.
 /// Gilt für ``EinkaufslisteDarstellungsModus/liste`` und lässt sich
 /// unabhängig vom Akkordeon-Toggle wählen.
 enum ListenAnzeigeTyp: String, CaseIterable {

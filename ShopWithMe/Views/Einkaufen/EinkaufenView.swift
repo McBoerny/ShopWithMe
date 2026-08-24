@@ -3,7 +3,7 @@ import SwiftData
 import MapKit
 
 /// Einstiegspunkt zum Einkaufen: zeigt sofort beim Öffnen die Einkaufsliste der
-/// ausgewählten ``Einkaufsliste`` an — optional nach Artikelkategorie gruppiert und
+/// ausgewählten ``Einkaufsliste`` an — optional nach Abteilung gruppiert und
 /// sortiert (``AbteilungsDistanzService``), wenn ein Geschäft gewählt ist. Ein
 /// passender ``Einkaufsvorgang`` (für die Kombination aus gewählter Liste und
 /// gewähltem Geschäft) wird dafür automatisch angelegt, sobald keiner läuft; ein
@@ -903,23 +903,23 @@ private struct GeschaeftInDerNaeheZeile: View {
     }
 }
 
-/// Eine Gruppe von Artikeln derselben Artikelkategorie — Ergebnis von
-/// ``EinkaufslisteView/kategorieGruppen(fuer:)``. Auf Modulebene (nicht `private`),
+/// Eine Gruppe von Artikeln derselben Abteilung — Ergebnis von
+/// ``EinkaufslisteView/abteilungGruppen(fuer:)``. Auf Modulebene (nicht `private`),
 /// damit ``EinkaufslisteDarstellungsView`` den Typ als Parameter nutzen kann.
-struct KategorieGruppe: Identifiable {
+struct AbteilungGruppe: Identifiable {
     struct Element: Identifiable {
         var id: PersistentIdentifier
         var artikel: Artikel
         /// `nil` bedeutet: Eintrag wurde bereits abgehakt (kein `EinkaufslistenEintrag` mehr vorhanden).
         var eintrag: EinkaufslistenEintrag?
     }
-    let kategorie: ArtikelKategorie
+    let abteilung: Abteilung
     var elemente: [Element]
-    var id: PersistentIdentifier { kategorie.persistentModelID }
+    var id: PersistentIdentifier { abteilung.persistentModelID }
 }
 
 /// Die Einkaufsliste einer ``Einkaufsliste`` für einen laufenden Einkaufsvorgang —
-/// nach Artikelkategorie gruppiert und, bei gewähltem Geschäft, per
+/// nach Abteilung gruppiert und, bei gewähltem Geschäft, per
 /// ``AbteilungsDistanzService`` sortiert.
 private struct EinkaufslisteView: View {
     let geschaeft: Geschaeft?
@@ -1145,41 +1145,41 @@ private struct EinkaufslisteView: View {
     }
 
     /// `artikelListe` (üblicherweise ``artikelAufListe``), gruppiert nach
-    /// Artikelkategorie und sortiert über ``AbteilungsDistanzService`` — der
+    /// Abteilung und sortiert über ``AbteilungsDistanzService`` — der
     /// gelernten, paarweisen Abteilungs-Distanzmatrix dieses Geschäfts
     /// (Architekturvorschlag Abschnitt 4.2/4.3, GitHub #36). Startpunkt der
-    /// Sortierung ist ``zuletztAbgehakteKategorie`` — die verbleibende Liste wird
+    /// Sortierung ist ``zuletztAbgehakteAbteilung`` — die verbleibende Liste wird
     /// so nach jeder Abhakung dynamisch neu sortiert, ausgehend vom aktuellen
     /// (impliziten) Standort. Ohne genügend gelernte Daten
     /// (``AbteilungsDistanzService/genuegendDatenVerfuegbar(fuer:)``) bleibt es
     /// bei alphabetischer Reihenfolge.
     ///
-    /// Kategorien, unter denen `artikel` in dieser Liste angezeigt wird: normalerweise
-    /// alle zugeordneten (``Artikel/effektiveKategorien(context:)``) — außer bei
+    /// Abteilungen, unter denen `artikel` in dieser Liste angezeigt wird: normalerweise
+    /// alle zugeordneten (``Artikel/effektiveAbteilungen(context:)``) — außer bei
     /// gewähltem ``geschaeft`` liegt für `artikel` bereits eine eindeutig genug
-    /// gelernte Kategorie vor
-    /// (``AbteilungsDistanzService/gelernteKategorie(fuer:in:context:)``, GitHub-
+    /// gelernte Abteilung vor
+    /// (``AbteilungsDistanzService/gelernteAbteilung(fuer:in:context:)``, GitHub-
     /// Nachfolgefund zu #36): dann nur noch diese eine, statt weiter alle
     /// zugeordneten Abschnitte zu duplizieren. Ohne Geschäft (globale
-    /// Listenansicht) bleibt es bei allen zugeordneten Kategorien, da dort keine
+    /// Listenansicht) bleibt es bei allen zugeordneten Abteilungen, da dort keine
     /// geschäftsspezifische Kaufhistorie zur Auswahl herangezogen werden kann.
     ///
     /// Bei aktivem ``zeigeAlleArtikel`` (Lernmodus) bewusst immer ungefiltert —
     /// derselbe Bypass wie in ``verfuegbarkeitsgefiltert(_:)``: der Lernmodus soll
     /// gezielt ALLES zeigen, auch um eine zuvor gelernte, aber inzwischen falsche
     /// Zuordnung sichtbar korrigieren zu können.
-    private func kategorienFuerAnzeige(_ artikel: Artikel) -> [ArtikelKategorie] {
-        EinkaufslistenAnzeigeService.kategorienFuerAnzeige(artikel, geschaeft: geschaeft, zeigeAlleArtikel: zeigeAlleArtikel, context: modelContext)
+    private func abteilungenFuerAnzeige(_ artikel: Artikel) -> [Abteilung] {
+        EinkaufslistenAnzeigeService.abteilungenFuerAnzeige(artikel, geschaeft: geschaeft, zeigeAlleArtikel: zeigeAlleArtikel, context: modelContext)
     }
 
-    /// Ein Artikel mit mehreren Kategorien (``Artikel/effektiveKategorien(context:)``,
+    /// Ein Artikel mit mehreren Abteilungen (``Artikel/effektiveAbteilungen(context:)``,
     /// z.B. Ohropax unter "Drogerie" UND "Reisebedarf") landet in JEDER
     /// zugehörigen Gruppe statt nur in einer einzigen "führenden" — solange
-    /// ``kategorienFuerAnzeige(_:)`` für dieses Geschäft noch keine eindeutig
-    /// gelernte Kategorie liefert (siehe dort): eine Duplizierung ist bis dahin
+    /// ``abteilungenFuerAnzeige(_:)`` für dieses Geschäft noch keine eindeutig
+    /// gelernte Abteilung liefert (siehe dort): eine Duplizierung ist bis dahin
     /// gewollt (der Nutzer tappt ihn dort ab, wo er im jeweiligen Geschäft
     /// tatsächlich steht), außerdem hing die frühere Einzelauswahl von der nicht
-    /// ordnungsgarantierten SwiftData-Relationship ``Artikel/kategorien`` ab und
+    /// ordnungsgarantierten SwiftData-Relationship ``Artikel/abteilungen`` ab und
     /// sprang dadurch zwischen Sync-Zyklen sichtbar zwischen Abschnitten hin und
     /// her.
     ///
@@ -1187,19 +1187,19 @@ private struct EinkaufslisteView: View {
     /// Render mit einer bereits berechneten `artikelListe` aufruft, statt sie
     /// (inklusive der darin enthaltenen Sortierung samt SwiftData-Fetch) mehrfach
     /// neu auszuwerten.
-    private func kategorieGruppen() -> [KategorieGruppe] {
-        EinkaufslistenAnzeigeService.kategorieGruppen(
+    private func abteilungGruppen() -> [AbteilungGruppe] {
+        EinkaufslistenAnzeigeService.abteilungGruppen(
             offeneEintraege: offeneEintraege,
             abgehakteArtikel: abgehakteArtikel,
             zeigeAbgehakteArtikel: zeigeAbgehakteArtikel,
             zeigeAlleArtikel: zeigeAlleArtikel,
             geschaeft: geschaeft,
-            zuletztAbgehakteKategorie: zuletztAbgehakteKategorie,
+            zuletztAbgehakteAbteilung: zuletztAbgehakteAbteilung,
             context: modelContext
         )
     }
 
-    /// Die Kategorie des zuletzt (nach Zeitstempel) abgehakten Artikels dieses
+    /// Die Abteilung des zuletzt (nach Zeitstempel) abgehakten Artikels dieses
     /// Einkaufsvorgangs — impliziter aktueller Standort für die dynamische
     /// Neusortierung (Architekturvorschlag Abschnitt 4.3). `nil` vor dem ersten
     /// Abhaken.
@@ -1211,8 +1211,8 @@ private struct EinkaufslisteView: View {
     /// Laden, nicht die eigene. Beim Verwenden der breiteren Menge würde die
     /// Sortierung fälschlich versuchen, sich am Standort einer anderen Person
     /// zu orientieren.
-    private var zuletztAbgehakteKategorie: ArtikelKategorie? {
-        einkaufsvorgang.kaufEintraege.max { $0.datum < $1.datum }?.kategorie
+    private var zuletztAbgehakteAbteilung: Abteilung? {
+        einkaufsvorgang.kaufEintraege.max { $0.datum < $1.datum }?.abteilung
     }
 
     /// Geteilte Sprachregelung für beide Pillen-Varianten (siehe
@@ -1244,11 +1244,11 @@ private struct EinkaufslisteView: View {
     }
 
     /// Statusbanner über den Sortierzustand dieses Geschäfts (Architekturvorschlag
-    /// Abschnitt 7) — nur sichtbar, wenn es überhaupt kategoriebasiert sortierte
+    /// Abschnitt 7) — nur sichtbar, wenn es überhaupt abteilungbasiert sortierte
     /// Abschnitte gibt. Nimmt die bereits berechneten `gruppen` entgegen, statt
-    /// ``kategorieGruppen(fuer:)`` ein zweites Mal auszuwerten.
+    /// ``abteilungGruppen(fuer:)`` ein zweites Mal auszuwerten.
     @ViewBuilder
-    private func sortierStatusHinweis(gruppen: [KategorieGruppe]) -> some View {
+    private func sortierStatusHinweis(gruppen: [AbteilungGruppe]) -> some View {
         if let geschaeft, !gruppen.isEmpty {
             HStack(spacing: 6) {
                 if AbteilungsDistanzService.genuegendDatenVerfuegbar(fuer: geschaeft) {
@@ -1269,7 +1269,7 @@ private struct EinkaufslisteView: View {
     /// Die momentan für die Anzeige relevante Menge eines Artikels: solange er noch
     /// auf ``einkaufsliste`` steht, dessen ``EinkaufslistenEintrag/menge``, sonst
     /// (bereits abgehakt) die im ``KaufEintrag`` festgehaltene Menge.
-    private func menge(fuer element: KategorieGruppe.Element) -> Double {
+    private func menge(fuer element: AbteilungGruppe.Element) -> Double {
         if let eintrag = element.eintrag { return eintrag.menge }
         return kaufEintrag(fuer: element.artikel)?.menge ?? element.artikel.mengenSchritt
     }
@@ -1282,7 +1282,7 @@ private struct EinkaufslisteView: View {
     }
 
     /// ALLE (nicht nur den ersten) offenen Kaufeinträge für `artikel` auf
-    /// dieser Liste — Grundlage für ``umschalten(_:kategorie:)``/
+    /// dieser Liste — Grundlage für ``umschalten(_:abteilung:)``/
     /// ``entferneDauerhaft(_:)``. Vor dem Live-Test-Fund (Nachtrag Session
     /// 2026-08-03) konnte derselbe Artikel unter zwei unterschiedlichen,
     /// beide offenen Vorgängen abgehakt sein (Dedupe-Schutz galt nur pro
@@ -1297,7 +1297,7 @@ private struct EinkaufslisteView: View {
     }
 
     var body: some View {
-        let gruppen = kategorieGruppen()
+        let gruppen = abteilungGruppen()
         EinkaufslisteDarstellungsView(
             gruppen: gruppen,
             offeneEintraegeAnzahl: offeneEintraege.count,
@@ -1305,8 +1305,8 @@ private struct EinkaufslisteView: View {
             einkaufslistenName: einkaufsliste.name,
             istAbgehakt: istAbgehakt(_:),
             menge: menge(fuer:),
-            mehrfachKategorisiert: { element in kategorienFuerAnzeige(element.artikel).count > 1 },
-            abhaken: umschalten(_:kategorie:),
+            mehrfachKategorisiert: { element in abteilungenFuerAnzeige(element.artikel).count > 1 },
+            abhaken: umschalten(_:abteilung:),
             mengeErhoehen: mengeErhoehen(_:),
             mengeVerringern: mengeVerringern(_:),
             dauerhaftEntfernen: entferneDauerhaft(_:),
@@ -1444,21 +1444,21 @@ private struct EinkaufslisteView: View {
 
     /// Bewusst aus ``abgehakteKaufEintraege`` (liste-weit) statt nur
     /// ``einkaufsvorgang`` — siehe Typ-Doku dort.
-    private func istAbgehakt(_ element: KategorieGruppe.Element) -> Bool {
+    private func istAbgehakt(_ element: AbteilungGruppe.Element) -> Bool {
         element.eintrag == nil
     }
 
-    /// `kategorie`: die Sektion, aus der heraus getappt wurde (siehe
-    /// ``kategorieGruppen(fuer:)``) — bei einem Artikel mit mehreren Kategorien
+    /// `abteilung`: die Sektion, aus der heraus getappt wurde (siehe
+    /// ``abteilungGruppen(fuer:)``) — bei einem Artikel mit mehreren Abteilungen
     /// ist das die tatsächliche Beobachtung, in welcher davon er in diesem
     /// Geschäft steht, und wird unverändert an
-    /// ``Einkaufsvorgang/artikelAbhaken(_:context:kategorie:)`` weitergereicht.
-    private func umschalten(_ element: KategorieGruppe.Element, kategorie: ArtikelKategorie) {
+    /// ``Einkaufsvorgang/artikelAbhaken(_:context:abteilung:)`` weitergereicht.
+    private func umschalten(_ element: AbteilungGruppe.Element, abteilung: Abteilung) {
         interaktionRegistrieren()
         let artikelReferenz = ModelReference(element.artikel)
         let produktReferenz = ModelReference(element.eintrag?.produkt)
         let einkaufsvorgangReferenz = ModelReference(einkaufsvorgang)
-        let kategorieReferenz = ModelReference(kategorie)
+        let abteilungReferenz = ModelReference(abteilung)
         let vorhandeneEintragReferenzen = alleAbgehaktenEintraege(fuer: element.artikel).map(ModelReference.init)
         Task {
             var abhakErgebnis: AbhakErgebnis?
@@ -1472,10 +1472,10 @@ private struct EinkaufslisteView: View {
                         vorgang.artikelAbwaehlen(artikelFrisch, context: modelContext)
                     }
                 } else {
-                    let kategorieFrisch = kategorieReferenz.resolved(in: modelContext)
+                    let abteilungFrisch = abteilungReferenz.resolved(in: modelContext)
                     let produktFrisch = produktReferenz?.resolved(in: modelContext)
                     abhakErgebnis = einkaufsvorgangFrisch.artikelAbhaken(
-                        artikelFrisch, produkt: produktFrisch, context: modelContext, kategorie: kategorieFrisch
+                        artikelFrisch, produkt: produktFrisch, context: modelContext, abteilung: abteilungFrisch
                     )
                 }
             }
@@ -1504,7 +1504,7 @@ private struct EinkaufslisteView: View {
         }
     }
 
-    private func entferneDauerhaft(_ element: KategorieGruppe.Element) {
+    private func entferneDauerhaft(_ element: AbteilungGruppe.Element) {
         interaktionRegistrieren()
         let artikelReferenz = ModelReference(element.artikel)
         let vorhandeneEintragReferenzen = alleAbgehaktenEintraege(fuer: element.artikel).map(ModelReference.init)
@@ -1524,7 +1524,7 @@ private struct EinkaufslisteView: View {
     /// für offene Einträge gibt es noch keinen — hier existiert nur der
     /// ``EinkaufslistenEintrag`` selbst, den ``Einkaufsliste/artikelEntfernen(_:produkt:context:)``
     /// entfernt (bereits etabliertes Muster, siehe ``ArtikelHinzufuegenView/entfernen(_:)``).
-    private func entferneVonListe(_ element: KategorieGruppe.Element) {
+    private func entferneVonListe(_ element: AbteilungGruppe.Element) {
         interaktionRegistrieren()
         let einkaufslisteReferenz = ModelReference(einkaufsliste)
         let artikelReferenz = ModelReference(element.artikel)
@@ -1546,7 +1546,7 @@ private struct EinkaufslisteView: View {
     /// Schreibvorgang-Katalog“). Solange der Artikel noch auf ``einkaufsliste``
     /// steht, wirkt sich das auf dessen ``EinkaufslistenEintrag/menge`` aus, danach
     /// (bereits abgehakt) auf die im ``KaufEintrag`` festgehaltene Menge.
-    private func mengeErhoehen(_ element: KategorieGruppe.Element) {
+    private func mengeErhoehen(_ element: AbteilungGruppe.Element) {
         interaktionRegistrieren()
         let eintragReferenz = element.eintrag.map(ModelReference.init)
         let artikelReferenz = ModelReference(element.artikel)
@@ -1562,7 +1562,7 @@ private struct EinkaufslisteView: View {
         }
     }
 
-    private func mengeVerringern(_ element: KategorieGruppe.Element) {
+    private func mengeVerringern(_ element: AbteilungGruppe.Element) {
         interaktionRegistrieren()
         let eintragReferenz = element.eintrag.map(ModelReference.init)
         let artikelReferenz = ModelReference(element.artikel)
@@ -1633,16 +1633,16 @@ private struct SchnellauswahlButton: View {
     }
 }
 
-/// Kopfzeile einer Einkaufslisten-Kategorie-Sektion mit Icon/Farbe
-/// (``ArtikelKategorie/standardSymbol``/``standardFarbeHex``).
+/// Kopfzeile einer Einkaufslisten-Abteilung-Sektion mit Icon/Farbe
+/// (``Abteilung/standardSymbol``/``standardFarbeHex``).
 struct EinkaufslistenSektionHeader: View {
-    let kategorie: ArtikelKategorie
+    let abteilung: Abteilung
 
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: kategorie.standardSymbol)
-                .foregroundStyle(Color(hex: kategorie.standardFarbeHex))
-            Text(kategorie.name)
+            Image(systemName: abteilung.standardSymbol)
+                .foregroundStyle(Color(hex: abteilung.standardFarbeHex))
+            Text(abteilung.name)
             Spacer()
         }
     }
@@ -1671,14 +1671,14 @@ struct ArtikelAbhakZeile: View {
     let eintrag: EinkaufslistenEintrag?
     let mengeAnzeige: Double
     let istAbgehakt: Bool
-    /// `true`, wenn ``artikel`` mehreren Kategorien angehört und deshalb (siehe
-    /// `kategorieGruppen(fuer:)`) in mehr als einem Abschnitt dieser Liste
+    /// `true`, wenn ``artikel`` mehreren Abteilungen angehört und deshalb (siehe
+    /// `abteilungGruppen(fuer:)`) in mehr als einem Abschnitt dieser Liste
     /// erscheint — blendet ein kleines Hinweis-Symbol neben dem Namen ein, damit
     /// das nicht wie ein doppelter Eintrag wirkt.
     let mehrfachKategorisiert: Bool
     /// Optionaler 4pt-Farbstreifen links — gesetzt von ``EinkaufslisteDarstellungsView``
     /// wenn der Nutzer „Farbiger Streifen" aktiviert hat.
-    var kategoriefarbe: Color? = nil
+    var abteilungfarbe: Color? = nil
     let abhaken: () -> Void
     let mengeErhoehen: () -> Void
     let mengeVerringern: () -> Void
@@ -1705,7 +1705,7 @@ struct ArtikelAbhakZeile: View {
     }
 
     var body: some View {
-        if kategoriefarbe != nil {
+        if abteilungfarbe != nil {
             zeilenInhalt
                 .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 16))
         } else {
@@ -1715,7 +1715,7 @@ struct ArtikelAbhakZeile: View {
 
     private var zeilenInhalt: some View {
         HStack(spacing: 0) {
-            if let farbe = kategoriefarbe {
+            if let farbe = abteilungfarbe {
                 Rectangle()
                     .fill(istAbgehakt ? Color.green : farbe)
                     .frame(width: 4)
@@ -1730,7 +1730,7 @@ struct ArtikelAbhakZeile: View {
                             Image(systemName: "rectangle.on.rectangle")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
-                                .accessibilityLabel("Artikel gehört mehreren Kategorien an und erscheint in mehreren Abschnitten")
+                                .accessibilityLabel("Artikel gehört mehreren Abteilungen an und erscheint in mehreren Abschnitten")
                         }
                     }
                     if let notiz = eintrag?.notiz, !notiz.isEmpty {
@@ -1763,7 +1763,7 @@ struct ArtikelAbhakZeile: View {
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.leading, kategoriefarbe != nil ? 12 : 0)
+            .padding(.leading, abteilungfarbe != nil ? 12 : 0)
             .contentShape(Rectangle())
             // Ganze Zeile zum Abhaken tappbar (GitHub #137, allgemeine
             // Designregel), mit Ausnahme der Mengenangabe (eigener,

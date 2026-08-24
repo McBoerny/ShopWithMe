@@ -105,7 +105,7 @@ enum SyncDebugLogger {
 
         /// Diagnose (Nutzerbericht 2026-08-10, „Backup schließt ab, Artikel
         /// bleiben trotzdem auf der Liste"): protokolliert bei jedem per
-        /// ``SyncSnapshotImportService/mergeKaufEintraege(_:artikelZuordnung:einkaufsvorgangZuordnung:geschaeftZuordnung:kategorieZuordnung:peerGeraeteID:context:)``
+        /// ``SyncSnapshotImportService/mergeKaufEintraege(_:artikelZuordnung:einkaufsvorgangZuordnung:geschaeftZuordnung:abteilungZuordnung:peerGeraeteID:context:)``
         /// frisch aus einem Peer-Snapshot angelegten ``KaufEintrag``, ob dabei
         /// tatsächlich ein offener ``EinkaufslistenEintrag`` für denselben
         /// Artikel/dieselbe Liste gefunden (und gelöscht) wurde. Details:
@@ -221,7 +221,7 @@ enum SyncDebugLogger {
     }
 
     private static let writer = DebugLogWriter(
-        kategorie: "Datensynchronisation",
+        abteilung: "Datensynchronisation",
         dateiURL: FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("sync-debug.log")
     )

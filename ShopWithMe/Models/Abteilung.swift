@@ -1,65 +1,65 @@
 import Foundation
 import SwiftData
 
-/// Eine Artikelkategorie fasst gleichartige Artikel zusammen, z.B. „Obst & Gemüse“.
+/// Eine Abteilung fasst gleichartige Artikel zusammen, z.B. „Obst & Gemüse“.
 ///
-/// Kategorien sind global und geschäftsunabhängig. Ob eine Kategorie in einem
+/// Abteilungen sind global und geschäftsunabhängig. Ob eine Abteilung in einem
 /// bestimmten Geschäft verfügbar ist, ergibt sich direkt über ``geschaefte``
-/// (``Geschaeft/kategorien``) — siehe `docs/DECISIONS.md`.
+/// (``Geschaeft/abteilungen``) — siehe `docs/DECISIONS.md`.
 @Model
-final class ArtikelKategorie {
+final class Abteilung {
     /// Eindeutige Kennung.
     var id: UUID
-    /// Anzeigename der Kategorie, z.B. "Obst & Gemüse".
+    /// Anzeigename der Abteilung, z.B. "Obst & Gemüse".
     var name: String
-    /// Standard-SF-Symbol, das neuen ``Artikel``n dieser Kategorie vorgeschlagen wird.
+    /// Standard-SF-Symbol, das neuen ``Artikel``n dieser Abteilung vorgeschlagen wird.
     var standardSymbol: String
     /// Standardfarbe als Hex-String (z.B. `"#34C759"`), die neuen ``Artikel``n dieser
-    /// Kategorie vorgeschlagen wird.
+    /// Abteilung vorgeschlagen wird.
     var standardFarbeHex: String
     /// Reihenfolge für die Anzeige in Auswahllisten.
     var sortIndex: Int
 
-    /// Artikel, die dieser Kategorie über das alte, einzelwertige ``Artikel/kategorie``
+    /// Artikel, die dieser Abteilung über das alte, einzelwertige ``Artikel/abteilung``
     /// zugeordnet sind — Migrations-Fallback, seit Einführung der Mehrfachzuordnung
     /// nicht mehr die maßgebliche Quelle (siehe ``zugeordneteArtikel``).
-    @Relationship(deleteRule: .nullify, inverse: \Artikel.kategorie)
+    @Relationship(deleteRule: .nullify, inverse: \Artikel.abteilung)
     var artikel: [Artikel] = []
-    /// Artikel, die dieser Kategorie über ``Artikel/kategorien`` (Mehrfachzuordnung)
+    /// Artikel, die dieser Abteilung über ``Artikel/abteilungen`` (Mehrfachzuordnung)
     /// zugeordnet sind — die maßgebliche Quelle. Inverse wird auf der
-    /// ``Artikel/kategorienRaw``-Seite deklariert (analog ``geschaefte`` unten, die
+    /// ``Artikel/abteilungenRaw``-Seite deklariert (analog ``geschaefte`` unten, die
     /// ebenfalls nur einseitig `inverse:` trägt).
     var zugeordneteArtikel: [Artikel] = []
 
-    /// Geschäfte, in denen diese Kategorie verfügbar ist — siehe
-    /// ``Geschaeft/kategorien``.
+    /// Geschäfte, in denen diese Abteilung verfügbar ist — siehe
+    /// ``Geschaeft/abteilungen``.
     var geschaefte: [Geschaeft] = []
-    /// Geschäfte, die diese Kategorie individuell ausgeschlossen haben —
-    /// inverse zu ``Geschaeft/ausgeschlosseneKategorien``. Ohne diese
+    /// Geschäfte, die diese Abteilung individuell ausgeschlossen haben —
+    /// inverse zu ``Geschaeft/ausgeschlosseneAbteilungen``. Ohne diese
     /// `inverse`-Deklaration bliebe der Ausschluss-Eintrag beim Löschen der
-    /// Kategorie eine "baumelnde" Referenz (Absturzrisiko wie bei
+    /// Abteilung eine "baumelnde" Referenz (Absturzrisiko wie bei
     /// ``Geschaeft/einkaufsvorgaenge`` beschrieben) statt automatisch aus dem
     /// Array entfernt zu werden.
-    @Relationship(inverse: \Geschaeft.ausgeschlosseneKategorien)
+    @Relationship(inverse: \Geschaeft.ausgeschlosseneAbteilungen)
     var geschaefteMitAusschluss: [Geschaeft] = []
 
-    /// Kaufeinträge, deren Kategorie-Schnappschuss auf diese Kategorie
-    /// verweist — inverse zu ``KaufEintrag/kategorie``. Nullify: die
-    /// Kaufhistorie bleibt bestehen, auch wenn die Kategorie später gelöscht
+    /// Kaufeinträge, deren Abteilung-Schnappschuss auf diese Abteilung
+    /// verweist — inverse zu ``KaufEintrag/abteilung``. Nullify: die
+    /// Kaufhistorie bleibt bestehen, auch wenn die Abteilung später gelöscht
     /// wird (Absturzrisiko ohne diese `inverse`-Deklaration wie bei
     /// ``Geschaeft/einkaufsvorgaenge`` beschrieben).
-    @Relationship(deleteRule: .nullify, inverse: \KaufEintrag.kategorie)
+    @Relationship(deleteRule: .nullify, inverse: \KaufEintrag.abteilung)
     var kaufEintraege: [KaufEintrag] = []
-    /// Gelernte Abteilungs-Distanzen, an denen diese Kategorie als "erste"
-    /// Seite beteiligt ist — inverse zu ``WarengruppenDistanz/kategorieA``.
-    /// Kaskadierend: ohne die Kategorie ist der Distanz-Eintrag bedeutungslos.
-    @Relationship(deleteRule: .cascade, inverse: \WarengruppenDistanz.kategorieA)
-    var distanzenAlsKategorieA: [WarengruppenDistanz] = []
-    /// Wie ``distanzenAlsKategorieA``, für die "zweite" Seite
-    /// (``WarengruppenDistanz/kategorieB``) — zwei getrennte Inverse-Arrays,
+    /// Gelernte Abteilungs-Distanzen, an denen diese Abteilung als "erste"
+    /// Seite beteiligt ist — inverse zu ``WarengruppenDistanz/abteilungA``.
+    /// Kaskadierend: ohne die Abteilung ist der Distanz-Eintrag bedeutungslos.
+    @Relationship(deleteRule: .cascade, inverse: \WarengruppenDistanz.abteilungA)
+    var distanzenAlsAbteilungA: [WarengruppenDistanz] = []
+    /// Wie ``distanzenAlsAbteilungA``, für die "zweite" Seite
+    /// (``WarengruppenDistanz/abteilungB``) — zwei getrennte Inverse-Arrays,
     /// da es sich um zwei unabhängige Relationship-Kanten handelt.
-    @Relationship(deleteRule: .cascade, inverse: \WarengruppenDistanz.kategorieB)
-    var distanzenAlsKategorieB: [WarengruppenDistanz] = []
+    @Relationship(deleteRule: .cascade, inverse: \WarengruppenDistanz.abteilungB)
+    var distanzenAlsAbteilungB: [WarengruppenDistanz] = []
 
     /// Rohwert für ``geschaeftsTypen`` von vor Einführung von ``GeschaeftTyp`` als
     /// eigenständigem SwiftData-Modell (GitHub #25) — enum-Rohwerte wie
@@ -71,12 +71,12 @@ final class ArtikelKategorie {
     /// Rohspeicher für ``geschaeftsTypen`` — bewusst `internal` (nicht `private`),
     /// damit ``GeschaeftTyp`` per `inverse:`-KeyPath darauf verweisen kann. Nicht
     /// direkt verwenden, stattdessen ``geschaeftsTypen``.
-    @Relationship(inverse: \GeschaeftTyp.standardKategorien)
+    @Relationship(inverse: \GeschaeftTyp.standardAbteilungen)
     var geschaeftsTypModelle: [GeschaeftTyp] = []
-    /// Geschäftstypen, für die diese Kategorie als typische Abteilung gilt —
+    /// Geschäftstypen, für die diese Abteilung als typische Abteilung gilt —
     /// unabhängig von einer tatsächlichen Zuordnung zu einem konkreten
     /// ``Geschaeft`` (siehe ``geschaefte``). Grundlage dafür, dass
-    /// ``Geschaeft/verfuegbareKategorien(alleKategorien:)`` diese Kategorie für jedes
+    /// ``Geschaeft/verfuegbareAbteilungen(alleAbteilungen:)`` diese Abteilung für jedes
     /// Geschäft mit passendem Typ automatisch als verfügbar ansieht (GitHub #5),
     /// ohne sie in ``geschaefte`` zu persistieren.
     var geschaeftsTypen: [GeschaeftTyp] {
@@ -90,7 +90,7 @@ final class ArtikelKategorie {
     /// Logischer Zeitstempel der letzten Änderung an ``name``/``standardSymbol``/
     /// ``standardFarbeHex`` — Grundlage dafür, dass eine Umbenennung/
     /// Farbänderung auch bereits synchronisierte Geräte erreicht
-    /// (`SyncSnapshotImportService.mergeArtikelKategorien`), siehe
+    /// (`SyncSnapshotImportService.mergeAbteilungen`), siehe
     /// ``GeschaeftTyp/lamportZaehler`` für die volle Begründung.
     var lamportZaehler: UInt64 { lamportZaehlerRaw ?? 0 }
 
@@ -103,7 +103,7 @@ final class ArtikelKategorie {
     }
 
     /// Aufgerufen, wenn der Anwender ``name``/``standardSymbol``/
-    /// ``standardFarbeHex`` dieser bereits bestehenden Kategorie ändert
+    /// ``standardFarbeHex`` dieser bereits bestehenden Abteilung ändert
     /// (siehe `AbteilungenVerwaltungView`) — nie bei bloßer Neuanlage, siehe
     /// ``GeschaeftTyp/markiereGeaendert()``.
     func markiereGeaendert() {
@@ -117,39 +117,39 @@ final class ArtikelKategorie {
     }
 }
 
-extension ArtikelKategorie {
-    /// Name der Kategorie, in die unkategorisierte Artikel automatisch fallen
-    /// (siehe ``Artikel/effektiveKategorie(context:)``).
+extension Abteilung {
+    /// Name der Abteilung, in die unkategorisierte Artikel automatisch fallen
+    /// (siehe ``Artikel/effektiveAbteilung(context:)``).
     static let sonstigesName = "Sonstiges"
 
-    /// Findet die "Sonstiges"-Kategorie (wird normalerweise über
+    /// Findet die "Sonstiges"-Abteilung (wird normalerweise über
     /// ``SeedData`` angelegt) oder legt sie an, falls sie ausnahmsweise noch nicht
     /// existiert.
-    static func sonstige(context: ModelContext) -> ArtikelKategorie {
+    static func sonstige(context: ModelContext) -> Abteilung {
         let name = sonstigesName
-        var deskriptor = FetchDescriptor<ArtikelKategorie>(predicate: #Predicate { $0.name == name })
+        var deskriptor = FetchDescriptor<Abteilung>(predicate: #Predicate { $0.name == name })
         deskriptor.fetchLimit = 1
         if let bestehende = try? context.fetch(deskriptor).first {
             return bestehende
         }
-        let naechsterIndex = ((try? context.fetch(FetchDescriptor<ArtikelKategorie>()))?.map(\.sortIndex).max() ?? -1) + 1
-        let neue = ArtikelKategorie(name: name, standardSymbol: "shippingbox.fill", standardFarbeHex: "#8E8E93", sortIndex: naechsterIndex)
+        let naechsterIndex = ((try? context.fetch(FetchDescriptor<Abteilung>()))?.map(\.sortIndex).max() ?? -1) + 1
+        let neue = Abteilung(name: name, standardSymbol: "shippingbox.fill", standardFarbeHex: "#8E8E93", sortIndex: naechsterIndex)
         context.insert(neue)
         return neue
     }
 
-    /// Migriert vor GitHub #25 angelegte Kategorien (deren ``geschaeftsTypen`` noch
+    /// Migriert vor GitHub #25 angelegte Abteilungen (deren ``geschaeftsTypen`` noch
     /// leer ist, aber ``geschaeftsTypenRaw`` alte enum-Rohwerte gespeichert hat)
     /// einmalig auf die entsprechenden ``GeschaeftTyp``-Objekte. Wird beim
-    /// App-Start für alle Kategorien aufgerufen (siehe ``SeedData``).
+    /// App-Start für alle Abteilungen aufgerufen (siehe ``SeedData``).
     static func geschaeftsTypenMigrierenFallsNoetig(context: ModelContext) {
-        let alle = (try? context.fetch(FetchDescriptor<ArtikelKategorie>())) ?? []
-        for kategorie in alle {
-            guard kategorie.geschaeftsTypen.isEmpty,
-                  let rohwerte = kategorie.geschaeftsTypenRaw, !rohwerte.isEmpty else { continue }
+        let alle = (try? context.fetch(FetchDescriptor<Abteilung>())) ?? []
+        for abteilung in alle {
+            guard abteilung.geschaeftsTypen.isEmpty,
+                  let rohwerte = abteilung.geschaeftsTypenRaw, !rohwerte.isEmpty else { continue }
             let namen = rohwerte.compactMap(GeschaeftTyp.legacyName(fuerRohwert:))
             guard !namen.isEmpty else { continue }
-            kategorie.geschaeftsTypen = namen.map { GeschaeftTyp.mitNamen($0, context: context) }
+            abteilung.geschaeftsTypen = namen.map { GeschaeftTyp.mitNamen($0, context: context) }
         }
     }
 }

@@ -30,7 +30,7 @@ Belegscans hinweg.
 - `ShopWithMe/DesignSystem/TagesKollisionZeile.swift` — Inline-Hinweis samt
   Umschalt-Button, wenn für heute bereits ein abweichender Preis erfasst ist.
 - `ShopWithMe/Models/KaufEintrag.swift` — operative Buchungszeile eines laufenden
-  Einkaufsvorgangs (Dedupe, `kategorieBesuchsIndex`), seit GitHub #76 ohne Preisrolle.
+  Einkaufsvorgangs (Dedupe, `abteilungBesuchsIndex`), seit GitHub #76 ohne Preisrolle.
 - `ShopWithMe/Models/Geschaeft.swift` — `alternativeNamen`,
   `alternativenNamenLernen(_:)`, `passendes(fuerErkannterName:unter:)`.
 - `ShopWithMe/Views/Geschaefte/GeschaeftWahlSheet.swift` — Geschäftsauswahl, falls
@@ -315,7 +315,7 @@ bestehenden, generischen `Artikel` zugeordnet, dreistufig:
 3. **KI-Best-Match** — nur falls Stufe 1+2 erfolglos **und** lokale KI verfügbar
    (`AISuggestionService.istVerfuegbar`): `AISuggestionService.artikelMatch(fuerName:bekannteArtikel:)`
    (`@Generable ArtikelMatchVorschlag`, exaktes Vorbild
-   `AISuggestionService.kategorieMatch(fuerName:bekannteKategorien:)`, bereits
+   `AISuggestionService.abteilungMatch(fuerName:bekannteAbteilungen:)`, bereits
    identisch genutzt in `MilkForUsImportService`). Antwortet die KI mit einem
    leeren String oder einem Namen, der zu keinem `Artikel` exakt passt, gilt die
    Stufe als erfolglos.
@@ -385,7 +385,7 @@ verschwinden auch seine Ignorier-Einträge (`Geschaeft.ignorierteArtikel`).
 **Seit GitHub #76** gibt es kein eigenes „Belegposition“-Model, aber zwei getrennte
 Ziel-Typen statt eines: `Preispunkt` trägt die Preishistorie-Rolle, `KaufEintrag`
 bleibt die rein operative Buchungszeile eines laufenden Einkaufsvorgangs (Dedupe,
-`kategorieBesuchsIndex` für `AbteilungsDistanzService`, keine Preisfelder mehr).
+`abteilungBesuchsIndex` für `AbteilungsDistanzService`, keine Preisfelder mehr).
 Grund für die Trennung: die beiden Rollen wuchsen unterschiedlich (jeder Kauf vs. nur
 echte Preisänderungen) und ein Preisschild-Scan hat ohnehin nie einen
 Einkaufsvorgang — siehe `docs/ROADMAP.md`/Issue #76 für die volle Herleitung.

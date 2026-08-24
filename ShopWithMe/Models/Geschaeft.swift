@@ -4,7 +4,7 @@ import SwiftData
 
 /// Ein Geschäft, das der Anwender zum Einkaufen aufsucht.
 ///
-/// Ein Geschäft bekommt ``ArtikelKategorie``n direkt zugeordnet (``kategorien``) —
+/// Ein Geschäft bekommt ``Abteilung``en direkt zugeordnet (``abteilungen``) —
 /// die Reihenfolge beim Einkaufen wird nicht manuell festgelegt, sondern von
 /// ``AbteilungsDistanzService`` aus dem bisherigen Abhakverhalten gelernt (siehe
 /// `docs/ARCHITEKTURVORSCHLAG_ADAPTIVE_SORTIERUNG.md`).
@@ -64,19 +64,19 @@ final class Geschaeft {
         get { erkennungsradiusRaw ?? GeschaeftErkennungService.koordinatenTreffertoleranz }
         set { erkennungsradiusRaw = newValue }
     }
-    /// Artikelkategorien, die diesem Geschäft zugeordnet sind — der einzige Weg,
-    /// eine Kategorie in einem Geschäft verfügbar zu machen (siehe
-    /// ``verfuegbareKategorien``).
-    @Relationship(inverse: \ArtikelKategorie.geschaefte)
-    var kategorien: [ArtikelKategorie] = []
-    /// Kategorien, die trotz automatischer Verfügbarkeit über einen der
-    /// ``typen`` (``ArtikelKategorie/geschaeftsTypen``) für dieses eine
+    /// Abteilungen, die diesem Geschäft zugeordnet sind — der einzige Weg,
+    /// eine Abteilung in einem Geschäft verfügbar zu machen (siehe
+    /// ``verfuegbareAbteilungen``).
+    @Relationship(inverse: \Abteilung.geschaefte)
+    var abteilungen: [Abteilung] = []
+    /// Abteilungen, die trotz automatischer Verfügbarkeit über einen der
+    /// ``typen`` (``Abteilung/geschaeftsTypen``) für dieses eine
     /// Geschäft ausgeschlossen sind (GitHub #43) — eine Negativliste zusätzlich
-    /// zur Positivliste ``kategorien``. Wird eine hier gelistete Kategorie
-    /// später direkt zu ``kategorien`` hinzugefügt (z.B. über
+    /// zur Positivliste ``abteilungen``. Wird eine hier gelistete Abteilung
+    /// später direkt zu ``abteilungen`` hinzugefügt (z.B. über
     /// ``AbteilungHinzufuegenSheet``), sticht das den Ausschluss (siehe
-    /// ``verfuegbareKategorien(alleKategorien:)``).
-    var ausgeschlosseneKategorien: [ArtikelKategorie] = []
+    /// ``verfuegbareAbteilungen(alleAbteilungen:)``).
+    var ausgeschlosseneAbteilungen: [Abteilung] = []
     /// Operative Einkaufs-Buchungszeilen (``KaufEintrag``) in diesem Geschäft — seit
     /// GitHub #76 ohne Preisrolle, siehe ``preispunkte``. Wird das Geschäft gelöscht,
     /// werden auch seine Buchungszeilen gelöscht — siehe `docs/GESCHAEFTSERKENNUNG.md`.
@@ -440,36 +440,36 @@ final class Geschaeft {
         return Set(anzahl.filter { $0.value > 1 }.keys)
     }
 
-    /// Alle Artikelkategorien, die in diesem Geschäft manuell verfügbar gemacht
-    /// wurden, sortiert nach ``ArtikelKategorie/sortIndex``. Zeigt bewusst **nicht**
-    /// die zusätzlich über ``verfuegbareKategorien(alleKategorien:)`` einbezogenen,
-    /// rein aus dem Geschäftstyp abgeleiteten Kategorien — diese Variante ist die
+    /// Alle Abteilungen, die in diesem Geschäft manuell verfügbar gemacht
+    /// wurden, sortiert nach ``Abteilung/sortIndex``. Zeigt bewusst **nicht**
+    /// die zusätzlich über ``verfuegbareAbteilungen(alleAbteilungen:)`` einbezogenen,
+    /// rein aus dem Geschäftstyp abgeleiteten Abteilungen — diese Variante ist die
     /// Grundlage für die manuelle Verwaltung (``GeschaeftDetailView``, Entfernen
-    /// einer Kategorie), wo nur tatsächlich zugeordnete Kategorien entfernbar sein
+    /// einer Abteilung), wo nur tatsächlich zugeordnete Abteilungen entfernbar sein
     /// dürfen.
-    var verfuegbareKategorien: [ArtikelKategorie] {
-        kategorien.sorted { $0.sortIndex < $1.sortIndex }
+    var verfuegbareAbteilungen: [Abteilung] {
+        abteilungen.sorted { $0.sortIndex < $1.sortIndex }
     }
 
-    /// Wie ``verfuegbareKategorien``, ergänzt um Kategorien, die zwar nicht
-    /// ``kategorien`` dieses Geschäfts zugeordnet sind, aber laut
-    /// ``ArtikelKategorie/geschaeftsTypen`` als typische Abteilung für einen der
+    /// Wie ``verfuegbareAbteilungen``, ergänzt um Abteilungen, die zwar nicht
+    /// ``abteilungen`` dieses Geschäfts zugeordnet sind, aber laut
+    /// ``Abteilung/geschaeftsTypen`` als typische Abteilung für einen der
     /// ``typen`` dieses Geschäfts gelten (GitHub #5) — abzüglich individuell
-    /// ``ausgeschlosseneKategorien`` (GitHub #43). Eine ausgeschlossene Kategorie,
-    /// die trotzdem direkt zu ``kategorien`` hinzugefügt wird, bleibt verfügbar —
+    /// ``ausgeschlosseneAbteilungen`` (GitHub #43). Eine ausgeschlossene Abteilung,
+    /// die trotzdem direkt zu ``abteilungen`` hinzugefügt wird, bleibt verfügbar —
     /// der Ausschluss betrifft nur den automatischen, typ-basierten Weg. Wird für
     /// die tatsächliche Verfügbarkeit beim Einkaufen genutzt (siehe
-    /// ``ArtikelVerfuegbarkeitService``, ``Artikel/fuehrendeKategorie(inGeschaeft:context:)``)
-    /// — `alleKategorien` kommt dort aus einem ``ModelContext``-Fetch bzw. einem
+    /// ``ArtikelVerfuegbarkeitService``, ``Artikel/fuehrendeAbteilung(inGeschaeft:context:)``)
+    /// — `alleAbteilungen` kommt dort aus einem ``ModelContext``-Fetch bzw. einem
     /// bestehenden `@Query`.
-    func verfuegbareKategorien(alleKategorien: [ArtikelKategorie]) -> [ArtikelKategorie] {
+    func verfuegbareAbteilungen(alleAbteilungen: [Abteilung]) -> [Abteilung] {
         let eigeneTypen = Set(typen)
-        let ausgeschlossen = Set(ausgeschlosseneKategorien.map(\.persistentModelID))
-        let typBasiert = alleKategorien.filter {
+        let ausgeschlossen = Set(ausgeschlosseneAbteilungen.map(\.persistentModelID))
+        let typBasiert = alleAbteilungen.filter {
             !Set($0.geschaeftsTypen).isDisjoint(with: eigeneTypen) && !ausgeschlossen.contains($0.persistentModelID)
         }
         var gesehen = Set<PersistentIdentifier>()
-        return (verfuegbareKategorien + typBasiert)
+        return (verfuegbareAbteilungen + typBasiert)
             .filter { gesehen.insert($0.persistentModelID).inserted }
             .sorted { $0.sortIndex < $1.sortIndex }
     }

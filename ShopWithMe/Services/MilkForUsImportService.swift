@@ -34,18 +34,18 @@ enum MilkForUsParser {
     }
 }
 
-/// Wie eine importierte MilkForUs-Kategorie auf den ShopWithMe-Kategoriebestand
+/// Wie eine importierte MilkForUs-Kategorie auf den ShopWithMe-Abteilungsbestand
 /// abgebildet wird.
-enum KategorieZuordnung: Equatable {
-    /// Eine bereits vorhandene Kategorie wird verwendet (exakter Namenstreffer oder
+enum AbteilungZuordnung: Equatable {
+    /// Eine bereits vorhandene Abteilung wird verwendet (exakter Namenstreffer oder
     /// ein von der KI vorgeschlagener bzw. vom Nutzer gewählter Treffer).
-    case bestehend(ArtikelKategorie)
-    /// Es wird beim Übernehmen eine neue Kategorie mit diesem Namen angelegt.
+    case bestehend(Abteilung)
+    /// Es wird beim Übernehmen eine neue Abteilung mit diesem Namen angelegt.
     case neuAnlegen(name: String)
-    /// Die Artikel dieser Gruppe werden ``ArtikelKategorie/sonstige(context:)`` zugeordnet.
+    /// Die Artikel dieser Gruppe werden ``Abteilung/sonstige(context:)`` zugeordnet.
     case sonstige
 
-    static func == (lhs: KategorieZuordnung, rhs: KategorieZuordnung) -> Bool {
+    static func == (lhs: AbteilungZuordnung, rhs: AbteilungZuordnung) -> Bool {
         switch (lhs, rhs) {
         case let (.bestehend(a), .bestehend(b)): return a.id == b.id
         case let (.neuAnlegen(a), .neuAnlegen(b)): return a == b
@@ -62,18 +62,18 @@ enum KategorieZuordnung: Equatable {
 struct MilkForUsKategorieGruppe: Identifiable {
     var id: String { kategorieName }
     let kategorieName: String
-    var zuordnung: KategorieZuordnung
+    var zuordnung: AbteilungZuordnung
     var artikelNamen: [String]
 }
 
-/// Kernlogik des MilkForUs-Textimports: Kategorie-Abgleich (exakt, dann KI-Best-Match,
+/// Kernlogik des MilkForUs-Textimports: Abteilung-Abgleich (exakt, dann KI-Best-Match,
 /// dann "neu anlegen") und die abschließende Übernahme in den Datenbestand.
 enum MilkForUsImportService {
-    /// Sendable-sicheres Zwischenergebnis der Kategorie-Vorschlagslogik — trägt nur
-    /// den Namen einer eventuell gefundenen bestehenden Kategorie, nicht das
-    /// ``ArtikelKategorie``-Objekt selbst. Grundlage für ``vorschlagsName(fuerKategorieName:bekannteKategorienNamen:)``,
-    /// das (anders als ``vorschlag(fuerKategorieName:bestehendeKategorien:)``) aus einer
-    /// parallelen `Task`-Gruppe heraus aufgerufen werden kann — ``ArtikelKategorie``
+    /// Sendable-sicheres Zwischenergebnis der Abteilung-Vorschlagslogik — trägt nur
+    /// den Namen einer eventuell gefundenen bestehenden Abteilung, nicht das
+    /// ``Abteilung``-Objekt selbst. Grundlage für ``vorschlagsName(fuerAbteilungName:bekannteAbteilungenNamen:)``,
+    /// das (anders als ``vorschlag(fuerAbteilungName:bestehendeAbteilungen:)``) aus einer
+    /// parallelen `Task`-Gruppe heraus aufgerufen werden kann — ``Abteilung``
     /// ist als SwiftData-`@Model`-Referenztyp nicht `Sendable` und dürfte eine
     /// Task-Grenze nicht direkt überqueren.
     private enum VorschlagsName: Sendable {
@@ -82,18 +82,18 @@ enum MilkForUsImportService {
         case sonstige
     }
 
-    /// Bildet ein ``VorschlagsName``-Ergebnis auf die eigentliche ``KategorieZuordnung``
-    /// mit dem `ArtikelKategorie`-Objekt ab — reiner Namens-Lookup in
-    /// `bestehendeKategorien`, keine weitere `await`-Grenze.
+    /// Bildet ein ``VorschlagsName``-Ergebnis auf die eigentliche ``AbteilungZuordnung``
+    /// mit dem `Abteilung`-Objekt ab — reiner Namens-Lookup in
+    /// `bestehendeAbteilungen`, keine weitere `await`-Grenze.
     @MainActor
-    private static func zuordnung(fuer ergebnis: VorschlagsName, in bestehendeKategorien: [ArtikelKategorie]) -> KategorieZuordnung {
+    private static func zuordnung(fuer ergebnis: VorschlagsName, in bestehendeAbteilungen: [Abteilung]) -> AbteilungZuordnung {
         switch ergebnis {
         case .sonstige:
             return .sonstige
         case .neuAnlegen(let name):
             return .neuAnlegen(name: name)
         case .bestehenderName(let name):
-            guard let treffer = bestehendeKategorien.first(where: {
+            guard let treffer = bestehendeAbteilungen.first(where: {
                 $0.name.localizedCaseInsensitiveCompare(name) == .orderedSame
             }) else {
                 return .neuAnlegen(name: name)
@@ -102,17 +102,17 @@ enum MilkForUsImportService {
         }
     }
 
-    /// Kern der Vorschlagslogik (siehe ``vorschlag(fuerKategorieName:bestehendeKategorien:)``
-    /// für die vollständige Beschreibung) — arbeitet bewusst nur mit Kategorie-
-    /// NAMEN statt `ArtikelKategorie`-Objekten, damit dieser Teil `nonisolated`
+    /// Kern der Vorschlagslogik (siehe ``vorschlag(fuerAbteilungName:bestehendeAbteilungen:)``
+    /// für die vollständige Beschreibung) — arbeitet bewusst nur mit Abteilung-
+    /// NAMEN statt `Abteilung`-Objekten, damit dieser Teil `nonisolated`
     /// bleiben und aus mehreren parallelen `Task`s gleichzeitig aufgerufen werden
-    /// kann (siehe ``gruppenMitVorschlag(aus:bestehendeKategorien:fortschritt:)``).
+    /// kann (siehe ``gruppenMitVorschlag(aus:bestehendeAbteilungen:fortschritt:)``).
     private static func vorschlagsName(
-        fuerKategorieName name: String,
-        bekannteKategorienNamen: [String]
+        fuerAbteilungName name: String,
+        bekannteAbteilungenNamen: [String]
     ) async -> VorschlagsName {
         guard !name.isEmpty else { return .sonstige }
-        if let treffer = bekannteKategorienNamen.first(where: {
+        if let treffer = bekannteAbteilungenNamen.first(where: {
             $0.localizedCaseInsensitiveCompare(name) == .orderedSame
         }) {
             return .bestehenderName(treffer)
@@ -120,14 +120,14 @@ enum MilkForUsImportService {
         guard AISuggestionService.istVerfuegbar else {
             return .neuAnlegen(name: name)
         }
-        guard let kiVorschlag = try? await AISuggestionService.kategorieMatch(
+        guard let kiVorschlag = try? await AISuggestionService.abteilungMatch(
             fuerName: name,
-            bekannteKategorien: bekannteKategorienNamen
+            bekannteAbteilungen: bekannteAbteilungenNamen
         ) else {
             return .neuAnlegen(name: name)
         }
-        if let treffer = bekannteKategorienNamen.first(where: {
-            $0.localizedCaseInsensitiveCompare(kiVorschlag.passendeKategorie) == .orderedSame
+        if let treffer = bekannteAbteilungenNamen.first(where: {
+            $0.localizedCaseInsensitiveCompare(kiVorschlag.passendeAbteilung) == .orderedSame
         }) {
             return .bestehenderName(treffer)
         }
@@ -136,20 +136,20 @@ enum MilkForUsImportService {
 
     /// Baut aus den geparsten Einträgen Gruppen je (distinktem) Kategorienamen, in
     /// der Reihenfolge ihres ersten Auftretens in der Datei, und schlägt für jede
-    /// Gruppe eine ``KategorieZuordnung`` vor.
+    /// Gruppe eine ``AbteilungZuordnung`` vor.
     ///
     /// **Performance (Nutzerbericht 2026-08-24, sehr große MilkForUs-Listen):** die
-    /// KI-Abfrage je Kategorie (``vorschlagsName(fuerKategorieName:bekannteKategorienNamen:)``)
+    /// KI-Abfrage je Abteilung (``vorschlagsName(fuerAbteilungName:bekannteAbteilungenNamen:)``)
     /// lief vorher streng sequenziell — bei vielen Abteilungen in einer großen
     /// Liste summierte sich das spürbar. Läuft jetzt mit bis zu `maxGleichzeitig`
-    /// Kategorien parallel über eine `TaskGroup`, Ergebnis-Reihenfolge bleibt über
+    /// Abteilungen parallel über eine `TaskGroup`, Ergebnis-Reihenfolge bleibt über
     /// den Index erhalten. `fortschritt` (optional) meldet nach jeder fertigen
-    /// Kategorie `(erledigt, gesamt)` — Grundlage für die Fortschrittsanzeige in
+    /// Abteilung `(erledigt, gesamt)` — Grundlage für die Fortschrittsanzeige in
     /// ``MilkForUsImportView``.
     @MainActor
     static func gruppenMitVorschlag(
         aus eintraege: [MilkForUsEintrag],
-        bestehendeKategorien: [ArtikelKategorie],
+        bestehendeAbteilungen: [Abteilung],
         fortschritt: ((Int, Int) -> Void)? = nil
     ) async -> [MilkForUsKategorieGruppe] {
         var reihenfolge: [String] = []
@@ -166,7 +166,7 @@ enum MilkForUsImportService {
         guard gesamt > 0 else { return [] }
         fortschritt?(0, gesamt)
 
-        let bekannteKategorienNamen = bestehendeKategorien.map(\.name)
+        let bekannteAbteilungenNamen = bestehendeAbteilungen.map(\.name)
         var ergebnisse = [VorschlagsName?](repeating: nil, count: gesamt)
         var erledigt = 0
         let maxGleichzeitig = 4
@@ -178,7 +178,7 @@ enum MilkForUsImportService {
                 let name = reihenfolge[index]
                 naechsterIndex += 1
                 group.addTask {
-                    (index, await vorschlagsName(fuerKategorieName: name, bekannteKategorienNamen: bekannteKategorienNamen))
+                    (index, await vorschlagsName(fuerAbteilungName: name, bekannteAbteilungenNamen: bekannteAbteilungenNamen))
                 }
             }
             for _ in 0..<min(maxGleichzeitig, gesamt) { naechstenStarten() }
@@ -193,7 +193,7 @@ enum MilkForUsImportService {
         return reihenfolge.enumerated().map { index, name in
             MilkForUsKategorieGruppe(
                 kategorieName: name,
-                zuordnung: zuordnung(fuer: ergebnisse[index] ?? .neuAnlegen(name: name), in: bestehendeKategorien),
+                zuordnung: zuordnung(fuer: ergebnisse[index] ?? .neuAnlegen(name: name), in: bestehendeAbteilungen),
                 artikelNamen: artikelNachKategorie[name] ?? []
             )
         }
@@ -202,44 +202,44 @@ enum MilkForUsImportService {
     /// Ermittelt die Zuordnung für einen einzelnen MilkForUs-Kategorienamen: exakter,
     /// Groß-/Kleinschreibung ignorierender Treffer zuerst, sonst — falls auf dem
     /// Gerät verfügbar — ein KI-basierter Best-Match gegen die bestehenden
-    /// Kategorien (siehe ``AISuggestionService/kategorieMatch(fuerName:bekannteKategorien:)``),
-    /// sonst der Vorschlag, die Kategorie neu anzulegen. Der Nutzer kann jeden
+    /// Abteilungen (siehe ``AISuggestionService/abteilungMatch(fuerName:bekannteAbteilungen:)``),
+    /// sonst der Vorschlag, die Abteilung neu anzulegen. Der Nutzer kann jeden
     /// Vorschlag in der Vorschau noch auf "Sonstiges" oder eine andere bestehende
-    /// Kategorie umstellen. Dünner Wrapper um ``vorschlagsName(fuerKategorieName:bekannteKategorienNamen:)``
+    /// Abteilung umstellen. Dünner Wrapper um ``vorschlagsName(fuerAbteilungName:bekannteAbteilungenNamen:)``
     /// — eigenständig gehalten (statt nur intern verwendet), weil bestehende Tests
-    /// direkt gegen diese Signatur mit `KategorieZuordnung`-Rückgabewert prüfen.
+    /// direkt gegen diese Signatur mit `AbteilungZuordnung`-Rückgabewert prüfen.
     @MainActor
     static func vorschlag(
-        fuerKategorieName name: String,
-        bestehendeKategorien: [ArtikelKategorie]
-    ) async -> KategorieZuordnung {
-        let ergebnis = await vorschlagsName(fuerKategorieName: name, bekannteKategorienNamen: bestehendeKategorien.map(\.name))
-        return zuordnung(fuer: ergebnis, in: bestehendeKategorien)
+        fuerAbteilungName name: String,
+        bestehendeAbteilungen: [Abteilung]
+    ) async -> AbteilungZuordnung {
+        let ergebnis = await vorschlagsName(fuerAbteilungName: name, bekannteAbteilungenNamen: bestehendeAbteilungen.map(\.name))
+        return zuordnung(fuer: ergebnis, in: bestehendeAbteilungen)
     }
 
     /// Ein einzelner Artikel innerhalb einer Gruppe, zusammen mit deren Identität
-    /// (``MilkForUsKategorieGruppe/id``) und Kategorie-Zuordnung — Grundlage für
+    /// (``MilkForUsKategorieGruppe/id``) und Abteilung-Zuordnung — Grundlage für
     /// die in ``uebernehmen(gruppen:in:context:fortschritt:)`` über alle Gruppen
     /// hinweg flach durchnummerierte, in Chunks verarbeitete Arbeitsliste.
     private struct Arbeitsschritt {
         let gruppenID: String
-        let zuordnung: KategorieZuordnung
+        let zuordnung: AbteilungZuordnung
         let artikelName: String
     }
 
     /// Übernimmt die Gruppen (nach ggf. manueller Korrektur von ``zuordnung``/
-    /// ``artikelNamen`` durch den Nutzer): legt neue Kategorien an (Default-Symbol/
+    /// ``artikelNamen`` durch den Nutzer): legt neue Abteilungen an (Default-Symbol/
     /// -Farbe, siehe ``NeueAbteilungSheet``), gleicht je Artikelname zuerst gegen
     /// bestehende ``Artikel``, dann gegen bestehende ``Produktname``n ab (GitHub
     /// #139 — verhindert, dass ein importierter, konkreter Produktname wie „Alete
     /// Kindermilch 3" fälschlich einen neuen, doppelten generischen ``Artikel``
     /// erzeugt statt an das bestehende ``Produkt`` anzudocken), erstellt nur wenn
     /// beides erfolglos bleibt einen neuen ``Artikel`` (bestehende Artikel/Produkte
-    /// bleiben inklusive ihrer Kategorie unangetastet und werden nur auf
+    /// bleiben inklusive ihrer Abteilung unangetastet und werden nur auf
     /// ``einkaufsliste`` gesetzt) und ruft dafür
     /// ``Einkaufsliste/artikelHinzufuegen(_:produkt:context:)`` auf. Gruppen ohne
     /// verbliebene Artikelnamen (z.B. weil der Nutzer alle in der Vorschau entfernt
-    /// hat) werden übersprungen, damit keine ungenutzten neuen Kategorien entstehen.
+    /// hat) werden übersprungen, damit keine ungenutzten neuen Abteilungen entstehen.
     ///
     /// **Performance (Nutzerbericht 2026-08-24, sehr große MilkForUs-Listen):**
     /// vorher wurde für JEDEN importierten Artikelnamen der komplette bestehende
@@ -277,7 +277,7 @@ enum MilkForUsImportService {
         // gesamte, jetzt in Chunks verteilte Dauer des Übernehmens hinweg könnte
         // die Zielliste anderweitig gelöscht werden.
         let einkaufslisteReferenz = ModelReference(einkaufsliste)
-        var naechsterSortIndex = ((try? context.fetch(FetchDescriptor<ArtikelKategorie>()))?.map(\.sortIndex).max() ?? -1) + 1
+        var naechsterSortIndex = ((try? context.fetch(FetchDescriptor<Abteilung>()))?.map(\.sortIndex).max() ?? -1) + 1
         var artikelNachName: [String: Artikel] = Dictionary(
             ((try? context.fetch(FetchDescriptor<Artikel>())) ?? []).map { ($0.name.lowercased(), $0) },
             uniquingKeysWith: { erster, _ in erster }
@@ -294,10 +294,10 @@ enum MilkForUsImportService {
             uniquingKeysWith: { erster, _ in erster }
         )
         // Pro Gruppe (Schlüssel ``MilkForUsKategorieGruppe/id``) einmalig
-        // aufgelöste Kategorie — verhindert, dass eine `.neuAnlegen`-Gruppe, deren
-        // Artikel sich über mehrere Chunks verteilen, dieselbe neue Kategorie
+        // aufgelöste Abteilung — verhindert, dass eine `.neuAnlegen`-Gruppe, deren
+        // Artikel sich über mehrere Chunks verteilen, dieselbe neue Abteilung
         // mehrfach anlegt.
-        var kategorieProGruppenID: [String: ArtikelKategorie] = [:]
+        var abteilungProGruppenID: [String: Abteilung] = [:]
 
         let chunkGroesse = 25
         var erledigt = 0
@@ -309,17 +309,17 @@ enum MilkForUsImportService {
                 listeVorhanden = true
 
                 for schritt in chunk {
-                    let kategorie: ArtikelKategorie
-                    if let bestehende = kategorieProGruppenID[schritt.gruppenID] {
-                        kategorie = bestehende
+                    let abteilung: Abteilung
+                    if let bestehende = abteilungProGruppenID[schritt.gruppenID] {
+                        abteilung = bestehende
                     } else {
                         switch schritt.zuordnung {
                         case .bestehend(let bestehende):
-                            kategorie = bestehende
+                            abteilung = bestehende
                         case .sonstige:
-                            kategorie = ArtikelKategorie.sonstige(context: context)
+                            abteilung = Abteilung.sonstige(context: context)
                         case .neuAnlegen(let name):
-                            let neue = ArtikelKategorie(
+                            let neue = Abteilung(
                                 name: name,
                                 standardSymbol: "shippingbox.fill",
                                 standardFarbeHex: Color.artikelPalette[0],
@@ -327,9 +327,9 @@ enum MilkForUsImportService {
                             )
                             naechsterSortIndex += 1
                             context.insert(neue)
-                            kategorie = neue
+                            abteilung = neue
                         }
-                        kategorieProGruppenID[schritt.gruppenID] = kategorie
+                        abteilungProGruppenID[schritt.gruppenID] = abteilung
                     }
 
                     let schluessel = schritt.artikelName.lowercased()
@@ -346,7 +346,7 @@ enum MilkForUsImportService {
                             name: schritt.artikelName,
                             symbolName: SymbolPalette.alle[0],
                             farbeHex: Color.artikelPalette[0],
-                            kategorien: [kategorie]
+                            abteilungen: [abteilung]
                         )
                         context.insert(neuer)
                         artikelNachName[schluessel] = neuer

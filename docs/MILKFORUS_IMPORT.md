@@ -1,6 +1,6 @@
 # MilkForUs-Textimport
 
-Importiert eine aus der Shopping-App "MilkForUs" exportierte Textdatei (Kategorien +
+Importiert eine aus der Shopping-App "MilkForUs" exportierte Textdatei (Abteilungen +
 Artikel) in den ShopWithMe-Bestand und auf eine gewählte `Einkaufsliste`. Drei
 Einstiegspunkte führen zum selben Ablauf: manuelle Dateiauswahl in den Einstellungen,
 direkt aus einer geöffneten Einkaufsliste heraus (GitHub #138, Zielliste dabei fest
@@ -10,10 +10,10 @@ aus einem Chat heraus) über eine eigene Share Extension.
 ## Beteiligte Dateien
 
 - `ShopWithMe/Services/MilkForUsImportService.swift` — `MilkForUsParser` (Textformat
-  → Einträge), `KategorieZuordnung`, Kategorie-Abgleich, Übernahme in den Bestand.
-- `ShopWithMe/Services/AISuggestionService.swift` — `kategorieMatch(fuerName:bekannteKategorien:)`,
-  KI-basierter Best-Match für den Kategorie-Abgleich (gleiches Muster wie der
-  Artikel-Kategorie-Vorschlag).
+  → Einträge), `AbteilungZuordnung`, Abteilung-Abgleich, Übernahme in den Bestand.
+- `ShopWithMe/Services/AISuggestionService.swift` — `abteilungMatch(fuerName:bekannteAbteilungen:)`,
+  KI-basierter Best-Match für den Abteilung-Abgleich (gleiches Muster wie der
+  Artikel-Abteilung-Vorschlag).
 - `ShopWithMe/Views/Einstellungen/MilkForUsImportView.swift` — Datei-Picker, Vorschau/
   Korrektur, Zielisten-Wahl (`vorbelegteZielliste`, sofern vom Aufrufer gesetzt),
   Übernahme.
@@ -33,19 +33,19 @@ aus einem Chat heraus) über eine eigene Share Extension.
 ## Textformat
 
 ```
-Kategoriename
+Abteilungsname
 - Artikel 1
 - Artikel 2
 
-Andere Kategorie
+Andere Abteilung
 - Artikel 3
 ```
 
-Kategorienamen stehen allein auf einer Zeile, Artikel darunter mit `- `-Präfix,
+Abteilungsnamen stehen allein auf einer Zeile, Artikel darunter mit `- `-Präfix,
 Blöcke durch Leerzeilen getrennt. `MilkForUsParser.parsen(text:)` ist rein
-zeilenbasiert: eine nicht-leere Zeile ohne `-`-Präfix startet eine neue Kategorie,
-Leerzeilen werden ignoriert. Artikel vor der ersten Kategorie-Überschrift bekommen
-den leeren Kategorienamen `""`.
+zeilenbasiert: eine nicht-leere Zeile ohne `-`-Präfix startet eine neue Abteilung,
+Leerzeilen werden ignoriert. Artikel vor der ersten Abteilung-Überschrift bekommen
+den leeren Abteilungsnamen `""`.
 
 ## Ablauf
 
@@ -53,25 +53,25 @@ den leeren Kategorienamen `""`.
    UTType `.plainText`) oder vorbefüllt über `initialText`, gesetzt von `RootView`
    nachdem die Share Extension einen Text bereitgelegt hat (siehe unten).
 2. **Parsen** (`MilkForUsParser.parsen(text:)`) → `[MilkForUsEintrag]`.
-3. **Gruppieren + Kategorie-Abgleich** (`MilkForUsImportService.gruppenMitVorschlag(aus:bestehendeKategorien:fortschritt:)`):
-   pro distinktem Kategorienamen (Reihenfolge des ersten Auftretens in der Datei)
-   wird eine `KategorieZuordnung` vorgeschlagen. Der KI-Abgleich (Schritt 2 unten)
-   läuft für bis zu 4 Kategorien gleichzeitig statt streng nacheinander (siehe
+3. **Gruppieren + Abteilung-Abgleich** (`MilkForUsImportService.gruppenMitVorschlag(aus:bestehendeAbteilungen:fortschritt:)`):
+   pro distinktem Abteilungsnamen (Reihenfolge des ersten Auftretens in der Datei)
+   wird eine `AbteilungZuordnung` vorgeschlagen. Der KI-Abgleich (Schritt 2 unten)
+   läuft für bis zu 4 Abteilungen gleichzeitig statt streng nacheinander (siehe
    „Performance“ unten); `fortschritt` (optional) meldet nach jeder fertigen
-   Kategorie `(erledigt, gesamt)`:
+   Abteilung `(erledigt, gesamt)`:
    1. Exakter, Groß-/Kleinschreibung ignorierender Namenstreffer gegen bestehende
-      `ArtikelKategorie`n → `.bestehend`.
+      `Abteilung`en → `.bestehend`.
    2. Sonst, falls `AISuggestionService.istVerfuegbar`: KI-Best-Match
-      (`AISuggestionService.kategorieMatch(fuerName:bekannteKategorien:)`) gegen die
-      bestehenden Kategorienamen — z.B. bildet das MilkForUs-"Brot" auf das
+      (`AISuggestionService.abteilungMatch(fuerName:bekannteAbteilungen:)`) gegen die
+      bestehenden Abteilungsnamen — z.B. bildet das MilkForUs-"Brot" auf das
       bestehende "Brot & Backwaren" ab, statt eine Dublette anzulegen. Antwortet die
       KI mit keinem Treffer aus der Liste → `.neuAnlegen`.
    3. Ohne KI-Verfügbarkeit direkt `.neuAnlegen`.
-   4. Leerer Kategoriename (siehe oben) → immer sofort `.sonstige`, nie
+   4. Leerer Abteilungsname (siehe oben) → immer sofort `.sonstige`, nie
       `.neuAnlegen(name: "")`.
 4. **Vorschau/Korrektur** (`MilkForUsImportView`, `VorschauListe`): eine Section pro
-   Kategorie-Gruppe, Header mit Menü zum Umstellen der Zuordnung (bestehende
-   Kategorie / neu anlegen / Sonstiges), Artikel-Zeilen mit „vorhanden“/„neu“-Badge
+   Abteilung-Gruppe, Header mit Menü zum Umstellen der Zuordnung (bestehende
+   Abteilung / neu anlegen / Sonstiges), Artikel-Zeilen mit „vorhanden“/„neu“-Badge
    (Abgleich gegen `Artikel.name` UND `Produktname.name`, case-insensitive — seit
    GitHub #139, siehe Schritt 5), Swipe-to-delete zum Ausschließen einzelner Artikel.
    Picker zur Ziel-`Einkaufsliste` (Default: `Einkaufsliste.standard(context:)`, außer
@@ -80,16 +80,16 @@ den leeren Kategorienamen `""`.
    #140 — Standard für Buttons mit reiner Bestätigungswirkung), nicht mehr am unteren
    Bildschirmrand.
 5. **Übernahme** (`MilkForUsImportService.uebernehmen(gruppen:in:context:fortschritt:)`):
-   legt neue Kategorien an (Default-Symbol/-Farbe wie `NeueKategorieSheet`), gleicht
+   legt neue Abteilungen an (Default-Symbol/-Farbe wie `NeueAbteilungSheet`), gleicht
    je Artikelname zuerst exakt (case-insensitive) gegen bestehende `Artikel.name`,
    dann gegen bestehende `Produktname.name` ab (GitHub #139 — ein importierter,
    konkreter Produktname wie „Alete Kindermilch 3“ dockt so an das bestehende
    `Produkt` und dessen generischen `Artikel` an, statt einen doppelten, neuen
    generischen `Artikel` zu erzeugen), erstellt nur wenn beides erfolglos bleibt
-   einen neuen `Artikel` (bestehende Artikel/Produkte bleiben inkl. ihrer Kategorie
+   einen neuen `Artikel` (bestehende Artikel/Produkte bleiben inkl. ihrer Abteilung
    unangetastet), ruft `Einkaufsliste.artikelHinzufuegen(_:produkt:context:)` auf.
    Gruppen ohne verbliebene Artikel (z.B. alle in der Vorschau entfernt) werden
-   übersprungen, damit keine ungenutzten neuen Kategorien entstehen. Läuft in Chunks
+   übersprungen, damit keine ungenutzten neuen Abteilungen entstehen. Läuft in Chunks
    à 25 Artikeln, je einem eigenen kurzen `DatabaseLeaseService.performMicroLease`
    (siehe „Performance“ unten); `fortschritt` (optional) meldet nach jedem Chunk
    `(erledigt, gesamt)` in Artikeln. Während dieser Phase zeigt `MilkForUsImportView`
@@ -97,14 +97,14 @@ den leeren Kategorienamen `""`.
 
 ## Performance bei sehr großen Listen (Nutzerbericht 2026-08-24)
 
-Zwei Engpässe behoben, die den Import bei vielen Kategorien/Artikeln spürbar
+Zwei Engpässe behoben, die den Import bei vielen Abteilungen/Artikeln spürbar
 langsam machten:
 
-- **KI-Kategorieabgleich parallelisiert:** `gruppenMitVorschlag` fragte vorher
-  jede Kategorie einzeln nacheinander bei der KI an. Läuft jetzt mit bis zu 4
-  Kategorien gleichzeitig über eine `TaskGroup` (`vorschlagsName(fuerKategorieName:bekannteKategorienNamen:)`,
-  Sendable-sicher — arbeitet bewusst nur mit Kategorie-NAMEN statt
-  `ArtikelKategorie`-Objekten, da SwiftData-`@Model`-Typen nicht `Sendable` sind).
+- **KI-Abteilungsabgleich parallelisiert:** `gruppenMitVorschlag` fragte vorher
+  jede Abteilung einzeln nacheinander bei der KI an. Läuft jetzt mit bis zu 4
+  Abteilungen gleichzeitig über eine `TaskGroup` (`vorschlagsName(fuerAbteilungName:bekannteAbteilungenNamen:)`,
+  Sendable-sicher — arbeitet bewusst nur mit Abteilung-NAMEN statt
+  `Abteilung`-Objekten, da SwiftData-`@Model`-Typen nicht `Sendable` sind).
 - **Artikel-Zuordnung indiziert statt linear durchsucht:** `uebernehmen` suchte
   vorher für JEDEN importierten Artikelnamen per linearem Scan im kompletten
   bestehenden Artikelbestand (`alleArtikel.first { ... }`) — bei mehreren hundert
@@ -156,6 +156,6 @@ Umweg über „Sichern“ + manuellen Datei-Picker:
   übernommen.
 - **Keine Mengen-/Einheiten-Übernahme** — das Textformat enthält keine; neue Artikel
   bekommen die Standardwerte (`Einheit.stueck`, `mengenSchritt == 1`).
-- **Keine feste Alias-Liste** für den Kategorie-Abgleich — bewusst KI-Best-Match statt
+- **Keine feste Alias-Liste** für den Abteilung-Abgleich — bewusst KI-Best-Match statt
   hartkodierter Zuordnungstabelle, damit sich der Abgleich automatisch an künftige,
-  heute noch unbekannte MilkForUs-Kategorienamen anpasst.
+  heute noch unbekannte MilkForUs-Abteilungsnamen anpasst.

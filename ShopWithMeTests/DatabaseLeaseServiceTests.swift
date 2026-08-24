@@ -38,7 +38,7 @@ struct DatabaseLeaseServiceTests {
     }
 
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {
-        let schema = Schema([Artikel.self, ArtikelKategorie.self, Einkaufsliste.self, EinkaufslistenEintrag.self, SyncEvent.self])
+        let schema = Schema([Artikel.self, Abteilung.self, Einkaufsliste.self, EinkaufslistenEintrag.self, SyncEvent.self])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
         return (container, container.mainContext)
@@ -111,7 +111,7 @@ struct DatabaseLeaseServiceTests {
         #expect(mutateAufgerufen)
     }
 
-    /// Verschachtelte Session-Leases (z.B. `KategorieHinzufuegenSheet` über einem
+    /// Verschachtelte Session-Leases (z.B. `AbteilungHinzufuegenSheet` über einem
     /// bereits offenen `GeschaeftDetailView`) teilen sich denselben Lease — die
     /// Lock-Datei darf erst verschwinden, wenn auch der äußere Lease freigegeben ist.
     @Test

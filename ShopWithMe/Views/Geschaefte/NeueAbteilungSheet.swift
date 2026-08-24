@@ -1,13 +1,13 @@
 import SwiftUI
 import SwiftData
 
-/// Sheet zum Anlegen einer neuen ``ArtikelKategorie``, z.B. aus der
-/// Kategorien-Verwaltung eines Geschäfts heraus. Die neue Kategorie wird beim
+/// Sheet zum Anlegen einer neuen ``Abteilung``, z.B. aus der
+/// Abteilungen-Verwaltung eines Geschäfts heraus. Die neue Abteilung wird beim
 /// Sichern in den Model-Context eingefügt und über ``onErstellt`` an den
 /// Aufrufer gemeldet.
 struct NeueAbteilungSheet: View {
     let naechsterSortIndex: Int
-    let onErstellt: (ArtikelKategorie) -> Void
+    let onErstellt: (Abteilung) -> Void
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -36,7 +36,7 @@ struct NeueAbteilungSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Sichern") {
-                        let kategorie = ArtikelKategorie(
+                        let abteilung = Abteilung(
                             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
                             standardSymbol: symbolName,
                             standardFarbeHex: farbeHex,
@@ -44,9 +44,9 @@ struct NeueAbteilungSheet: View {
                         )
                         Task {
                             await DatabaseLeaseService.performMicroLease(context: modelContext) {
-                                modelContext.insert(kategorie)
+                                modelContext.insert(abteilung)
                             }
-                            onErstellt(kategorie)
+                            onErstellt(abteilung)
                             dismiss()
                         }
                     }

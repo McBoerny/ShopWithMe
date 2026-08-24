@@ -643,7 +643,7 @@ private struct ErgebnisListe: View {
                 } header: {
                     Text("Erkannte Positionen")
                 } footer: {
-                    Text("Der Produktname ist der menschenlesbare Klarname \u{2013} von der KI vorbelegt, antippen zum Bearbeiten. Artikel ist die generische Kategorie \u{2013} antippen zum W\u{E4}hlen oder Neuanlegen. Wischen nach links l\u{F6}scht die Position f\u{FC}r diesen Scan, nach rechts ignoriert sie dauerhaft f\u{FC}r dieses Gesch\u{E4}ft. Das Lupen-Symbol markiert die erkannte Stelle im Beleg-Foto.")
+                    Text("Der Produktname ist der menschenlesbare Klarname \u{2013} von der KI vorbelegt, antippen zum Bearbeiten. Artikel ist die generische Abteilung \u{2013} antippen zum W\u{E4}hlen oder Neuanlegen. Wischen nach links l\u{F6}scht die Position f\u{FC}r diesen Scan, nach rechts ignoriert sie dauerhaft f\u{FC}r dieses Gesch\u{E4}ft. Das Lupen-Symbol markiert die erkannte Stelle im Beleg-Foto.")
                 }
             }
             .safeAreaInset(edge: .bottom) {

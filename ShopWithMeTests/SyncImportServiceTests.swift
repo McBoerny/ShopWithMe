@@ -16,7 +16,7 @@ import Testing
 struct SyncImportServiceTests {
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {
         let schema = Schema([
-            Artikel.self, ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self,
+            Artikel.self, Abteilung.self, Geschaeft.self, GeschaeftTyp.self,
             Einkaufsvorgang.self, KaufEintrag.self,
             Einkaufsliste.self, EinkaufslistenEintrag.self, SyncEvent.self, SyncEntitaetsAlias.self,
             ArtikelGeschaeftVerfuegbarkeit.self, ArtikelListenKauf.self,
@@ -374,7 +374,7 @@ struct SyncImportServiceTests {
     /// Ein importiertes `artikelAbgehakt`-Event beschreibt die Laufreihenfolge
     /// des SENDENDEN Geräts durchs Geschäft, nicht die dieses Geräts — der
     /// dadurch entstehende `KaufEintrag` darf deshalb keinen
-    /// `kategorieBesuchsIndex` bekommen (sonst würde
+    /// `abteilungBesuchsIndex` bekommen (sonst würde
     /// `AbteilungsDistanzService` mit einer erfundenen Besuchsposition für
     /// diesen Nutzer gefüttert). Ein bereits lokal abgehakter Artikel (mit
     /// echtem Index) bleibt davon unberührt, und sein Index verschiebt sich
@@ -387,15 +387,15 @@ struct SyncImportServiceTests {
         try SyncOrdnerService.ordnerFestlegen(syncOrdner)
         defer { SyncOrdnerService.ordnerEntfernen() }
 
-        let obst = ArtikelKategorie(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
+        let obst = Abteilung(name: "Obst", standardSymbol: "carrot.fill", standardFarbeHex: "#34C759")
         context.insert(obst)
         let geschaeft = Geschaeft(name: "Testladen", typen: [GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")])
         context.insert(geschaeft)
         let liste = Einkaufsliste(name: "Einkaufsliste")
         context.insert(liste)
-        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst])
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759", abteilungen: [obst])
         context.insert(apfel)
-        let birne = Artikel(name: "Birne", symbolName: "carrot.fill", farbeHex: "#34C759", kategorien: [obst])
+        let birne = Artikel(name: "Birne", symbolName: "carrot.fill", farbeHex: "#34C759", abteilungen: [obst])
         context.insert(birne)
         liste.artikelHinzufuegenOhneEventAufzeichnung(birne, context: context)
 
@@ -417,11 +417,11 @@ struct SyncImportServiceTests {
 
         let apfelEintrag = einkauf.kaufEintraege.first { $0.artikel == apfel }
         let birnenEintrag = einkauf.kaufEintraege.first { $0.artikel == birne }
-        #expect(apfelEintrag?.kategorieBesuchsIndex == 0)
+        #expect(apfelEintrag?.abteilungBesuchsIndex == 0)
         #expect(apfelEintrag?.ursprungsGeraeteID == nil)
-        #expect(birnenEintrag?.kategorieBesuchsIndex == nil)
+        #expect(birnenEintrag?.abteilungBesuchsIndex == nil)
         #expect(birnenEintrag?.ursprungsGeraeteID == "fremdes-geraet")
-        #expect(birnenEintrag?.kategorie == obst)
+        #expect(birnenEintrag?.abteilung == obst)
         #expect(!liste.enthaelt(birne))
     }
 

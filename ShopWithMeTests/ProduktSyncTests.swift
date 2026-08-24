@@ -14,7 +14,7 @@ import Testing
 struct ProduktSyncTests {
     private func machtLeerenContainer() throws -> (ModelContainer, ModelContext) {
         let schema = Schema([
-            Artikel.self, ArtikelKategorie.self, Geschaeft.self, GeschaeftTyp.self,
+            Artikel.self, Abteilung.self, Geschaeft.self, GeschaeftTyp.self,
             Einkaufsvorgang.self, KaufEintrag.self, Einkaufsliste.self, EinkaufslistenEintrag.self,
             SyncEvent.self, SyncEntitaetsAlias.self, SyncPeerInfo.self, SyncTombstone.self,
             Preispunkt.self, SyncAbgleichKandidat.self, Produkt.self, Produktname.self,
@@ -33,7 +33,7 @@ struct ProduktSyncTests {
     private func leererSnapshot(geraeteID: String, geraeteName: String = "Fremdes iPhone") -> SyncSnapshot {
         SyncSnapshot(
             formatVersion: SyncSnapshot.aktuelleFormatVersion, erzeugtAm: Date(), geraeteID: geraeteID, geraeteName: geraeteName,
-            geschaeftsTypen: [], artikelKategorien: [], geschaefte: [], artikel: [],
+            geschaeftsTypen: [], abteilungen: [], geschaefte: [], artikel: [],
             einkaufslisten: [], einkaufslistenEintraege: [], einkaufsvorgaenge: [], kaufEintraege: [],
             preispunkte: [],
             warengruppenDistanzen: [], tombstones: []
@@ -49,7 +49,7 @@ struct ProduktSyncTests {
             geraeteID: snapshot.geraeteID, geraeteName: snapshot.geraeteName
         )
         let stamm = SyncStammSnapshot(
-            geschaeftsTypen: snapshot.geschaeftsTypen, artikelKategorien: snapshot.artikelKategorien,
+            geschaeftsTypen: snapshot.geschaeftsTypen, abteilungen: snapshot.abteilungen,
             geschaefte: snapshot.geschaefte, artikel: snapshot.artikel, einkaufslisten: snapshot.einkaufslisten,
             produkte: snapshot.produkte, produktnamen: snapshot.produktnamen
         )
@@ -88,7 +88,7 @@ struct ProduktSyncTests {
         snapshot.artikel = [
             ArtikelSnapshot(
                 id: zahnpasta.id, name: "Zahnpasta", symbolName: "sparkles", farbeHex: "#AF52DE",
-                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+                abteilungIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
             ),
         ]
         let fremdeProduktID = UUID()
@@ -125,11 +125,11 @@ struct ProduktSyncTests {
         snapshot.artikel = [
             ArtikelSnapshot(
                 id: zahnpasta.id, name: "Zahnpasta", symbolName: "sparkles", farbeHex: "#AF52DE",
-                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+                abteilungIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
             ),
             ArtikelSnapshot(
                 id: shampoo.id, name: "Shampoo", symbolName: "drop.fill", farbeHex: "#5AC8FA",
-                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+                abteilungIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
             ),
         ]
         snapshot.produkte = [
@@ -160,7 +160,7 @@ struct ProduktSyncTests {
         snapshot.artikel = [
             ArtikelSnapshot(
                 id: zahnpasta.id, name: "Zahnpasta", symbolName: "sparkles", farbeHex: "#AF52DE",
-                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+                abteilungIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
             ),
         ]
         let elternID = UUID()
@@ -200,13 +200,13 @@ struct ProduktSyncTests {
         snapshot.artikel = [
             ArtikelSnapshot(
                 id: zahnpasta.id, name: "Zahnpasta", symbolName: "sparkles", farbeHex: "#AF52DE",
-                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+                abteilungIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
             ),
         ]
         snapshot.geschaefte = [
             GeschaeftSnapshot(
                 id: geschaeft.id, name: "Rewe", typIDs: [], adresse: nil, breitengrad: nil, laengengrad: nil,
-                erkennungsradius: nil, kategorieIDs: [], ausgeschlosseneKategorieIDs: [], alternativeNamen: [],
+                erkennungsradius: nil, abteilungIDs: [], ausgeschlosseneAbteilungIDs: [], alternativeNamen: [],
                 ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
             ),
         ]
@@ -244,7 +244,7 @@ struct ProduktSyncTests {
         snapshot.artikel = [
             ArtikelSnapshot(
                 id: zahnpasta.id, name: "Zahnpasta", symbolName: "sparkles", farbeHex: "#AF52DE",
-                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+                abteilungIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
             ),
         ]
         let fremdeProduktID = UUID()
@@ -290,7 +290,7 @@ struct ProduktSyncTests {
         snapshot.artikel = [
             ArtikelSnapshot(
                 id: zahnpasta.id, name: "Zahnpasta", symbolName: "sparkles", farbeHex: "#AF52DE",
-                kategorieIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+                abteilungIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
             ),
         ]
         snapshot.preispunkte = [

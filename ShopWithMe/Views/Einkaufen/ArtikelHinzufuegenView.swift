@@ -433,20 +433,20 @@ struct ArtikelHinzufuegenView: View {
     }
 }
 
-/// Kompakter linker Teil einer Artikel-Auswahlzeile: Kategorie-Icon/Farbe, Name
+/// Kompakter linker Teil einer Artikel-Auswahlzeile: Abteilung-Icon/Farbe, Name
 /// und optionaler Produktname. Auswahlstatus (Haken) und Mengenanzeige werden
 /// vom Aufrufer in der äußeren HStack gesetzt (GitHub #124).
 private struct ArtikelAuswahlZeile: View {
     let artikel: Artikel
     var gewaehltesProduktnamen: String? = nil
 
-    private var kategorie: ArtikelKategorie? { artikel.kategorien.first }
+    private var abteilung: Abteilung? { artikel.abteilungen.first }
 
     var body: some View {
         HStack(spacing: 10) {
             GlassSymbolBadge(
-                symbolName: kategorie?.standardSymbol ?? "shippingbox.fill",
-                farbe: Color(hex: kategorie?.standardFarbeHex ?? "#8E8E93"),
+                symbolName: abteilung?.standardSymbol ?? "shippingbox.fill",
+                farbe: Color(hex: abteilung?.standardFarbeHex ?? "#8E8E93"),
                 groesse: 28
             )
 
@@ -488,5 +488,5 @@ private struct ProduktSubZeile: View {
 
 #Preview {
     ArtikelHinzufuegenView(einkaufsliste: Einkaufsliste(name: "Einkaufsliste"))
-        .modelContainer(for: [Artikel.self, ArtikelKategorie.self, GeschaeftTyp.self, Einkaufsliste.self, EinkaufslistenEintrag.self, Produkt.self, Produktname.self], inMemory: true)
+        .modelContainer(for: [Artikel.self, Abteilung.self, GeschaeftTyp.self, Einkaufsliste.self, EinkaufslistenEintrag.self, Produkt.self, Produktname.self], inMemory: true)
 }

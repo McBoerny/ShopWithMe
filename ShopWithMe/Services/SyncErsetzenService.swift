@@ -123,7 +123,7 @@ enum SyncErsetzenService {
     /// ``NeuaufbauZusammenfassung``.
     struct BereichsZaehler: Codable {
         var geschaeftsTypen: Int
-        var artikelKategorien: Int
+        var abteilungen: Int
         var geschaefte: Int
         var artikel: Int
         var einkaufslisten: Int
@@ -133,7 +133,7 @@ enum SyncErsetzenService {
 
         init(snapshot: SyncSnapshot) {
             geschaeftsTypen = snapshot.geschaeftsTypen.count
-            artikelKategorien = snapshot.artikelKategorien.count
+            abteilungen = snapshot.abteilungen.count
             geschaefte = snapshot.geschaefte.count
             artikel = snapshot.artikel.count
             einkaufslisten = snapshot.einkaufslisten.count
@@ -146,7 +146,7 @@ enum SyncErsetzenService {
         /// vorher nicht leer"-Abbruchtest in ``fuehreAusstehendeAktionAus(context:)``,
         /// ohne jeden Bereich einzeln auf Null prüfen zu müssen.
         var gesamt: Int {
-            geschaeftsTypen + artikelKategorien + geschaefte + artikel + einkaufslisten
+            geschaeftsTypen + abteilungen + geschaefte + artikel + einkaufslisten
                 + einkaufsvorgaenge + kaufEintraege + warengruppenDistanzen
         }
     }
@@ -410,7 +410,7 @@ enum SyncErsetzenService {
                 zeitpunkt: Date(), vorher: vorherZaehler, nachher: nachherZaehler
             )
 
-            // Härtung (Kategorie-3-Review): ein Neuaufbau, der eindeutig
+            // Härtung (Abteilung-3-Review): ein Neuaufbau, der eindeutig
             // fehlgeschlagen ist — Ordnerzugriff gescheitert, oder ein
             // vorher nicht leerer Bestand ist danach komplett leer (kein
             // erreichbarer Peer hatte irgendetwas) — wird nicht mehr nur

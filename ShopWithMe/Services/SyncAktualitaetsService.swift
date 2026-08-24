@@ -13,7 +13,7 @@ import SwiftData
 /// Aufbewahrungs-Wasserstand (``SyncSnapshotImportService/aktuellerAufraeumWasserstand(in:)``)
 /// — die hier beantwortete Frage ("wie lange kann ICH mich nicht mehr auf
 /// die Vollständigkeit meines eigenen Event-Lesens verlassen") ist rein
-/// lokal, ohne Gruppenbezug, und in einer anderen Kategorie als die
+/// lokal, ohne Gruppenbezug, und in einer anderen Abteilung als die
 /// Aufräum-Mechanismen für Events/Tombstones — siehe `docs/PEER_LEBENSZYKLUS.md`.
 ///
 /// **Warum ein eigener, rein lokaler Zeitstempel statt einer Konsum-Quittung

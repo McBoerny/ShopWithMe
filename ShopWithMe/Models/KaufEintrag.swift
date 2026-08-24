@@ -3,7 +3,7 @@ import SwiftData
 
 /// Ein einzelner Kauf eines Artikels — die operative Buchungszeile eines
 /// laufenden ``Einkaufsvorgang``s (Dedupe-Schutz, Entfernen von der Liste,
-/// ``kategorieBesuchsIndex`` für ``AbteilungsDistanzService``).
+/// ``abteilungBesuchsIndex`` für ``AbteilungsDistanzService``).
 ///
 /// **Seit GitHub #76 keine Preishistorie-Rolle mehr** — die ist nach
 /// ``Preispunkt`` verschoben, da sie fachlich unabhängig vom laufenden
@@ -30,10 +30,10 @@ final class KaufEintrag {
     var einkaufsvorgang: Einkaufsvorgang?
     /// Das Geschäft, in dem der Kauf stattfand.
     var geschaeft: Geschaeft?
-    /// Die Kategorie des Artikels zum Kaufzeitpunkt — Grundlage für
+    /// Die Abteilung des Artikels zum Kaufzeitpunkt — Grundlage für
     /// ``AbteilungsDistanzService``, unabhängig von einer späteren Änderung der
-    /// Artikel-Kategorie-Zuordnung.
-    var kategorie: ArtikelKategorie?
+    /// Artikel-Abteilung-Zuordnung.
+    var abteilung: Abteilung?
     /// Name des Artikels zum Kaufzeitpunkt (dauerhafter Schnappschuss).
     var artikelNameSnapshot: String
     /// Name des Geschäfts zum Kaufzeitpunkt (dauerhafter Schnappschuss).
@@ -54,22 +54,22 @@ final class KaufEintrag {
     var preis: Decimal?
     /// Gekaufte Menge (Standard: 1).
     var menge: Double
-    /// Position in der chronologischen Kategorie-Besuchsreihenfolge dieses
+    /// Position in der chronologischen Abteilung-Besuchsreihenfolge dieses
     /// Einkaufsvorgangs — Grundlage für ``AbteilungsDistanzService``.
-    var kategorieBesuchsIndex: Int?
+    var abteilungBesuchsIndex: Int?
     /// `nil`, wenn dieser Eintrag lokal auf diesem Gerät entstanden ist (oder ein
     /// Altdatensatz von vor Einführung dieses Attributs ist); sonst die Geräte-ID
     /// des Peers, von dem er per Sync-Event oder Snapshot übernommen wurde —
     /// analog ``SyncEvent/autorGeraeteID`` (GitHub #68).
     ///
     /// `init` erzwingt zentral, dass ein fremder Ursprung nie einen
-    /// ``kategorieBesuchsIndex`` bekommt: ein von einem ANDEREN Gerät stammender
+    /// ``abteilungBesuchsIndex`` bekommt: ein von einem ANDEREN Gerät stammender
     /// Eintrag beschreibt dessen Laufreihenfolge durch den Laden, nicht die
     /// dieses Geräts — würde er trotzdem einen Index bekommen, würde er
     /// fälschlich als eigene Beobachtung in die lokal gelernte, ladenspezifische
     /// Distanzmatrix (``AbteilungsDistanzService``) einfließen. Vorher war diese
     /// Regel nur an den beiden Konstruktions-Call-Sites von Hand nachgebildet
-    /// (``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:kategorie:geschaeft:)``,
+    /// (``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:abteilung:geschaeft:)``,
     /// ``SyncSnapshotImportService``) — hier im Typ selbst gilt sie automatisch
     /// für jeden, auch künftigen, Konstruktionsort.
     var ursprungsGeraeteID: String?
@@ -77,24 +77,24 @@ final class KaufEintrag {
     init(
         artikel: Artikel?,
         geschaeft: Geschaeft?,
-        kategorie: ArtikelKategorie? = nil,
+        abteilung: Abteilung? = nil,
         preis: Decimal? = nil,
         menge: Double = 1,
         datum: Date = Date(),
-        kategorieBesuchsIndex: Int? = nil,
+        abteilungBesuchsIndex: Int? = nil,
         ursprungsGeraeteID: String? = nil
     ) {
         self.id = UUID()
         self.artikel = artikel
         self.geschaeft = geschaeft
-        self.kategorie = kategorie
+        self.abteilung = abteilung
         self.artikelNameSnapshot = artikel?.name ?? ""
         self.geschaeftNameSnapshot = geschaeft?.name ?? ""
         self.datum = datum
         self.preis = preis
         self.menge = menge
         self.ursprungsGeraeteID = ursprungsGeraeteID
-        self.kategorieBesuchsIndex = ursprungsGeraeteID == nil ? kategorieBesuchsIndex : nil
+        self.abteilungBesuchsIndex = ursprungsGeraeteID == nil ? abteilungBesuchsIndex : nil
     }
 }
 

@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.16 (Build 337) — `ArtikelKategorie` → `Abteilung`, vollständige Modell-Umbenennung (GitHub #88)
+
+Der `@Model`-Typ `ArtikelKategorie` sowie alle davon persistierten Relationship-/
+Attributnamen heißen jetzt `Abteilung` (GUI-Text war bereits seit #62 auf
+"Warengruppe" umgestellt — nur der Code-Begriff fehlte noch). Betrifft 89 Dateien:
+Modell selbst (`ArtikelKategorie.swift` → `Abteilung.swift`), alle referenzierenden
+Relationships in `Artikel`/`Geschaeft`/`KaufEintrag`/`WarengruppenDistanz`/
+`GeschaeftTyp`, Sync-Snapshot/-Merge-Layer, Services, Views, Tests und Doku.
+
+**Ohne SwiftData-Migration** — bewusste Nutzervorgabe, da die App noch in
+Entwicklung ist und nur ein eigenes Gerät mit Testdaten betroffen war;
+möglich, weil `SchemaV1` seit dem Schema-Reset vom 2026-08-22 (#128/#129)
+ohnehin keinen Migrationsplan mehr hat. Sync-Wire-Format bewusst mitgebrochen
+(`SyncEntitaetsArt`-String, `SyncSnapshot`-Feldnamen) statt CodingKeys-
+Kompatibilitätslayer. Details/Begründung: `docs/DECISIONS.md`.
+
+Volle Suite grün bis auf die vorbestehende, dokumentiert nicht-deterministische
+OCR-Fixture-Drift in `BelegScanIntegrationTests` (unabhängig von dieser Änderung).
+
 ## v0.16 (Build 336) — MilkForUs-Import: Produktabgleich, Direkteinstieg, Haken-Button; Einkaufsliste ganze Zeile abhakbar (GitHub #139, #138, #140, #137)
 
 - **#139 (Bug):** `MilkForUsImportService.uebernehmen` glich importierte Namen bisher

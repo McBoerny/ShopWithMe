@@ -5,12 +5,12 @@ import SwiftData
 /// Grundlage für den Standard-Filter beim Einkaufen (siehe
 /// `EinkaufslisteView.verfuegbarkeitsgefiltert(_:)`).
 ///
-/// Besitzt das Geschäft eigene Kategorien (``Geschaeft/verfuegbareKategorien(alleKategorien:)``
+/// Besitzt das Geschäft eigene Abteilungen (``Geschaeft/verfuegbareAbteilungen(alleAbteilungen:)``
 /// — direkt zugeordnet oder über den Geschäftstyp, siehe
-/// ``ArtikelKategorie/geschaeftsTypen``), ist ein Artikel verfügbar, wenn
-/// mindestens eine seiner Kategorien darin enthalten ist (ein Artikel kann
-/// mehreren Kategorien angehören).
-/// Besitzt das Geschäft keine eigenen Kategorien, lernt die App stattdessen aus der
+/// ``Abteilung/geschaeftsTypen``), ist ein Artikel verfügbar, wenn
+/// mindestens eine seiner Abteilungen darin enthalten ist (ein Artikel kann
+/// mehreren Abteilungen angehören).
+/// Besitzt das Geschäft keine eigenen Abteilungen, lernt die App stattdessen aus der
 /// Kaufhistorie: ein Artikel gilt als verfügbar, sobald er dort mindestens einmal
 /// abgehakt/gekauft wurde (``ArtikelGeschaeftVerfuegbarkeit``) — das Abhaken eines
 /// bislang unbekannten Artikels (bei eingeblendeten "alle Artikeln" während des
@@ -25,11 +25,11 @@ import SwiftData
 /// unabhängig davon, ob der ursprüngliche ``Einkaufsvorgang`` noch existiert.
 enum ArtikelVerfuegbarkeitService {
     static func istVerfuegbar(_ artikel: Artikel, in geschaeft: Geschaeft, context: ModelContext) -> Bool {
-        let alleKategorien = (try? context.fetch(FetchDescriptor<ArtikelKategorie>())) ?? []
-        let verfuegbareKategorien = geschaeft.verfuegbareKategorien(alleKategorien: alleKategorien)
-        guard verfuegbareKategorien.isEmpty else {
-            let kategorien = artikel.effektiveKategorien(context: context)
-            return kategorien.contains(where: verfuegbareKategorien.contains)
+        let alleAbteilungen = (try? context.fetch(FetchDescriptor<Abteilung>())) ?? []
+        let verfuegbareAbteilungen = geschaeft.verfuegbareAbteilungen(alleAbteilungen: alleAbteilungen)
+        guard verfuegbareAbteilungen.isEmpty else {
+            let abteilungen = artikel.effektiveAbteilungen(context: context)
+            return abteilungen.contains(where: verfuegbareAbteilungen.contains)
         }
         return wurdeBereitsGekauft(artikel, in: geschaeft, context: context)
     }
@@ -37,7 +37,7 @@ enum ArtikelVerfuegbarkeitService {
     /// `true`, sobald ``artikel`` mindestens einmal in ``geschaeft`` als
     /// gekauft vermerkt wurde (``vermerkeGekauft(artikel:geschaeft:context:)``).
     /// Bewusst nicht `private` — direkt testbar unabhängig vom
-    /// Kategorie-Kurzschluss in ``istVerfuegbar(_:in:context:)``.
+    /// Abteilung-Kurzschluss in ``istVerfuegbar(_:in:context:)``.
     static func wurdeBereitsGekauft(_ artikel: Artikel, in geschaeft: Geschaeft, context: ModelContext) -> Bool {
         let artikelID = artikel.persistentModelID
         let geschaeftID = geschaeft.persistentModelID
@@ -48,7 +48,7 @@ enum ArtikelVerfuegbarkeitService {
     }
 
     /// Vermerkt dauerhaft, dass ``artikel`` in ``geschaeft`` gekauft wurde —
-    /// aufgerufen aus ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:kategorie:geschaeft:)``.
+    /// aufgerufen aus ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:abteilung:geschaeft:)``.
     /// Idempotent: eine bereits bekannte Kombination erzeugt keine weitere
     /// Zeile (reine Existenz-Tatsache, kein Zähler).
     static func vermerkeGekauft(artikel: Artikel, geschaeft: Geschaeft, context: ModelContext) {

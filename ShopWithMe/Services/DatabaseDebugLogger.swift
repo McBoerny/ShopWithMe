@@ -153,7 +153,7 @@ enum DatabaseDebugLogger {
             return zwischengespeicherterWriter.writer
         }
         let writer = DebugLogWriter(
-            kategorie: "DatabaseConcurrency",
+            abteilung: "DatabaseConcurrency",
             dateiURL: FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
                 .appendingPathComponent("\(praefix) DB Debug.log")
         )

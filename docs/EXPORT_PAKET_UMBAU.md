@@ -28,11 +28,11 @@ kleinen, selten ändernden Stammdaten). Zwei unabhängige Ineffizienzen:
 ```
 manifest.json    Klein, IMMER geschrieben (auch ohne inhaltliche Änderung) —
                  ersetzt formatVersion/erzeugtAm als Peer-Alters-Gate.
-tombstones.json  Löschungen (Geschäft/Artikel/ArtikelKategorie/Einkaufsliste/
+tombstones.json  Löschungen (Geschäft/Artikel/Abteilung/Einkaufsliste/
                  Einkaufsvorgang/KaufEintrag/Preispunkt) — eigene Datei, nicht
                  mit vorgaenge.json gebündelt (siehe „Warum eine eigene
                  tombstones.json" unten).
-stamm.json       GeschaeftTyp, ArtikelKategorie, Geschaeft, Artikel,
+stamm.json       GeschaeftTyp, Abteilung, Geschaeft, Artikel,
                  Einkaufsliste, Produkt, Produktname (ArtikelAlias seit
                  GitHub #128 abgelöst, siehe docs/ARTIKEL_PRODUKT_MODELL.md).
 listen.json      EinkaufslistenEintrag — seit GitHub #85 eigene Datei statt
@@ -76,7 +76,7 @@ Umsetzen zeigte eine erneute Durchsicht von `SyncSnapshotImportService.merge`:
 Kommentar „läuft bewusst zuerst" seit der „Architektur-Revision Alternative
 A"), und Tombstones gelten nicht nur für Bereich C (Einkaufsvorgang/
 KaufEintrag/Preispunkt), sondern auch für Stammdaten (Geschäft/Artikel/
-ArtikelKategorie/Einkaufsliste). Läge diese Datei in `vorgaenge.json`, würde sie
+Abteilung/Einkaufsliste). Läge diese Datei in `vorgaenge.json`, würde sie
 erst NACH `stamm.json` gelesen — die Stammdaten-Tombstone-Prüfung käme zu
 spät. Deshalb eine eigene, immer zuerst gelesene Datei.
 
@@ -90,10 +90,10 @@ Bereich-A-`SyncEvent`s (siehe `docs/DATENSYNCHRONISATION.md` §4,
 „Architektur-Revision Alternative A"). Dieses Feld ändert sich aber mit der
 Häufigkeit von Bereich-A-Aktionen (Abhaken/Hinzufügen/Entfernen — oft alle
 paar Sekunden während aktiv eingekauft wird), nicht mit der Häufigkeit echter
-Stammdaten-Änderungen (neuer Laden/neue Kategorie — selten). Weil der
+Stammdaten-Änderungen (neuer Laden/neue Abteilung — selten). Weil der
 Fingerabdruck-Vergleich `stamm.json` als eine unteilbare Einheit behandelt,
 riss praktisch jedes Abhaken einen kompletten Neuaufbau/-schrieb der
-eigentlich stabilen Geschäfte-/Artikel-/Kategorien-/Alias-Liste mit sich —
+eigentlich stabilen Geschäfte-/Artikel-/Abteilungen-/Alias-Liste mit sich —
 derselbe Fehler-Typ, den GitHub #82 für `kaufEintraege` bereits behoben hatte,
 hier nur unentdeckt in `stamm.json` weiterbestehend.
 

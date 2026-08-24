@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Einstiegspunkt für Einstellungen: Hilfe/Anleitungen, Artikel-, Geschäfte-,
-/// Kategorien-, Geschäftstypen- und Einkaufslisten-Verwaltung, Datensynchronisation
+/// Abteilungen-, Geschäftstypen- und Einkaufslisten-Verwaltung, Datensynchronisation
 /// und App-Informationen.
 ///
 /// „Artikel" und „Geschäfte" sind seit GitHub #1 keine eigenen Tabs mehr (die App
@@ -23,7 +23,7 @@ private enum SettingsNavigationsziel: Hashable {
     case hilfe
     case artikel
     case geschaefte
-    case kategorien
+    case abteilungen
     case produkte
     case geschaeftsTypen
     case einkaufslisten
@@ -47,7 +47,7 @@ struct SettingsView: View {
                     NavigationLink(value: SettingsNavigationsziel.geschaefte) {
                         Label("Geschäfte", systemImage: "cart")
                     }
-                    NavigationLink(value: SettingsNavigationsziel.kategorien) {
+                    NavigationLink(value: SettingsNavigationsziel.abteilungen) {
                         Label("Abteilungen", systemImage: "tag")
                     }
                     .accessibilityIdentifier(A11yID.Settings.abteilungenRow)
@@ -92,7 +92,7 @@ struct SettingsView: View {
                     ArtikelListView()
                 case .geschaefte:
                     GeschaeftListView()
-                case .kategorien:
+                case .abteilungen:
                     AbteilungenVerwaltungView()
                 case .produkte:
                     ProduktVerwaltungView()

@@ -20,7 +20,7 @@ enum AbhakErgebnis: Equatable {
 /// Ein einzelner Einkaufsvorgang (Ladenbesuch) in einem bestimmten ``Geschaeft``.
 ///
 /// Während eines Einkaufsvorgangs entstehen ``KaufEintrag``e, aus deren
-/// Reihenfolge der ``AbteilungsDistanzService`` lernt, welche Artikelkategorien
+/// Reihenfolge der ``AbteilungsDistanzService`` lernt, welche Abteilungen
 /// im jeweiligen Geschäft räumlich nah beieinanderliegen.
 @Model
 final class Einkaufsvorgang {
@@ -73,24 +73,24 @@ final class Einkaufsvorgang {
     /// Markiert einen Artikel als gekauft: legt einen ``KaufEintrag`` (zunächst ohne
     /// Preis) in diesem Einkaufsvorgang an und entfernt den Artikel von
     /// ``einkaufsliste`` (falls dort noch ein ``EinkaufslistenEintrag`` existiert).
-    /// Artikel mit derselben Kategorie erhalten denselben
-    /// ``KaufEintrag/kategorieBesuchsIndex``, neue Kategorien den jeweils nächsten
+    /// Artikel mit derselben Abteilung erhalten denselben
+    /// ``KaufEintrag/abteilungBesuchsIndex``, neue Abteilungen den jeweils nächsten
     /// Index — das ist die Rohdatenbasis für ``AbteilungsDistanzService``. Artikel
-    /// ohne eigene Kategorie fallen dabei automatisch unter "Sonstiges". Reine
-    /// Zustandsmutation ohne Event-Aufzeichnung, siehe ``artikelAbhaken(_:context:kategorie:)``.
+    /// ohne eigene Abteilung fallen dabei automatisch unter "Sonstiges". Reine
+    /// Zustandsmutation ohne Event-Aufzeichnung, siehe ``artikelAbhaken(_:context:abteilung:)``.
     /// Liefert ``AbhakErgebnis/abgehakt``, falls tatsächlich ein ``KaufEintrag``
     /// entstanden ist (Grundlage dafür, ob die aufzeichnende Variante ein Event
     /// erzeugt) — sonst ``AbhakErgebnis/bereitsAbgehaktVon(geraeteID:)`` (GitHub
     /// #48, Überkauf-Hinweis).
     ///
     /// `ursprungsGeraeteID` (siehe ``SyncImportService``) unterdrückt die
-    /// Vergabe eines ``KaufEintrag/kategorieBesuchsIndex`` bewusst, sobald sie
+    /// Vergabe eines ``KaufEintrag/abteilungBesuchsIndex`` bewusst, sobald sie
     /// nicht `nil` ist (durchgereicht an ``KaufEintrag/ursprungsGeraeteID``, das
     /// die Unterdrückung zentral im Typ selbst erzwingt, GitHub #68): Ein von
     /// einem Peer per Bereich-A-Event empfangenes Abhaken beschreibt, wo/wann
     /// **dessen** Nutzer durchs Geschäft gelaufen ist, nicht wo dieses Gerät
     /// gerade steht — würde es trotzdem einen Index aus der lokalen
-    /// Besuchsreihenfolge bekommen (`naechsterKategorieBesuchsIndex(fuer:)`),
+    /// Besuchsreihenfolge bekommen (`naechsterAbteilungBesuchsIndex(fuer:)`),
     /// erschiene es fälschlich als "als Nächstes von diesem Nutzer besucht" und
     /// würde die ladenspezifische Distanzmatrix
     /// (``AbteilungsDistanzService/besuchsreihenfolge(fuer:)`` überspringt
@@ -99,14 +99,14 @@ final class Einkaufsvorgang {
     /// existiert, verschwindet von der offenen Liste), fließt aber nicht in die
     /// Reihenfolge-Analyse ein.
     ///
-    /// `kategorie`: explizite Kategorie, aus deren Abschnitt der Nutzer
+    /// `abteilung`: explizite Abteilung, aus deren Abschnitt der Nutzer
     /// tatsächlich abgehakt hat (``EinkaufenView`` zeigt einen Artikel mit
-    /// mehreren Kategorien gleichzeitig in allen zugehörigen Abschnitten an) —
-    /// `nil` fällt auf ``Artikel/fuehrendeKategorie(inGeschaeft:context:)`` zurück
+    /// mehreren Abteilungen gleichzeitig in allen zugehörigen Abschnitten an) —
+    /// `nil` fällt auf ``Artikel/fuehrendeAbteilung(inGeschaeft:context:)`` zurück
     /// (Belegscan, Preisschild-Scan, Sync-Import, wo kein konkreter Abschnitt
     /// getappt wurde). Genau dieses Signal ist die Grundlage dafür, dass
     /// ``AbteilungsDistanzService`` pro Geschäft lernen kann, in welcher der
-    /// mehreren zugeordneten Kategorien ein Artikel dort tatsächlich steht (z.B.
+    /// mehreren zugeordneten Abteilungen ein Artikel dort tatsächlich steht (z.B.
     /// Sojasauce bei Edeka unter "Soßen", bei Aldi unter "Asia") statt einer
     /// global für den Artikel geratenen.
     /// `geschaeftUeberschreibung` ist ein DOPPELT optionaler Parameter
@@ -121,7 +121,7 @@ final class Einkaufsvorgang {
     @discardableResult
     func artikelAbhakenOhneEventAufzeichnung(
         _ artikel: Artikel, produkt: Produkt? = nil, context: ModelContext, ursprungsGeraeteID: String? = nil,
-        kategorie kategorieUeberschreibung: ArtikelKategorie? = nil,
+        abteilung abteilungUeberschreibung: Abteilung? = nil,
         geschaeft geschaeftUeberschreibung: Geschaeft?? = nil
     ) -> AbhakErgebnis {
         // Dedupe-Schutz gegen das in `docs/DATABASE_CONCURRENCY.md` dokumentierte
@@ -162,14 +162,14 @@ final class Einkaufsvorgang {
         }
 
         let geschaeftFuerEintrag = geschaeftUeberschreibung ?? geschaeft
-        let kategorie = kategorieUeberschreibung ?? artikel.fuehrendeKategorie(inGeschaeft: geschaeftFuerEintrag, context: context)
-        let index = ursprungsGeraeteID == nil ? naechsterKategorieBesuchsIndex(fuer: kategorie) : nil
+        let abteilung = abteilungUeberschreibung ?? artikel.fuehrendeAbteilung(inGeschaeft: geschaeftFuerEintrag, context: context)
+        let index = ursprungsGeraeteID == nil ? naechsterAbteilungBesuchsIndex(fuer: abteilung) : nil
         let eintrag = KaufEintrag(
             artikel: artikel,
             geschaeft: geschaeftFuerEintrag,
-            kategorie: kategorie,
+            abteilung: abteilung,
             menge: listenEintrag?.menge ?? artikel.mengenSchritt,
-            kategorieBesuchsIndex: index,
+            abteilungBesuchsIndex: index,
             ursprungsGeraeteID: ursprungsGeraeteID
         )
         context.insert(eintrag)
@@ -187,7 +187,7 @@ final class Einkaufsvorgang {
         return .abgehakt
     }
 
-    /// Wie ``artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:kategorie:geschaeft:)``,
+    /// Wie ``artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:abteilung:geschaeft:)``,
     /// zeichnet zusätzlich (nur bei tatsächlicher Neuanlage) ein
     /// ``SyncEventArt/artikelAbgehakt``-Event auf (Phase 0,
     /// `docs/DATENSYNCHRONISATION_VERLAUF.md`) — inklusive des eigenen
@@ -195,8 +195,8 @@ final class Einkaufsvorgang {
     /// Empfänger den Kaufeintrag auch nach einer Umleitung auf einen anderen
     /// Vorgang mit dem tatsächlich zutreffenden Geschäft anlegen kann.
     @discardableResult
-    func artikelAbhaken(_ artikel: Artikel, produkt: Produkt? = nil, context: ModelContext, kategorie: ArtikelKategorie? = nil) -> AbhakErgebnis {
-        let ergebnis = artikelAbhakenOhneEventAufzeichnung(artikel, produkt: produkt, context: context, kategorie: kategorie)
+    func artikelAbhaken(_ artikel: Artikel, produkt: Produkt? = nil, context: ModelContext, abteilung: Abteilung? = nil) -> AbhakErgebnis {
+        let ergebnis = artikelAbhakenOhneEventAufzeichnung(artikel, produkt: produkt, context: context, abteilung: abteilung)
         if ergebnis == .abgehakt {
             SyncEventService.aufzeichnen(.artikelAbgehakt, bezugsID: id, artikelID: artikel.id, geschaeftID: geschaeft?.id, context: context)
         }
@@ -276,17 +276,17 @@ final class Einkaufsvorgang {
 
     /// Sucht bewusst nur unter Einträgen mit BEREITS VORHANDENEM Index (nicht per
     /// simplem `first(where:)` über die ungeordnete `kaufEintraege`-Relationship):
-    /// seit remote materialisierte/gemergte Einträge bewusst `kategorieBesuchsIndex
-    /// == nil` bekommen (siehe ``artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:kategorie:)``),
+    /// seit remote materialisierte/gemergte Einträge bewusst `abteilungBesuchsIndex
+    /// == nil` bekommen (siehe ``artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:abteilung:)``),
     /// könnte die ungeordnete Aufzählung sonst zuerst auf so einen `nil`-Eintrag
-    /// treffen und fälschlich einen NEUEN Index für eine Kategorie vergeben, die
+    /// treffen und fälschlich einen NEUEN Index für eine Abteilung vergeben, die
     /// lokal bereits einen echten Index hat — zwei Besuchs-Slots für dieselbe
-    /// Kategorie, die die gelernte Distanzmatrix verfälschen.
-    private func naechsterKategorieBesuchsIndex(fuer kategorie: ArtikelKategorie) -> Int {
-        if let vorhandenerIndex = kaufEintraege.first(where: { $0.kategorie == kategorie && $0.kategorieBesuchsIndex != nil })?.kategorieBesuchsIndex {
+    /// Abteilung, die die gelernte Distanzmatrix verfälschen.
+    private func naechsterAbteilungBesuchsIndex(fuer abteilung: Abteilung) -> Int {
+        if let vorhandenerIndex = kaufEintraege.first(where: { $0.abteilung == abteilung && $0.abteilungBesuchsIndex != nil })?.abteilungBesuchsIndex {
             return vorhandenerIndex
         }
-        return (kaufEintraege.compactMap(\.kategorieBesuchsIndex).max() ?? -1) + 1
+        return (kaufEintraege.compactMap(\.abteilungBesuchsIndex).max() ?? -1) + 1
     }
 }
 

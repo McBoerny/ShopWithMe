@@ -16,7 +16,7 @@ import SwiftData
 ///
 /// Bewusst generisch über `entitaetsArt` gehalten (nicht ein eigener Typ pro
 /// Modell) — befüllt für jeden namensbasiert gematchten Bereich-B-Typ
-/// (``ArtikelKategorie``, ``Geschaeft``, ``Artikel``, ``Einkaufsliste``,
+/// (``Abteilung``, ``Geschaeft``, ``Artikel``, ``Einkaufsliste``,
 /// ``Einkaufsvorgang``, siehe `docs/DATENSYNCHRONISATION.md` Abschnitt 4.2),
 /// nicht nur für ``Artikel``.
 @Model
@@ -39,7 +39,7 @@ enum SyncEntitaetsArt {
     static let einkaufsliste = "Einkaufsliste"
     static let geschaeft = "Geschaeft"
     static let einkaufsvorgang = "Einkaufsvorgang"
-    static let artikelKategorie = "ArtikelKategorie"
+    static let abteilung = "Abteilung"
     static let geschaeftTyp = "GeschaeftTyp"
     static let kaufEintrag = "KaufEintrag"
     static let preispunkt = "Preispunkt"
@@ -76,7 +76,7 @@ enum SyncEntitaetsArt {
         case einkaufsliste = "Einkaufsliste"
         case geschaeft = "Geschaeft"
         case einkaufsvorgang = "Einkaufsvorgang"
-        case artikelKategorie = "ArtikelKategorie"
+        case abteilung = "Abteilung"
         case geschaeftTyp = "GeschaeftTyp"
         case kaufEintrag = "KaufEintrag"
         case preispunkt = "Preispunkt"

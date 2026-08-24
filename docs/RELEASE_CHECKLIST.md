@@ -18,7 +18,7 @@ Test- und Doku-Punkte.
 - [ ] **Automatisierte Tests** — `xcodebuild test` (Swift Testing), keine
       roten oder übersprungenen Tests.
 - [ ] **Manueller UI-Test / Golden Path** — Kernflows durchklicken: Einkaufen,
-      Artikel-/Geschäfte-/Kategorien-Verwaltung, Belegscan, KI-Artikelvorschlag.
+      Artikel-/Geschäfte-/Abteilungen-Verwaltung, Belegscan, KI-Artikelvorschlag.
 - [ ] **SwiftData-Migrationscheck** — falls sich das Datenmodell geändert hat:
       Store aus der vorherigen Version mit dem neuen Schema öffnen und auf
       Crash/Datenverlust prüfen (bekannte Fallen siehe
@@ -35,7 +35,7 @@ Test- und Doku-Punkte.
 - [ ] **Voller Security-Review** — `/security-review` über den gesamten Diff
       seit letztem Major-Release.
 - [ ] **Vollständiger Regressionstest** — alle dokumentierten Sonderfälle
-      gezielt durchspielen (z.B. Artikel ohne Kategorie, mehrere
+      gezielt durchspielen (z.B. Artikel ohne Abteilung, mehrere
       Einkaufslisten, abgehaktes Rückgängigmachen, Belegscan in beiden
       Kontexten — siehe Memory/`docs/DECISIONS.md`), nicht nur Golden Path.
 - [ ] **Accessibility-Vollcheck** — VoiceOver-Durchlauf + Dynamic-Type-Extremwerte

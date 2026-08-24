@@ -37,8 +37,8 @@ enum Einheit: String, Codable, CaseIterable, Identifiable {
 
 /// Ein einkaufbarer Artikel (z.B. "Vollmilch").
 ///
-/// Ein Artikel kann mehreren ``ArtikelKategorie``n gleichzeitig angehören (siehe
-/// ``kategorien``) — die Kategorien können jederzeit über die
+/// Ein Artikel kann mehreren ``Abteilung``en gleichzeitig angehören (siehe
+/// ``abteilungen``) — die Abteilungen können jederzeit über die
 /// Bearbeiten-Bildschirme geändert werden.
 @Model
 final class Artikel {
@@ -56,17 +56,17 @@ final class Artikel {
     /// angezeigt/editierbar, bleibt als Feld für eine mögliche künftige
     /// Wiederverwendung erhalten.
     var farbeHex: String
-    /// Die (einzelne) Kategorie dieses Artikels — seit Einführung von
-    /// ``kategorien`` (Mehrfachzuordnung) nicht mehr direkt von außen gesetzt,
+    /// Die (einzelne) Abteilung dieses Artikels — seit Einführung von
+    /// ``abteilungen`` (Mehrfachzuordnung) nicht mehr direkt von außen gesetzt,
     /// bleibt aber als Migrations-Fallback für vor diesem Zeitpunkt angelegte
-    /// Artikel sowie als führende (erste) Kategorie erhalten — von ``kategorien``
+    /// Artikel sowie als führende (erste) Abteilung erhalten — von ``abteilungen``
     /// synchron gehalten.
-    var kategorie: ArtikelKategorie?
-    /// Rohspeicher für ``kategorien`` — bewusst `internal` (nicht `private`),
-    /// damit ``ArtikelKategorie`` per `inverse:`-KeyPath darauf verweisen kann.
-    /// Nicht direkt verwenden, stattdessen ``kategorien``.
-    @Relationship(inverse: \ArtikelKategorie.zugeordneteArtikel)
-    var kategorienRaw: [ArtikelKategorie] = []
+    var abteilung: Abteilung?
+    /// Rohspeicher für ``abteilungen`` — bewusst `internal` (nicht `private`),
+    /// damit ``Abteilung`` per `inverse:`-KeyPath darauf verweisen kann.
+    /// Nicht direkt verwenden, stattdessen ``abteilungen``.
+    @Relationship(inverse: \Abteilung.zugeordneteArtikel)
+    var abteilungenRaw: [Abteilung] = []
     /// Zeitpunkt der Anlage.
     var erstelltAm: Date
     /// Optionale, dauerhafte Notiz, z.B. bevorzugte Marke.
@@ -145,7 +145,7 @@ final class Artikel {
         name: String,
         symbolName: String,
         farbeHex: String,
-        kategorien: [ArtikelKategorie] = [],
+        abteilungen: [Abteilung] = [],
         notiz: String? = nil,
         einheit: Einheit = .stueck,
         mengenSchritt: Double = 1
@@ -154,8 +154,8 @@ final class Artikel {
         self.name = name
         self.symbolName = symbolName
         self.farbeHex = farbeHex
-        self.kategorie = kategorien.first
-        self.kategorienRaw = kategorien
+        self.abteilung = abteilungen.first
+        self.abteilungenRaw = abteilungen
         self.erstelltAm = Date()
         self.notiz = notiz
         self.einheitRaw = einheit.rawValue
@@ -182,70 +182,70 @@ extension Artikel {
     /// Produkt-Pflicht nur noch an ``Produkt``, siehe dort).
     var preispunkte: [Preispunkt] { produkte.flatMap(\.preispunkte) }
 
-    /// Kategorien, denen dieser Artikel zugeordnet ist — ein Artikel kann mehreren
+    /// Abteilungen, denen dieser Artikel zugeordnet ist — ein Artikel kann mehreren
     /// gleichzeitig angehören (z.B. "Süßigkeiten" und "Geschenke"). Die erste
-    /// Kategorie gilt als führend und bleibt automatisch in ``kategorie``
+    /// Abteilung gilt als führend und bleibt automatisch in ``abteilung``
     /// gespiegelt (Migrations-Fallback, Grundlage für
-    /// ``fuehrendeKategorie(inGeschaeft:context:)``).
-    var kategorien: [ArtikelKategorie] {
-        get { kategorienRaw }
+    /// ``fuehrendeAbteilung(inGeschaeft:context:)``).
+    var abteilungen: [Abteilung] {
+        get { abteilungenRaw }
         set {
-            kategorienRaw = newValue
-            kategorie = newValue.first
+            abteilungenRaw = newValue
+            abteilung = newValue.first
         }
     }
 
-    /// Die tatsächlich wirksamen Kategorien: ``kategorien``, falls gesetzt; sonst
+    /// Die tatsächlich wirksamen Abteilungen: ``abteilungen``, falls gesetzt; sonst
     /// (Migrations-Fallback für vor der Mehrfachauswahl angelegte Artikel, deren
-    /// `kategorienRaw` noch leer ist) das alte, einzelwertige ``kategorie``; sonst
-    /// automatisch "Sonstiges" (siehe ``ArtikelKategorie/sonstige(context:)``). Nie
+    /// `abteilungenRaw` noch leer ist) das alte, einzelwertige ``abteilung``; sonst
+    /// automatisch "Sonstiges" (siehe ``Abteilung/sonstige(context:)``). Nie
     /// leer.
-    func effektiveKategorien(context: ModelContext) -> [ArtikelKategorie] {
-        if !kategorien.isEmpty { return kategorien }
-        if let kategorie { return [kategorie] }
-        return [ArtikelKategorie.sonstige(context: context)]
+    func effektiveAbteilungen(context: ModelContext) -> [Abteilung] {
+        if !abteilungen.isEmpty { return abteilungen }
+        if let abteilung { return [abteilung] }
+        return [Abteilung.sonstige(context: context)]
     }
 
-    /// Beste Schätzung der Kategorie eines Artikels in `geschaeft`, wenn keine
+    /// Beste Schätzung der Abteilung eines Artikels in `geschaeft`, wenn keine
     /// explizite Sektionsauswahl vorliegt (Belegscan, Preisschild-Scan,
     /// Sync-Import empfangener Bereich-A-Events — siehe
-    /// ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:kategorie:)``,
-    /// deren `kategorie`-Parameter für die reguläre Einkaufsliste bevorzugt
+    /// ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:abteilung:)``,
+    /// deren `abteilung`-Parameter für die reguläre Einkaufsliste bevorzugt
     /// genutzt wird).
     ///
-    /// Priorität: die aus der Kaufhistorie **gelernte** Kategorie
-    /// (``AbteilungsDistanzService/gelernteKategorie(fuer:in:context:)``, sobald
-    /// genug Käufe vorliegen) > eine im Geschäft tatsächlich verfügbare Kategorie >
-    /// die erste zugeordnete Kategorie (ohne `geschaeft`, z.B. in der
+    /// Priorität: die aus der Kaufhistorie **gelernte** Abteilung
+    /// (``AbteilungsDistanzService/gelernteAbteilung(fuer:in:context:)``, sobald
+    /// genug Käufe vorliegen) > eine im Geschäft tatsächlich verfügbare Abteilung >
+    /// die erste zugeordnete Abteilung (ohne `geschaeft`, z.B. in der
     /// geschäftsunabhängigen Artikel-Verwaltung). Kandidaten werden vor der Auswahl
     /// deterministisch sortiert (``sortIndex``, dann `id` als letzter Tiebreaker) —
-    /// `kategorien` selbst ist eine ungeordnete SwiftData-Relationship, deren
+    /// `abteilungen` selbst ist eine ungeordnete SwiftData-Relationship, deren
     /// Aufzählungsreihenfolge sich zwischen Fetches/Sync-Merges ändern kann; ohne
     /// diese Sortierung hätte ein mehrfach kategorisierter Artikel vor Erreichen
-    /// der Lernschwelle bei jedem Sync-Zyklus zufällig eine andere Kategorie
+    /// der Lernschwelle bei jedem Sync-Zyklus zufällig eine andere Abteilung
     /// liefern können.
     ///
     /// **Bis zur Lernschwelle weiterhin kein "Gewinner" im Sinne der
     /// EinkaufenView-Anzeige** (die zeigt einen Artikel mit mehreren, noch nicht
-    /// geschäftsspezifisch gelernten Kategorien gleichzeitig in allen zugehörigen
+    /// geschäftsspezifisch gelernten Abteilungen gleichzeitig in allen zugehörigen
     /// Abschnitten, GitHub-Nachfolgefund zu #36 — zwei Geräte/Nutzer können pro
     /// Artikel und Geschäft unterschiedliche, jeweils tatsächlich zutreffende
-    /// Kategorien lernen, z.B. Sojasauce bei Edeka unter "Soßen", bei Aldi unter
+    /// Abteilungen lernen, z.B. Sojasauce bei Edeka unter "Soßen", bei Aldi unter
     /// "Asia"; `EinkaufenView` fragt dafür direkt bei
-    /// ``AbteilungsDistanzService/gelernteKategorie(fuer:in:context:)`` nach,
+    /// ``AbteilungsDistanzService/gelernteAbteilung(fuer:in:context:)`` nach,
     /// nicht über diese Funktion hier).
-    func fuehrendeKategorie(inGeschaeft geschaeft: Geschaeft?, context: ModelContext) -> ArtikelKategorie {
-        let kandidaten = effektiveKategorien(context: context).sorted { a, b in
+    func fuehrendeAbteilung(inGeschaeft geschaeft: Geschaeft?, context: ModelContext) -> Abteilung {
+        let kandidaten = effektiveAbteilungen(context: context).sorted { a, b in
             a.sortIndex != b.sortIndex ? a.sortIndex < b.sortIndex : a.id.uuidString < b.id.uuidString
         }
         guard let geschaeft else { return kandidaten[0] }
         if kandidaten.count > 1,
-           let gelernt = AbteilungsDistanzService.gelernteKategorie(fuer: self, in: geschaeft, context: context) {
+           let gelernt = AbteilungsDistanzService.gelernteAbteilung(fuer: self, in: geschaeft, context: context) {
             return gelernt
         }
-        let alleKategorien = (try? context.fetch(FetchDescriptor<ArtikelKategorie>())) ?? []
-        let verfuegbareKategorien = geschaeft.verfuegbareKategorien(alleKategorien: alleKategorien)
-        if let verfuegbar = kandidaten.first(where: { verfuegbareKategorien.contains($0) }) {
+        let alleAbteilungen = (try? context.fetch(FetchDescriptor<Abteilung>())) ?? []
+        let verfuegbareAbteilungen = geschaeft.verfuegbareAbteilungen(alleAbteilungen: alleAbteilungen)
+        if let verfuegbar = kandidaten.first(where: { verfuegbareAbteilungen.contains($0) }) {
             return verfuegbar
         }
         return kandidaten[0]

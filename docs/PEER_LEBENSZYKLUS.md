@@ -172,7 +172,7 @@ an genau dem Peer vorbei fortschreiten, der ihn eigentlich noch zurückhalten m�
   Dienste in `RootView.swift`.
 
 **`SyncAktualitaetsService.istAusDerZeitGefallen` bewusst unverändert** — reiner,
-lokaler Selbst-Check ohne Gruppenbezug, in einer anderen Kategorie als die beiden
+lokaler Selbst-Check ohne Gruppenbezug, in einer anderen Abteilung als die beiden
 Aufräum-Mechanismen oben. Bekommt einen eigenen, unabhängigen Wert
 (`SyncAktualitaetsService.veraltungsSchwelle`, weiterhin 30 Tage) statt weiter
 `SyncExportService.eventAufbewahrungsfrist` mitzunutzen, die mit dieser Umstellung
