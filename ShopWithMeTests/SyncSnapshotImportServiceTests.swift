@@ -2821,6 +2821,42 @@ struct SyncSnapshotImportServiceTests {
         #expect(try context.fetch(FetchDescriptor<SyncAbgleichKandidat>()).isEmpty)
     }
 
+    /// Root-Cause-Fund (Session 2026-08-24, Nutzerbericht "Testliste weicht
+    /// nach Geräte-Beitritt ab", ~240 fälschlich zurückgestellte Artikel auf
+    /// einem komplett LEEREN Gerät): `LokalerBestandCache.alle` wurde nach
+    /// jeder Neuanlage per `nachfuehren` sofort erweitert — die
+    /// Ambiguitäts-Prüfung verglich einen Remote-Eintrag dadurch auch gegen
+    /// ANDERE, Sekunden zuvor aus DEMSELBEN Peer-Snapshot neu angelegte
+    /// Objekte, nicht nur gegen echten lokalen Altbestand. Zwei
+    /// unterschiedliche, aber koordinatenlose Geschäfte desselben Peers, die
+    /// zufällig in Teilstring-Beziehung stehen, wurden dadurch fälschlich
+    /// gegeneinander als Kandidat markiert, obwohl auf diesem Gerät VORHER
+    /// gar kein lokaler Bestand existierte.
+    @Test
+    func zweiUnterschiedlicheGeschaefteImSelbenBatchWerdenNichtGegenseitigAlsMehrdeutigMarkiert() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        func macheGeschaeftSnapshot(name: String) -> GeschaeftSnapshot {
+            GeschaeftSnapshot(
+                id: UUID(), name: name, typIDs: [], adresse: nil, breitengrad: nil, laengengrad: nil,
+                erkennungsradius: nil, abteilungIDs: [], ausgeschlosseneAbteilungIDs: [], alternativeNamen: [],
+                ignorierteArtikelNamen: [], eigeneAnzahlEinkaufsvorgaenge: 0, umbauVerdacht: false, unauffaelligeEinkaeufeInFolge: 0
+            )
+        }
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.geschaefte = [macheGeschaeftSnapshot(name: "Rewe"), macheGeschaeftSnapshot(name: "Rewe Nord")]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        #expect(try context.fetch(FetchDescriptor<Geschaeft>()).count == 2)
+        #expect(try context.fetch(FetchDescriptor<SyncAbgleichKandidat>()).isEmpty)
+    }
+
     /// Neu ab dieser Änderung: `Artikel` hat keine zweite Vergleichsdimension
     /// wie Koordinaten — Ambiguität ist deshalb ein reiner
     /// Teilstring-Treffer ohne exakte Übereinstimmung. Deckt Rückstellung UND
@@ -2864,6 +2900,34 @@ struct SyncSnapshotImportServiceTests {
         #expect(try context.fetch(FetchDescriptor<SyncAbgleichKandidat>()).isEmpty)
     }
 
+    /// Root-Cause-Fund (Session 2026-08-24) — siehe Geschaeft-Pendant oben
+    /// für die volle Begründung. Für `Artikel` reproduzierbar sogar auf
+    /// einem komplett leeren Gerät: „Milch" und „H-Milch" kommen hier BEIDE
+    /// vom selben Peer im selben Batch, keiner existierte vorher lokal.
+    @Test
+    func zweiUnterschiedlicheArtikelImSelbenBatchWerdenNichtGegenseitigAlsMehrdeutigMarkiert() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        func macheArtikelSnapshot(name: String) -> ArtikelSnapshot {
+            ArtikelSnapshot(
+                id: UUID(), name: name, symbolName: "drop.fill", farbeHex: "#34C759", abteilungIDs: [],
+                notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+            )
+        }
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.artikel = [macheArtikelSnapshot(name: "Milch"), macheArtikelSnapshot(name: "H-Milch")]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        #expect(try context.fetch(FetchDescriptor<Artikel>()).count == 2)
+        #expect(try context.fetch(FetchDescriptor<SyncAbgleichKandidat>()).isEmpty)
+    }
+
     /// Wie oben, für `Einkaufsliste` — ebenfalls reiner Teilstring-Vergleich,
     /// diesmal über die „Gleich"-Auflösung geprüft (Alias-Registrierung).
     @Test
@@ -2897,6 +2961,31 @@ struct SyncSnapshotImportServiceTests {
 
         await SyncSnapshotImportService.importiereSnapshots(context: context)
         #expect(try context.fetch(FetchDescriptor<Einkaufsliste>()).count == 1)
+        #expect(try context.fetch(FetchDescriptor<SyncAbgleichKandidat>()).isEmpty)
+    }
+
+    /// Root-Cause-Fund (Session 2026-08-24) — siehe Geschaeft-/Artikel-Pendants
+    /// oben. Reproduziert den ursprünglichen Live-Fund am genauesten: die
+    /// betroffene „Testliste" selbst kollidierte mit einer anderen, vom
+    /// selben Peer im selben Batch mitgelieferten Liste.
+    @Test
+    func zweiUnterschiedlicheEinkaufslistenImSelbenBatchWerdenNichtGegenseitigAlsMehrdeutigMarkiert() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        var snapshot = leererSnapshot(geraeteID: "fremdes-geraet")
+        snapshot.einkaufslisten = [
+            EinkaufslisteSnapshot(id: UUID(), name: "Test", erstelltAm: Date()),
+            EinkaufslisteSnapshot(id: UUID(), name: "Testliste", erstelltAm: Date()),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        #expect(try context.fetch(FetchDescriptor<Einkaufsliste>()).count == 2)
         #expect(try context.fetch(FetchDescriptor<SyncAbgleichKandidat>()).isEmpty)
     }
 

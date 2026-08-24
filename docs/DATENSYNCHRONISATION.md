@@ -327,6 +327,28 @@ Abteilungen-/Artikel-Verwaltung bleibt zusätzlich möglich, für den Fall, dass
 die Ambiguitäts-Regel selbst keinen Treffer findet (z.B. „Milch" vs.
 „Vollmilch", kein Teilstring).
 
+**Live-Fund (2026-08-24): Selbst-Kollision innerhalb eines einzelnen
+Batches, reproduzierbar auf einem komplett leeren Gerät.** Nutzerbericht:
+nach Beitritt eines frisch zurückgesetzten Geräts wich eine große
+Einkaufsliste dauerhaft vom Bestandsgerät ab (~240 betroffene Artikel,
+sichtbar als `sync_event_nicht_anwendbar … fehlt=artikel` im Debug-Log, da
+die referenzierenden Bereich-A-Events auf zurückgestellte, noch nicht
+materialisierte Artikel zielten). Ursache lag NICHT an einem bereits
+vorhandenen lokalen Bestand (das neue Gerät war tatsächlich leer), sondern an
+`LokalerBestandCache`: `nachfuehren` erweiterte `alle` sofort nach jeder
+Neuanlage (nötig für den exakten Namenstreffer-Zweig, siehe GitHub #105 oben),
+die Ambiguitäts-Prüfung fragte aber ebenfalls `alle` ab — ein Remote-Eintrag
+kollidierte dadurch mit einem ANDEREN, Sekunden zuvor aus DEMSELBEN
+Peer-Snapshot neu angelegten Objekt (z.B. „Milch" und „H-Milch", beide vom
+selben Peer im selben Batch), nicht mit echtem lokalen Altbestand. Deterministisch
+bei jedem erneuten Import desselben Snapshots, keine Race Condition. **Fix:**
+`LokalerBestandCache` trägt jetzt zusätzlich `lokalerBestand` (nur der beim
+Erzeugen tatsächlich vorgefundene Bestand, NICHT durch `nachfuehren`
+erweitert) — `mergeGeschaefte`/`mergeArtikel`/`mergeEinkaufslisten` prüfen die
+Ambiguitäts-Regel jetzt ausschließlich dagegen; der exakte
+Namenstreffer-Zweig (Schutz gegen mehrfach im selben Batch referenzierte
+Einträge) bleibt bewusst unverändert gegen `alle`.
+
 **Abhängigkeitsreihenfolge beim Merge** (spätere Schritte brauchen die
 Zuordnungstabellen früherer): `GeschaeftTyp` → `Abteilung` →
 `Geschaeft` → `Artikel` → `Produkt` (GitHub #47, einzige Abhängigkeit:

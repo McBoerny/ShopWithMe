@@ -718,17 +718,41 @@ enum SyncSnapshotImportService {
     /// empfindlicheren Historie zu vermischen.
     private struct LokalerBestandCache<T: IdentifizierbaresModell> {
         private(set) var alle: [T]
+        /// Nur der beim Erzeugen tatsächlich vorgefundene lokale Bestand —
+        /// bewusst NICHT durch ``nachfuehren`` erweitert, im Gegensatz zu
+        /// ``alle`` oben.
+        ///
+        /// **Live-Fund (2026-08-24, Nutzerbericht "Testliste weicht nach
+        /// Geräte-Beitritt ab"):** eine Ambiguitäts-Rückstellung (Teilstring-
+        /// Treffer ohne exakte Übereinstimmung, siehe `mergeArtikel`/
+        /// `mergeGeschaefte`/`mergeEinkaufslisten`) darf NUR gegen diesen
+        /// ursprünglichen Bestand prüfen, nicht gegen ``alle`` — sonst
+        /// kollidiert ein Remote-Eintrag mit einem ANDEREN, erst Sekunden
+        /// zuvor aus DEMSELBEN Peer-Snapshot neu angelegten Objekt (z.B.
+        /// "Milch" und "H-Milch" beide vom selben Peer, keine echte lokale
+        /// Dublette). Reproduzierbar sogar auf einem komplett leeren Gerät
+        /// beim allerersten Import eines großen Snapshots, deterministisch
+        /// bei jedem erneuten Import desselben Snapshots (keine Race
+        /// Condition) — der exakte Namenstreffer-Zweig (Zeile darüber je
+        /// Merge-Funktion) bleibt bewusst gegen ``alle``, da der genau
+        /// entgegengesetzte Fall (derselbe Eintrag zweimal im selben Batch,
+        /// z.B. doppelt referenziertes "Brot") dort weiterhin über ``alle``
+        /// abgefangen werden muss (GitHub #105, Commit `7da06ea`).
+        private(set) var lokalerBestand: [T]
         private var nachID: [UUID: T]
 
         init(context: ModelContext) {
-            alle = (try? context.fetch(FetchDescriptor<T>())) ?? []
-            nachID = Dictionary(alle.map { ($0.id, $0) }, uniquingKeysWith: { erster, _ in erster })
+            lokalerBestand = (try? context.fetch(FetchDescriptor<T>())) ?? []
+            alle = lokalerBestand
+            nachID = Dictionary(lokalerBestand.map { ($0.id, $0) }, uniquingKeysWith: { erster, _ in erster })
         }
 
         /// O(1) ID-Treffer statt linearem Scan (Performance-Fund).
         subscript(id: UUID) -> T? { nachID[id] }
 
         /// Muss nach jeder Neuanlage aufgerufen werden — siehe Typ-Doku.
+        /// Erweitert bewusst NUR ``alle``, nicht ``lokalerBestand`` (siehe
+        /// dort).
         mutating func nachfuehren(_ neu: T) {
             alle.append(neu)
             nachID[neu.id] = neu
@@ -833,7 +857,7 @@ enum SyncSnapshotImportService {
                 // unabhängiges Geschäft anzulegen. Existiert für diesen
                 // Remote-Eintrag bereits ein Kandidat, bleibt er einfach
                 // zurückgestellt, bis der Nutzer entscheidet.
-                if let mehrdeutig = cache.alle.first(where: {
+                if let mehrdeutig = cache.lokalerBestand.first(where: {
                     GeschaeftErkennungService.istMehrdeutigerBeitrittsKandidat(
                         nameA: $0.name, koordinatenA: koordinatenPaar($0), radiusA: $0.erkennungsradius,
                         nameB: eintrag.name, koordinatenB: remoteKoordinaten,
@@ -941,7 +965,7 @@ enum SyncSnapshotImportService {
             // Ähnlichkeits-Heuristik) — z.B. „Milch" vom Peer trifft lokal
             // „H-Milch". Der Nutzer entscheidet aktiv statt zweier stiller,
             // unabhängiger Artikel.
-            if let mehrdeutig = cache.alle.first(where: {
+            if let mehrdeutig = cache.lokalerBestand.first(where: {
                 $0.name.localizedCaseInsensitiveContains(eintrag.name) || eintrag.name.localizedCaseInsensitiveContains($0.name)
             }) {
                 if !SyncAbgleichKandidat.existiertBereits(
@@ -1129,7 +1153,7 @@ enum SyncSnapshotImportService {
             guard !geloeschteIDs.contains(aufgeloesteID) else { continue }
             // Aktive Rückstellung statt stiller Dublette — analog
             // ``mergeArtikel``, siehe Begründung dort.
-            if let mehrdeutig = cache.alle.first(where: {
+            if let mehrdeutig = cache.lokalerBestand.first(where: {
                 $0.name.localizedCaseInsensitiveContains(eintrag.name) || eintrag.name.localizedCaseInsensitiveContains($0.name)
             }) {
                 if !SyncAbgleichKandidat.existiertBereits(

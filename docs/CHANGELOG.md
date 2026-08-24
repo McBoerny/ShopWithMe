@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.16 (Build 347) — Ambiguitäts-Rückstellung: Selbst-Kollision innerhalb eines Batches behoben
+
+Nutzerbericht: nach Beitritt eines komplett leeren Geräts zu einem Sync-Ordner
+wichen die Einträge einer großen Einkaufsliste dauerhaft zwischen den Geräten
+ab (~240 Artikel betroffen). Ursache: `LokalerBestandCache` (verwendet von
+`mergeGeschaefte`/`mergeArtikel`/`mergeEinkaufslisten`) führte neu angelegte
+Objekte per `nachfuehren` sofort in denselben Cache nach, den die
+Ambiguitäts-Prüfung (Teilstring-/Koordinaten-Rückstellung, `SyncAbgleichKandidat`)
+für nachfolgende Einträge desselben Batches abfragte — zwei voneinander
+unabhängige, aber zufällig namensähnliche Objekte aus DEMSELBEN Peer-Snapshot
+(z.B. „Milch"/„H-Milch") kollidierten dadurch fälschlich miteinander, obwohl
+kein echter lokaler Altbestand existierte. Reproduzierbar auf einem leeren
+Gerät, deterministisch bei jedem erneuten Import (keine Race Condition). Fix:
+neues `LokalerBestandCache.lokalerBestand` (nur der ursprüngliche Fetch, nicht
+per `nachfuehren` erweitert) — die drei Ambiguitäts-Prüfungen vergleichen jetzt
+ausschließlich dagegen; der exakte Namenstreffer-Zweig (Schutz gegen doppelt
+im selben Batch referenzierte Einträge, GitHub #105) bleibt bewusst gegen den
+vollen, batch-inklusiven Bestand. Details: `docs/DATENSYNCHRONISATION.md` §4.2.
+
 ## v0.16 (Build 346) — Multipeer-Catch-up: erster Absturz-Fix reichte nicht, jetzt mit nonisolated-Methode behoben
 
 Derselbe Absturz aus dem letzten Eintrag (`dispatch_assert_queue`-Fail im
