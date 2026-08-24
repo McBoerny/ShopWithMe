@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.16 (Build 351) — Sicherheitsnetz gegen wiederbelebte Käufe auf Bereich-A-Event-Replay ausgeweitet
+
+Live-Fund: Nach einem Geräte-Neuaufbau spielte der Datei-Kanal die komplette
+historische Bereich-A-Event-Datei erneut ab — inklusive `artikelHinzugefuegt`-
+Events für Artikel, die zwischenzeitlich (auf einem anderen Gerät) bereits
+gekauft waren. Das Sicherheitsnetz gegen wiederbelebte Käufe (GitHub #99,
+`docs/DATENSYNCHRONISATION.md` §4.7) deckte bisher nur den Bereich-B-Snapshot-
+Merge ab, nicht diese direkte Event-Materialisierung — zwei unabhängige
+Live-Reproduktionen zeigten 22 Artikel, die Sekunden nach einem korrekten
+Snapshot-Merge (der sie zurecht ausschloss) durch den nachfolgenden
+Event-Replay dauerhaft zurück auf die offene Liste sprangen, ohne
+Selbstheilung. `SyncImportService.materialisiere` prüft im
+`.artikelHinzugefuegt`-Zweig jetzt denselben zeitstempel-basierten Vergleich
+(`ArtikelListenKaufService.istOffen`) wie der Snapshot-Merge. Details:
+`docs/DATENSYNCHRONISATION.md` §4.7.
+
 ## v0.16 (Build 350) — Sync-Status-Übersicht: Live-Diagnose für Peers, ausstehende Events und Multipeer-Catch-up
 
 Neue Sektion in `DebuggingView` (Einstellungen → Debugging): zeigt live (alle

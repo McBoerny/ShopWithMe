@@ -14,7 +14,7 @@ import SwiftData
 /// B/C-Import ist erst Phase 3), wird das Event bewusst NICHT als bekannt
 /// markiert, sondern beim nächsten Sync-Zyklus automatisch erneut versucht —
 /// die Peer-Event-Datei bleibt dafür unverändert liegen (siehe
-/// ``wendeAn(_:gewinner:context:)``). Ein konkurrierendes, aber bereits anwendbares
+/// ``wendeAn(_:gewinner:aliase:abgehaktZeitstempel:context:)``). Ein konkurrierendes, aber bereits anwendbares
 /// schwächeres Event kann dadurch übergangsweise vor einem noch nicht
 /// anwendbaren stärkeren Event materialisiert werden — das System konvergiert
 /// aber selbstständig auf den korrekten Endzustand, sobald auch das stärkere
@@ -189,10 +189,16 @@ enum SyncImportService {
         // Einmal für den gesamten Zyklus aufgebaut statt pro eingehendem Event
         // per ``SyncEventService/aktuellerGewinner(bezugsID:artikelID:context:)``
         // neu gefetcht+dekodiert (Performance-Fund, O(n) statt O(n²) bei n
-        // eingehenden Events) — ``wendeAn(_:gewinner:context:)`` hält den
+        // eingehenden Events) — ``wendeAn(_:gewinner:aliase:abgehaktZeitstempel:context:)`` hält den
         // Gewinner-Index während der Verarbeitung selbst aktuell, siehe dort.
         // `bekannteIDs` dient unten als Vorfilter gegen unnötige Datei-Lesevorgänge.
         var (gewinner, bekannteIDs) = SyncEventService.alleAktuellenGewinnerUndBekannteIDs(context: context)
+        // Sicherheitsnetz gegen wiederbelebte Käufe (GitHub #99), bisher nur
+        // in ``SyncSnapshotImportService/mergeEinkaufslistenEintraege(_:listeZuordnung:artikelZuordnung:produktZuordnung:context:)``
+        // (Bereich B) angewendet — siehe ``wendeAn(_:gewinner:aliase:abgehaktZeitstempel:context:)``
+        // für die Begründung, warum derselbe Schutz jetzt auch hier (Bereich A)
+        // gilt. Einmal pro Batch geladen statt pro Event, analog `aliase` oben.
+        let abgehaktZeitstempel = ArtikelListenKaufService.alleZeitstempel(context: context)
 
         for peerOrdner in peerVerzeichnisse where !PeerOrdnerName.gehoertZu(peerOrdner.lastPathComponent, geraeteID: eigeneGeraeteID) {
             let eventsOrdner = SyncExportService.eventsOrdner(fuerPeer: peerOrdner.lastPathComponent, in: syncOrdner)
@@ -228,7 +234,7 @@ enum SyncImportService {
                 .sorted { $0.lamportZaehler < $1.lamportZaehler }
 
             for empfangen in empfangeneEvents {
-                wendeAn(empfangen, gewinner: &gewinner, aliase: aliase, context: context)
+                wendeAn(empfangen, gewinner: &gewinner, aliase: aliase, abgehaktZeitstempel: abgehaktZeitstempel, context: context)
             }
         }
 
@@ -280,7 +286,7 @@ enum SyncImportService {
     /// Wendet ein einzeln empfangenes Event sofort an (Multipeer-
     /// Beschleunigungskanal, GitHub #49, ``MultipeerSyncService``) — dieselbe
     /// Konfliktauflösung/Materialisierung wie beim Datei-Import
-    /// (``wendeAn(_:gewinner:context:)``), nur für ein einzelnes Event statt
+    /// (``wendeAn(_:gewinner:aliase:abgehaktZeitstempel:context:)``), nur für ein einzelnes Event statt
     /// einen ganzen Peer-Ordner-Batch, damit hier keine zweite, parallel
     /// gepflegte Kopie dieser Logik entsteht.
     ///
@@ -325,7 +331,11 @@ enum SyncImportService {
             }
         }
         let aliase = SyncEntitaetsAliasService.alleAliaseNachArt(context: context)
-        wendeAn(empfangen, gewinner: &gewinner, aliase: aliase, context: context)
+        // Kein Batch-Cache hier (anders als ``importiereNeueEvents(context:)``)
+        // — ein einzelnes Multipeer-Event ist bereits die Ausnahme, kein
+        // Massen-Batch, siehe Typ-Doku „Kein Batch-Index-Aufbau" oben.
+        let abgehaktZeitstempel = ArtikelListenKaufService.alleZeitstempel(context: context)
+        wendeAn(empfangen, gewinner: &gewinner, aliase: aliase, abgehaktZeitstempel: abgehaktZeitstempel, context: context)
         guard context.hasChanges else { return }
         try? context.save()
     }
@@ -361,7 +371,7 @@ enum SyncImportService {
     @MainActor
     private static func wendeAn(
         _ empfangen: SyncEventExportDarstellung, gewinner: inout [SyncEventService.PaarSchluessel: SyncEvent],
-        aliase: [String: [UUID: UUID]], context: ModelContext
+        aliase: [String: [UUID: UUID]], abgehaktZeitstempel: [ArtikelListenKaufService.Schluessel: Date?], context: ModelContext
     ) {
         guard !SyncEventService.istBereitsBekannt(empfangen.id, context: context) else { return }
 
@@ -387,7 +397,8 @@ enum SyncImportService {
         }
 
         let materialisierungsErgebnis = materialisiere(
-            art, nutzlast: nutzlast, autorGeraeteID: empfangen.autorGeraeteID, wallClock: empfangen.wallClock, aliase: aliase, context: context
+            art, nutzlast: nutzlast, autorGeraeteID: empfangen.autorGeraeteID, wallClock: empfangen.wallClock,
+            aliase: aliase, abgehaktZeitstempel: abgehaktZeitstempel, context: context
         )
         guard materialisierungsErgebnis == .erfolgreich else {
             guard !referenzDauerhaftGeloescht(art: art, bezugsID: nutzlast.bezugsID, artikelID: nutzlast.artikelID, aliase: aliase, context: context) else {
@@ -492,16 +503,44 @@ enum SyncImportService {
     /// Absenders — ausschließlich für den `.artikelHinzugefuegt`-Zweig
     /// gebraucht (siehe ``Einkaufsliste/artikelHinzufuegenOhneEventAufzeichnung(_:am:context:)``-Doku),
     /// alle anderen Zweige ignorieren ihn.
+    ///
+    /// `abgehaktZeitstempel`: Sicherheitsnetz gegen wiederbelebte Käufe
+    /// (GitHub #99) — bisher nur beim Bereich-B-Snapshot-Merge angewendet
+    /// (``SyncSnapshotImportService/mergeEinkaufslistenEintraege(_:listeZuordnung:artikelZuordnung:produktZuordnung:context:)``).
+    /// **Live-Fund (2026-08-24):** genau dieser Zweig hier hatte KEIN
+    /// äquivalentes Sicherheitsnetz — nach einem Geräte-Neuaufbau, der die
+    /// komplette historische Bereich-A-Event-Datei erneut abspielt, holte ein
+    /// längst per `KaufEintrag` als gekauft bekannter Artikel klaglos zurück
+    /// auf die offene Liste, obwohl derselbe Merge-Durchlauf ihn Sekunden
+    /// zuvor über den Snapshot-Kanal bereits korrekt ausgeschlossen hatte
+    /// (live bestätigt: 22 Artikel sprangen nach Reset+Event-Replay von
+    /// korrekt 1239 zurück auf 1265). Nur der zeitstempel-basierte Vergleich
+    /// (``ArtikelListenKaufService/istOffen(hinzugefuegtAm:abgehaktAm:)``) wird
+    /// hier repliziert, NICHT der `alleVorgaenge`-Fallback von
+    /// ``SyncSnapshotImportService/istBereitsAbgehakt(_:aufListe:alleVorgaenge:istAusDerZeitGefallen:bekannterEintrag:)``
+    /// für Altbestand ohne Zeitstempel — bewusste Vereinfachung, da dieser
+    /// Zweig zuvor GAR keinen Schutz hatte (reine Verbesserung) und der
+    /// Fallback zusätzliches Batch-Fetching von `Einkaufsvorgang`en erfordert
+    /// hätte.
     @MainActor
     private static func materialisiere(
         _ art: SyncEventArt, nutzlast: SyncEventNutzlast, autorGeraeteID: String, wallClock: Date,
-        aliase: [String: [UUID: UUID]], context: ModelContext
+        aliase: [String: [UUID: UUID]], abgehaktZeitstempel: [ArtikelListenKaufService.Schluessel: Date?], context: ModelContext
     ) -> MaterialisierungsErgebnis {
         switch art {
         case .artikelHinzugefuegt:
             let liste = einkaufsliste(mitID: nutzlast.bezugsID, aliase: aliase, context: context)
             let artikel = artikel(mitID: nutzlast.artikelID, aliase: aliase, context: context)
             guard let liste, let artikel else { return fehlendeReferenz(bezug: liste, artikel: artikel) }
+            let schluessel = ArtikelListenKaufService.Schluessel(artikelID: artikel.id, einkaufslisteID: liste.id)
+            let zuletztAbgehaktAm = abgehaktZeitstempel[schluessel] ?? nil
+            guard ArtikelListenKaufService.istOffen(hinzugefuegtAm: wallClock, abgehaktAm: zuletztAbgehaktAm) else {
+                SyncDebugLogger.log(
+                    .einkaufslistenEintragSicherheitsnetzUebersprungen,
+                    details: "artikel=\(artikel.name) liste=\(liste.name) pfad=bereichA"
+                )
+                return .erfolgreich
+            }
             liste.artikelHinzufuegenOhneEventAufzeichnung(artikel, am: wallClock, context: context)
             return .erfolgreich
         case .artikelEntfernt:
@@ -549,7 +588,7 @@ enum SyncImportService {
         }
     }
 
-    /// Unterscheidet die beiden nicht-erfolgreichen Fälle von ``materialisiere(_:nutzlast:autorGeraeteID:wallClock:aliase:context:)``:
+    /// Unterscheidet die beiden nicht-erfolgreichen Fälle von ``materialisiere(_:nutzlast:autorGeraeteID:wallClock:aliase:abgehaktZeitstempel:context:)``:
     /// Referenz nur *noch nicht* lokal bekannt (retrywürdig) vs. Referenz
     /// *bewusst gelöscht* (Tombstone, siehe ``SyncTombstoneService``) und damit
     /// dauerhaft unauflösbar — ein Retry würde hier bei jedem Sync-Zyklus

@@ -804,6 +804,37 @@ Durchlauf. Bewusst nicht behoben (würde eine Umstellung der seit mehreren
 Live-Tests bestätigten Abhängigkeitsreihenfolge erfordern) — der Randfall
 löst sich beim nächsten Zyklus von selbst auf.
 
+**Nachtrag (Live-Fund 2026-08-24): das Sicherheitsnetz deckte nur den
+Bereich-B-Snapshot-Merge ab, nicht die direkte Bereich-A-Event-Materialisierung.**
+Alle bisherigen Fixes oben betreffen ausschließlich
+`SyncSnapshotImportService.mergeEinkaufslistenEintraege` — der Pfad, über den
+ein `artikelHinzugefuegt`-*Event* materialisiert wird
+(`SyncImportService.materialisiere` → `Einkaufsliste.artikelHinzufuegenOhneEventAufzeichnung`),
+hatte dagegen KEINE äquivalente Prüfung, seit dieser Mechanismus existiert.
+Im Normalbetrieb blieb das folgenlos, weil Bereich-A ohnehin nur je neue,
+noch unbekannte Events verarbeitet. Nach einem Geräte-Neuaufbau (frischer
+lokaler Store, aber weiter derselbe geteilte Sync-Ordner) spielt der
+Datei-Kanal aber die KOMPLETTE historische Event-Datei erneut ab — inklusive
+längst überholter `artikelHinzugefuegt`-Events für Artikel, die
+zwischenzeitlich (auf einem anderen Gerät) bereits gekauft wurden. Live
+bestätigt über zwei unabhängige Reproduktionen am selben Zwei-Geräte-Setup:
+22 Artikel sprangen jeweils Sekunden nach einem korrekten
+Bereich-B/C-Snapshot-Merge (der sie zurecht ausschloss) durch den
+nachfolgenden Bereich-A-Event-Replay zurück auf die offene Liste — der
+Bestand blieb dauerhaft auf dem falschen, höheren Stand stehen, keine
+Selbstheilung.
+
+**Fix:** `SyncImportService.materialisiere` prüft im
+`.artikelHinzugefuegt`-Zweig jetzt denselben zeitstempel-basierten Vergleich
+(`ArtikelListenKaufService.istOffen(hinzugefuegtAm:abgehaktAm:)`) wie
+`mergeEinkaufslistenEintraege` — der `zuletztAbgehaktAm`-Zeitstempel wird
+dafür einmal pro Batch (`SyncImportService.importiereNeueEvents`) bzw. pro
+Einzelereignis (`wendeEinzelnesEmpfangenesEventAn`, Multipeer-Kanal) geladen.
+Bewusst NICHT repliziert: der ältere `alleVorgaenge`-Fallback für Altbestand
+ohne Zeitstempel (siehe `istBereitsAbgehakt`) — dieser Zweig hatte zuvor GAR
+keinen Schutz, die reine Ergänzung des robusten, primären Vergleichs ist
+bereits eine strikte Verbesserung.
+
 **Nachtrag (Nutzerbericht 2026-08-10, Abschnitt 57): `mergeKaufEintraege`
 ließ den offenen Listen-Eintrag stehen.** Anders als das lokale Abhaken
 löschte der Bereich-C-Merge den zugehörigen `EinkaufslistenEintrag` nie,
@@ -1180,7 +1211,14 @@ kompletten `kaeufe/`-Ordners, aber ohne `events/` anzutasten.
   wechselt erst bei erneutem Betreten von `EinkaufenView`) — anders als der
   Datei-Kanal, dessen Vertrauensmerkmal (Zugriff auf den geteilten Ordner) nie
   im Klartext übers lokale Netz geht. Echte PKI/Zertifikatsprüfung wäre
-  möglich, aber bewusst eine spätere, eigene Entscheidung.
+  möglich, aber bewusst eine spätere, eigene Entscheidung (bewertet und
+  bewusst zurückgestellt in GitHub #147: `MCSession` bietet keine direkte
+  Pinning-API, ein sauberer Ansatz bräuchte eine Post-Connect-Bestätigung, die
+  das per Session neu generierte, ephemere TLS-Zertifikat nachträglich an
+  ``gruppenSchluessel`` bindet — nicht trivial und angesichts der bereits
+  bestehenden Absicherung (Pflicht-TLS + peer-gebundenes Challenge-Response)
+  für eine nicht-kritische App aktuell nicht gerechtfertigt. Bei wachsendem
+  Datenumfang/Kritikalität des Multipeer-Kanals erneut bewerten).
 - **Unerreichbare Vorgeschichte:** Einkaufslisten-Einträge, die entstanden,
   bevor Bereich-A-Events bzw. der volle Snapshot-Inhalt existierten, wurden
   nie als Event aufgezeichnet und stecken in keinem historischen Snapshot —

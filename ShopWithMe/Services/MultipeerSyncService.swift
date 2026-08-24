@@ -57,7 +57,14 @@ import SwiftData
 /// Issue #97. Das empfangene TLS-Zertifikat selbst wird weiterhin ungeprüft
 /// akzeptiert (``session(_:didReceiveCertificate:fromPeer:certificateHandler:)``),
 /// das Vertrauen kommt aus dem beschriebenen Challenge-Response, nicht aus
-/// einer PKI.
+/// einer PKI — bewusst zurückgestellt (GitHub #147, geschlossen: `MCSession`
+/// bietet keine Pinning-API, das TLS-Zertifikat wird pro Session neu und
+/// ephemer generiert; ein sauberer Ansatz bräuchte eine
+/// Post-Connect-Bestätigung, die das Zertifikat nachträglich an
+/// ``gruppenSchluessel`` bindet — angesichts der bestehenden Absicherung für
+/// eine nicht-kritische App aktuell nicht gerechtfertigt, bei wachsendem
+/// Datenumfang/Kritikalität erneut bewerten). Details siehe
+/// `docs/DATENSYNCHRONISATION.md` §9.
 @MainActor
 final class MultipeerSyncService: NSObject, ObservableObject {
     /// Schwache Referenz auf die laufende Instanz, damit
