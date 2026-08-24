@@ -21,7 +21,27 @@ struct SyncOrdnerSettingsView: View {
     @EnvironmentObject private var syncPollingService: SyncPollingService
     @EnvironmentObject private var multipeerSyncService: MultipeerSyncService
 
-    @State private var zeigeOrdnerauswahl = false
+    /// Welcher `.fileImporter`-Vorgang gerade aktiv ist — EIN gemeinsamer
+    /// Trigger für Sync-Ordner-Auswahl und Backup-Import statt zwei
+    /// getrennter `.fileImporter`-Modifier auf derselben View: mehrere
+    /// `.fileImporter`/`.fileExporter`-Modifier an derselben View
+    /// destabilisieren sich gegenseitig (SwiftUI-Bug, live gefunden — nach
+    /// Hinzufügen des zweiten `.fileImporter` für „Backup importieren“
+    /// öffnete der bereits bestehende „Sync-Ordner“-Dialog beim Antippen
+    /// stillschweigend nicht mehr, ohne jede Fehlermeldung).
+    private enum AktiverDateiImport {
+        case syncOrdner
+        case backup
+    }
+    /// Getrennt von `zeigeDateiImporter`, damit die `completion`-Closure des
+    /// `.fileImporter` den Typ noch zuverlässig lesen kann: SwiftUI setzt
+    /// `isPresented` beim Schließen des Sheets zurück, was — wäre der Typ im
+    /// selben Zustand gekoppelt — je nach Reihenfolge bereits vor der
+    /// Auswertung der Auswahl auf `nil` fallen und `ordnerFestlegen(...)`
+    /// nie aufrufen würde (live gefunden: Ordner wählbar, aber nicht
+    /// übernommen).
+    @State private var aktiverDateiImport: AktiverDateiImport?
+    @State private var zeigeDateiImporter = false
     @State private var fehlermeldung: String?
     @State private var ausgewaehlterOrdner: URL? = SyncOrdnerService.gewaehlterOrdner()
     /// Initialisiert aus ``SyncErsetzenService/ausstehendeAktion`` statt aus
@@ -50,7 +70,6 @@ struct SyncOrdnerSettingsView: View {
     @State private var exportDokument: BackupExportDocument?
     @State private var exportDateiname = "backup.json"
     @State private var zeigeBackupExport = false
-    @State private var zeigeBackupImport = false
     /// Nur zum erneuten Auslösen von ``body`` nach Backup-Erstellung/-Löschung/
     /// -Import — ``SyncErsetzenService/alleBackups()`` liest bei jedem Aufruf
     /// direkt von der Platte, ohne eigenes zwischengespeichertes State.
@@ -99,7 +118,8 @@ struct SyncOrdnerSettingsView: View {
 
             Section {
                 Button {
-                    zeigeOrdnerauswahl = true
+                    aktiverDateiImport = .syncOrdner
+                    zeigeDateiImporter = true
                 } label: {
                     LabeledContent("Sync-Ordner") {
                         Text(ausgewaehlterOrdner?.lastPathComponent ?? "wählen…")
@@ -181,7 +201,8 @@ struct SyncOrdnerSettingsView: View {
                 }
                 .disabled(wirdErsetzt)
                 Button("Backup importieren…") {
-                    zeigeBackupImport = true
+                    aktiverDateiImport = .backup
+                    zeigeDateiImporter = true
                 }
                 .disabled(wirdErsetzt)
             } header: {
@@ -228,13 +249,24 @@ struct SyncOrdnerSettingsView: View {
         }
         .navigationTitle("Synchronisation")
         .navigationBarTitleDisplayMode(.inline)
-        .fileImporter(isPresented: $zeigeOrdnerauswahl, allowedContentTypes: [.folder]) { ergebnis in
-            switch ergebnis {
-            case .success(let ordner):
-                ordnerFestlegen(ordner)
-            case .failure(let error):
-                fehlermeldung = error.localizedDescription
+        .fileImporter(
+            isPresented: $zeigeDateiImporter,
+            allowedContentTypes: aktiverDateiImport == .backup ? [.json] : [.folder]
+        ) { ergebnis in
+            switch aktiverDateiImport {
+            case .syncOrdner:
+                switch ergebnis {
+                case .success(let ordner):
+                    ordnerFestlegen(ordner)
+                case .failure(let error):
+                    fehlermeldung = error.localizedDescription
+                }
+            case .backup:
+                backupImportieren(ergebnis)
+            case nil:
+                break
             }
+            aktiverDateiImport = nil
         }
         // GitHub #63: der gewählte Ordner enthält bereits Daten anderer
         // Geräte — die frühere „Zusammenführen"-Wahl (GitHub #86, Teil 2)
@@ -293,9 +325,6 @@ struct SyncOrdnerSettingsView: View {
             if case .failure(let error) = ergebnis {
                 fehlermeldung = error.localizedDescription
             }
-        }
-        .fileImporter(isPresented: $zeigeBackupImport, allowedContentTypes: [.json]) { ergebnis in
-            backupImportieren(ergebnis)
         }
         .alert("Neustart nötig", isPresented: $zeigeNeustartHinweis) {
             Button("OK") {}

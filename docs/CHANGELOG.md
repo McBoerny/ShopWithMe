@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.16 (Build 339) — Sync-Ordner ließ sich nicht mehr setzen (doppelter `.fileImporter`-Konflikt)
+
+Seit dem Hinzufügen von "Backup importieren…" (`.fileImporter`) reagierte der
+ursprüngliche "Sync-Ordner"-`.fileImporter` auf derselben View beim Antippen
+gar nicht mehr — kein Dialog, keine Fehlermeldung (bekanntes SwiftUI-Problem
+bei mehreren `.fileImporter`/`.fileExporter`-Modifiern an derselben View).
+Beide Importe teilen sich jetzt einen einzigen `.fileImporter`, gesteuert über
+einen Typ-State (`aktiverDateiImport`). Ein erster Fix-Versuch koppelte diesen
+Typ-State direkt an `isPresented`, was einen Folge-Bug erzeugte (Ordner
+wählbar, aber Auswahl wurde nicht übernommen, da der Typ beim Schließen des
+Sheets teils schon auf `nil` zurückgesetzt war, bevor die `completion`-Closure
+ihn auswertete) — behoben durch Trennung von "Sheet sichtbar"
+(`zeigeDateiImporter`) und "welcher Import war aktiv" (`aktiverDateiImport`).
+
 ## v0.16 (Build 338) — Vier Design-Konventionen umgesetzt (GitHub #141/#142/#143/#144)
 
 - Einkaufslisten-Verwaltung: Zeilen ohne führendes Checklist-Icon (#141).
