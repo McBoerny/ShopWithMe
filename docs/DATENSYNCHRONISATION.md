@@ -76,6 +76,12 @@ Funktioniert nur bei physischer Nähe (WiFi/Bluetooth/AWDL über Bonjour), nicht
 Wire-Format-Wiederverwendung) siehe ``MultipeerSyncService``-Typ-Doku und
 ``SyncOrdnerService/multipeerGruppenID(in:)``.
 
+**Deaktivieren der Synchronisierung (GitHub #145):** `SyncOrdnerService.ordnerEntfernenUndPeersVergessen(context:)`
+löscht dabei zusätzlich den eigenen Peer-Ordner (`peers/{eigenerName}/`) im
+geteilten Ordner, damit dieser sauber hinterlassen wird. Bewusst nur der
+eigene Unterordner — Peer-Ordner anderer, ggf. weiterhin synchronisierender
+Geräte sowie die `.sync-gruppen-id`-Marker-Datei bleiben unangetastet.
+
 ## 2. Geräte-Identität und Lamport-Uhr
 
 - **Geräte-ID:** `DatabaseLeaseService.geraeteID` (stabile UUID pro

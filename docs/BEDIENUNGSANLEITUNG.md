@@ -487,8 +487,12 @@ werden ausgetauscht.
   ein-/ausschaltbar, gemeinsame Protokollgröße/Teilen/Leeren), eine
   „Datei-I/O-Statistik" (Anzahl geöffneter/erstellter Dateien sowie gelesene/
   geschriebene Datenmenge des Sync-Ordners seit dem letzten Zurücksetzen, mit
-  eigenem Reset-Button), sowie in Debug-Builds zusätzlich der
-  Standort-Suchradius.
+  eigenem Reset-Button), „Gerät komplett zurücksetzen (Neuinstallation
+  simulieren)" — löscht unwiderruflich alle Daten der lokalen Datenbank und
+  legt danach nur die Standarddaten (Abteilungen, Geschäftstypen) neu an, wie
+  bei einer frischen Installation; Sync-Ordner-Auswahl und sonstige
+  App-Einstellungen bleiben dabei erhalten, sowie in Debug-Builds zusätzlich
+  der Standort-Suchradius.
 - **Synchronisation** — siehe eigener Abschnitt „Datensynchronisation
   (gemeinsam einkaufen)" oben, inkl. des Schalters „Multipeer-Sync" für den
   optionalen Nahbereich-Kanal.

@@ -112,14 +112,36 @@ enum SyncOrdnerService {
     /// ``SyncPeerInfo``-Einträge — ohne aktiven Sync-Ordner sind sie ohnehin
     /// nur noch Anzeige-Ballast und werden bei einem erneuten Beitritt vom
     /// jeweiligen Peer selbst wieder neu gesetzt (``SyncSnapshotImportService``).
+    /// Löscht zusätzlich den eigenen Peer-Ordner im geteilten Ordner
+    /// (GitHub #145), damit dieser sauber hinterlassen wird — Peer-Ordner
+    /// anderer, ggf. weiterhin synchronisierender Geräte bleiben unangetastet.
     @MainActor
     static func ordnerEntfernenUndPeersVergessen(context: ModelContext) async {
+        if let ordner = gewaehlterOrdner() {
+            loescheEigenenPeerOrdner(in: ordner)
+        }
         ordnerEntfernen()
         let alle = (try? context.fetch(FetchDescriptor<SyncPeerInfo>())) ?? []
         guard !alle.isEmpty else { return }
         await DatabaseLeaseService.performMicroLease(context: context) {
             for peer in alle { context.delete(peer) }
         }
+    }
+
+    /// Löscht den eigenen Peer-Ordner (``eigenerPeerOrdnerName(in:)``) im
+    /// geteilten Ordner (GitHub #145) — Teil des Deaktivierens der
+    /// Synchronisierung. Bewusst nur der eigene Unterordner, nicht der
+    /// gesamte `peers/`-Ordner oder die `.sync-gruppen-id`-Marker-Datei:
+    /// andere Geräte können den Ordner weiterhin nutzen.
+    @MainActor
+    private static func loescheEigenenPeerOrdner(in ordner: URL) {
+        guard ordner.startAccessingSecurityScopedResource() else { return }
+        defer { ordner.stopAccessingSecurityScopedResource() }
+
+        let eigenerName = eigenerPeerOrdnerName(in: ordner)
+        let peersOrdner = ordner.appendingPathComponent("peers", isDirectory: true)
+        let eigenerOrdner = peersOrdner.appendingPathComponent(eigenerName, isDirectory: true)
+        SyncDateiZugriff.loescheKoordiniert(eigenerOrdner)
     }
 
     /// Ob `ordner` bereits Peer-Unterordner anderer Geräte enthält (unter

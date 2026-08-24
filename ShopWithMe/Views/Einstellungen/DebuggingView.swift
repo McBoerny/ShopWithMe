@@ -67,6 +67,8 @@ struct DebuggingView: View {
 
             DatenintegritaetSection()
 
+            GeraetKomplettZuruecksetzenSection()
+
             #if DEBUG
             SuchradiusUeberschreibungSection()
             #endif
@@ -619,6 +621,73 @@ private struct DatenintegritaetSection: View {
     }
 }
 
+/// Löscht ALLE Daten der lokalen Datenbank und befüllt sie sofort wieder nur
+/// mit den Standarddaten (Abteilungen, Geschäftstypen) — simuliert damit eine
+/// Neuinstallation der App (GitHub #146), ohne die App tatsächlich neu
+/// installieren zu müssen. Bewusst eine eigene Sektion, getrennt von
+/// ``DatenintegritaetSection``s „Gerät zurücksetzen und von Sync-Gerät neu
+/// aufbauen…" — dort wird der Bestand aus einem Sync-Peer wiederhergestellt,
+/// hier wird er unabhängig von Sync komplett verworfen. Betrifft absichtlich
+/// nur die Datenbank, nicht sonstige App-Einstellungen (Sync-Ordner,
+/// Gerätename etc. bleiben erhalten).
+private struct GeraetKomplettZuruecksetzenSection: View {
+    @EnvironmentObject private var syncPollingService: SyncPollingService
+    @EnvironmentObject private var multipeerSyncService: MultipeerSyncService
+    @State private var zeigeBestaetigung = false
+    @State private var fehlermeldung: String?
+
+    var body: some View {
+        Section {
+            Button("Gerät komplett zurücksetzen (Neuinstallation simulieren)…", role: .destructive) {
+                zeigeBestaetigung = true
+            }
+            if let fehlermeldung {
+                Label(fehlermeldung, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red)
+            }
+        } header: {
+            Text("Neuinstallation simulieren")
+        } footer: {
+            Text("Löscht ALLE Daten der lokalen Datenbank (Artikel, Geschäfte, Einkaufslisten, Belege, …) unwiderruflich und legt anschließend nur die Standarddaten (Abteilungen, Geschäftstypen) neu an — wie bei einer frischen Installation. Sync-Ordner-Auswahl, Gerätename und sonstige App-Einstellungen bleiben unverändert. Ist eine Synchronisierung mit einem erreichbaren Sync-Ordner aktiv, können die gelöschten Daten beim nächsten Sync-Zyklus von dort wieder übernommen werden — vor dem Zurücksetzen ggf. die Synchronisierung deaktivieren.")
+        }
+        .confirmationDialog("Gerät komplett zurücksetzen", isPresented: $zeigeBestaetigung, titleVisibility: .visible) {
+            Button("Alle Daten löschen", role: .destructive) {
+                zuruecksetzen()
+            }
+            Button("Abbrechen", role: .cancel) {}
+        } message: {
+            Text("Löscht unwiderruflich ALLE Daten der lokalen Datenbank und legt danach nur die Standarddaten neu an. Nicht rückgängig zu machen.")
+        }
+    }
+
+    /// ``ModelContainerController.aktuell`` ist nur `nil`, solange die
+    /// laufende Instanz nicht existiert — praktisch nie während diese Ansicht
+    /// sichtbar ist (siehe Typ-Doku ``ModelContainerController``). Anders als
+    /// bei ``DatenintegritaetSection``s Wiederherstellungspfaden gibt es für
+    /// den kompletten Datenbank-Wipe keinen sinnvollen „beim nächsten
+    /// Neustart nachholen"-Fallback — statt einen irreführenden
+    /// Neustart-Hinweis zu zeigen, ohne dass etwas vorgemerkt wurde, meldet
+    /// dieser Fall stattdessen einen Fehler.
+    private func zuruecksetzen() {
+        fehlermeldung = nil
+        guard let controller = ModelContainerController.aktuell else {
+            fehlermeldung = "Zurücksetzen aktuell nicht möglich — bitte erneut versuchen."
+            return
+        }
+        syncPollingService.stoppen()
+        multipeerSyncService.stoppen()
+        Task {
+            do {
+                try await controller.ersetzeLiveMitNeuemStore { context in
+                    SeedData.seedeStandarddatenFallsLeer(context: context)
+                    SeedData.seedeGeschaeftsTypenFallsLeer(context: context)
+                }
+            } catch {
+                fehlermeldung = error.localizedDescription
+            }
+        }
+    }
+}
 
 /// Vorher-/Nachher-Mengenvergleich eines „Ersetzen durch Peer"-Neuaufbaus
 /// (``SyncErsetzenService/NeuaufbauZusammenfassung``, Abschnitt 21) — zeigt
