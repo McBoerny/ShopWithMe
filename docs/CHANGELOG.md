@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.17 (Build 353) — Minor-Versionssprung: Sync-Diagnose & Sicherheitsnetz-Härtung gegen wiederbelebte Käufe
+
+Bündelt die vorangegangenen v0.16-Änderungen dieser Session zu einem
+Versionssprung: die neue Sync-Status-Übersicht in `DebuggingView`
+(bekannte Peers, ausstehende Events, Multipeer-Catch-up-Status, letzter
+voller Sync-Zyklus) sowie zwei zusammenhängende Live-Funde, bei denen das
+Sicherheitsnetz gegen wiederbelebte Käufe (GitHub #99) einen Bereich-A-
+Event-Replay-Pfad nicht abdeckte (Listen-Eintrag-Resurrektion sowie falsches
+`KaufEintrag.datum`) — beide behoben und live über zwei unabhängige
+Zwei-Geräte-Reproduktionen verifiziert.
+
+Der obligatorische Testlauf für diesen Versionssprung (`docs/RELEASE_CHECKLIST.md`)
+fing dabei selbst einen Regressionsfund ab: die erste Fassung des Listen-
+Eintrag-Fixes blockte wegen einer falsch verstandenen `istOffen`-Randbedingung
+JEDES `artikelHinzugefuegt`-Event, nicht nur die tatsächlich betroffenen —
+vier automatisierte Tests schlugen sofort fehl und deckten es vor jeder
+Freigabe auf. Details: `docs/DATENSYNCHRONISATION.md` §4.7.
+
 ## v0.16 (Build 352) — KaufEintrag-Datum bei Bereich-A-Event-Replay korrigiert
 
 Direkter Folgefund zum vorigen Sicherheitsnetz-Fix: `Einkaufsvorgang.artikelAbhakenOhneEventAufzeichnung`

@@ -515,8 +515,12 @@ enum SyncImportService {
     /// zuvor über den Snapshot-Kanal bereits korrekt ausgeschlossen hatte
     /// (live bestätigt: 22 Artikel sprangen nach Reset+Event-Replay von
     /// korrekt 1239 zurück auf 1265). Nur der zeitstempel-basierte Vergleich
-    /// (``ArtikelListenKaufService/istOffen(hinzugefuegtAm:abgehaktAm:)``) wird
-    /// hier repliziert, NICHT der `alleVorgaenge`-Fallback von
+    /// wird hier repliziert (direkt, NICHT über
+    /// ``ArtikelListenKaufService/istOffen(hinzugefuegtAm:abgehaktAm:)`` —
+    /// dessen Vertrag behandelt ein fehlendes `abgehaktAm` immer als „nicht
+    /// offen", was hier den weitaus häufigeren Fall „noch nie gekauft" fälschlich
+    /// geblockt hätte, siehe Kommentar an der Aufrufstelle unten), NICHT der
+    /// `alleVorgaenge`-Fallback von
     /// ``SyncSnapshotImportService/istBereitsAbgehakt(_:aufListe:alleVorgaenge:istAusDerZeitGefallen:bekannterEintrag:)``
     /// für Altbestand ohne Zeitstempel — bewusste Vereinfachung, da dieser
     /// Zweig zuvor GAR keinen Schutz hatte (reine Verbesserung) und der
@@ -533,8 +537,19 @@ enum SyncImportService {
             let artikel = artikel(mitID: nutzlast.artikelID, aliase: aliase, context: context)
             guard let liste, let artikel else { return fehlendeReferenz(bezug: liste, artikel: artikel) }
             let schluessel = ArtikelListenKaufService.Schluessel(artikelID: artikel.id, einkaufslisteID: liste.id)
-            let zuletztAbgehaktAm = abgehaktZeitstempel[schluessel] ?? nil
-            guard ArtikelListenKaufService.istOffen(hinzugefuegtAm: wallClock, abgehaktAm: zuletztAbgehaktAm) else {
+            // NICHT ``ArtikelListenKaufService/istOffen(hinzugefuegtAm:abgehaktAm:)``
+            // direkt mit dem Dictionary-Lookup verwendet: dessen Vertrag
+            // behandelt ein fehlendes `abgehaktAm` IMMER als „nicht offen"
+            // (siehe dortige Typ-Doku „kein Default-offen bei fehlendem
+            // abgehaktAm") — passend für eine BEKANNTE ``ArtikelListenKauf``-
+            // Zeile ohne Zeitstempel (Altbestand), aber falsch für den hier
+            // weitaus häufigeren Fall „noch nie gekauft" (Schlüssel fehlt
+            // komplett im Dictionary). Ein direkter Aufruf hätte JEDES normale
+            // `artikelHinzugefuegt`-Event blockiert (Regressionsfund im
+            // Test-Lauf vor dem v0.17-Release, siehe
+            // `SyncImportServiceTests/importiertArtikelHinzugefuegtVonFremdemGeraet`).
+            // Nur ein tatsächlich bekannter, konkreter Zeitstempel blockt hier.
+            if let zuletztAbgehaktAm = abgehaktZeitstempel[schluessel] ?? nil, wallClock <= zuletztAbgehaktAm {
                 SyncDebugLogger.log(
                     .einkaufslistenEintragSicherheitsnetzUebersprungen,
                     details: "artikel=\(artikel.name) liste=\(liste.name) pfad=bereichA"

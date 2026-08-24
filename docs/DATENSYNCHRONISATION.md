@@ -835,6 +835,22 @@ ohne Zeitstempel (siehe `istBereitsAbgehakt`) — dieser Zweig hatte zuvor GAR
 keinen Schutz, die reine Ergänzung des robusten, primären Vergleichs ist
 bereits eine strikte Verbesserung.
 
+**Nachtrag (Regressionsfund im Release-Test-Lauf für v0.17, noch vor
+Freigabe abgefangen):** die erste Fassung dieses Fixes rief
+`ArtikelListenKaufService.istOffen(hinzugefuegtAm:abgehaktAm:)` DIREKT mit
+dem Ergebnis eines Dictionary-Lookups auf. Dessen Vertrag behandelt ein
+fehlendes `abgehaktAm` aber IMMER als „nicht offen" (siehe Typ-Doku „kein
+Default-offen bei fehlendem abgehaktAm") — passend für eine bekannte
+``ArtikelListenKauf``-Zeile ohne Zeitstempel, aber falsch für den weitaus
+häufigeren Fall „Artikel wurde noch nie gekauft" (Schlüssel fehlt komplett
+im Dictionary). Dadurch blockte die erste Fassung JEDES normale
+`artikelHinzugefuegt`-Event, nicht nur die tatsächlich betroffenen — vier
+automatisierte Tests schlugen sofort fehl (u.a.
+`SyncImportServiceTests/importiertArtikelHinzugefuegtVonFremdemGeraet`).
+**Fix:** direkter Vergleich statt `istOffen`-Aufruf — nur ein tatsächlich
+bekannter, konkreter `zuletztAbgehaktAm`-Zeitstempel blockt, ein fehlender
+Dictionary-Eintrag lässt das Hinzufügen unverändert zu.
+
 **Nachtrag (direkter Folgefund, Live-Fund 2026-08-24): derselbe
 Event-Replay-Nachhol-Lauf stempelte auch falsche `KaufEintrag.datum`-Werte.**
 Beim Aufspüren des Fundes oben fiel eine zweite, verwandte Lücke auf:
