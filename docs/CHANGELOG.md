@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.16 (Build 335) — EinkaufslistenAnzeigeService extrahiert (GitHub #110, schließt #107)
+
+Letzter Baustein von #107: `EinkaufenView.swift`s private `EinkaufslisteView`
+enthielt drei Anzeige-Entscheidungsmethoden (`verfuegbarkeitsgefiltert`,
+`kategorienFuerAnzeige`, `kategorieGruppen`) — welche Artikel als "verfügbar"
+gelten, unter welcher(n) Kategorie(n) ein Artikel angezeigt wird, wie die
+Kategorie-Abschnitte sortiert werden (inkl. `AbteilungsDistanzService`-
+gelernter Reihenfolge). Anders als Schritt 1/2 kein historischer
+Live-Test-Bug — reiner Testbarkeits-/Struktur-Gewinn. Extrahiert nach
+demselben Muster in `EinkaufslistenAnzeigeService`; die drei View-Methoden
+sind jetzt dünne Call-Sites. 9 neue Tests in
+`EinkaufslistenAnzeigeServiceTests`. Volle Suite weiterhin grün bis auf die
+vorbestehende OCR-Fixture-Drift in `BelegScanIntegrationTests`.
+
+Damit ist GitHub #107 (EinkaufenView/BelegScanView vermischen UI und
+Domänenlogik) vollständig umgesetzt — alle drei Schritte extrahiert
+(`EinkaufsvorgangAbschlussService`, `BelegUebernahmeService`,
+`EinkaufslistenAnzeigeService`).
+
 ## v0.16 (Build 334) — BelegUebernahmeService extrahiert (GitHub #109, #107 Schritt 2/3)
 
 `BelegScanView.uebernehmen()` (~160 Zeilen) war die letzte komplett

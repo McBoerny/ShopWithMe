@@ -1137,11 +1137,7 @@ private struct EinkaufslisteView: View {
     /// Per ``zeigeAlleArtikel`` kann der Anwender diesen Filter für den laufenden
     /// Einkauf übergehen.
     private func verfuegbarkeitsgefiltert(_ eintraege: [EinkaufslistenEintrag]) -> [EinkaufslistenEintrag] {
-        guard let geschaeft, !zeigeAlleArtikel else { return eintraege }
-        return eintraege.filter { eintrag in
-            guard let artikel = eintrag.artikel else { return false }
-            return ArtikelVerfuegbarkeitService.istVerfuegbar(artikel, in: geschaeft, context: modelContext)
-        }
+        EinkaufslistenAnzeigeService.verfuegbarkeitsgefiltert(eintraege, geschaeft: geschaeft, zeigeAlleArtikel: zeigeAlleArtikel, context: modelContext)
     }
 
     /// `artikelListe` (üblicherweise ``artikelAufListe``), gruppiert nach
@@ -1169,11 +1165,7 @@ private struct EinkaufslisteView: View {
     /// gezielt ALLES zeigen, auch um eine zuvor gelernte, aber inzwischen falsche
     /// Zuordnung sichtbar korrigieren zu können.
     private func kategorienFuerAnzeige(_ artikel: Artikel) -> [ArtikelKategorie] {
-        let alle = artikel.effektiveKategorien(context: modelContext)
-        guard !zeigeAlleArtikel, alle.count > 1, let geschaeft,
-              let gelernt = AbteilungsDistanzService.gelernteKategorie(fuer: artikel, in: geschaeft, context: modelContext)
-        else { return alle }
-        return [gelernt]
+        EinkaufslistenAnzeigeService.kategorienFuerAnzeige(artikel, geschaeft: geschaeft, zeigeAlleArtikel: zeigeAlleArtikel, context: modelContext)
     }
 
     /// Ein Artikel mit mehreren Kategorien (``Artikel/effektiveKategorien(context:)``,
@@ -1192,37 +1184,15 @@ private struct EinkaufslisteView: View {
     /// (inklusive der darin enthaltenen Sortierung samt SwiftData-Fetch) mehrfach
     /// neu auszuwerten.
     private func kategorieGruppen() -> [KategorieGruppe] {
-        var nachKategorie: [PersistentIdentifier: KategorieGruppe] = [:]
-        for eintrag in verfuegbarkeitsgefiltert(offeneEintraege) {
-            guard let artikel = eintrag.artikel else { continue }
-            let element = KategorieGruppe.Element(id: eintrag.persistentModelID, artikel: artikel, eintrag: eintrag)
-            for kategorie in kategorienFuerAnzeige(artikel) {
-                nachKategorie[kategorie.persistentModelID, default: KategorieGruppe(kategorie: kategorie, elemente: [])].elemente.append(element)
-            }
-        }
-        if zeigeAbgehakteArtikel {
-            for artikel in abgehakteArtikel {
-                let element = KategorieGruppe.Element(id: artikel.persistentModelID, artikel: artikel, eintrag: nil)
-                for kategorie in kategorienFuerAnzeige(artikel) {
-                    nachKategorie[kategorie.persistentModelID, default: KategorieGruppe(kategorie: kategorie, elemente: [])].elemente.append(element)
-                }
-            }
-        }
-        let alphabetisch = nachKategorie.values.map(\.kategorie)
-            .sorted { $0.name.vergleicheAlphabetisch(mit: $1.name) == .orderedAscending }
-        guard let geschaeft else {
-            return nachKategorie.values.sorted { $0.kategorie.name.vergleicheAlphabetisch(mit: $1.kategorie.name) == .orderedAscending }
-        }
-        let sortiert = AbteilungsDistanzService.sortierteReihenfolge(
-            offeneKategorien: alphabetisch,
-            startpunkt: zuletztAbgehakteKategorie,
-            in: geschaeft,
+        EinkaufslistenAnzeigeService.kategorieGruppen(
+            offeneEintraege: offeneEintraege,
+            abgehakteArtikel: abgehakteArtikel,
+            zeigeAbgehakteArtikel: zeigeAbgehakteArtikel,
+            zeigeAlleArtikel: zeigeAlleArtikel,
+            geschaeft: geschaeft,
+            zuletztAbgehakteKategorie: zuletztAbgehakteKategorie,
             context: modelContext
         )
-        let position = Dictionary(uniqueKeysWithValues: sortiert.enumerated().map { ($1.persistentModelID, $0) })
-        return nachKategorie.values.sorted {
-            (position[$0.kategorie.persistentModelID] ?? .max) < (position[$1.kategorie.persistentModelID] ?? .max)
-        }
     }
 
     /// Die Kategorie des zuletzt (nach Zeitstempel) abgehakten Artikels dieses
