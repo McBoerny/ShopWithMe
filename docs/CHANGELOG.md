@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.16 (Build 334) — BelegUebernahmeService extrahiert (GitHub #109, #107 Schritt 2/3)
+
+`BelegScanView.uebernehmen()` (~160 Zeilen) war die letzte komplett
+ungetestete Persistenz-Orchestrierung nach einem Kassenbon-Scan — entscheidet
+je nach `BelegScanKontext`, ob ein `KaufEintrag` oder nur ein `Preispunkt`
+entsteht, löst Artikel/Produkt pro Position auf (inkl. automatischer
+Produkt-Neuanlage) und behandelt Tages-Preis-Kollisionen (GitHub
+#76-Folgearbeit). Reines Struktur-Refactoring nach demselben Muster wie
+Schritt 1 (`EinkaufsvorgangAbschlussService`): neuer stateloser
+`BelegUebernahmeService` (`@MainActor`, da er `PreispunktService`/
+`Produkt.aufgeloestesOderNeuesProdukt` aufruft), `BelegScanView.uebernehmen()`
+bleibt dünne Call-Site (baut weiterhin die `ModelReference`s vor jedem
+`await`, siehe kritische Randbedingung unten). `BearbeitbarePosition` ist
+jetzt `internal` statt `private`, damit der Service sie referenzieren kann.
+
+**Kritisch unverändert:** die `ModelReference`s werden weiterhin GANZ AM
+ANFANG von `uebernehmen()` gebaut, vor dem Geocoding-`await` und dem
+Lease-Erwerb-`await` — sonst droht bei einer zwischenzeitlich per
+Sync-Tombstone gelöschten Referenz derselbe SwiftData-Fatal-Error wie bei
+GitHub #100.
+
+10 neue Tests in `BelegUebernahmeServiceTests` (alle drei
+`BelegScanKontext`-Verzweigungen, beide Tages-Kollisions-Pfade, automatische
+vs. bereits zugeordnete Produkt-Auflösung, Adress-/Alias-Lernen,
+Regressionsschutz für einen zwischenzeitlich gelöschten Einkaufsvorgang).
+Volle Testsuite grün bis auf die bereits vorbestehenden, unabhängigen
+OCR-Fixture-Abweichungen in `BelegScanIntegrationTests` (KI-Modell-Drift
+gegenüber den Fixture-Sollwerten, siehe `shopwithme-conventions`-Skill →
+„Belegscan-Integrationstests" — nicht Gegenstand dieser Änderung).
+
 ## v0.16 (Build 333) — Einkaufsliste: offene Artikel löschen, Produktname statt Artikelname anzeigen
 
 GitHub #136: In der laufenden Einkaufsliste (`EinkaufenView`) gab es für noch

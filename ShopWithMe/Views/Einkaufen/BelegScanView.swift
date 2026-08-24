@@ -377,126 +377,23 @@ struct BelegScanView: View {
 
             // Ein Micro-Lease um den gesamten Beleg-Vorgang statt pro Position —
             // fachlich eine einzige Aktion (siehe `docs/DATABASE_CONCURRENCY.md` →
-            // „Vollständiger Schreibvorgang-Katalog“).
+            // „Vollständiger Schreibvorgang-Katalog“). Die eigentliche Persistenz-
+            // Orchestrierung steckt in ``BelegUebernahmeService`` (GitHub #109).
             await DatabaseLeaseService.performMicroLease(context: modelContext) {
-                let erkanntesGeschaeftFrisch = erkanntesGeschaeftReferenz?.resolved(in: modelContext)
-                let einkaufsvorgangFrisch = einkaufsvorgangReferenz?.resolved(in: modelContext)
-
-                if !erkannterGeschaeftName.isEmpty {
-                    erkanntesGeschaeftFrisch?.alternativenNamenLernen(erkannterGeschaeftName)
-                }
-                // Hat das zugeordnete Geschäft noch keine Adresse, wird die auf dem
-                // Beleg erkannte übernommen (GitHub #19) — unabhängig davon, ob das
-                // Geschäft automatisch oder manuell über `GeschaeftWahlSheet`
-                // zugeordnet wurde.
-                if let erkanntesGeschaeftFrisch, erkanntesGeschaeftFrisch.adresse == nil, !getrimmteErkannteAdresse.isEmpty {
-                    erkanntesGeschaeftFrisch.adresse = getrimmteErkannteAdresse
-                    if let gelernteKoordinaten {
-                        erkanntesGeschaeftFrisch.breitengrad = gelernteKoordinaten.breitengrad
-                        erkanntesGeschaeftFrisch.laengengrad = gelernteKoordinaten.laengengrad
-                    }
-                }
-
-                if let einkaufsvorgangFrisch, einkaufsvorgangFrisch.geschaeft == nil {
-                    einkaufsvorgangFrisch.geschaeft = erkanntesGeschaeftFrisch
-                }
-
-                for (index, position) in positionen.enumerated() {
-                    let name = position.artikelName.trimmingCharacters(in: .whitespacesAndNewlines)
-                    let erkannterName = position.erkannterName.trimmingCharacters(in: .whitespacesAndNewlines)
-                    let getrimmterProduktKlarname = positionsKlarnamen[index]
-                    let produktName: String? = erkannterName.isEmpty ? nil : erkannterName
-                    // Klarname als alternativerName → in `Preispunkt.anzeigeName` gegenüber dem
-                    // abgekürzten Bon-Text (`produktName`) bevorzugt (GitHub #121).
-                    let neuerAlternativerName = leiteAlternativenNamenAb(
-                        eingegeben: getrimmterProduktKlarname.isEmpty ? erkannterName : getrimmterProduktKlarname,
-                        erkannt: erkannterName
-                    )
-                    guard !name.isEmpty,
-                          let preis = PreisEingabeFormat.decimal(ausText: position.preisText)
-                    else { continue }
-                    let artikel = positionsArtikelReferenzen[index]?.resolved(in: modelContext)
-                    var produkt = positionsProduktReferenzen[index]?.resolved(in: modelContext)
-
-                    let geschaeftFuerPreispunkt: Geschaeft
-                    switch kontext {
-                    case .einkaufsvorgang:
-                        // Der Einkaufsvorgang selbst kann inzwischen gelöscht worden
-                        // sein (siehe oben) — dann fehlt jeder Bezug für diese
-                        // Position, sie wird übersprungen statt einen losgelösten
-                        // Kaufeintrag anzulegen. Ebenso, falls das soeben zugewiesene
-                        // Geschäft zwischenzeitlich gelöscht wurde (Geschäfts-Pflicht).
-                        guard let einkaufsvorgangFrisch, let vorgangGeschaeft = einkaufsvorgangFrisch.geschaeft else { continue }
-                        geschaeftFuerPreispunkt = vorgangGeschaeft
-                        // Nur die operative Buchungszeile: existiert bereits ein
-                        // passender ``KaufEintrag`` (Artikel wurde auf der Liste
-                        // abgehakt), bleibt er unverändert bis auf das vom Beleg
-                        // erkannte Datum — die Preisrolle übernimmt ausschließlich
-                        // ``PreispunktService`` unten. Kein Treffer → neuer,
-                        // rein operativer Eintrag ohne Preisfelder (z.B. Spontankauf,
-                        // der nicht auf der Liste stand).
-                        if let vorhandenerEintrag = einkaufsvorgangFrisch.kaufEintraege.first(where: { passtZu(name: name, eintrag: $0) }) {
-                            vorhandenerEintrag.datum = belegDatum
-                        } else {
-                            let neuerEintrag = KaufEintrag(
-                                artikel: artikel,
-                                geschaeft: einkaufsvorgangFrisch.geschaeft,
-                                kategorie: artikel?.fuehrendeKategorie(inGeschaeft: einkaufsvorgangFrisch.geschaeft, context: modelContext),
-                                datum: belegDatum
-                            )
-                            neuerEintrag.artikelNameSnapshot = artikel?.name ?? name
-                            modelContext.insert(neuerEintrag)
-                            neuerEintrag.einkaufsvorgang = einkaufsvorgangFrisch
-                        }
-                    case .geschaeft, .unbekannt:
-                        // Kein laufender Einkauf, also keine operative Rolle — hier
-                        // entsteht ausschließlich ein ``Preispunkt``, kein ``KaufEintrag``.
-                        // Geschäfts-Pflicht: ohne (noch aufgelöstes) Geschäft keine Position.
-                        guard let erkanntesGeschaeftFrisch else { continue }
-                        geschaeftFuerPreispunkt = erkanntesGeschaeftFrisch
-                    }
-
-                    // Folgearbeit zu GitHub #47/#116: nur ein bereits bekannter
-                    // Produktname-Treffer bringt an dieser Stelle schon ein
-                    // `produkt` mit (siehe ``ArtikelZuordnungsService``). Bei
-                    // Substring-/KI-Treffer oder manueller Artikel-Zuweisung ohne
-                    // Produktwahl sonst automatisch ein neues, eigenständiges
-                    // Produkt auflösen/anlegen statt im geteilten Standardprodukt
-                    // des Artikels zu landen — siehe `docs/ARTIKEL_PRODUKT_MODELL.md`
-                    // → „Automatische Neuanlage beim Belegscan”. Legt bei Bedarf
-                    // auch gleich den passenden ``Produktname`` an (GitHub #128) —
-                    // ersetzt das frühere separate ``ArtikelAlias/lernen(...)``.
-                    if produkt == nil, let artikel {
-                        let klarname = getrimmterProduktKlarname.isEmpty ? erkannterName : getrimmterProduktKlarname
-                        produkt = Produkt.aufgeloestesOderNeuesProdukt(
-                            klarname: klarname, erkannterName: erkannterName, artikel: artikel,
-                            geschaeft: geschaeftFuerPreispunkt, context: modelContext
-                        )
-                    }
-                    // Produkt-Pflicht (siehe ``Preispunkt``-Typ-Doku): ohne Artikel-
-                    // Zuordnung entsteht kein Produkt, also auch kein Preispunkt für
-                    // diese Position — die operative ``KaufEintrag``-Buchungszeile
-                    // oben bleibt davon unberührt.
-                    guard let produktFuerPreispunkt = produkt else { continue }
-
-                    // Tages-Kollision (GitHub #76-Folgearbeit): Anwender hat „Bisherigen
-                    // behalten" gewählt → kein neuer Preispunkt für diese Position.
-                    // Sonst (Standard „wird ersetzt") den bestehenden Tagespunkt zuerst
-                    // entfernen, statt beide nebeneinander bestehen zu lassen.
-                    let behalteBestehenden = position.bestehenderPreisHeute != nil && position.behalteBestehendenPreisHeute
-                    if position.bestehenderPreisHeute != nil, !behalteBestehenden,
-                       let vorhandenerPunkt = PreispunktService.vorhandenerPunktHeute(
-                           produkt: produktFuerPreispunkt, geschaeft: geschaeftFuerPreispunkt, amDatum: belegDatum, context: modelContext
-                       ) {
-                        PreispunktService.ersetzeVorhandenenPunkt(vorhandenerPunkt, context: modelContext)
-                    }
-                    if !behalteBestehenden {
-                        PreispunktService.erfassen(
-                            preis: preis, produkt: produktFuerPreispunkt, geschaeft: geschaeftFuerPreispunkt, datum: belegDatum,
-                            produktName: produktName, alternativerName: neuerAlternativerName, context: modelContext
-                        )
-                    }
-                }
+                BelegUebernahmeService.uebernehmen(
+                    kontext: kontext,
+                    erkanntesGeschaeftReferenz: erkanntesGeschaeftReferenz,
+                    einkaufsvorgangReferenz: einkaufsvorgangReferenz,
+                    erkannterGeschaeftName: erkannterGeschaeftName,
+                    getrimmteErkannteAdresse: getrimmteErkannteAdresse,
+                    gelernteKoordinaten: gelernteKoordinaten,
+                    belegDatum: belegDatum,
+                    positionen: positionen,
+                    positionsArtikelReferenzen: positionsArtikelReferenzen,
+                    positionsProduktReferenzen: positionsProduktReferenzen,
+                    positionsKlarnamen: positionsKlarnamen,
+                    context: modelContext
+                )
             }
             if istEigenerTab {
                 zuruecksetzen()
@@ -518,21 +415,6 @@ struct BelegScanView: View {
         erkannterGeschaeftName = ""
         erkannteGeschaeftAdressen = []
         belegDatum = .now
-    }
-
-    /// Der Text im „Artikel“-Feld weicht vom rohen erkannten Namen ab (manuell
-    /// korrigiert) → als ``Preispunkt/alternativerName`` übernehmen, damit die
-    /// Preishistorie den vom Nutzer bestätigten Namen statt des rohen Bon-Texts
-    /// anzeigt (siehe ``Preispunkt/anzeigeName``).
-    private func leiteAlternativenNamenAb(eingegeben: String, erkannt: String) -> String? {
-        guard !erkannt.isEmpty, eingegeben.localizedCaseInsensitiveCompare(erkannt) != .orderedSame else { return nil }
-        return eingegeben
-    }
-
-    private func passtZu(name: String, eintrag: KaufEintrag) -> Bool {
-        let artikelName = eintrag.artikelNameSicher
-        guard !artikelName.isEmpty else { return false }
-        return artikelName.localizedCaseInsensitiveContains(name) || name.localizedCaseInsensitiveContains(artikelName)
     }
 
     /// Entfernt `position` sofort aus der Prüf-Ansicht und merkt sich ihren
@@ -566,7 +448,7 @@ struct BelegScanView: View {
 /// leer. `zugeordneterArtikel` ist bereits beim Einlesen über
 /// ``ArtikelZuordnungsService/textBasierteZuordnung(erkannterName:alleArtikel:geschaeft:bekannteProduktnamen:)``
 /// ermittelt (siehe ``BelegScanView/verarbeite(bild:)``).
-private struct BearbeitbarePosition: Identifiable {
+struct BearbeitbarePosition: Identifiable {
     let id = UUID()
     let erkannterName: String
     var artikelName: String
