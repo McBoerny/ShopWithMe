@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.17 (Build 359) — Artikelauswahl: ganze Zeile tappbar + Wischgesten (#169, #170)
+
+- **#169:** In „Artikel hinzufügen" ist jetzt die ganze Zeile (nicht mehr nur der
+  Artikelname) zum Auswählen/Abwählen tappbar — Ausnahme bleibt ein gezielter Tap
+  auf die Mengenangabe (öffnet weiterhin das Mengen-Sheet) und der Chevron-Button
+  zum Aufklappen der Produktliste. Bereits gewählte Artikel/Produkte lassen sich in
+  dieser Liste zusätzlich per Wischgeste in der Menge anpassen (nach rechts
+  verringern, nach links erhöhen) — analog zur bestehenden Geste in der
+  Einkaufsliste selbst.
+- **#170:** In der Einkaufsliste löst ein vollständiger Wisch bei bereits
+  abgehakten Artikeln jetzt automatisch „Menge erhöhen" statt gar nichts aus —
+  vorher musste man immer erst stoppen und explizit einen der beiden Buttons
+  (Menge erhöhen/Dauerhaft entfernen) antippen. Ein gestoppter, unvollständiger
+  Wisch zeigt weiterhin beide Buttons zur freien Wahl.
+
 ## v0.17 (Build 358) — Code-Review-Nachfassung: Bereich-A-Sicherheitsnetz (#165–#168)
 
 Ein automatisierter Code-Review (`/code-review high`) der v0.17-Sicherheitsnetz-

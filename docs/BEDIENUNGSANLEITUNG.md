@@ -200,10 +200,13 @@ optimiert ist oder noch lernt; bei einem erkannten Ladenumbau erscheint nach
 dem Abschließen ein kurzer Hinweis, dass sich die App automatisch anpasst.
 
 - **Wischen nach rechts** verringert die Menge, **Wischen nach links** erhöht sie
-  (nie unter die Schrittweite) — bei noch offenen Artikeln löst ein vollständiger
-  Wisch die Aktion direkt aus, ganz ohne zusätzlichen Bestätigungs-Tap. **Tap auf
-  die Mengenangabe** öffnet ein Sheet für eine exakte Menge, die Mengeneinheit und
-  eine temporäre Notiz.
+  (nie unter die Schrittweite) — ein vollständiger Wisch löst die Aktion direkt aus,
+  ganz ohne zusätzlichen Bestätigungs-Tap. Das gilt auch bei bereits abgehakten
+  Artikeln, wo dieselbe Wischrichtung zusätzlich „Dauerhaft entfernen" anbietet: ein
+  voller Wisch erhöht dort immer zuerst die Menge, „Dauerhaft entfernen" bleibt nur
+  erreichbar, wenn man den Wisch vorher stoppt und den Button gezielt antippt. **Tap
+  auf die Mengenangabe** öffnet ein Sheet für eine exakte Menge, die Mengeneinheit
+  und eine temporäre Notiz.
 - **Abhaken** geschieht über die eigenständige Checkbox am Zeilenende.
 - Standardmäßig zeigt die App nur im gewählten Geschäft verfügbare Artikel. Die
   Schnellauswahl (Symbol neben „Artikel hinzufügen") bündelt zwei Anzeigeoptionen:
@@ -241,10 +244,13 @@ dem Abschließen ein kurzer Hinweis, dass sich die App automatisch anpasst.
   findet „Äpfel" auch den Artikel „Apfel") und findet Artikel auch über
   Produktnamen (z.B. findet „Sebamed" den Artikel „Shampoo", der dann
   automatisch mit aufgeklappter Produktliste erscheint). Bereits auf der
-  Liste stehende Artikel sind mit dem Abhak-Symbol markiert — erneutes
-  Antippen nimmt sie wieder von der Liste. Links vom Abhak-Symbol steht
-  die aktuelle Menge; Antippen öffnet dasselbe Blatt zum Anpassen von
-  Menge, Einheit und Notiz wie beim Einkaufen selbst.
+  Liste stehende Artikel sind mit dem Abhak-Symbol markiert — ein Tap auf die
+  ganze Zeile nimmt sie wieder von der Liste (bzw. fügt sie hinzu). Links vom
+  Abhak-Symbol steht die aktuelle Menge; nur ein Tap gezielt darauf öffnet
+  dasselbe Blatt zum Anpassen von Menge, Einheit und Notiz wie beim Einkaufen
+  selbst. Bei bereits gewählten Artikeln/Produkten lässt sich die Menge
+  zusätzlich direkt in dieser Liste per Wischgeste ändern (wie beim Einkaufen
+  selbst: nach rechts verringern, nach links erhöhen).
 - **Darstellung anpassen:** Einstellungen → „Listendarstellung" — wählt zwischen
   klassischer Gruppenliste, Chips (groß oder klein) und Kacheln (2 oder 3 Spalten).
   Je Modus konfigurierbar: Akkordeon-Abteilungen, Fortschrittsbalken und

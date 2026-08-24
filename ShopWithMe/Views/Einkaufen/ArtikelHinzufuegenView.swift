@@ -173,39 +173,34 @@ struct ArtikelHinzufuegenView: View {
                                 return namen.count == 1 ? namen[0] : "\(namen[0]) +\(namen.count - 1)"
                             }()
 
-                            // Hauptzeile: Toggle-Button füllt verfügbare Breite, rechts
-                            // davon optionale Mengenanzeige (nur wenn auf Liste und keine
-                            // benannten Produkte), Haken und ggf. Chevron (GitHub #124).
+                            // Hauptzeile: die ganze Zeile ist zum Auswählen/Abwählen
+                            // tappbar (GitHub #169, analog ``ArtikelAbhakZeile`` in
+                            // EinkaufenView.swift), mit Ausnahme der Mengenanzeige
+                            // (eigener, höherprioritärer Tap) und des Chevron-Buttons
+                            // (als Button ohnehin gegenüber der Ancestor-Geste
+                            // bevorzugt). Bei bereits auf der Liste stehenden Artikeln
+                            // ohne benannte Produkte lässt sich die Menge zusätzlich per
+                            // Wischgeste ändern.
+                            let hauptEintrag = bereitsAufListe && produkteDesArtikels.isEmpty
+                                ? einkaufsliste.eintrag(fuer: artikel)
+                                : nil
                             HStack(spacing: 0) {
-                                Button {
-                                    if bereitsAufListe {
-                                        entfernen(artikel)
-                                    } else {
-                                        hinzufuegen(artikel)
-                                    }
-                                    suchfeldFuerNaechsteEingabeZuruecksetzen()
-                                } label: {
-                                    ArtikelAuswahlZeile(
-                                        artikel: artikel,
-                                        gewaehltesProduktnamen: gewaehltesProduktnamen
-                                    )
-                                }
-                                .buttonStyle(.plain)
+                                ArtikelAuswahlZeile(
+                                    artikel: artikel,
+                                    gewaehltesProduktnamen: gewaehltesProduktnamen
+                                )
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .contentShape(Rectangle())
 
-                                if bereitsAufListe && produkteDesArtikels.isEmpty,
-                                   let eintrag = einkaufsliste.eintrag(fuer: artikel) {
-                                    Button {
-                                        zuVerfeinernderEintrag = eintrag
-                                        zeigeVerfeinerungsSheet = true
-                                    } label: {
-                                        Text(mengeText(fuer: eintrag))
-                                            .font(.subheadline)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .padding(.trailing, 8)
+                                if let eintrag = hauptEintrag {
+                                    Text(mengeText(fuer: eintrag))
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                        .padding(.trailing, 8)
+                                        .contentShape(Rectangle())
+                                        .highPriorityGesture(TapGesture().onEnded {
+                                            zuVerfeinernderEintrag = eintrag
+                                            zeigeVerfeinerungsSheet = true
+                                        })
                                 }
 
                                 Image(systemName: bereitsAufListe ? "checkmark.circle.fill" : "circle")
@@ -225,67 +220,130 @@ struct ArtikelHinzufuegenView: View {
                                     .accessibilityLabel(aufgeklappt ? "Produkte zuklappen" : "Produkt wählen")
                                 }
                             }
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                if bereitsAufListe {
+                                    entfernen(artikel)
+                                } else {
+                                    hinzufuegen(artikel)
+                                }
+                                suchfeldFuerNaechsteEingabeZuruecksetzen()
+                            }
+                            .swipeActions(edge: .leading) {
+                                if let eintrag = hauptEintrag {
+                                    Button {
+                                        mengeVerringern(eintrag)
+                                    } label: {
+                                        Label("Menge verringern", systemImage: "minus")
+                                    }
+                                    .tint(.orange)
+                                }
+                            }
+                            .swipeActions(edge: .trailing) {
+                                if let eintrag = hauptEintrag {
+                                    Button {
+                                        mengeErhoehen(eintrag)
+                                    } label: {
+                                        Label("Menge erhöhen", systemImage: "plus")
+                                    }
+                                    .tint(.blue)
+                                }
+                            }
 
                             if aufgeklappt && !produkteDesArtikels.isEmpty {
                                 let nilEintrag = einkaufsliste.eintrag(fuer: artikel, produkt: nil)
                                 let nilGewaehlt = nilEintrag != nil
                                 HStack(spacing: 0) {
-                                    Button {
-                                        produktWaehlen(nil, fuer: artikel)
-                                        suchfeldFuerNaechsteEingabeZuruecksetzen()
-                                    } label: {
-                                        ProduktSubZeile(name: "Kein bestimmtes Produkt", istGewaehlt: nilGewaehlt)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .contentShape(Rectangle())
+                                    ProduktSubZeile(name: "Kein bestimmtes Produkt", istGewaehlt: nilGewaehlt)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
 
                                     if nilGewaehlt, let eintrag = nilEintrag {
-                                        Button {
-                                            zuVerfeinernderEintrag = eintrag
-                                            zeigeVerfeinerungsSheet = true
-                                        } label: {
-                                            Text(mengeText(fuer: eintrag))
-                                                .font(.subheadline)
-                                                .foregroundStyle(.secondary)
-                                        }
-                                        .buttonStyle(.plain)
-                                        .padding(.trailing, 8)
+                                        Text(mengeText(fuer: eintrag))
+                                            .font(.subheadline)
+                                            .foregroundStyle(.secondary)
+                                            .padding(.trailing, 8)
+                                            .contentShape(Rectangle())
+                                            .highPriorityGesture(TapGesture().onEnded {
+                                                zuVerfeinernderEintrag = eintrag
+                                                zeigeVerfeinerungsSheet = true
+                                            })
                                     }
 
                                     Image(systemName: nilGewaehlt ? "checkmark.circle.fill" : "circle")
                                         .foregroundStyle(nilGewaehlt ? Color.accentColor : .secondary)
+                                }
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    produktWaehlen(nil, fuer: artikel)
+                                    suchfeldFuerNaechsteEingabeZuruecksetzen()
+                                }
+                                .swipeActions(edge: .leading) {
+                                    if nilGewaehlt, let eintrag = nilEintrag {
+                                        Button {
+                                            mengeVerringern(eintrag)
+                                        } label: {
+                                            Label("Menge verringern", systemImage: "minus")
+                                        }
+                                        .tint(.orange)
+                                    }
+                                }
+                                .swipeActions(edge: .trailing) {
+                                    if nilGewaehlt, let eintrag = nilEintrag {
+                                        Button {
+                                            mengeErhoehen(eintrag)
+                                        } label: {
+                                            Label("Menge erhöhen", systemImage: "plus")
+                                        }
+                                        .tint(.blue)
+                                    }
                                 }
 
                                 ForEach(produkteDesArtikels) { produkt in
                                     let istGewaehlt = einkaufsliste.enthaelt(artikel, produkt: produkt)
                                     let produktEintrag = einkaufsliste.eintrag(fuer: artikel, produkt: produkt)
                                     HStack(spacing: 0) {
-                                        Button {
-                                            produktWaehlen(produkt, fuer: artikel)
-                                            suchfeldFuerNaechsteEingabeZuruecksetzen()
-                                        } label: {
-                                            ProduktSubZeile(name: produkt.name, istGewaehlt: istGewaehlt)
-                                        }
-                                        .buttonStyle(.plain)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .contentShape(Rectangle())
+                                        ProduktSubZeile(name: produkt.name, istGewaehlt: istGewaehlt)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
 
                                         if istGewaehlt, let eintrag = produktEintrag {
-                                            Button {
-                                                zuVerfeinernderEintrag = eintrag
-                                                zeigeVerfeinerungsSheet = true
-                                            } label: {
-                                                Text(mengeText(fuer: eintrag))
-                                                    .font(.subheadline)
-                                                    .foregroundStyle(.secondary)
-                                            }
-                                            .buttonStyle(.plain)
-                                            .padding(.trailing, 8)
+                                            Text(mengeText(fuer: eintrag))
+                                                .font(.subheadline)
+                                                .foregroundStyle(.secondary)
+                                                .padding(.trailing, 8)
+                                                .contentShape(Rectangle())
+                                                .highPriorityGesture(TapGesture().onEnded {
+                                                    zuVerfeinernderEintrag = eintrag
+                                                    zeigeVerfeinerungsSheet = true
+                                                })
                                         }
 
                                         Image(systemName: istGewaehlt ? "checkmark.circle.fill" : "circle")
                                             .foregroundStyle(istGewaehlt ? Color.accentColor : .secondary)
+                                    }
+                                    .contentShape(Rectangle())
+                                    .onTapGesture {
+                                        produktWaehlen(produkt, fuer: artikel)
+                                        suchfeldFuerNaechsteEingabeZuruecksetzen()
+                                    }
+                                    .swipeActions(edge: .leading) {
+                                        if istGewaehlt, let eintrag = produktEintrag {
+                                            Button {
+                                                mengeVerringern(eintrag)
+                                            } label: {
+                                                Label("Menge verringern", systemImage: "minus")
+                                            }
+                                            .tint(.orange)
+                                        }
+                                    }
+                                    .swipeActions(edge: .trailing) {
+                                        if istGewaehlt, let eintrag = produktEintrag {
+                                            Button {
+                                                mengeErhoehen(eintrag)
+                                            } label: {
+                                                Label("Menge erhöhen", systemImage: "plus")
+                                            }
+                                            .tint(.blue)
+                                        }
                                     }
                                 }
                             }
@@ -403,6 +461,28 @@ struct ArtikelHinzufuegenView: View {
                 } else {
                     einkaufslisteFrisch.artikelHinzufuegen(artikelFrisch, produkt: produktFrisch, context: modelContext)
                 }
+            }
+        }
+    }
+
+    /// Wischgeste zum Erhöhen der Menge eines bereits gewählten Eintrags
+    /// (GitHub #169, analog ``EinkaufenView/mengeErhoehen(_:)``).
+    private func mengeErhoehen(_ eintrag: EinkaufslistenEintrag) {
+        let eintragReferenz = ModelReference(eintrag)
+        Task {
+            await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                eintragReferenz.resolved(in: modelContext)?.mengeErhoehen()
+            }
+        }
+    }
+
+    /// Wischgeste zum Verringern der Menge eines bereits gewählten Eintrags
+    /// (GitHub #169, analog ``EinkaufenView/mengeVerringern(_:)``).
+    private func mengeVerringern(_ eintrag: EinkaufslistenEintrag) {
+        let eintragReferenz = ModelReference(eintrag)
+        Task {
+            await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                eintragReferenz.resolved(in: modelContext)?.mengeVerringern()
             }
         }
     }

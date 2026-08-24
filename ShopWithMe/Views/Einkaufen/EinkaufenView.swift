@@ -1686,12 +1686,13 @@ struct EinkaufslistenSektionHeader: View {
 /// - Swipe nach rechts (leading): verringert die Menge um ``Artikel/mengenSchritt``.
 ///
 /// Beide Wischgesten lösen bei vollständigem Swipe die jeweilige Aktion direkt aus
-/// (kein zusätzliches Bestätigen nötig, siehe GitHub #11) — **außer** bei bereits
-/// abgehakten Artikeln: dort bietet die Trailing-Swipe-Aktion zusätzlich an, den
+/// (kein zusätzliches Bestätigen nötig, siehe GitHub #11) — auch bei bereits
+/// abgehakten Artikeln, wo die Trailing-Swipe-Aktion zusätzlich anbietet, den
 /// Artikel dauerhaft aus dieser Ansicht zu entfernen (``dauerhaftEntfernen``, `nil`
-/// bei noch offenen Artikeln), und ein voller Swipe löst dann bewusst **nicht**
-/// automatisch aus — sonst könnte ein schnelles Wischen versehentlich dauerhaft
-/// löschen statt nur die Menge zu erhöhen.
+/// bei noch offenen Artikeln): ein voller Swipe erhöht dort immer die Menge (erste
+/// deklarierte Aktion), „Dauerhaft entfernen" bleibt nur über einen gestoppten,
+/// unvollständigen Wisch erreichbar (GitHub #170) — so kann ein schnelles Wischen
+/// nicht mehr versehentlich dauerhaft löschen.
 struct ArtikelAbhakZeile: View {
     let artikel: Artikel
     /// Der Einkaufslisten-Eintrag für diesen Artikel+Produkt-Eintrag — `nil`, wenn bereits abgehakt.
@@ -1804,16 +1805,22 @@ struct ArtikelAbhakZeile: View {
             }
             .tint(.orange)
         }
-        .swipeActions(edge: .trailing, allowsFullSwipe: dauerhaftEntfernen == nil) {
+        .swipeActions(edge: .trailing) {
+            // `mengeErhoehen` steht bewusst ZUERST: SwiftUI löst einen
+            // vollständigen Wisch als die zuerst deklarierte Aktion auf, nicht
+            // die zuletzt deklarierte — bei umgekehrter Reihenfolge (Löschen
+            // zuerst) würde ein voller Wisch versehentlich dauerhaft löschen
+            // statt nur die Menge zu erhöhen (GitHub #170). Ein gestoppter,
+            // unvollständiger Wisch zeigt weiterhin beide Buttons zur freien Wahl.
+            Button(action: mengeErhoehen) {
+                Label("Menge erhöhen", systemImage: "plus")
+            }
+            .tint(.blue)
             if let dauerhaftEntfernen {
                 Button(role: .destructive, action: dauerhaftEntfernen) {
                     Label(istAbgehakt ? "Dauerhaft entfernen" : "Löschen", systemImage: "trash")
                 }
             }
-            Button(action: mengeErhoehen) {
-                Label("Menge erhöhen", systemImage: "plus")
-            }
-            .tint(.blue)
         }
         .sheet(isPresented: $zeigeMengenSheet) {
             if let eintrag {
