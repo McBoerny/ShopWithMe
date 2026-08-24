@@ -66,77 +66,47 @@ struct ArtikelListView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            suchfeld
-            liste
-        }
-        .navigationTitle("Artikel")
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Picker("Sortierung", selection: $sortierung) {
-                    ForEach(ArtikelSortierung.allCases) { modus in
-                        Text(modus.anzeigename).tag(modus)
-                    }
-                }
-                .pickerStyle(.menu)
-            }
-            if AISuggestionService.istVerfuegbar {
+        liste
+            .navigationTitle("Artikel")
+            .toolbar {
                 ToolbarItem(placement: .secondaryAction) {
+                    Picker("Sortierung", selection: $sortierung) {
+                        ForEach(ArtikelSortierung.allCases) { modus in
+                            Text(modus.anzeigename).tag(modus)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
+                if AISuggestionService.istVerfuegbar {
+                    ToolbarItem(placement: .secondaryAction) {
+                        Button {
+                            zeigeDuplikatVorschlaege = true
+                        } label: {
+                            Label("Dubletten finden", systemImage: "sparkles")
+                        }
+                    }
+                }
+                ToolbarItem(placement: .primaryAction) {
                     Button {
-                        zeigeDuplikatVorschlaege = true
+                        neuerArtikelEntwurf = Artikel(
+                            name: "",
+                            symbolName: SymbolPalette.alle[0],
+                            farbeHex: Color.artikelPalette[0]
+                        )
                     } label: {
-                        Label("Dubletten finden", systemImage: "sparkles")
+                        Label("Artikel hinzufügen", systemImage: "plus")
                     }
                 }
             }
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    neuerArtikelEntwurf = Artikel(
-                        name: "",
-                        symbolName: SymbolPalette.alle[0],
-                        farbeHex: Color.artikelPalette[0]
-                    )
-                } label: {
-                    Label("Artikel hinzufügen", systemImage: "plus")
-                }
+            .sheet(item: $neuerArtikelEntwurf) { entwurf in
+                ArtikelEditView(artikel: entwurf, istNeu: true)
             }
-        }
-        .sheet(item: $neuerArtikelEntwurf) { entwurf in
-            ArtikelEditView(artikel: entwurf, istNeu: true)
-        }
-        .sheet(item: $bearbeiteterArtikel) { eintrag in
-            ArtikelEditView(artikel: eintrag, istNeu: false)
-        }
-        .sheet(isPresented: $zeigeDuplikatVorschlaege) {
-            ArtikelDuplikatVorschlaegeView()
-        }
-    }
-
-    /// Dauerhaft sichtbares Suchfeld über der Liste — bewusst kein
-    /// `.searchable(...)` (anders als ``ProduktVerwaltungView``/
-    /// ``AbteilungenVerwaltungView``): der Anwender möchte hier direkt beim
-    /// Öffnen suchen können, ohne erst per Pull-to-Search den Titel
-    /// wegzuscrollen.
-    private var suchfeld: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-            TextField("Artikel suchen", text: $suchtext)
-                .textFieldStyle(.plain)
-            if !suchtext.isEmpty {
-                Button {
-                    suchtext = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
+            .sheet(item: $bearbeiteterArtikel) { eintrag in
+                ArtikelEditView(artikel: eintrag, istNeu: false)
             }
-        }
-        .padding(8)
-        .background(.fill.tertiary, in: RoundedRectangle(cornerRadius: 10))
-        .padding(.horizontal)
-        .padding(.top, 8)
+            .sheet(isPresented: $zeigeDuplikatVorschlaege) {
+                ArtikelDuplikatVorschlaegeView()
+            }
     }
 
     private var liste: some View {
@@ -163,6 +133,7 @@ struct ArtikelListView: View {
                 }
             }
         }
+        .searchable(text: $suchtext, prompt: "Artikel suchen")
         .overlay {
             if alphabetischSortiert.isEmpty {
                 ContentUnavailableView(

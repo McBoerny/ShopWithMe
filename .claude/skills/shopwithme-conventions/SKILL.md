@@ -117,6 +117,28 @@ Zielerwartungen des Scanners. Für die KI gelten folgende Regeln:
     KI-korrekte UTF-8-Ausgaben gegen ASCII-Fixtures matchen zu können
   - OCR-Parameter tunen (z.B. `minimumTextHeight`, Sprache)
 
+## Suchleisten-Konvention (GitHub #144)
+
+Listenansichten verwenden für die Suche einheitlich `.searchable(text:prompt:)`
+direkt auf der `List` — Referenzmuster: `ProduktVerwaltungView.swift`. Ein
+eigenes, dauerhaft sichtbares Suchfeld statt `.searchable(...)` ist nur zulässig,
+wenn die Abweichung im Code explizit begründet dokumentiert ist — Referenz:
+`ArtikelHinzufuegenView.swift` (`.searchable(..., isPresented:, placement:
+.navigationBarDrawer(displayMode: .always), ...)`, sofort sichtbar statt per
+Pull-to-Search, weil beim Artikel-hinzufügen-Sheet sofortige Sucheingabe erwartet
+wird).
+
+## Icon-Farben-Konvention (GitHub #142)
+
+Content-Icons neben Text (Symbole, die einen Sachverhalt illustrieren, keine
+Auswahl-/Statusindikatoren) werden einheitlich in der Textfarbe dargestellt
+(`.foregroundStyle(.primary)` bzw. implizit über umgebende Textfarbe), nicht in
+`Color.accentColor`. Ausnahme: eine fachlich vorgegebene explizite Farbe, z.B.
+`Color(hex: abteilung.standardFarbeHex)` bei Abteilungssymbolen, oder
+Statusfarben mit eigener Bedeutung (grün=erledigt, orange=Warnung). Reine
+Auswahl-Checkmarks (Standard-iOS-Muster für "ausgewählt") und
+Kartenoverlays fallen nicht unter diese Regel.
+
 ## Doku-Konvention
 
 Neue, substanzielle Design-/Architekturentscheidungen bekommen eine eigene

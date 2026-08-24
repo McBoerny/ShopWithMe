@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.16 (Build 338) — Vier Design-Konventionen umgesetzt (GitHub #141/#142/#143/#144)
+
+- Einkaufslisten-Verwaltung: Zeilen ohne führendes Checklist-Icon (#141).
+- Artikelliste: Sortierung aus eigenem Toolbar-Picker ins "…"-Menü verschoben (#143).
+- Geschäfts-Vorschlags-Card: Location-Icon in Textfarbe statt Akzentblau (#142).
+- Artikelliste: eigenes Suchfeld durch `.searchable(...)` ersetzt, analog
+  `ProduktVerwaltungView` (#144).
+
+Zwei neue Konventionen im `shopwithme-conventions`-Skill verankert:
+Suchleisten-Konvention (`.searchable` als Standard, begründete Ausnahmen erlaubt)
+und Icon-Farben-Konvention (Content-Icons in Textfarbe, Ausnahme bei fachlich
+vorgegebener Farbe/Statusbedeutung).
+
 ## v0.16 (Build 337) — `ArtikelKategorie` → `Abteilung`, vollständige Modell-Umbenennung (GitHub #88)
 
 Der `@Model`-Typ `ArtikelKategorie` sowie alle davon persistierten Relationship-/

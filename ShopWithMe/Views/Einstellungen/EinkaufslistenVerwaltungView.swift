@@ -77,11 +77,7 @@ private struct EinkaufslisteZeile: View {
     @Bindable var liste: Einkaufsliste
 
     var body: some View {
-        Label {
-            TextField("Name", text: $liste.name)
-        } icon: {
-            Image(systemName: "checklist")
-        }
+        TextField("Name", text: $liste.name)
     }
 }
 

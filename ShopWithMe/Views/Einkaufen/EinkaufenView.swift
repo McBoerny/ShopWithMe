@@ -704,7 +704,7 @@ private struct GeschaeftVorschlagBanner: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: "location.fill")
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(.primary)
             VStack(alignment: .leading, spacing: 2) {
                 Text("In der Nähe: \(vorschlag.name)")
                     .font(.subheadline.bold())
