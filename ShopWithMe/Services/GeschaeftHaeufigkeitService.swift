@@ -16,6 +16,16 @@ enum GeschaeftHaeufigkeitService {
     static let standardAnzahlFavoriten = 5
     static let standardZeitfensterTage = 30
 
+    /// Obergrenze des in den Einstellungen wählbaren ``zeitfensterTage``
+    /// (`GeschaeftListView`s Stepper, `in: 1...maximalesZeitfensterTage`) —
+    /// zugleich die feste Fenstergrenze für die `@Query`-Predicates in
+    /// `EinkaufenView`/`GeschaeftListView`, die ``favoriten(aus:anzahl:zeitfensterTage:jetzt:)``
+    /// mit Rohdaten versorgen (Performance-Fund #157): ein `#Predicate`
+    /// kann nicht live auf den aktuell eingestellten Wert reagieren, eine
+    /// feste Obergrenze bleibt aber für JEDEN wählbaren Wert korrekt (nie zu
+    /// eng), statt eine unbeschränkt wachsende Tabelle zu laden.
+    static let maximalesZeitfensterTage = 365
+
     /// Wie viele Geschäfte ``favoriten(aus:anzahl:zeitfensterTage:jetzt:)`` maximal
     /// liefert. Standard: ``standardAnzahlFavoriten``.
     static var anzahlFavoriten: Int {

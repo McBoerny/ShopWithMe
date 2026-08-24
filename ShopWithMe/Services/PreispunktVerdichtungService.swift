@@ -133,8 +133,13 @@ enum PreispunktVerdichtungService {
     private static func verdichteTaeglich(context: ModelContext, jetzt: Date, grenze: Int) async -> Int {
         let kalender = Calendar.current
         let heute = kalender.startOfDay(for: jetzt)
-        let alle = ((try? context.fetch(FetchDescriptor<Preispunkt>())) ?? [])
-            .filter { kalender.startOfDay(for: $0.datum) < heute }
+        // `#Predicate` statt ungefiltertem Fetch + Swift-`.filter` (Performance-Fund
+        // #158) — `startOfDay(for: $0.datum) < heute` ist für ein bereits auf
+        // Tagesbeginn normiertes `heute` äquivalent zu `$0.datum < heute` (jeder
+        // Zeitpunkt eines früheren Kalendertags liegt immer vor der heutigen
+        // Mitternacht, jeder Zeitpunkt des heutigen oder eines späteren Tags nie),
+        // damit direkt als `#Predicate` ausdrückbar, analog `PreisHistorieBereinigungService.bereinigen`.
+        let alle = (try? context.fetch(FetchDescriptor<Preispunkt>(predicate: #Predicate { $0.datum < heute }))) ?? []
 
         let gruppiert = Dictionary(grouping: alle) { punkt in
             GruppenSchluessel(
@@ -161,7 +166,8 @@ enum PreispunktVerdichtungService {
     ) async -> Int {
         guard let stichtag = Calendar.current.date(byAdding: .day, value: -minAlterTage, to: jetzt) else { return 0 }
         let kalender = Calendar.current
-        let kandidaten = ((try? context.fetch(FetchDescriptor<Preispunkt>())) ?? []).filter { $0.datum < stichtag }
+        // `#Predicate` statt ungefiltertem Fetch + Swift-`.filter` (Performance-Fund #158).
+        let kandidaten = (try? context.fetch(FetchDescriptor<Preispunkt>(predicate: #Predicate { $0.datum < stichtag }))) ?? []
 
         let gruppiert = Dictionary(grouping: kandidaten) { punkt in
             GruppenSchluessel(

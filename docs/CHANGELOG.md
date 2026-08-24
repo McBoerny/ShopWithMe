@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.17 (Build 356) — Performance: Preisverdichtung, Favoriten-Query, Artikelliste (#156, #157, #158)
+
+Dritter Batch der Performance-Aufarbeitung (#152–#164), isolierte
+Einzelfixes in Services/Views:
+
+- **#158:** `PreispunktVerdichtungService.verdichteTaeglich`/
+  `verdichteNachKalenderEinheit` fetchen `Preispunkt` jetzt per `#Predicate`
+  datumsbeschränkt statt dreimal pro Verdichtungslauf ungefiltert, analog dem
+  bereits vorhandenen Muster in `PreisHistorieBereinigungService`.
+- **#157:** `EinkaufenView.abgeschlosseneEinkaufsvorgaenge`/
+  `GeschaeftListView.einkaufsvorgaenge` sind jetzt auf das größte in den
+  Einstellungen wählbare Favoriten-Zeitfenster beschränkt (neue
+  `GeschaeftHaeufigkeitService.maximalesZeitfensterTage`-Konstante, jetzt
+  auch von der Zeitfenster-Stepper-Grenze genutzt statt eines eigenen Magic
+  Numbers) — bleibt für jeden vom Nutzer eingestellten Wert korrekt, statt
+  unbegrenzt mit der gesamten Kaufhistorie zu wachsen.
+- **#156:** `ArtikelListView` löst die "Sonstige"-Abteilung jetzt einmal pro
+  Gruppierungslauf auf (neue `Artikel.effektiveAbteilungen(sonstigeAbteilung:)`-
+  Überladung) statt sie pro Artikel ohne eigene Abteilung erneut zu fetchen;
+  die alphabetische Sortierung/Filterung wird einmal pro Render berechnet und
+  wiederverwendet statt 2-3x pro Render neu ausgewertet zu werden.
+
 ## v0.17 (Build 355) — Performance: Sync-Merge-Batching (#155, #159, #160)
 
 Zweiter Batch der Performance-Aufarbeitung (#152–#164). Sync-Merge-Pfade, die

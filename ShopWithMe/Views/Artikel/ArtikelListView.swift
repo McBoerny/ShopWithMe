@@ -42,7 +42,13 @@ struct ArtikelListView: View {
 
     /// ``artikel``, alphabetisch sortiert und ggf. nach ``suchtext`` gefiltert
     /// — Umlaute einsortiert bei ihrem Basisbuchstaben (GitHub #46).
-    private var alphabetischSortiert: [Artikel] {
+    ///
+    /// Als Funktion statt als computed property, damit `liste` sie einmal pro
+    /// Render aufruft und das Ergebnis wiederverwendet, statt sie (2-3x pro
+    /// Render: Empty-State-Check, Listendarstellung, ggf. erneut via
+    /// ``abteilungGruppen(fuer:)`` im Abteilungs-Modus) mehrfach neu zu
+    /// berechnen (Performance-Fund #156).
+    private func alphabetischSortiert() -> [Artikel] {
         let sortiert = artikel.sorted { $0.name.vergleicheAlphabetisch(mit: $1.name) == .orderedAscending }
         guard !getrimmterSuchtext.isEmpty else { return sortiert }
         return sortiert.filter { $0.name.localizedCaseInsensitiveContains(getrimmterSuchtext) }
@@ -52,10 +58,14 @@ struct ArtikelListView: View {
         suchtext.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var abteilungGruppen: [AbteilungGruppe] {
+    private func abteilungGruppen(fuer alphabetischSortiert: [Artikel]) -> [AbteilungGruppe] {
         var nachAbteilung: [PersistentIdentifier: AbteilungGruppe] = [:]
+        // Einmal aufgelöst statt pro Artikel ohne eigene Abteilung erneut
+        // gefetcht (Performance-Fund #156) — siehe
+        // ``Artikel/effektiveAbteilungen(sonstigeAbteilung:)``.
+        let sonstige = Abteilung.sonstige(context: modelContext)
         for eintrag in alphabetischSortiert {
-            let abteilung = eintrag.effektiveAbteilungen(context: modelContext)[0]
+            let abteilung = eintrag.effektiveAbteilungen(sonstigeAbteilung: sonstige)[0]
             nachAbteilung[abteilung.persistentModelID, default: AbteilungGruppe(abteilung: abteilung, artikel: [])].artikel.append(eintrag)
         }
         return nachAbteilung.values.sorted {
@@ -110,18 +120,19 @@ struct ArtikelListView: View {
     }
 
     private var liste: some View {
-        List {
+        let sortiert = alphabetischSortiert()
+        return List {
             switch sortierung {
             case .alphabetisch:
                 AlphabetischeListenSektion(
-                    alphabetischSortiert,
+                    sortiert,
                     name: \.name,
                     loeschen: { offsets, gruppe in artikelLoeschen(offsets.map { gruppe[$0] }) }
                 ) { eintrag in
                     artikelZeile(eintrag)
                 }
             case .abteilung:
-                ForEach(abteilungGruppen) { gruppe in
+                ForEach(abteilungGruppen(fuer: sortiert)) { gruppe in
                     Section(gruppe.abteilung.name) {
                         ForEach(gruppe.artikel) { eintrag in
                             artikelZeile(eintrag)
@@ -135,7 +146,7 @@ struct ArtikelListView: View {
         }
         .searchable(text: $suchtext, prompt: "Artikel suchen")
         .overlay {
-            if alphabetischSortiert.isEmpty {
+            if sortiert.isEmpty {
                 ContentUnavailableView(
                     artikel.isEmpty ? "Keine Artikel" : "Keine Treffer",
                     systemImage: "carrot.fill",

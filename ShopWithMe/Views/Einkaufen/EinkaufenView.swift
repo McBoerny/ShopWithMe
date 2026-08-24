@@ -24,12 +24,30 @@ struct EinkaufenView: View {
     @Query(sort: \Einkaufsliste.erstelltAm) private var einkaufslisten: [Einkaufsliste]
     @Query(filter: #Predicate<Einkaufsvorgang> { $0.endZeit == nil })
     private var offeneEinkaufsvorgaenge: [Einkaufsvorgang]
-    @Query(filter: #Predicate<Einkaufsvorgang> { $0.endZeit != nil })
-    private var abgeschlosseneEinkaufsvorgaenge: [Einkaufsvorgang]
+    // Zusätzlich auf `GeschaeftHaeufigkeitService.maximalesZeitfensterTage`
+    // beschränkt statt ungefiltert (Performance-Fund #157) — `favoritenGeschaefte`
+    // unten braucht über ``GeschaeftHaeufigkeitService/favoriten(aus:)`` nie mehr
+    // als das größte wählbare Zeitfenster. Der Stichtag wird in ``init()``
+    // gesetzt (statt hier direkt als `#Predicate`-Ausdruck), da `#Predicate`
+    // eine erfasste lokale Konstante braucht, keinen Zugriff auf einen
+    // statischen Member-Ausdruck.
+    @Query private var abgeschlosseneEinkaufsvorgaenge: [Einkaufsvorgang]
     @Query(sort: \IgnorierterGeschaeftsVorschlag.ignoriertAm, order: .reverse)
     private var ignorierteVorschlaege: [IgnorierterGeschaeftsVorschlag]
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
+
+    /// Setzt nur ``abgeschlosseneEinkaufsvorgaenge`` explizit — alle übrigen
+    /// gespeicherten Eigenschaften behalten ihre bereits an der Deklaration
+    /// angegebenen Defaults. Nötig, weil `#Predicate` eine tatsächlich
+    /// erfasste lokale Konstante braucht (``favoritenStichtag`` direkt als
+    /// Ausdruck im `@Query`-Attribut oben führt zu einem Compile-Fehler, da
+    /// der Macro-Expander einen statischen Member-Zugriff nicht als
+    /// Erfassung eines konkreten Werts erkennt).
+    init() {
+        let stichtag = Self.favoritenStichtag
+        _abgeschlosseneEinkaufsvorgaenge = Query(filter: #Predicate<Einkaufsvorgang> { $0.endZeit != nil && $0.startZeit >= stichtag })
+    }
 
     /// Ab dieser Dauer ohne Interaktion mit der Einkaufsliste (Abhaken, Mengen
     /// ändern, Entfernen, Abschließen) schließt ``inaktivitaetPruefen()`` den
@@ -38,6 +56,15 @@ struct EinkaufenView: View {
     /// unabhängig davon, ob die App dabei im Vorder- oder Hintergrund war. Ein
     /// Ladenbesuch ist naturgemäß zeitlich begrenzt (typischerweise 1–3h).
     private static let inaktivitaetsSchwelleMitGeschaeft: TimeInterval = 3 * 60 * 60
+
+    /// Stichtag für den `@Query`-Filter auf ``abgeschlosseneEinkaufsvorgaenge``
+    /// oben — siehe dort. `static var` statt `let`, damit der Wert bei jeder
+    /// Neuinitialisierung dieser View (und damit dieses `@Query`-Filters) neu
+    /// berechnet wird, nicht einmalig beim ersten Zugriff einfriert.
+    private static var favoritenStichtag: Date {
+        Calendar.current.date(byAdding: .day, value: -GeschaeftHaeufigkeitService.maximalesZeitfensterTage, to: Date())!
+    }
+
     /// Dieselbe Schwelle für den Fall OHNE gewähltes Geschäft (GitHub
     /// #71-Diskussion): ohne Ladenbezug wird oft über mehrere Tage verteilt
     /// nach Bedarf abgehakt, ohne dass der Einkauf je aktiv "abgeschlossen"

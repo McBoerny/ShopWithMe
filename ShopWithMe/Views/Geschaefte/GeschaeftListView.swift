@@ -21,6 +21,11 @@ import SwiftData
 /// konfigurierbar über den Stern-Button im Toolbar.
 struct GeschaeftListView: View {
     @Query private var geschaefte: [Geschaeft]
+    // Auf `GeschaeftHaeufigkeitService.maximalesZeitfensterTage` beschränkt statt
+    // ungefiltert (Performance-Fund #157) — `favoriten(aus:)` unten braucht ohnehin
+    // nie mehr als das größte wählbare Zeitfenster; die Grenze bleibt für jeden
+    // eingestellten Wert korrekt, siehe Doku dort. Stichtag wird in ``init()``
+    // gesetzt, siehe dortige Begründung (analog `EinkaufenView.init()`).
     @Query private var einkaufsvorgaenge: [Einkaufsvorgang]
     @Environment(\.modelContext) private var modelContext
 
@@ -28,6 +33,26 @@ struct GeschaeftListView: View {
     @State private var zeigeBelegScan = false
     @State private var zeigeFavoritenEinstellungen = false
     @State private var aufgeklappteMarken: Set<String> = []
+
+    /// Setzt nur ``einkaufsvorgaenge`` explizit — alle übrigen gespeicherten
+    /// Eigenschaften behalten ihre bereits an der Deklaration angegebenen
+    /// Defaults. Nötig, weil `#Predicate` eine tatsächlich erfasste lokale
+    /// Konstante braucht (``favoritenStichtag`` direkt als Ausdruck im
+    /// `@Query`-Attribut führt zu einem Compile-Fehler, da der Macro-Expander
+    /// einen statischen Member-Zugriff nicht als Erfassung eines konkreten
+    /// Werts erkennt).
+    init() {
+        let stichtag = Self.favoritenStichtag
+        _einkaufsvorgaenge = Query(filter: #Predicate<Einkaufsvorgang> { $0.startZeit >= stichtag })
+    }
+
+    /// Stichtag für den `@Query`-Filter auf ``einkaufsvorgaenge`` oben — siehe
+    /// dort für die Begründung. `static var` statt `let`, damit der Wert bei
+    /// jeder Neuinitialisierung dieser View (und damit dieses `@Query`-Filters)
+    /// neu berechnet wird, nicht einmalig beim ersten Zugriff einfriert.
+    private static var favoritenStichtag: Date {
+        Calendar.current.date(byAdding: .day, value: -GeschaeftHaeufigkeitService.maximalesZeitfensterTage, to: Date())!
+    }
 
     private var namenMitDuplikaten: Set<String> {
         Geschaeft.namenMitDuplikaten(unter: geschaefte)
@@ -216,7 +241,10 @@ private struct GeschaeftFavoritenEinstellungenSheet: View {
                     Text("Wie viele der meistgenutzten Geschäfte oben als Favoriten angezeigt werden.")
                 }
                 Section {
-                    Stepper("Zeitfenster: \(zeitfensterTage) Tage", value: $zeitfensterTage, in: 1...365, step: 5)
+                    Stepper(
+                        "Zeitfenster: \(zeitfensterTage) Tage", value: $zeitfensterTage,
+                        in: 1...GeschaeftHaeufigkeitService.maximalesZeitfensterTage, step: 5
+                    )
                 } footer: {
                     Text("Nur Einkäufe innerhalb dieses Zeitraums zählen für die Favoriten-Ermittlung.")
                 }

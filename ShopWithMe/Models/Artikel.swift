@@ -201,9 +201,19 @@ extension Artikel {
     /// automatisch "Sonstiges" (siehe ``Abteilung/sonstige(context:)``). Nie
     /// leer.
     func effektiveAbteilungen(context: ModelContext) -> [Abteilung] {
+        effektiveAbteilungen(sonstigeAbteilung: Abteilung.sonstige(context: context))
+    }
+
+    /// Wie ``effektiveAbteilungen(context:)``, nimmt die "Sonstiges"-Abteilung
+    /// aber bereits aufgelöst entgegen, statt sie bei Bedarf selbst zu
+    /// fetchen — für Aufrufer, die diese Funktion in einer Schleife über
+    /// mehrere Artikel aufrufen (z.B. `ArtikelListView.abteilungGruppen`) und
+    /// den `Abteilung.sonstige(context:)`-Fetch dafür einmal statt pro
+    /// Artikel ohne eigene Abteilung ausführen wollen (Performance-Fund #156).
+    func effektiveAbteilungen(sonstigeAbteilung: Abteilung) -> [Abteilung] {
         if !abteilungen.isEmpty { return abteilungen }
         if let abteilung { return [abteilung] }
-        return [Abteilung.sonstige(context: context)]
+        return [sonstigeAbteilung]
     }
 
     /// Beste Schätzung der Abteilung eines Artikels in `geschaeft`, wenn keine
