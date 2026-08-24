@@ -34,10 +34,31 @@ Long-Press = Sheet für exakte Menge + Notiz).
 | Swipe statt Tap-Kaskade für +/- | Swipe-Gesten sind für Mengenänderungen in Listen ein etabliertes iOS-Muster (vgl. Mail/Erinnerungen) und eindeutig (links/rechts statt „wie oft tippen"), ohne mit dem Tap auf die Mengenangabe oder der Checkbox-Aktion zum Abhaken zu kollidieren. |
 | `allowsFullSwipe: false` (trailing) | Trailing enthält jetzt zwei Aktionen (Menge erhöhen + destruktives Entfernen); ohne diese Einstellung würde eine der beiden Aktionen implizit zur „Vollständiger-Swipe"-Aktion, was bei einer destruktiven Aktion ein Risiko für versehentliches Auslösen wäre. |
 
+## Nachtrag (GitHub #137, 2026-08-24): ganze Zeile tappbar zum Abhaken
+
+Die ursprüngliche Entscheidung oben ("Checkbox bleibt eigenständiger Button")
+war bewusst so gewählt, um mit der damaligen Einfach-/Doppel-Tap-Kaskade für
+Mengenänderungen nicht zu kollidieren. Diese Kaskade existiert seit der
+Swipe-Umstellung (siehe oben) nicht mehr — die ursprüngliche Begründung ist
+damit überholt.
+
+`ArtikelAbhakZeile.zeilenInhalt` (`EinkaufenView.swift`) trägt jetzt zusätzlich
+einen zeilenweiten `.onTapGesture(perform: abhaken)`. Die Mengenangabe bleibt
+über eine explizit höherpriorisierte Geste (`.highPriorityGesture(TapGesture()...)`
+statt eines gleichrangigen `.onTapGesture`) ausgenommen — sie öffnet weiterhin
+`MengenNotizSheet`. Die Checkbox selbst bleibt zusätzlich als eigenständiger
+`Button` bestehen (führt dieselbe Aktion aus, kein Konflikt).
+
+**Allgemeine Designregel** (aus demselben Issue): hat ein Listenelement genau
+eine primäre Aktion, soll die gesamte Zeile dafür tappbar sein, nicht nur ein
+schmaler Teilbereich — Ausnahmen nur für Bereiche mit einer eigenen, anderen
+Funktion (wie hier die Mengenangabe). `ArtikelAbhakZeile` war die einzige
+verbleibende Ausnahme im Projekt; andere Listenelemente (z.B. `kachelLabel`/
+`chipFlow` in `EinkaufslisteDarstellungsView.swift`) sind bereits vollständig
+tappbar.
+
 ## Bekannte Grenzen
 
-- Die Checkbox zum Abhaken bleibt unverändert ein eigenständiger Button am
-  Zeilenende (kein Tap auf die restliche Zeile mehr nötig oder möglich).
 - Für Geschäfte ohne aktiven Sektions-Fortschritt gibt es aktuell keine
   Ersatzanzeige des Gesamtfortschritts (z.B. auf Ebene des gesamten
   Einkaufsvorgangs) — bei Bedarf wäre das ein separater, künftiger Punkt.

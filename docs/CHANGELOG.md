@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.16 (Build 336) — MilkForUs-Import: Produktabgleich, Direkteinstieg, Haken-Button; Einkaufsliste ganze Zeile abhakbar (GitHub #139, #138, #140, #137)
+
+- **#139 (Bug):** `MilkForUsImportService.uebernehmen` glich importierte Namen bisher
+  nur gegen `Artikel.name` ab — ein importierter, konkreter Produktname erzeugte
+  fälschlich einen doppelten, neuen generischen `Artikel` statt an das bestehende
+  `Produkt` anzudocken. Gleicht jetzt zusätzlich (O(1)-indiziert) gegen `Produktname`
+  ab und übergibt das gefundene `Produkt` an `Einkaufsliste.artikelHinzufuegen`.
+  Vorschau-Badges ("vorhanden"/"neu") berücksichtigen Produktnamen ebenfalls.
+- **#138:** MilkForUs-Import jetzt auch direkt aus einer geöffneten Einkaufsliste
+  heraus startbar (`EinkaufenView.EinkaufslisteView`), nicht mehr nur über die
+  Einkaufslisten-Verwaltung in den Einstellungen — Zielliste dabei fest auf die
+  gerade geöffnete Liste vorbelegt (`MilkForUsImportView.vorbelegteZielliste`).
+- **#140:** Der "Importieren"-Bestätigungsbutton zeigt jetzt ein Haken-Icon statt
+  Text (Buttons mit reiner Bestätigungswirkung).
+- **#137:** In der Einkaufsliste lässt sich jetzt die ganze Zeile (nicht mehr nur die
+  kleine Checkbox) zum Abhaken antippen — die Mengenangabe bleibt als einzige
+  Ausnahme über eine höherpriorisierte Geste ausgenommen.
+
+Volle Suite grün bis auf die vorbestehende, dokumentiert nicht-deterministische
+OCR-Fixture-Drift in `BelegScanIntegrationTests` (unabhängig von diesen Änderungen).
+
 ## v0.16 (Build 335) — EinkaufslistenAnzeigeService extrahiert (GitHub #110, schließt #107)
 
 Letzter Baustein von #107: `EinkaufenView.swift`s private `EinkaufslisteView`

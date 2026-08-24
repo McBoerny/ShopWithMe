@@ -13,11 +13,17 @@ struct MilkForUsImportView: View {
     /// wenn der Import über die Teilen-Funktion (``ShopWithMeShareExtension``) statt
     /// über den manuellen Datei-Picker angestoßen wurde.
     var initialText: String?
+    /// Bereits gewählte Zielliste, wenn der Import aus dem Kontext einer konkreten
+    /// ``Einkaufsliste`` heraus gestartet wurde (GitHub #138, z.B. direkt aus
+    /// ``EinkaufenView``) — überschreibt den sonst per ``Einkaufsliste/standard(context:)``
+    /// vorbelegten Default.
+    var vorbelegteZielliste: Einkaufsliste?
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \ArtikelKategorie.sortIndex) private var alleKategorien: [ArtikelKategorie]
     @Query(sort: \Artikel.name) private var alleArtikel: [Artikel]
+    @Query private var alleProduktnamen: [Produktname]
     @Query(sort: \Einkaufsliste.erstelltAm) private var alleListen: [Einkaufsliste]
 
     @State private var zeigeDateiPicker = false
@@ -44,7 +50,7 @@ struct MilkForUsImportView: View {
                     VorschauListe(
                         gruppen: Binding(get: { gruppen }, set: { self.gruppen = $0 }),
                         bestehendeKategorien: alleKategorien,
-                        bestehendeArtikelNamen: Set(alleArtikel.map { $0.name.lowercased() }),
+                        bestehendeArtikelNamen: Set(alleArtikel.map { $0.name.lowercased() } + alleProduktnamen.map { $0.name.lowercased() }),
                         alleListen: alleListen,
                         zielListe: $zielListe
                     )
@@ -63,8 +69,11 @@ struct MilkForUsImportView: View {
                 }
                 if gruppen != nil {
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("Importieren", action: uebernehmen)
-                            .disabled(!kannUebernehmen)
+                        Button(action: uebernehmen) {
+                            Label("Importieren", systemImage: "checkmark")
+                        }
+                        .labelStyle(.iconOnly)
+                        .disabled(!kannUebernehmen)
                     }
                 }
             }
@@ -78,8 +87,12 @@ struct MilkForUsImportView: View {
             }
         }
         .task {
-            await DatabaseLeaseService.performMicroLease(context: modelContext) {
-                zielListe = Einkaufsliste.standard(context: modelContext)
+            if let vorbelegteZielliste {
+                zielListe = vorbelegteZielliste
+            } else {
+                await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                    zielListe = Einkaufsliste.standard(context: modelContext)
+                }
             }
             if let initialText {
                 verarbeite(text: initialText)

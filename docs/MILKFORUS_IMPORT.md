@@ -1,10 +1,11 @@
 # MilkForUs-Textimport
 
 Importiert eine aus der Shopping-App "MilkForUs" exportierte Textdatei (Kategorien +
-Artikel) in den ShopWithMe-Bestand und auf eine gewählte `Einkaufsliste`. Zwei
+Artikel) in den ShopWithMe-Bestand und auf eine gewählte `Einkaufsliste`. Drei
 Einstiegspunkte führen zum selben Ablauf: manuelle Dateiauswahl in den Einstellungen,
-oder die iOS-Teilen-Funktion (z.B. direkt aus einem Chat heraus) über eine eigene
-Share Extension.
+direkt aus einer geöffneten Einkaufsliste heraus (GitHub #138, Zielliste dabei fest
+auf die gerade geöffnete Liste vorbelegt), oder die iOS-Teilen-Funktion (z.B. direkt
+aus einem Chat heraus) über eine eigene Share Extension.
 
 ## Beteiligte Dateien
 
@@ -14,9 +15,13 @@ Share Extension.
   KI-basierter Best-Match für den Kategorie-Abgleich (gleiches Muster wie der
   Artikel-Kategorie-Vorschlag).
 - `ShopWithMe/Views/Einstellungen/MilkForUsImportView.swift` — Datei-Picker, Vorschau/
-  Korrektur, Zielisten-Wahl, Übernahme.
+  Korrektur, Zielisten-Wahl (`vorbelegteZielliste`, sofern vom Aufrufer gesetzt),
+  Übernahme.
 - `ShopWithMe/Views/Einstellungen/EinkaufslistenVerwaltungView.swift` — Einstiegspunkt
-  („MilkForUs importieren“ in der Toolbar).
+  aus den Einstellungen („MilkForUs importieren“ in der Toolbar).
+- `ShopWithMe/Views/Einkaufen/EinkaufenView.swift` (`EinkaufslisteView`) —
+  Einstiegspunkt direkt aus der Einkaufsliste heraus, gleicher Toolbar-Eintrag,
+  Zielliste vorbelegt.
 - `ShopWithMe/Services/MilkForUsPendingImportStore.swift` — Übergabe des geteilten
   Texts von der Share Extension an die Haupt-App über eine App-Group-Containerdatei.
   Quelle für **beide** Targets (siehe `project.yml`).
@@ -67,16 +72,23 @@ den leeren Kategorienamen `""`.
 4. **Vorschau/Korrektur** (`MilkForUsImportView`, `VorschauListe`): eine Section pro
    Kategorie-Gruppe, Header mit Menü zum Umstellen der Zuordnung (bestehende
    Kategorie / neu anlegen / Sonstiges), Artikel-Zeilen mit „vorhanden“/„neu“-Badge
-   (Abgleich gegen `Artikel.name`, case-insensitive), Swipe-to-delete zum Ausschließen
-   einzelner Artikel. Picker zur Ziel-`Einkaufsliste` (Default:
-   `Einkaufsliste.standard(context:)`). Der „Importieren“-Button sitzt in der
-   Navigationsleiste oben rechts (`.confirmationAction`), nicht mehr am unteren
+   (Abgleich gegen `Artikel.name` UND `Produktname.name`, case-insensitive — seit
+   GitHub #139, siehe Schritt 5), Swipe-to-delete zum Ausschließen einzelner Artikel.
+   Picker zur Ziel-`Einkaufsliste` (Default: `Einkaufsliste.standard(context:)`, außer
+   `vorbelegteZielliste` ist gesetzt). Der Übernehmen-Button sitzt in der
+   Navigationsleiste oben rechts (`.confirmationAction`) als reines Haken-Icon (GitHub
+   #140 — Standard für Buttons mit reiner Bestätigungswirkung), nicht mehr am unteren
    Bildschirmrand.
 5. **Übernahme** (`MilkForUsImportService.uebernehmen(gruppen:in:context:fortschritt:)`):
-   legt neue Kategorien an (Default-Symbol/-Farbe wie `NeueKategorieSheet`), findet
-   oder erstellt je Artikelname einen `Artikel` (bestehende Artikel bleiben inkl.
-   ihrer Kategorie unangetastet), ruft `Einkaufsliste.artikelHinzufuegen(_:context:)`
-   auf. Gruppen ohne verbliebene Artikel (z.B. alle in der Vorschau entfernt) werden
+   legt neue Kategorien an (Default-Symbol/-Farbe wie `NeueKategorieSheet`), gleicht
+   je Artikelname zuerst exakt (case-insensitive) gegen bestehende `Artikel.name`,
+   dann gegen bestehende `Produktname.name` ab (GitHub #139 — ein importierter,
+   konkreter Produktname wie „Alete Kindermilch 3“ dockt so an das bestehende
+   `Produkt` und dessen generischen `Artikel` an, statt einen doppelten, neuen
+   generischen `Artikel` zu erzeugen), erstellt nur wenn beides erfolglos bleibt
+   einen neuen `Artikel` (bestehende Artikel/Produkte bleiben inkl. ihrer Kategorie
+   unangetastet), ruft `Einkaufsliste.artikelHinzufuegen(_:produkt:context:)` auf.
+   Gruppen ohne verbliebene Artikel (z.B. alle in der Vorschau entfernt) werden
    übersprungen, damit keine ungenutzten neuen Kategorien entstehen. Läuft in Chunks
    à 25 Artikeln, je einem eigenen kurzen `DatabaseLeaseService.performMicroLease`
    (siehe „Performance“ unten); `fortschritt` (optional) meldet nach jedem Chunk

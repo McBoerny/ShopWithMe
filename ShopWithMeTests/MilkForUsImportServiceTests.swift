@@ -12,6 +12,7 @@ struct MilkForUsImportServiceTests {
             Artikel.self, ArtikelKategorie.self, Geschaeft.self,
             Einkaufsvorgang.self, KaufEintrag.self,
             Einkaufsliste.self, EinkaufslistenEintrag.self, SyncEvent.self,
+            Produkt.self, Produktname.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
@@ -134,6 +135,40 @@ struct MilkForUsImportServiceTests {
         #expect(artikel.count == 1)
         #expect(artikel[0].kategorie === milchprodukte)
         #expect(liste.eintraege.count == 1)
+    }
+
+    /// Regressionstest für GitHub #139: ein importierter Name, der einem
+    /// konkreten ``Produktname`` entspricht (nicht dem generischen
+    /// ``Artikel/name``), darf keinen doppelten neuen ``Artikel`` erzeugen —
+    /// stattdessen wird der bestehende, generische Artikel des zugehörigen
+    /// ``Produkt``s verwendet und das Produkt mit übernommen.
+    @Test
+    func produktnameTrefferVerwendetBestehendenArtikelStattDuplikat() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let milchprodukte = ArtikelKategorie(name: "Milchprodukte & Eier", standardSymbol: "refrigerator.fill", standardFarbeHex: "#5AC8FA")
+        context.insert(milchprodukte)
+        let bestehenderArtikel = Artikel(name: "Kindermilch", symbolName: "cart.fill", farbeHex: "#FF3B30", kategorien: [milchprodukte])
+        context.insert(bestehenderArtikel)
+        let produkt = Produkt(name: "Alete Kindermilch 3", artikel: bestehenderArtikel)
+        context.insert(produkt)
+        let produktname = Produktname(name: "Alete Kindermilch 3", produkt: produkt, geschaeft: nil)
+        context.insert(produktname)
+        let liste = Einkaufsliste(name: "Test")
+        context.insert(liste)
+
+        let gruppe = MilkForUsKategorieGruppe(
+            kategorieName: "Milchprodukte",
+            zuordnung: .bestehend(milchprodukte),
+            artikelNamen: ["Alete Kindermilch 3"]
+        )
+        await MilkForUsImportService.uebernehmen(gruppen: [gruppe], in: liste, context: context)
+
+        let artikel = try context.fetch(FetchDescriptor<Artikel>())
+        #expect(artikel.count == 1)
+        #expect(artikel[0] === bestehenderArtikel)
+        #expect(liste.eintraege.count == 1)
+        #expect(liste.eintraege.first?.produkt === produkt)
     }
 
     @Test

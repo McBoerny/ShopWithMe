@@ -957,6 +957,10 @@ private struct EinkaufslisteView: View {
     @State private var zeigeBelegScanAngebot = false
     @State private var zeigeBelegScan = false
     @State private var zeigeArtikelHinzufuegen = false
+    /// MilkForUs-Import direkt aus der Einkaufsliste heraus (GitHub #138) —
+    /// gleiche Funktion wie in ``EinkaufslistenVerwaltungView``, aber ohne
+    /// Umweg über die Einstellungen; Zielliste ist immer ``einkaufsliste``.
+    @State private var zeigeMilkForUsImport = false
     /// Beleg-/Preisschild-Scan direkt für das aktuell gewählte ``geschaeft`` über den
     /// Toolbar-Button — unabhängig vom Abschluss-Angebot (``zeigeBelegScanAngebot``),
     /// das an den laufenden ``einkaufsvorgang`` gebunden ist.
@@ -1353,9 +1357,19 @@ private struct EinkaufslisteView: View {
                     Label("Artikel hinzufügen", systemImage: "plus")
                 }
             }
+            ToolbarItem(placement: .secondaryAction) {
+                Button {
+                    zeigeMilkForUsImport = true
+                } label: {
+                    Label("MilkForUs importieren", systemImage: "square.and.arrow.down.on.square")
+                }
+            }
         }
         .sheet(isPresented: $zeigeArtikelHinzufuegen) {
             ArtikelHinzufuegenView(einkaufsliste: einkaufsliste)
+        }
+        .sheet(isPresented: $zeigeMilkForUsImport) {
+            MilkForUsImportView(vorbelegteZielliste: einkaufsliste)
         }
         // GitHub #97: derselbe kurz aufblitzende Trigger-Picker wie in
         // ``SyncOrdnerSettingsView`` — siehe ``ICloudSyncTriggerPicker``.
@@ -1635,9 +1649,12 @@ struct EinkaufslistenSektionHeader: View {
 }
 
 /// Eine Zeile zum Erhöhen/Verringern der Menge eines Artikels beim Einkaufen — Abhaken
-/// geschieht über die eigenständige Checkbox am Zeilenende:
+/// geschieht per Tap auf die gesamte Zeile (GitHub #137) oder auf die Checkbox am
+/// Zeilenende, die zusätzlich als eigenständiger Button bestehen bleibt:
 /// - Tap auf die Mengenangabe (nur solange noch offen, ``eintrag`` gesetzt): öffnet
-///   ``MengenNotizSheet`` für eine exakte Menge + temporäre Notiz.
+///   ``MengenNotizSheet`` für eine exakte Menge + temporäre Notiz — als einzige
+///   Ausnahme vom zeilenweiten Abhak-Tap, über eine höherpriorisierte Geste
+///   verbindlich abgegrenzt.
 /// - Swipe nach links (trailing): erhöht die Menge um ``Artikel/mengenSchritt``.
 /// - Swipe nach rechts (leading): verringert die Menge um ``Artikel/mengenSchritt``.
 ///
@@ -1732,7 +1749,13 @@ struct ArtikelAbhakZeile: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .contentShape(Rectangle())
-                    .onTapGesture { if eintrag != nil { zeigeMengenSheet = true } }
+                    // `.highPriorityGesture` statt `.onTapGesture`, damit dieser Tap
+                    // gegenüber dem zeilenweiten Abhak-Tap (siehe unten,
+                    // ``.onTapGesture(perform: abhaken)`` auf der umschließenden
+                    // `HStack`) verbindlich gewinnt, statt sich auf die implizite
+                    // Bottom-up-Auflösung zweier gleichrangiger `onTapGesture`s zu
+                    // verlassen (GitHub #137).
+                    .highPriorityGesture(TapGesture().onEnded { if eintrag != nil { zeigeMengenSheet = true } })
                 Button(action: abhaken) {
                     Image(systemName: istAbgehakt ? "checkmark.circle.fill" : "circle")
                         .font(.title3)
@@ -1741,6 +1764,12 @@ struct ArtikelAbhakZeile: View {
                 .buttonStyle(.plain)
             }
             .padding(.leading, kategoriefarbe != nil ? 12 : 0)
+            .contentShape(Rectangle())
+            // Ganze Zeile zum Abhaken tappbar (GitHub #137, allgemeine
+            // Designregel), mit Ausnahme der Mengenangabe (eigener,
+            // höherprioritärer Tap oben) und der Checkbox selbst (als `Button`
+            // ohnehin gegenüber dieser Ancestor-Geste bevorzugt).
+            .onTapGesture(perform: abhaken)
         }
         .swipeActions(edge: .leading) {
             Button(action: mengeVerringern) {

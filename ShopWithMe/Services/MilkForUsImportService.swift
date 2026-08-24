@@ -229,12 +229,17 @@ enum MilkForUsImportService {
 
     /// Übernimmt die Gruppen (nach ggf. manueller Korrektur von ``zuordnung``/
     /// ``artikelNamen`` durch den Nutzer): legt neue Kategorien an (Default-Symbol/
-    /// -Farbe, siehe ``NeueAbteilungSheet``), findet oder erstellt je Artikelname
-    /// einen ``Artikel`` (bestehende Artikel bleiben inklusive ihrer Kategorie
-    /// unangetastet und werden nur auf ``einkaufsliste`` gesetzt) und ruft dafür
-    /// ``Einkaufsliste/artikelHinzufuegen(_:context:)`` auf. Gruppen ohne verbliebene
-    /// Artikelnamen (z.B. weil der Nutzer alle in der Vorschau entfernt hat) werden
-    /// übersprungen, damit keine ungenutzten neuen Kategorien entstehen.
+    /// -Farbe, siehe ``NeueAbteilungSheet``), gleicht je Artikelname zuerst gegen
+    /// bestehende ``Artikel``, dann gegen bestehende ``Produktname``n ab (GitHub
+    /// #139 — verhindert, dass ein importierter, konkreter Produktname wie „Alete
+    /// Kindermilch 3" fälschlich einen neuen, doppelten generischen ``Artikel``
+    /// erzeugt statt an das bestehende ``Produkt`` anzudocken), erstellt nur wenn
+    /// beides erfolglos bleibt einen neuen ``Artikel`` (bestehende Artikel/Produkte
+    /// bleiben inklusive ihrer Kategorie unangetastet und werden nur auf
+    /// ``einkaufsliste`` gesetzt) und ruft dafür
+    /// ``Einkaufsliste/artikelHinzufuegen(_:produkt:context:)`` auf. Gruppen ohne
+    /// verbliebene Artikelnamen (z.B. weil der Nutzer alle in der Vorschau entfernt
+    /// hat) werden übersprungen, damit keine ungenutzten neuen Kategorien entstehen.
     ///
     /// **Performance (Nutzerbericht 2026-08-24, sehr große MilkForUs-Listen):**
     /// vorher wurde für JEDEN importierten Artikelnamen der komplette bestehende
@@ -277,6 +282,17 @@ enum MilkForUsImportService {
             ((try? context.fetch(FetchDescriptor<Artikel>())) ?? []).map { ($0.name.lowercased(), $0) },
             uniquingKeysWith: { erster, _ in erster }
         )
+        // Produktname-Bestand (GitHub #139): eine importierte Zeile kann auch
+        // einen konkreten Produktnamen tragen (z.B. "Alete Kindermilch 3")
+        // statt eines generischen Artikelnamens ("Kindermilch") — ohne diesen
+        // Abgleich würde dafür fälschlich ein neuer, doppelter ``Artikel``
+        // angelegt statt das bestehende ``Produkt`` (und dessen generischen
+        // Artikel) wiederzuverwenden. Gleiche O(1)-Indizierung wie
+        // ``artikelNachName`` statt eines linearen Scans je Zeile.
+        let produktnameNachName: [String: Produktname] = Dictionary(
+            ((try? context.fetch(FetchDescriptor<Produktname>())) ?? []).map { ($0.name.lowercased(), $0) },
+            uniquingKeysWith: { erster, _ in erster }
+        )
         // Pro Gruppe (Schlüssel ``MilkForUsKategorieGruppe/id``) einmalig
         // aufgelöste Kategorie — verhindert, dass eine `.neuAnlegen`-Gruppe, deren
         // Artikel sich über mehrere Chunks verteilen, dieselbe neue Kategorie
@@ -317,7 +333,15 @@ enum MilkForUsImportService {
                     }
 
                     let schluessel = schritt.artikelName.lowercased()
-                    let artikel = artikelNachName[schluessel] ?? {
+                    let artikel: Artikel
+                    let produkt: Produkt?
+                    if let bestehenderArtikel = artikelNachName[schluessel] {
+                        artikel = bestehenderArtikel
+                        produkt = nil
+                    } else if let produktTreffer = produktnameNachName[schluessel], let zugehoerigerArtikel = produktTreffer.produkt?.artikel {
+                        artikel = zugehoerigerArtikel
+                        produkt = produktTreffer.produkt
+                    } else {
                         let neuer = Artikel(
                             name: schritt.artikelName,
                             symbolName: SymbolPalette.alle[0],
@@ -326,9 +350,10 @@ enum MilkForUsImportService {
                         )
                         context.insert(neuer)
                         artikelNachName[schluessel] = neuer
-                        return neuer
-                    }()
-                    einkaufslisteFrisch.artikelHinzufuegen(artikel, context: context)
+                        artikel = neuer
+                        produkt = nil
+                    }
+                    einkaufslisteFrisch.artikelHinzufuegen(artikel, produkt: produkt, context: context)
                 }
             }
             // Zielliste inzwischen gelöscht — wie im ursprünglichen Verhalten

@@ -316,17 +316,20 @@ Geschäfts-Detailansicht.
 
 ## MilkForUs-Textimport
 
-In der Einkaufslisten-Verwaltung (Einstellungen) importierst du über „MilkForUs
-importieren" eine aus der Shopping-App „MilkForUs" exportierte Textdatei — entweder
-per Datei-Auswahl, oder direkt über die Teilen-Funktion eines anderen Apps (z.B.
-eine per Chat empfangene Datei per „Teilen" → „ShopWithMe"). In der Vorschau siehst
-du je MilkForUs-Kategorie, ob eine bestehende Abteilung automatisch erkannt wurde
-(exakter Name oder KI-Vorschlag), oder ob eine neue angelegt würde — per Antippen
-lässt sich das auf eine andere bestehende Abteilung oder „Sonstiges" umstellen.
-Bereits vorhandene Artikel werden nur auf die gewählte Liste gesetzt, nie
-dupliziert; einzelne Artikel lassen sich vor dem Übernehmen per Wischgeste aus dem
-Import ausschließen. Bei sehr großen Listen zeigt sowohl der Kategorieabgleich als
-auch das abschließende Übernehmen einen Fortschrittsbalken mit Zähler.
+Über „MilkForUs importieren" importierst du eine aus der Shopping-App „MilkForUs"
+exportierte Textdatei — entweder per Datei-Auswahl, oder direkt über die
+Teilen-Funktion eines anderen Apps (z.B. eine per Chat empfangene Datei per „Teilen"
+→ „ShopWithMe"). Der Eintrag findet sich sowohl in der Einkaufslisten-Verwaltung
+(Einstellungen) als auch direkt in der Toolbar einer geöffneten Einkaufsliste — im
+zweiten Fall ist die Zielliste bereits auf die gerade geöffnete Liste vorbelegt. In
+der Vorschau siehst du je MilkForUs-Kategorie, ob eine bestehende Abteilung
+automatisch erkannt wurde (exakter Name oder KI-Vorschlag), oder ob eine neue
+angelegt würde — per Antippen lässt sich das auf eine andere bestehende Abteilung
+oder „Sonstiges" umstellen. Bereits vorhandene Artikel oder Produkte werden nur auf
+die gewählte Liste gesetzt, nie dupliziert; einzelne Artikel lassen sich vor dem
+Übernehmen per Wischgeste aus dem Import ausschließen. Bei sehr großen Listen zeigt
+sowohl der Kategorieabgleich als auch das abschließende Übernehmen einen
+Fortschrittsbalken mit Zähler.
 
 ## Datensynchronisation (gemeinsam einkaufen)
 
