@@ -134,7 +134,7 @@ struct GeschaeftListView: View {
                 Button {
                     neuesGeschaeftEntwurf = Geschaeft(
                         name: "",
-                        typen: [GeschaeftTyp.mitNamen("Lebensmittel", symbolName: "cart.fill", context: modelContext)]
+                        typen: [GeschaeftTyp.mitNamen("Lebensmittel", symbolName: "cart", context: modelContext)]
                     )
                 } label: {
                     Label("Geschäft hinzufügen", systemImage: "plus")
@@ -245,7 +245,7 @@ private struct GeschaeftMarkenZeile: View {
     var body: some View {
         HStack(spacing: 12) {
             GlassSymbolBadge(
-                symbolName: filialen.first?.fuehrenderTyp?.symbolName ?? "shippingbox.fill",
+                symbolName: filialen.first?.fuehrenderTyp?.symbolName ?? "shippingbox",
                 farbe: .accentColor
             )
             VStack(alignment: .leading, spacing: 2) {
@@ -268,7 +268,7 @@ private struct GeschaeftZeile: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            GlassSymbolBadge(symbolName: geschaeft.fuehrenderTyp?.symbolName ?? "shippingbox.fill", farbe: .accentColor)
+            GlassSymbolBadge(symbolName: geschaeft.fuehrenderTyp?.symbolName ?? "shippingbox", farbe: .accentColor)
             VStack(alignment: .leading, spacing: 2) {
                 Text(geschaeft.name.isEmpty ? "Unbenannt" : geschaeft.name)
                 Text(geschaeft.typen.map(\.name).joined(separator: ", "))

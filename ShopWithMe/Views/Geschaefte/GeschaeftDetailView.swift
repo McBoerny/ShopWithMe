@@ -55,7 +55,7 @@ struct GeschaeftDetailView: View {
                     zeigeStammdatenEdit = true
                 } label: {
                     HStack(spacing: 16) {
-                        GlassSymbolBadge(symbolName: geschaeft.fuehrenderTyp?.symbolName ?? "shippingbox.fill", farbe: .accentColor, groesse: 56)
+                        GlassSymbolBadge(symbolName: geschaeft.fuehrenderTyp?.symbolName ?? "shippingbox", farbe: .accentColor, groesse: 56)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(geschaeft.name)
                                 .font(.title3.bold())

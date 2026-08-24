@@ -267,6 +267,6 @@ struct GeschaeftStammdatenEditView: View {
 }
 
 #Preview {
-    GeschaeftStammdatenEditView(geschaeft: Geschaeft(name: "Rewe", typen: [GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")]), istNeu: true)
+    GeschaeftStammdatenEditView(geschaeft: Geschaeft(name: "Rewe", typen: [GeschaeftTyp(name: "Lebensmittel", symbolName: "cart")]), istNeu: true)
         .modelContainer(for: [Geschaeft.self, GeschaeftTyp.self], inMemory: true)
 }

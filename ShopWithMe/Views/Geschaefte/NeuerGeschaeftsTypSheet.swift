@@ -13,7 +13,7 @@ struct NeuerGeschaeftsTypSheet: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
-    @State private var symbolName = "shippingbox.fill"
+    @State private var symbolName = "shippingbox"
     @State private var farbeHex = Color.artikelPalette[0]
 
     var body: some View {
@@ -36,7 +36,7 @@ struct NeuerGeschaeftsTypSheet: View {
                         let getrimmtesSymbol = symbolName.trimmingCharacters(in: .whitespacesAndNewlines)
                         let typ = GeschaeftTyp(
                             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-                            symbolName: getrimmtesSymbol.isEmpty ? "shippingbox.fill" : getrimmtesSymbol,
+                            symbolName: getrimmtesSymbol.isEmpty ? "shippingbox" : getrimmtesSymbol,
                             farbeHex: farbeHex,
                             sortIndex: naechsterSortIndex
                         )

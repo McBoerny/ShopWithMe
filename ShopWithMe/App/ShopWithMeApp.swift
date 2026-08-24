@@ -83,6 +83,7 @@ struct ShopWithMeApp: App {
         DatabaseLeaseService.storeURL = konfiguration.url
         SeedData.seedeStandarddatenFallsLeer(context: context)
         SeedData.seedeGeschaeftsTypenFallsLeer(context: context)
+        SeedData.migriereStandardGeschaeftsTypSymboleFallsNoetig(context: context)
         Geschaeft.typenMigrierenFallsNoetig(context: context)
         Abteilung.geschaeftsTypenMigrierenFallsNoetig(context: context)
         KaufEintrag.preisverlaufMigrierenFallsNoetig(context: context)

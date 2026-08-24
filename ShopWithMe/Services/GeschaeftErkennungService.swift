@@ -387,9 +387,9 @@ enum GeschaeftErkennungService {
 
     private static func typVorschlag(fuer abteilung: MKPointOfInterestCategory?, context: ModelContext) -> GeschaeftTyp {
         switch abteilung {
-        case .pharmacy: return GeschaeftTyp.mitNamen("Apotheke", symbolName: "cross.case.fill", context: context)
-        case .foodMarket, .bakery: return GeschaeftTyp.mitNamen("Lebensmittel", symbolName: "cart.fill", context: context)
-        case .winery, .brewery: return GeschaeftTyp.mitNamen("Getränkemarkt", symbolName: "waterbottle.fill", context: context)
+        case .pharmacy: return GeschaeftTyp.mitNamen("Apotheke", symbolName: "cross.case", context: context)
+        case .foodMarket, .bakery: return GeschaeftTyp.mitNamen("Lebensmittel", symbolName: "cart", context: context)
+        case .winery, .brewery: return GeschaeftTyp.mitNamen("Getränkemarkt", symbolName: "waterbottle", context: context)
         default: return GeschaeftTyp.sonstiges(context: context)
         }
     }

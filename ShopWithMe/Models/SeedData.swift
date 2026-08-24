@@ -26,16 +26,16 @@ enum SeedData {
     /// Name und SF-Symbol der Standard-Geschäftstypen (GitHub #25) in
     /// Anzeige-Reihenfolge — entspricht den bisherigen `GeschaeftTyp`-enum-Fällen.
     static let standardGeschaeftsTypen: [(name: String, symbol: String)] = [
-        ("Lebensmittel", "cart.fill"),
+        ("Lebensmittel", "cart"),
         ("Drogerie", "sparkles"),
-        ("Baumarkt", "hammer.fill"),
-        ("Apotheke", "cross.case.fill"),
-        ("Elektronik", "bolt.fill"),
-        ("Bekleidung", "tshirt.fill"),
-        ("Getränkemarkt", "waterbottle.fill"),
-        ("Tierbedarf", "pawprint.fill"),
-        ("Bücher & Schreibwaren", "book.fill"),
-        (GeschaeftTyp.sonstigesName, "shippingbox.fill"),
+        ("Baumarkt", "hammer"),
+        ("Apotheke", "cross.case"),
+        ("Elektronik", "bolt"),
+        ("Bekleidung", "tshirt"),
+        ("Getränkemarkt", "waterbottle"),
+        ("Tierbedarf", "pawprint"),
+        ("Bücher & Schreibwaren", "book"),
+        (GeschaeftTyp.sonstigesName, "shippingbox"),
     ]
 
     /// Legt die Standardabteilungen an, sofern noch keine ``Abteilung`` im
@@ -77,6 +77,32 @@ enum SeedData {
         for (index, eintrag) in standardGeschaeftsTypen.enumerated() {
             let typ = GeschaeftTyp(name: eintrag.name, symbolName: eintrag.symbol, sortIndex: index)
             context.insert(typ)
+        }
+        try? context.save()
+    }
+
+    /// Aktualisiert auf bereits vor GitHub #149 geseedeten Geräten das Symbol
+    /// eines Standard-``GeschaeftTyp`` von der alten `.fill`-Variante auf die
+    /// aktuelle non-fill-Variante aus ``standardGeschaeftsTypen`` — reine
+    /// additive Datenkorrektur (kein `VersionedSchema`/`MigrationStage`
+    /// nötig), analog ``seedeGeschaeftsTypenFallsLeer(context:)`` aber ohne
+    /// deren Leer-Guard, da ``seedeGeschaeftsTypenFallsLeer(context:)`` auf
+    /// bestehenden Stores nie erneut greift. Aktualisiert nur, wenn das
+    /// aktuelle Symbol exakt der alten `.fill`-Variante entspricht — ein
+    /// manuell vom Anwender geändertes Symbol bleibt unangetastet. Idempotent,
+    /// bei jedem App-Start aufrufbar.
+    @MainActor
+    static func migriereStandardGeschaeftsTypSymboleFallsNoetig(context: ModelContext) {
+        for eintrag in standardGeschaeftsTypen {
+            let name = eintrag.name
+            let neuesSymbol = eintrag.symbol
+            let altesSymbol = neuesSymbol + ".fill"
+            var deskriptor = FetchDescriptor<GeschaeftTyp>(
+                predicate: #Predicate { $0.name == name && $0.symbolName == altesSymbol }
+            )
+            deskriptor.fetchLimit = 1
+            guard let typ = try? context.fetch(deskriptor).first else { continue }
+            typ.symbolName = eintrag.symbol
         }
         try? context.save()
     }

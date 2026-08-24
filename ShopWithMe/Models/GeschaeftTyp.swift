@@ -85,7 +85,7 @@ extension GeschaeftTyp {
     /// `symbolName` an, falls er noch nicht existiert — Grundlage für das Anlegen
     /// benutzerdefinierter Typen (GitHub #25) und die einmalige Migration alter
     /// enum-Rohwerte (``legacyName(fuerRohwert:)``).
-    static func mitNamen(_ name: String, symbolName: String = "shippingbox.fill", context: ModelContext) -> GeschaeftTyp {
+    static func mitNamen(_ name: String, symbolName: String = "shippingbox", context: ModelContext) -> GeschaeftTyp {
         var deskriptor = FetchDescriptor<GeschaeftTyp>(predicate: #Predicate { $0.name == name })
         deskriptor.fetchLimit = 1
         if let bestehender = try? context.fetch(deskriptor).first {
