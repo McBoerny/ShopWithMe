@@ -289,6 +289,8 @@ struct SyncOrdnerSettingsView: View {
                 wiederherstellenUndDeaktivieren()
             }
             Button("Ohne Wiederherstellung deaktivieren", role: .destructive) {
+                syncPollingService.stoppen()
+                multipeerSyncService.stoppen()
                 Task { await SyncOrdnerService.ordnerEntfernenUndPeersVergessen(context: modelContext) }
                 ausgewaehlterOrdner = nil
             }
@@ -479,6 +481,8 @@ struct SyncOrdnerSettingsView: View {
         if SyncErsetzenService.vorhandenesBackup() != nil {
             zeigeAustrittsWahl = true
         } else {
+            syncPollingService.stoppen()
+            multipeerSyncService.stoppen()
             Task { await SyncOrdnerService.ordnerEntfernenUndPeersVergessen(context: modelContext) }
             ausgewaehlterOrdner = nil
         }

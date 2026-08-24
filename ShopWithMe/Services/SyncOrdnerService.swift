@@ -115,16 +115,52 @@ enum SyncOrdnerService {
     /// Löscht zusätzlich den eigenen Peer-Ordner im geteilten Ordner
     /// (GitHub #145), damit dieser sauber hinterlassen wird — Peer-Ordner
     /// anderer, ggf. weiterhin synchronisierender Geräte bleiben unangetastet.
+    ///
+    /// **Reihenfolge bewusst: Bookmark zuerst löschen, dann den Peer-Ordner
+    /// entfernen** (GitHub #145-Nachfolgefund, live bestätigt: der Ordner
+    /// blieb trotz Löschversuchs bestehen). Grund: ein zum
+    /// Deaktivierungszeitpunkt bereits laufender oder — durch das eigene
+    /// Löschen ausgelöster — neu gestarteter Hintergrund-Zyklus
+    /// (``SyncPollingService/syncZyklus()``, auch über
+    /// ``SyncICloudAenderungsBeobachter``-Änderungsbenachrichtigungen)
+    /// exportiert sonst neue Event-/Paket-Dateien in den gerade gelöschten
+    /// Ordner und legt ihn dadurch ungewollt wieder an. Sobald das Bookmark
+    /// entfernt ist, bricht jeder — auch ein gerade erst ausgelöster —
+    /// `syncZyklus()` über seine `gewaehlterOrdner() != nil`-Prüfung sofort
+    /// ab. Der bereits aufgelöste `ordner`-Wert bleibt davon unberührt
+    /// nutzbar (Security-Scope ist an die URL-Instanz gebunden, nicht an den
+    /// UserDefaults-Eintrag). Ein zum Aufrufzeitpunkt bereits laufender
+    /// vollständiger Zyklus wird zusätzlich vorher abgewartet
+    /// (``warteAufLaufendenSyncZyklus()``), da dieser durch das
+    /// Bookmark-Löschen allein nicht mehr gestoppt werden kann.
     @MainActor
     static func ordnerEntfernenUndPeersVergessen(context: ModelContext) async {
-        if let ordner = gewaehlterOrdner() {
+        await warteAufLaufendenSyncZyklus()
+        let ordner = gewaehlterOrdner()
+        ordnerEntfernen()
+        if let ordner {
             loescheEigenenPeerOrdner(in: ordner)
         }
-        ordnerEntfernen()
         let alle = (try? context.fetch(FetchDescriptor<SyncPeerInfo>())) ?? []
         guard !alle.isEmpty else { return }
         await DatabaseLeaseService.performMicroLease(context: context) {
             for peer in alle { context.delete(peer) }
+        }
+    }
+
+    /// Wartet best effort (max. ``SyncDateiZugriff/zeitlimitSekunden``), bis
+    /// ein zum Zeitpunkt der Deaktivierung bereits laufender vollständiger
+    /// Sync-Zyklus (``SyncImportService/vollstaendigerZyklusLaeuft``) beendet
+    /// ist, bevor ``ordnerEntfernenUndPeersVergessen(context:)`` fortfährt —
+    /// siehe dortige Begründung. Läuft der Zyklus trotz Zeitlimit weiter,
+    /// wird trotzdem fortgefahren, statt die Deaktivierung unbegrenzt zu
+    /// blockieren.
+    @MainActor
+    private static func warteAufLaufendenSyncZyklus() async {
+        let start = ContinuousClock.now
+        while SyncImportService.vollstaendigerZyklusLaeuft {
+            guard start.duration(to: .now) < .seconds(SyncDateiZugriff.zeitlimitSekunden) else { return }
+            try? await Task.sleep(for: .milliseconds(100))
         }
     }
 
