@@ -36,6 +36,18 @@ struct RootView: View {
     @State private var zeigeSyncOrdnerSettingsFuerBeitritt = false
     @State private var toterGruppenPeer: SyncPeerInfo?
     @State private var zeigeToterGruppenPeerDialog = false
+    /// Beim laufenden Hintergrund-Sync zurückgestellte Merge-Kandidaten
+    /// (Geschäft/Artikel/Einkaufsliste) — siehe Ambiguitäts-Rückstellung in
+    /// `SyncSnapshotImportService.mergeGeschaefte`/`mergeArtikel`/
+    /// `mergeEinkaufslisten`. Bis GitHub #151 nur als passive Zeile in
+    /// `SyncOrdnerSettingsView` sichtbar — dort leicht übersehbar (kein
+    /// Badge/Push), was zu sichtbar divergierten Listen führte, solange
+    /// niemand aktiv hinschaute. Jetzt zusätzlich hier wie
+    /// ``zeigeAusDerZeitGefallenDialog``/``zeigeToterGruppenPeerDialog`` bei
+    /// jedem Vordergrund-Wechsel aktiv geprüft.
+    @Query(sort: \SyncAbgleichKandidat.erkanntAm) private var abgleichWarteschlange: [SyncAbgleichKandidat]
+    @State private var zeigeMoeglicheDuplikateDialog = false
+    @State private var zeigeAbgleichKandidatenSheet = false
 
     var body: some View {
         TabView {
@@ -60,6 +72,7 @@ struct RootView: View {
             await SyncTombstoneService.raeumeAlteTombstonesAufFallsFaellig(context: modelContext)
             pruefeAusDerZeitGefallen()
             pruefeToteGruppenPeers()
+            pruefeMoeglicheDuplikate()
         }
         .onChange(of: scenePhase) { _, neuePhase in
             guard neuePhase == .active else { return }
@@ -71,6 +84,7 @@ struct RootView: View {
             await SyncTombstoneService.raeumeAlteTombstonesAufFallsFaellig(context: modelContext)
                 pruefeAusDerZeitGefallen()
                 pruefeToteGruppenPeers()
+                pruefeMoeglicheDuplikate()
             }
         }
         .onChange(of: syncPollingService.wurdeAusGruppeEntfernt) { _, entfernt in
@@ -146,6 +160,25 @@ struct RootView: View {
         } message: { peer in
             Text("„\(peer.geraeteName)“ wurde seit \(peer.zuletztGesehen.formatted(date: .abbreviated, time: .omitted)) nicht mehr gesehen. Entfernen, wenn dieses Gerät die App nicht mehr nutzt.")
         }
+        // GitHub #151: aktive Rückfrage statt nur passiver Zeile in
+        // SyncOrdnerSettingsView — erscheint erneut bei jedem
+        // Vordergrund-Wechsel, solange noch Kandidaten offen sind (analog
+        // den übrigen Dialogen hier), damit unentschiedene Duplikate nicht
+        // unbemerkt liegen bleiben.
+        .confirmationDialog(
+            "Mögliche Duplikate gefunden", isPresented: $zeigeMoeglicheDuplikateDialog
+        ) {
+            Button("Jetzt prüfen") { zeigeAbgleichKandidatenSheet = true }
+            Button("Später erinnern", role: .cancel) {}
+        } message: {
+            Text("\(abgleichWarteschlange.count) Geschäft(e)/Artikel/Liste(n) vom Sync konnten nicht eindeutig zugeordnet werden und warten auf deine Entscheidung.")
+        }
+        .sheet(isPresented: $zeigeAbgleichKandidatenSheet) {
+            AbgleichKandidatenSheet(
+                kandidaten: AbgleichAnzeige.liste(aus: abgleichWarteschlange, context: modelContext),
+                onFertig: {}
+            )
+        }
     }
 
     private func pruefeAusDerZeitGefallen() {
@@ -213,6 +246,16 @@ struct RootView: View {
         zeigeToterGruppenPeerDialog = true
     }
 
+    /// Siehe ``abgleichWarteschlange``-Doc — bewusst kein „schon mal
+    /// gezeigt"-Unterdrücken: dieselbe, ungefilterte Bedingung wie
+    /// ``pruefeAusDerZeitGefallen()``/``pruefeToteGruppenPeers()``, damit
+    /// unentschiedene Kandidaten bei jedem Vordergrund-Wechsel erneut
+    /// auffallen statt nach einmaligem Wegtippen zu verschwinden.
+    private func pruefeMoeglicheDuplikate() {
+        guard !abgleichWarteschlange.isEmpty else { return }
+        zeigeMoeglicheDuplikateDialog = true
+    }
+
     private func entferneToterGruppenPeer(_ peer: SyncPeerInfo) {
         guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return }
         Task {
@@ -231,4 +274,5 @@ private struct AusstehenderImport: Identifiable {
     RootView()
         .environmentObject(SyncPollingService())
         .environmentObject(MultipeerSyncService())
+        .modelContainer(for: [SyncPeerInfo.self, SyncAbgleichKandidat.self], inMemory: true)
 }

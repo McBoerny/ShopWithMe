@@ -312,10 +312,19 @@ case-insensitiver Teilstring-Treffer ohne exakte Übereinstimmung, da dort
 keine zweite Vergleichsdimension wie Koordinaten existiert). Trifft sie zu,
 wird der Remote-Eintrag als ``SyncAbgleichKandidat`` (additive, generische
 Warteschlangen-Tabelle, ein Eintrag pro `(entitaetsArt, peerGeraeteID,
-fremdeID)`) zurückgestellt statt gemergt — sichtbar über ein Badge in
-`SyncOrdnerSettingsView` („N mögliche Duplikate prüfen"), das dieselbe
-`AbgleichKandidatenSheet`-Ansicht öffnet wie der bereits bestehende
-Beitritts-Abgleich (GitHub #86, Teil 2). „Gleich" registriert einen
+fremdeID)`) zurückgestellt statt gemergt — weiterhin über ein Badge in
+`SyncOrdnerSettingsView` („N mögliche Duplikate prüfen") manuell einsehbar,
+seit GitHub #151 zusätzlich als aktive Rückfrage in `RootView` (analog den
+dortigen bestehenden Dialogen wie „Gerät seit langem nicht gesehen"): bei
+jedem Vordergrund-Wechsel, solange die Warteschlange nicht leer ist, öffnet
+„Jetzt prüfen" dieselbe `AbgleichKandidatenSheet`-Ansicht wie der bereits
+bestehende Beitritts-Abgleich (GitHub #86, Teil 2) — jetzt aus
+`ShopWithMe/Views/Components/AbgleichKandidatenSheet.swift` ausgelagert, damit
+beide Aufrufer (`SyncOrdnerSettingsView`, `RootView`) dieselbe
+`AbgleichAnzeige.liste(aus:context:)`-Übersetzung nutzen. Bewusst OHNE
+Unterdrücken bereits gesehener Kandidaten (kein „schon mal weggetippt"-Zustand)
+— genau das unauffällige Liegenbleiben war der Auslöser des Live-Funds unten.
+„Gleich" registriert einen
 `SyncEntitaetsAlias` und übernimmt den gewählten Namen; „unterschiedlich"
 legt das zurückgehaltene Objekt jetzt aktiv mit `id = fremdeID` an (übrige
 Felder ergänzen sich additiv beim nächsten Merge-Durchlauf über den

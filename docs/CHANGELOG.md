@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.16 (Build 348) — Mögliche Duplikate: aktive Rückfrage statt passivem Badge
+
+Die "N mögliche Duplikate prüfen"-Warteschlange (`SyncAbgleichKandidat`) war
+bisher nur eine unscheinbare Zeile in Einstellungen → Sync-Ordner, ohne
+Badge/Push — im vorigen Live-Fund (siehe Eintrag unten) blieb sie dadurch
+unbemerkt, während unentschiedene Kandidaten die Listen sichtbar divergieren
+ließen. `RootView` fragt jetzt bei jedem Vordergrund-Wechsel aktiv nach
+(analog dem bestehenden "Gerät seit langem nicht gesehen"-Dialog), solange
+noch Kandidaten offen sind — "Jetzt prüfen" öffnet direkt die
+Duplikate-Auflösung, "Später erinnern" verschiebt auf den nächsten
+Vordergrund-Wechsel. `AbgleichKandidatenSheet`/`AbgleichAnzeige` dafür aus
+`SyncOrdnerSettingsView.swift` in eine eigene, gemeinsam genutzte Datei
+ausgelagert. Details: `docs/DATENSYNCHRONISATION.md` §4.2.
+
 ## v0.16 (Build 347) — Ambiguitäts-Rückstellung: Selbst-Kollision innerhalb eines Batches behoben
 
 Nutzerbericht: nach Beitritt eines komplett leeren Geräts zu einem Sync-Ordner

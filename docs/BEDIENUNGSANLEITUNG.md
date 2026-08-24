@@ -397,13 +397,16 @@ werden ausgetauscht.
   bestehender Nahbereich-Verbindung außerdem eine kleine Statuszeile
   („N Geräte verbunden") linksbündig unter dem Listennamen im
   Einkaufen-Bildschirm.
-- **„N mögliche Duplikate prüfen":** Erkennt der laufende Abgleich ein
+- **„Mögliche Duplikate gefunden":** Erkennt der laufende Abgleich ein
   Geschäft, einen Artikel oder eine Einkaufsliste, die einem bereits
   vorhandenen Eintrag ähneln, aber nicht eindeutig zugeordnet werden können,
-  wird nichts automatisch zusammengeführt oder verworfen — stattdessen
-  erscheint dieses Badge in den Sync-Einstellungen. Antippen zeigt eine
-  „Gleich"/„Unterschiedlich"-Wahl; unentschiedene Einträge bleiben einfach in
-  der Liste stehen, bis du reagierst.
+  wird nichts automatisch zusammengeführt oder verworfen — stattdessen fragt
+  die App bei App-Start/Rückkehr aus dem Hintergrund aktiv nach (analog „Gerät
+  seit langem nicht gesehen" unten), solange noch unentschiedene Kandidaten
+  offen sind. „Jetzt prüfen" zeigt pro Kandidat eine „Gleich"/„Unterschiedlich"-
+  Wahl, „Später erinnern" verschiebt die Frage auf den nächsten
+  Vordergrund-Wechsel. Dasselbe lässt sich auch jederzeit manuell einsehen:
+  Einstellungen → „Synchronisation" → „N mögliche Duplikate prüfen".
 - **„Synchronisierung deaktivieren"** trennt die Verbindung zum Ordner wieder,
   ohne bereits ausgetauschte Daten zu löschen.
 - **„Sync-Abgleich nötig":** War ein Gerät länger als 30 Tage nicht in
