@@ -58,7 +58,7 @@ import SwiftData
 final class SyncPollingService: ObservableObject {
     /// `static var` statt `let`, damit Tests sie auf sehr kurze Werte setzen
     /// können, ohne auf reale Wartezeiten angewiesen zu sein.
-    static var intervallAktivesEinkaufen: Duration = .seconds(5)
+    static var intervallAktivesEinkaufen: Duration = .seconds(10)
     static var intervallRuhend: Duration = .seconds(60)
 
     /// Von `EinkaufslisteView` gesetzt, solange der Einkaufen-Bildschirm
