@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.16 (Build 341) — Multipeer-Catch-up-Sync für Bereich B/C/D (GitHub #125)
+
+Ein per Multipeer verbundener Peer, der länger offline war, musste bisher für
+Stammdaten/Kaufhistorie/Lerndaten trotzdem auf den nächsten dateibasierten
+Sync-Zyklus (5s/60s) warten — nur Bereich A (Listen-Events) wurde bereits
+sofort gespiegelt. `MultipeerSyncService` löst jetzt zusätzlich einen
+Bereich-B/C/D-Catch-up aus, additiv zum unverändert als Quelle der Wahrheit
+bleibenden Dateikanal: bei jedem Connect-Event UND periodisch (alle 20s)
+während einer bestehenden Verbindung wird geprüft, ob sich der eigene Stand
+seit dem letzten Versand an genau diesen Peer geändert hat (SHA256-
+Fingerabdruck über den normalisierten Zustand, wiederverwendet aus dem
+bestehenden Datei-Kanal-Mechanismus) — nur bei Abweichung wird das volle
+Paket per `MCSession.sendResource` übertragen. Anwendung über dieselbe,
+bereits idempotente Merge-Funktion wie der Datei-Import
+(`SyncSnapshotImportService.mergePaket`), jetzt unter demselben
+Re-Entranz-Schutz wie der Datei-Zyklus. Details:
+`docs/DATENSYNCHRONISATION.md` §4.8.
+
 ## v0.16 (Build 339) — Sync-Ordner ließ sich nicht mehr setzen (doppelter `.fileImporter`-Konflikt)
 
 Seit dem Hinzufügen von "Backup importieren…" (`.fileImporter`) reagierte der

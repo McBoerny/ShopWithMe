@@ -2,7 +2,11 @@ import Foundation
 
 /// Transport-unabhängige Datenkapsel für einen vollständigen Paket-Export.
 /// Gespiegelt in `SyncSnapshotExportService.erstellePaketTeile(context:)`.
-struct SyncPaketTeile {
+/// `Codable`, damit ``MultipeerCatchUpPaket`` (GitHub #125,
+/// `Models/SyncSnapshot.swift`) es direkt als Feld einbetten und per
+/// `MCSession.sendResource` als JSON übertragen kann — alle Feldtypen sind
+/// bereits `Codable`, hier nur die Synthese aktiviert.
+struct SyncPaketTeile: Codable {
     var manifest: SyncPeerManifest
     var tombstones: [SyncTombstoneSnapshot]
     var stamm: SyncStammSnapshot

@@ -809,6 +809,65 @@ zweier unabhängiger Ad-hoc-Vergleiche. Architektur-Audit aller 19
 `mergeX`-Funktionen: dieselbe Asymmetrie kommt sonst nirgends vor. Details:
 `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitte 58–60.
 
+### 4.8 Multipeer-Catch-up für Bereich B/C/D (GitHub #125)
+
+Bereich A (Listen-Events) wird bereits über `MultipeerSyncService` sofort an
+verbundene Peers gespiegelt (Abschnitt 3, §9). Ein Peer, der länger offline
+war, musste für Bereich B/C/D (Stammdaten, Kaufhistorie, Lerndaten) bislang
+trotzdem auf den nächsten dateibasierten Zyklus warten. Seit #125 löst
+`MultipeerSyncService` zusätzlich einen **Bereich-B/C/D-Catch-up** aus —
+additiv, der Dateikanal bleibt unverändert die Quelle der Wahrheit für
+Wasserstand/Retention, Peer-Lifecycle und Bootstrap (Abschnitt 6/8).
+
+**Trigger — Connect-Event UND periodischer Re-Check, kein blindes
+Vollpaket bei jedem Reconnect:**
+
+- `session(_:peer:didChange:)`, Fall `.connected` — deckt „Peer war lange
+  offline" sofort ab.
+- Zusätzlich eine periodische Schleife (`MultipeerSyncService.catchUpPruefIntervall`,
+  Standard 20s), solange eine Verbindung besteht — deckt „Peer bleibt
+  verbunden, lokale Daten ändern sich während der Sitzung weiter" ab.
+
+Beide Trigger laufen durch dieselbe Prüfung
+(`pruefeUndSendeCatchUpFallsGeaendert(an:)`): ein SHA256-Fingerabdruck des
+eigenen, normalisierten Bereich-B/C/D/Kaufhistorie-Zustands
+(`SyncSnapshotExportService.zustandsFingerabdruck(...)`, dieselben
+`normalisiere*`-Funktionen wie der Datei-Kanal in 4.6, aber ein eigener,
+vom Datei-Fingerabdruck-Cache unabhängiger Verwendungszweck) wird mit dem
+zuletzt erfolgreich AN GENAU DIESEN Peer gesendeten Fingerabdruck verglichen
+— nur bei Abweichung wird tatsächlich gesendet. Ein bloßer Verbindungsabbruch
+und -wiederaufbau ohne zwischenzeitliche lokale Änderung löst dadurch
+**keinen** erneuten Vollversand aus.
+
+**Transport:** `MCSession.sendResource` (nicht `send`) mit dem kompletten,
+in-memory gebauten `MultipeerCatchUpPaket` (= `SyncPaketTeile` +
+vollständige `KaufEintrag`-Historie als `[KaufEintragSnapshot]`,
+`SyncKaeufeExportService.alleSnapshots(context:)`) als JSON-Datei — `send`
+wäre für die potenziell mehrere Megabyte große Kaufhistorie ungeeignet.
+
+**Anwendung:** dieselbe, bereits idempotente Merge-Funktion wie der
+Datei-Import,
+`SyncSnapshotImportService.mergePaket(tombstones:stamm:listen:lernen:vorgaenge:preise:kaeufe:geraeteName:peerGeraeteID:erzeugtAm:context:)`
+— kein zweiter Konfliktalgorithmus. Läuft unter demselben Re-Entranz-Schutz
+wie der Datei-Zyklus (`SyncImportService.versucheVollstaendigenZyklusZuStarten()`/
+`beendeVollstaendigenZyklus()`) — läuft gerade ein anderer vollständiger
+Zyklus, wird der Catch-up komplett übersprungen statt einen konkurrierenden
+Merge gegen denselben `ModelContext` zu starten (siehe Abschnitt 9a für den
+historischen Korruptionsfall, den dieser Schutz verhindert).
+
+**Warum kein Datenverlust trotz Best-effort-Charakter:** wird ein
+Catch-up-Versuch verworfen (Re-Entranz-Schutz beim Empfänger) oder wegen
+unveränderten Fingerabdrucks gar nicht erst erneut gesendet, holt der
+Datei-Kanal denselben Stand garantiert nach — nur langsamer. Der
+Multipeer-Fingerabdruck-Cache beim Sender sagt ausschließlich „ich habe
+diesen Stand erfolgreich an die `MCSession` übergeben", nie „der Peer hat ihn
+tatsächlich gemerged". Da `mergePaket` kommutativ/assoziativ/idempotent ist
+(Abschnitt 0.4 in `docs/SYNC_CONNECTOR_ARCHITEKTUR.md`) und Manifest-/
+Wasserstand-Zeitstempel ausschließlich vom Dateikanal geschrieben werden
+(``wendeCatchUpPaketAn`` schreibt kein `manifest.json`), ist der Endzustand
+nach hinreichend vielen Zyklen identisch zu reinem Datei-Abgleich — Multipeer
+verändert nur die Latenz, nie das Ergebnis.
+
 ## 5. Sync-Zyklus und adaptives Polling
 
 `SyncPollingService` führt einen vollständigen Zyklus (Import Bereich A →
@@ -1023,6 +1082,10 @@ kompletten `kaeufe/`-Ordners, aber ohne `events/` anzutasten.
   und bringt der Kanal die erhoffte spürbare Latenzverbesserung gegenüber dem
   Datei-Kanal (vergleichbar über `multipeer_event_empfangen` vs.
   `sync_event_empfangen` im Sync-Debug-Protokoll, siehe `docs/LOGGING.md`).
+  Gilt unverändert auch für den Bereich-B/C/D-Catch-up (GitHub #125, §4.8) —
+  auch dessen `sendResource`-Transfer und Fingerabdruck-Diffing sind nur
+  build-/unit-getestet, ein echter Zwei-Geräte-Test steht noch aus
+  (vergleichbar über `multipeer_catchup_angewendet` im Sync-Debug-Protokoll).
 - **Multipeer-Vertrauensmodell (GitHub #97, gehärtet):** der Gruppen-Schlüssel
   selbst geht nicht mehr über das Netz — stattdessen ein Challenge-Response-
   Verfahren aus pro Advertising-Session neuem Zufalls-Nonce (`discoveryInfo`)

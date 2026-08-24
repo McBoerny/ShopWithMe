@@ -119,6 +119,36 @@ final class MultipeerSyncService: NSObject, ObservableObject {
     /// gesetzte Sperre gegen überlappende Aufrufe — siehe dort.
     private var wirdAufgebaut = false
 
+    /// Intervall des periodischen Diff-Re-Checks für den Bereich-B/C/D-
+    /// Catch-up (GitHub #125, ``catchUpSchleife``) — `static var` statt
+    /// `let`, damit Tests sie verkürzen können (Muster wie
+    /// ``SyncPollingService/intervallAktivesEinkaufen``).
+    static var catchUpPruefIntervall: Duration = .seconds(20)
+
+    /// Fingerabdruck (``SyncSnapshotExportService/zustandsFingerabdruck(tombstones:stamm:listen:lernen:vorgaenge:preise:kaeufe:)``)
+    /// des zuletzt erfolgreich an einen Peer gesendeten Catch-up-Pakets,
+    /// keyed auf `peerID.displayName` — verhindert, dass ein Peer bei jedem
+    /// bloßen Reconnect (z.B. kurzer AWDL-Dropout während des gemeinsamen
+    /// Einkaufens) erneut das volle Paket bekommt, obwohl sich der lokale
+    /// Stand seit dem letzten erfolgreichen Versand AN GENAU DIESEN Peer
+    /// nicht geändert hat. Bewusst NICHT bei `.notConnected` gelöscht (nur in
+    /// ``beendeAdvertisingUndBrowsing()`` komplett zurückgesetzt) — ein
+    /// kurzer Connect/Disconnect/Reconnect-Zyklus ohne zwischenzeitliche
+    /// lokale Änderung soll die Ersparnis genau NICHT verlieren.
+    private var letzterGesendeterFingerabdruck: [String: String] = [:]
+
+    /// Periodischer Re-Check (``catchUpPruefIntervall``), solange
+    /// ``aktiv`` — Nutzer-Entscheidung (2026-08-24): nicht bei jedem
+    /// Connect-Event blind senden, sondern zusätzlich in festen Abständen
+    /// prüfen, ob sich der lokale Stand geändert hat, während eine
+    /// Verbindung bereits besteht (z.B. während einer längeren gemeinsamen
+    /// Einkaufssitzung werden laufend neue Artikel abgehakt). Läuft neben
+    /// dem `.connected`-Trigger in ``session(_:peer:didChange:)``, nicht
+    /// statt ihm — der Connect-Trigger deckt den „Peer war lange offline"-
+    /// Fall sofort ab, diese Schleife deckt „Peer bleibt verbunden, lokale
+    /// Daten ändern sich weiter" ab.
+    private var catchUpSchleife: Task<Void, Never>?
+
     /// Setzt `context`/`Self.aktuell` neu — z.B. beim App-Start oder bei
     /// jeder Rückkehr zu `scenePhase == .active`. Prüft dabei zusätzlich, ob
     /// `aktiv` (von `EinkaufenView`) bereits `true` ist, aber `session` fehlt:
@@ -210,6 +240,24 @@ final class MultipeerSyncService: NSObject, ObservableObject {
         neuerBrowser.delegate = self
         neuerBrowser.startBrowsingForPeers()
         browser = neuerBrowser
+
+        starteCatchUpSchleifeFallsNoetig()
+    }
+
+    /// Startet den periodischen Diff-Re-Check (``catchUpSchleife``), falls
+    /// noch keiner läuft — wirkungslos bei bereits laufender Schleife (kein
+    /// zweiter, überlappender Loop bei mehrfachem `starten(context:)`).
+    private func starteCatchUpSchleifeFallsNoetig() {
+        guard catchUpSchleife == nil else { return }
+        catchUpSchleife = Task(priority: .utility) { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Self.catchUpPruefIntervall)
+                guard !Task.isCancelled, let self, let session = self.session else { return }
+                for peerID in session.connectedPeers {
+                    self.pruefeUndSendeCatchUpFallsGeaendert(an: peerID)
+                }
+            }
+        }
     }
 
     /// `MCPeerID.displayName` erlaubt laut `MCPeerID.h` max. 63 **Bytes** in
@@ -240,6 +288,15 @@ final class MultipeerSyncService: NSObject, ObservableObject {
         gruppenSchluessel = nil
         discoveryNonce = nil
         verbundenePeerNamen = []
+        catchUpSchleife?.cancel()
+        catchUpSchleife = nil
+        // Peer-Identität (`peerID.displayName`) ist nur innerhalb EINER
+        // Advertising-Session verlässlich derselbe reale Peer (neuer Nonce
+        // pro Session, siehe Typ-Doku „Vertrauensmodell") — der Cache aus
+        // einer vorigen Session hätte hier ohnehin keine sichere Aussagekraft
+        // mehr, deshalb wie `gruppenSchluessel`/`discoveryNonce` komplett
+        // zurückgesetzt statt über Sessions hinweg mitgeschleppt.
+        letzterGesendeterFingerabdruck = [:]
     }
 
     /// Best-effort, fire-and-forget — blockiert nie, kein Fehlerfall
@@ -250,6 +307,98 @@ final class MultipeerSyncService: NSObject, ObservableObject {
         guard let session, !session.connectedPeers.isEmpty else { return }
         guard let daten = try? JSONEncoder().encode(darstellung) else { return }
         try? session.send(daten, toPeers: session.connectedPeers, with: .reliable)
+    }
+
+    /// Bereich-B/C/D-Catch-up (GitHub #125) — aufgerufen sowohl beim
+    /// `.connected`-Event (``session(_:peer:didChange:)``) als auch
+    /// periodisch aus ``catchUpSchleife``. Sendet NICHT bei jedem Aufruf
+    /// blind das volle Paket, sondern nur, wenn sich der eigene
+    /// Bereich-B/C/D/Kaufhistorie-Fingerabdruck seit dem letzten
+    /// erfolgreichen Versand AN DIESEN Peer geändert hat
+    /// (``letzterGesendeterFingerabdruck``, Nutzer-Entscheidung 2026-08-24 —
+    /// bewusst kein blindes Senden bei jedem Reconnect, siehe Typ-Doku dort).
+    /// Ein neu verbundener Peer hat noch keinen Eintrag im Cache, der erste
+    /// Aufruf sendet also immer — das deckt den eigentlichen Issue-Fall
+    /// „Peer war lange offline" sofort ab.
+    ///
+    /// Selbst ein unnötiger Versand wäre unschädlich: die Ziel-Merge-Funktion
+    /// (``SyncSnapshotImportService/mergePaket(tombstones:stamm:listen:lernen:vorgaenge:preise:kaeufe:geraeteName:peerGeraeteID:erzeugtAm:context:)``)
+    /// ist bereits ein idempotentes State-CRDT (`docs/SYNC_CONNECTOR_ARCHITEKTUR.md`
+    /// §0.4/§3) — das Diffing hier ist eine reine Bandbreiten-/Akku-
+    /// Optimierung, keine Korrektheitsvoraussetzung.
+    ///
+    /// `sendResource` statt `send` (Größenbudget: Kaufhistorie kann über die
+    /// Zeit mehrere Megabyte erreichen, siehe Typ-Doku ``SyncKaeufeExportService``
+    /// „56% der Größe einer realen export.json").
+    private func pruefeUndSendeCatchUpFallsGeaendert(an peerID: MCPeerID) {
+        guard let context, let session else { return }
+        let teile = SyncSnapshotExportService.erstellePaketTeile(context: context)
+        let kaeufe = SyncKaeufeExportService.alleSnapshots(context: context)
+
+        let fingerabdruck = SyncSnapshotExportService.zustandsFingerabdruck(
+            tombstones: teile.tombstones, stamm: teile.stamm, listen: teile.listen,
+            lernen: teile.lernen, vorgaenge: teile.vorgaenge, preise: teile.preise, kaeufe: kaeufe
+        )
+        guard letzterGesendeterFingerabdruck[peerID.displayName] != fingerabdruck else { return }
+
+        let paket = MultipeerCatchUpPaket(
+            teile: SyncPaketTeile(
+                manifest: teile.manifest, tombstones: teile.tombstones, stamm: teile.stamm,
+                listen: teile.listen, lernen: teile.lernen, vorgaenge: teile.vorgaenge, preise: teile.preise
+            ),
+            kaeufe: kaeufe
+        )
+        guard let daten = try? JSONEncoder().encode(paket) else { return }
+
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("multipeer-catchup-\(UUID().uuidString).json")
+        do {
+            try daten.write(to: tempURL)
+        } catch {
+            return
+        }
+        // Optimistisch VOR Abschluss des Transfers vermerkt (Muster wie
+        // ``sendeAnVerbundenePeers(_:)`` — fire-and-forget, kein Warten auf
+        // Bestätigung): ein tatsächlich fehlgeschlagener Transfer bleibt
+        // unschädlich, da der nächste periodische Re-Check oder der
+        // Datei-Kanal ohnehin nachliefert (siehe Re-Entranz-Schutz-Kommentar
+        // an ``wendeCatchUpPaketAn(_:context:)``).
+        letzterGesendeterFingerabdruck[peerID.displayName] = fingerabdruck
+        session.sendResource(at: tempURL, withName: tempURL.lastPathComponent, toPeer: peerID) { _ in
+            try? FileManager.default.removeItem(at: tempURL)
+        }
+    }
+
+    /// Wendet ein per Multipeer empfangenes Catch-up-Paket an — geteilte
+    /// Merge-Logik mit dem Datei-Kanal (``SyncSnapshotImportService/mergePaket(tombstones:stamm:listen:lernen:vorgaenge:preise:kaeufe:geraeteName:peerGeraeteID:erzeugtAm:context:)``),
+    /// kein neuer Konfliktalgorithmus.
+    ///
+    /// **Re-Entranz-Schutz zwingend nötig**, obwohl dieser Aufruf außerhalb
+    /// des regulären ``SyncPollingService``-Loops läuft: `mergePaket`
+    /// verändert denselben `ModelContext` wie der Datei-Import, und ein
+    /// unkoordinierter gleichzeitiger Aufruf hat bereits einmal echte
+    /// Datenkorruption verursacht (siehe ``SyncPollingService/syncZyklus()``
+    /// Typ-Doku „Re-Entranz-Schutz"). Bei bereits laufendem Zyklus wird der
+    /// Catch-up komplett übersprungen statt gewartet — kein Datenverlust, da
+    /// entweder der laufende Datei-Zyklus denselben Stand ohnehin gerade
+    /// importiert, oder die nächste Multipeer-Verbindung erneut den
+    /// vollständigen (idempotenten) Stand liefert.
+    private func wendeCatchUpPaketAn(_ paket: MultipeerCatchUpPaket, context: ModelContext) {
+        guard SyncImportService.versucheVollstaendigenZyklusZuStarten() else {
+            SyncDebugLogger.log(.multipeerCatchUpUebersprungen, details: paket.teile.manifest.geraeteName)
+            return
+        }
+        defer { SyncImportService.beendeVollstaendigenZyklus() }
+
+        SyncSnapshotImportService.mergePaket(
+            tombstones: paket.teile.tombstones, stamm: paket.teile.stamm, listen: paket.teile.listen,
+            lernen: paket.teile.lernen, vorgaenge: paket.teile.vorgaenge, preise: paket.teile.preise,
+            kaeufe: paket.kaeufe, geraeteName: paket.teile.manifest.geraeteName,
+            peerGeraeteID: paket.teile.manifest.geraeteID, erzeugtAm: paket.teile.manifest.erzeugtAm,
+            context: context
+        )
+        try? context.save()
+        SyncDebugLogger.log(.multipeerCatchUpAngewendet, details: paket.teile.manifest.geraeteName)
     }
 
     /// Verifiziert im Advertiser einen per Einladungs-`context` empfangenen
@@ -283,6 +432,7 @@ extension MultipeerSyncService: MCSessionDelegate {
                     self.verbundenePeerNamen.append(peerID.displayName)
                 }
                 SyncDebugLogger.log(.multipeerPeerVerbunden, details: peerID.displayName)
+                self?.pruefeUndSendeCatchUpFallsGeaendert(an: peerID)
             case .notConnected:
                 self?.verbundenePeerNamen.removeAll { $0 == peerID.displayName }
                 SyncDebugLogger.log(.multipeerPeerGetrennt, details: peerID.displayName)
@@ -321,14 +471,29 @@ extension MultipeerSyncService: MCSessionDelegate {
     nonisolated func session(
         _ session: MCSession, didReceive stream: InputStream, withName streamName: String, fromPeer peerID: MCPeerID
     ) {}
+    // Ungenutzt: nur ein Fortschritts-Hook, hier nicht gebraucht.
     nonisolated func session(
         _ session: MCSession, didStartReceivingResourceWithName resourceName: String, fromPeer peerID: MCPeerID,
         with progress: Progress
     ) {}
+
+    /// Empfangsseite des Bereich-B/C/D-Catch-up-Kanals (GitHub #125,
+    /// ``sendeCatchUpPaket(an:)``). `localURL` verweist auf eine temporäre
+    /// Datei, die das Framework nach Rückkehr dieser Methode aufräumt —
+    /// deshalb synchron (innerhalb des `Task`) gelesen, bevor irgendein
+    /// weiterer `await`-Punkt die Datei verschwinden lassen könnte.
     nonisolated func session(
         _ session: MCSession, didFinishReceivingResourceWithName resourceName: String, fromPeer peerID: MCPeerID,
         at localURL: URL?, withError error: Error?
-    ) {}
+    ) {
+        guard let localURL, error == nil else { return }
+        guard let daten = try? Data(contentsOf: localURL) else { return }
+        guard let paket = try? JSONDecoder().decode(MultipeerCatchUpPaket.self, from: daten) else { return }
+        Task { @MainActor [weak self] in
+            guard let self, let context = self.context else { return }
+            self.wendeCatchUpPaketAn(paket, context: context)
+        }
+    }
 }
 
 // MARK: - MCNearbyServiceAdvertiserDelegate

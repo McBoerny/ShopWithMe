@@ -103,6 +103,37 @@ enum SyncKaeufeExportService {
         return true
     }
 
+    /// Baut Snapshots für ALLE lokalen `KaufEintrag`e, nicht nur die noch nicht
+    /// exportierten wie ``exportiereNeueKaeufe(context:)`` — für den
+    /// Multipeer-Catch-up-Kanal (GitHub #125), der beim Verbindungsaufbau den
+    /// vollständigen Stand überträgt statt inkrementell einzelne Dateien
+    /// nachzuliefern. Reine In-Memory-Berechnung, kein Datei-I/O.
+    @MainActor
+    static func alleSnapshots(context: ModelContext) -> [KaufEintragSnapshot] {
+        let alleLokalen = (try? context.fetch(FetchDescriptor<KaufEintrag>())) ?? []
+        guard !alleLokalen.isEmpty else { return [] }
+
+        let gueltigeArtikelIDs = Set((try? context.fetch(FetchDescriptor<Artikel>()))?.map(\.persistentModelID) ?? [])
+        let gueltigeGeschaeftIDs = Set((try? context.fetch(FetchDescriptor<Geschaeft>()))?.map(\.persistentModelID) ?? [])
+        let gueltigeEinkaufsvorgangIDs = Set((try? context.fetch(FetchDescriptor<Einkaufsvorgang>()))?.map(\.persistentModelID) ?? [])
+        let gueltigeAbteilungIDs = Set((try? context.fetch(FetchDescriptor<Abteilung>()))?.map(\.persistentModelID) ?? [])
+
+        return alleLokalen.map { eintrag in
+            KaufEintragSnapshot(
+                id: eintrag.id,
+                artikelID: SyncSnapshotExportService.sichereID(eintrag.artikel, gueltigeIDs: gueltigeArtikelIDs),
+                einkaufsvorgangID: SyncSnapshotExportService.sichereID(eintrag.einkaufsvorgang, gueltigeIDs: gueltigeEinkaufsvorgangIDs),
+                geschaeftID: SyncSnapshotExportService.sichereID(eintrag.geschaeft, gueltigeIDs: gueltigeGeschaeftIDs),
+                abteilungID: SyncSnapshotExportService.sichereID(eintrag.abteilung, gueltigeIDs: gueltigeAbteilungIDs),
+                artikelNameSnapshot: eintrag.artikelNameSnapshot,
+                geschaeftNameSnapshot: eintrag.geschaeftNameSnapshot,
+                datum: eintrag.datum,
+                menge: eintrag.menge,
+                abteilungBesuchsIndex: eintrag.abteilungBesuchsIndex
+            )
+        }
+    }
+
     /// Löscht eigene `kaeufe/`-Dateien, deren UUID keinem lokalen ``KaufEintrag``
     /// mehr entspricht und die älter als
     /// ``KaufEintragBereinigungService/karenzzeit`` sind — Catch-all für den

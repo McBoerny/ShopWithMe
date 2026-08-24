@@ -609,6 +609,57 @@ enum SyncSnapshotExportService {
         return preise
     }
 
+    /// Reiner Wert-Container für ``zustandsFingerabdruck(tombstones:stamm:listen:lernen:vorgaenge:preise:kaeufe:)``
+    /// — bewusst OHNE `SyncPeerManifest`/`erzeugtAm`: dieses Feld ist der
+    /// Export-Zeitpunkt, nicht der Inhalt, und würde den Fingerabdruck bei
+    /// jedem Aufruf ändern, selbst ohne jede echte Datenänderung.
+    private struct KanonischerZustand: Encodable {
+        var tombstones: [SyncTombstoneSnapshot]
+        var stamm: SyncStammSnapshot
+        var listen: SyncListenSnapshot
+        var lernen: SyncLernenSnapshot
+        var vorgaenge: SyncVorgaengeSnapshot
+        var preise: SyncPreisSnapshot
+        var kaeufeIDs: [String]
+    }
+
+    /// Inhalts-Fingerabdruck über Bereich B/C/D + Kaufhistorie, unabhängig
+    /// vom Datei-Kanal-Fingerabdruck-Cache (`syncPaketFingerabdruck*` in
+    /// `UserDefaults`, oben) — eigener Verwendungszweck: der
+    /// Multipeer-Catch-up-Kanal (GitHub #125, ``MultipeerSyncService``)
+    /// nutzt dies, um beim periodischen Re-Check und bei einem Reconnect
+    /// nur dann erneut zu senden, wenn sich seit dem letzten Versand AN
+    /// GENAU DIESEN Peer tatsächlich etwas geändert hat — nicht bei jedem
+    /// Connect-Event blind das volle Paket zu schicken. Wiederverwendet
+    /// dieselben `normalisiere*`-Funktionen wie der Datei-Kanal, aus
+    /// demselben Grund (eine bloß andere SwiftData-Fetch-Reihenfolge soll
+    /// nicht fälschlich als Änderung zählen). `kaeufe` bewusst nur über
+    /// sortierte IDs statt vollem Inhalt gehasht — ein `KaufEintrag` wird nie
+    /// nachträglich verändert (siehe Typ-Doku ``SyncKaeufeExportService``,
+    /// „reine Union nach id"), die Menge der IDs allein bestimmt also
+    /// vollständig, ob sich seit dem letzten Versand etwas geändert hat.
+    static func zustandsFingerabdruck(
+        tombstones: [SyncTombstoneSnapshot], stamm: SyncStammSnapshot, listen: SyncListenSnapshot,
+        lernen: SyncLernenSnapshot, vorgaenge: SyncVorgaengeSnapshot, preise: SyncPreisSnapshot,
+        kaeufe: [KaufEintragSnapshot]
+    ) -> String {
+        let kanonisch = KanonischerZustand(
+            tombstones: normalisiereTombstones(tombstones), stamm: normalisiereStamm(stamm),
+            listen: normalisiereListen(listen), lernen: normalisiereLernen(lernen),
+            vorgaenge: normalisiereVorgaenge(vorgaenge), preise: normalisierePreise(preise),
+            kaeufeIDs: kaeufe.map(\.id.uuidString).sorted()
+        )
+        guard let daten = try? encoder.encode(kanonisch) else {
+            // Encoding-Fehlschlag sollte praktisch nie vorkommen (alle
+            // Feldtypen sind bereits erfolgreich Codable-geprüft an anderer
+            // Stelle) — ein garantiert einzigartiger Rückgabewert erzwingt im
+            // Zweifel „als geändert behandeln" statt eine echte Änderung zu
+            // verschlucken.
+            return UUID().uuidString
+        }
+        return SHA256.hash(data: daten).map { String(format: "%02x", $0) }.joined()
+    }
+
     /// Zerlegt einen frisch gebauten ``erstelleSnapshot(context:mitKaufEintraegen:)``
     /// in die unabhängig fingerabdruck-geprüften Paket-Teile — **bewusst kein
     /// eigener, sparsamerer Fetch je Teil**: `stamm`/`listen`/`lernen`/

@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+@preconcurrency import MultipeerConnectivity
 import SwiftData
 import Testing
 @testable import ShopWithMe
@@ -24,6 +25,47 @@ struct MultipeerSyncServiceTests {
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
         return (container, container.mainContext)
+    }
+
+    /// Erweiterter Container inklusive aller Modelltypen, die
+    /// ``SyncSnapshotImportService/mergePaket(tombstones:stamm:listen:lernen:vorgaenge:preise:kaeufe:geraeteName:peerGeraeteID:erzeugtAm:context:)``
+    /// fetcht (Muster wie `SyncSnapshotImportServiceTests.machtLeerenContainer`)
+    /// — für die Catch-up-Tests unten, die diese Funktion als geteilten
+    /// Merge-Einstiegspunkt mit dem Datei-Kanal nutzen (GitHub #125).
+    private func machtLeerenContainerFuerCatchUp() throws -> (ModelContainer, ModelContext) {
+        let schema = Schema([
+            Artikel.self, Abteilung.self, Geschaeft.self, GeschaeftTyp.self,
+            Einkaufsvorgang.self, KaufEintrag.self, WarengruppenDistanz.self, WarengruppenDistanzPeerZaehlerStand.self,
+            Einkaufsliste.self, EinkaufslistenEintrag.self, IgnorierterArtikel.self,
+            SyncEvent.self, SyncEntitaetsAlias.self, SyncPeerZaehlerStand.self, SyncPeerInfo.self,
+            SyncTombstone.self, Preispunkt.self, SyncAbgleichKandidat.self,
+            ArtikelGeschaeftVerfuegbarkeit.self, GeschaeftBesuch.self, ArtikelListenKauf.self,
+        ])
+        let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [konfiguration])
+        return (container, container.mainContext)
+    }
+
+    private func leeresCatchUpPaket(geraeteID: String, geraeteName: String = "Fremdes iPhone") -> MultipeerCatchUpPaket {
+        MultipeerCatchUpPaket(
+            teile: SyncPaketTeile(
+                manifest: SyncPeerManifest(
+                    formatVersion: SyncPeerManifest.aktuelleFormatVersion, erzeugtAm: Date(),
+                    geraeteID: geraeteID, geraeteName: geraeteName
+                ),
+                tombstones: [], stamm: SyncStammSnapshot(
+                    geschaeftsTypen: [], abteilungen: [], geschaefte: [], artikel: [],
+                    einkaufslisten: [], produkte: [], produktnamen: []
+                ),
+                listen: SyncListenSnapshot(einkaufslistenEintraege: []),
+                lernen: SyncLernenSnapshot(
+                    warengruppenDistanzen: [], artikelGeschaeftVerfuegbarkeiten: [],
+                    geschaeftBesuche: [], artikelListenKaeufe: []
+                ),
+                vorgaenge: SyncVorgaengeSnapshot(einkaufsvorgaenge: []), preise: SyncPreisSnapshot(preispunkte: [])
+            ),
+            kaeufe: []
+        )
     }
 
     private func macheTempSyncOrdner() -> URL {
@@ -222,5 +264,91 @@ struct MultipeerSyncServiceTests {
         #expect(!HMAC<SHA256>.isValidAuthenticationCode(
             gueltig, authenticating: nonce + Data(andererPeerName.utf8), using: schluessel
         ))
+    }
+
+    // MARK: - Bereich-B/C/D-Catch-up (GitHub #125)
+
+    /// Beweist, dass der Multipeer-Catch-up-Empfangspfad
+    /// (``MultipeerSyncService/session(_:didFinishReceivingResourceWithName:fromPeer:at:withError:)``)
+    /// dieselbe, geteilte Merge-Funktion wie der Datei-Import anwendet und
+    /// bei Wiederholung idempotent bleibt — kein zweiter, separat gepflegter
+    /// Konfliktalgorithmus.
+    @Test
+    func catchUpPaketWirdUebernommenUndIstBeiWiederholungIdempotent() async throws {
+        let (container, context) = try machtLeerenContainerFuerCatchUp()
+        _ = container
+
+        var paket = leeresCatchUpPaket(geraeteID: "fremdes-geraet")
+        paket.teile.stamm = SyncStammSnapshot(
+            geschaeftsTypen: [
+                GeschaeftTypSnapshot(id: UUID(), name: "Lebensmittel", symbolName: "cart", farbeHex: "#FF0000", sortIndex: 0),
+            ],
+            abteilungen: [], geschaefte: [], artikel: [], einkaufslisten: [], produkte: [], produktnamen: []
+        )
+
+        let dienst = MultipeerSyncService()
+        dienst.starten(context: context)
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).json")
+        try JSONEncoder().encode(paket).write(to: tempURL)
+        let fremdeSession = MCSession(peer: MCPeerID(displayName: "Testgerät"))
+        let fremderPeer = MCPeerID(displayName: "Fremdes iPhone")
+
+        dienst.session(fremdeSession, didFinishReceivingResourceWithName: "paket", fromPeer: fremderPeer, at: tempURL, withError: nil)
+        // Der eigentliche Merge läuft in einem intern gestarteten `Task {
+        // @MainActor in }` (Delegate-Callback-Konvention, siehe Typ-Doku) —
+        // auf dem `@MainActor`-`Test` reicht ein `Task.yield()`-Zyklus, um
+        // sicherzustellen, dass dieser Task vor der Prüfung unten drankam.
+        for _ in 0..<5 { await Task.yield() }
+
+        let typen = try context.fetch(FetchDescriptor<GeschaeftTyp>())
+        #expect(typen.count == 1)
+        #expect(typen.first?.name == "Lebensmittel")
+
+        // Zweiter, identischer Empfang desselben Pakets — kein Duplikat.
+        let zweiteTempURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).json")
+        try JSONEncoder().encode(paket).write(to: zweiteTempURL)
+        dienst.session(fremdeSession, didFinishReceivingResourceWithName: "paket", fromPeer: fremderPeer, at: zweiteTempURL, withError: nil)
+        for _ in 0..<5 { await Task.yield() }
+
+        let typenNachWiederholung = try context.fetch(FetchDescriptor<GeschaeftTyp>())
+        #expect(typenNachWiederholung.count == 1)
+    }
+
+    /// Re-Entranz-Schutz (siehe Typ-Doku ``MultipeerSyncService/wendeCatchUpPaketAn(_:context:)``):
+    /// läuft bereits ein anderer vollständiger Sync-Zyklus (hier simuliert
+    /// durch direkten Aufruf von ``SyncImportService/versucheVollstaendigenZyklusZuStarten()``,
+    /// wie es der Datei-Zyklus tut), wird der Catch-up komplett übersprungen
+    /// statt gegen denselben `ModelContext` einen konkurrierenden Merge zu
+    /// starten — die bereits einmal real aufgetretene Datenkorruption
+    /// zwischen zwei überlappenden `mergePaket`-Läufen darf sich hier nicht
+    /// wiederholen.
+    @Test
+    func catchUpPaketWirdBeiLaufendemZyklusUebersprungen() async throws {
+        let (container, context) = try machtLeerenContainerFuerCatchUp()
+        _ = container
+
+        var paket = leeresCatchUpPaket(geraeteID: "fremdes-geraet")
+        paket.teile.stamm = SyncStammSnapshot(
+            geschaeftsTypen: [
+                GeschaeftTypSnapshot(id: UUID(), name: "Lebensmittel", symbolName: "cart", farbeHex: "#FF0000", sortIndex: 0),
+            ],
+            abteilungen: [], geschaefte: [], artikel: [], einkaufslisten: [], produkte: [], produktnamen: []
+        )
+
+        let dienst = MultipeerSyncService()
+        dienst.starten(context: context)
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).json")
+        try JSONEncoder().encode(paket).write(to: tempURL)
+        let fremdeSession = MCSession(peer: MCPeerID(displayName: "Testgerät"))
+        let fremderPeer = MCPeerID(displayName: "Fremdes iPhone")
+
+        #expect(SyncImportService.versucheVollstaendigenZyklusZuStarten())
+        defer { SyncImportService.beendeVollstaendigenZyklus() }
+
+        dienst.session(fremdeSession, didFinishReceivingResourceWithName: "paket", fromPeer: fremderPeer, at: tempURL, withError: nil)
+        for _ in 0..<5 { await Task.yield() }
+
+        let typen = try context.fetch(FetchDescriptor<GeschaeftTyp>())
+        #expect(typen.isEmpty)
     }
 }

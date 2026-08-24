@@ -436,6 +436,21 @@ struct SyncPeerManifest: Codable {
     var geraeteName: String
 }
 
+/// Wire-Format für den Multipeer-Catch-up-Kanal (GitHub #125) — bündelt ein
+/// vollständiges ``SyncPaketTeile`` (Bereich B/D + Tombstones) mit der
+/// kompletten lokalen Kaufhistorie (Bereich C, sonst als Append-Log über den
+/// Dateikanal verteilt), damit ein per Multipeer neu verbundener Peer den
+/// Stand in EINEM `MCSession.sendResource`-Transfer aufholen kann, statt auf
+/// den nächsten 5s/60s-Datei-Zyklus zu warten. Der Dateikanal bleibt davon
+/// unberührt Quelle der Wahrheit (`docs/DATENSYNCHRONISATION.md` §9) — dieses
+/// Paket ist rein additiv und wird über dieselbe, bereits idempotente
+/// ``SyncSnapshotImportService/mergePaket(tombstones:stamm:listen:lernen:vorgaenge:preise:kaeufe:geraeteName:peerGeraeteID:erzeugtAm:context:)``
+/// angewendet wie ein Datei-Import.
+struct MultipeerCatchUpPaket: Codable {
+    var teile: SyncPaketTeile
+    var kaeufe: [KaufEintragSnapshot]
+}
+
 /// Bereich B (Stammdaten) — ändert sich selten, klein, immer als Ganzes
 /// neu aufgebaut wie bisher der komplette Monolith, aber unabhängig von den
 /// anderen Teilen fingerabdruck-geprüft.

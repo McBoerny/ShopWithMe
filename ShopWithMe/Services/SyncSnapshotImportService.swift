@@ -428,8 +428,14 @@ enum SyncSnapshotImportService {
     /// Stammdaten-Tombstones (Geschäft/Artikel/Abteilung/Einkaufsliste)
     /// — deshalb eine eigene, immer zuerst gelesene Datei statt Bündelung mit
     /// `vorgaenge.json`.
+    /// Sichtbarkeit bewusst `static` statt `private static` (GitHub #125):
+    /// der Multipeer-Catch-up-Kanal (``MultipeerSyncService``) ruft dies als
+    /// dritten Aufrufer neben dem Datei-Import unten und
+    /// ``SyncErsetzenService`` direkt mit einem per `MCSession` empfangenen
+    /// Paket auf — ohne Umweg über den Dateikanal. Reine Sichtbarkeitsänderung,
+    /// keine Verhaltensänderung.
     @MainActor
-    private static func mergePaket(
+    static func mergePaket(
         tombstones: [SyncTombstoneSnapshot], stamm: SyncStammSnapshot, listen: SyncListenSnapshot, lernen: SyncLernenSnapshot,
         vorgaenge: SyncVorgaengeSnapshot, preise: SyncPreisSnapshot, kaeufe: [KaufEintragSnapshot],
         geraeteName: String, peerGeraeteID: String, erzeugtAm: Date, context: ModelContext

@@ -150,6 +150,17 @@ enum SyncDebugLogger {
         /// diesen Versuch übersprungen, kein Fallback auf eine geratene ID.
         case multipeerGruppenIDNichtAufloesbar = "multipeer_gruppen_id_nicht_aufloesbar"
 
+        /// GitHub #125: der Bereich-B/C/D-Catch-up eines gerade verbundenen
+        /// Multipeer-Peers wurde erfolgreich per ``SyncSnapshotImportService/mergePaket(tombstones:stamm:listen:lernen:vorgaenge:preise:kaeufe:geraeteName:peerGeraeteID:erzeugtAm:context:)``
+        /// angewendet — Details: `geraeteName` des Absenders.
+        case multipeerCatchUpAngewendet = "multipeer_catchup_angewendet"
+        /// GitHub #125: der Catch-up wurde übersprungen, weil zeitgleich
+        /// bereits ein anderer vollständiger Sync-Zyklus lief (Re-Entranz-
+        /// Schutz, ``SyncImportService/versucheVollstaendigenZyklusZuStarten()``)
+        /// — kein Fehler, der nächste Connect oder reguläre Datei-Zyklus holt
+        /// denselben (idempotenten) Stand ohnehin nach.
+        case multipeerCatchUpUebersprungen = "multipeer_catchup_uebersprungen"
+
         /// Mindest-Protokollstufe, ab der dieses Ereignis geschrieben wird
         /// (siehe ``Protokollstufe``-Typ-Doku für die Einteilungskriterien).
         var mindestStufe: Protokollstufe {
@@ -165,7 +176,7 @@ enum SyncDebugLogger {
             case .zyklusStart, .zyklusEnde, .eventEmpfangen, .snapshotEmpfangen, .einkaufslistenStand,
                  .snapshotGeschrieben, .iCloudBeobachterAusgeloest, .iCloudBeobachterScopeAktualisiert,
                  .iCloudPickerTriggerAusgeloest, .multipeerPeerVerbunden, .multipeerPeerGetrennt,
-                 .multipeerEventEmpfangen:
+                 .multipeerEventEmpfangen, .multipeerCatchUpAngewendet, .multipeerCatchUpUebersprungen:
                 return .standard
             case .snapshotUnveraendertUebersprungen, .scopeZugriff:
                 return .ausfuehrlich
