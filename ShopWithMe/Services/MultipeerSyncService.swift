@@ -220,13 +220,12 @@ final class MultipeerSyncService: NSObject, ObservableObject {
         // Aufruf nicht zwingend die tatsächlich persistierte ID verwendet
         // (Live-Test/Review-Fund) — ein Gerät würde dann dauerhaft mit einer
         // vom eigenen Marker-Dateiinhalt abweichenden ID advertisen.
-        guard aktiv, session == nil, !wirdAufgebaut, let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return }
-        guard syncOrdner.startAccessingSecurityScopedResource() else { return }
+        // GitHub #171: kein eigener Security-Scope mehr — setzt die
+        // sitzungsweit bereits offene Sitzung voraus (``SyncOrdnerZugriffsSitzung``,
+        // von `SyncPollingService.starten(context:)` VOR diesem Aufruf geöffnet).
+        guard aktiv, session == nil, !wirdAufgebaut, let syncOrdner = SyncOrdnerZugriffsSitzung.offen else { return }
         wirdAufgebaut = true
-        defer {
-            syncOrdner.stopAccessingSecurityScopedResource()
-            wirdAufgebaut = false
-        }
+        defer { wirdAufgebaut = false }
 
         // `nil` bei nicht erreichbarem Ordner (Zeitlimit oder Lese-/Schreibfehler,
         // siehe dortige Typ-Doku) — dann bewusst KEINE geratene ID verwenden,

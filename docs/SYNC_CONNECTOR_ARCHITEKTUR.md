@@ -231,7 +231,7 @@ Connector entsteht:
 | Datei | Zeilen | Aufgabe |
 |---|---|---|
 | `SyncDateiZugriff.swift` | 186 | Low-Level-I/O: `NSFileCoordinator`-Lesen/Listen/Schreiben/Verschieben/Löschen + Zeitlimit-Wrapper. Bereits ein sauberer, wiederverwendbarer Baustein — praktisch schon „der Datei-Connector-I/O-Treiber", nur ohne eigenen Protokoll-Namen. |
-| `SyncOrdnerService.swift` | 282 | Ordnerwahl (Security-Scoped Bookmark), `peers/<name>/`-Layout, eigene Peer-Ordner-Benennung/Umbenennung, Mitgliedschafts-Listing, Peer-Entfernung, Multipeer-Gruppen-ID-Markerdatei. |
+| `SyncOrdnerService.swift` | 282 | Ordnerwahl (Security-Scoped Bookmark), `peers/<name>/`-Layout, eigene Peer-Ordner-Benennung/Umbenennung, Mitgliedschafts-Listing, Peer-Entfernung, Multipeer-Gruppen-ID-Markerdatei. Security-Scope-Lebenszyklus selbst läuft seit GitHub #171 sitzungsweit über `SyncOrdnerZugriffsSitzung`, nicht mehr pro Funktionsaufruf — siehe `docs/DATENSYNCHRONISATION_VERLAUF.md` §63. |
 | `SyncExportService.swift` | 188 | Bereich-A-Events als Einzeldateien schreiben (`peers/{id}/events/`), Lamport-gepolsterte Dateinamen für Sortierung, wasserstand-basiertes Aufräumen. |
 | `SyncSnapshotExportService.swift` | 655 | Bereich-B/C/D-Pakete schreiben, Fingerabdruck-Vergleich zum Überspringen unveränderter Teile. |
 | `SyncKaeufeExportService.swift` | 149 | `KaufEintrag`-Append-Log schreiben. |

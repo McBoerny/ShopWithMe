@@ -82,9 +82,8 @@ enum SyncSnapshotImportService {
     /// `nil` bedeutet für Aufrufer: in diesem Lauf nichts löschen.
     @MainActor
     static func aktuellerAufraeumWasserstand(in ordner: URL) async -> Date? {
-        guard ordner.startAccessingSecurityScopedResource() else { return nil }
-        defer { ordner.stopAccessingSecurityScopedResource() }
-
+        // GitHub #171: `ordner` muss bereits über ``SyncOrdnerZugriffsSitzung``
+        // geöffnet sein — kein eigener Security-Scope mehr hier.
         let peersOrdner = ordner.appendingPathComponent("peers", isDirectory: true)
         let eigeneGeraeteID = DatabaseLeaseService.geraeteID
         guard let peerVerzeichnisse = await SyncDateiZugriff.mitZeitlimit({
@@ -117,9 +116,8 @@ enum SyncSnapshotImportService {
     /// Nutzerbestätigung statt automatischen Aufräumens verlangt wird.
     @MainActor
     static func istAktuellEinzigerPeer(in ordner: URL) async -> Bool {
-        guard ordner.startAccessingSecurityScopedResource() else { return false }
-        defer { ordner.stopAccessingSecurityScopedResource() }
-
+        // GitHub #171: `ordner` muss bereits über ``SyncOrdnerZugriffsSitzung``
+        // geöffnet sein — kein eigener Security-Scope mehr hier.
         let peersOrdner = ordner.appendingPathComponent("peers", isDirectory: true)
         let eigeneGeraeteID = DatabaseLeaseService.geraeteID
         guard let peerVerzeichnisse = await SyncDateiZugriff.mitZeitlimit({
@@ -169,16 +167,12 @@ enum SyncSnapshotImportService {
     @discardableResult
     @MainActor
     static func importiereSnapshots(context: ModelContext) async -> Bool {
-        guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return true }
-        let zugriffErfolgreich = syncOrdner.startAccessingSecurityScopedResource()
-        SyncOrdnerZugriffsDiagnose.markiereOeffnen(aufrufstelle: "importiereSnapshots", erfolgreich: zugriffErfolgreich)
-        guard zugriffErfolgreich else {
+        guard SyncOrdnerService.gewaehlterOrdner() != nil else { return true }
+        // GitHub #171: kein eigener Security-Scope mehr — setzt die
+        // sitzungsweit bereits offene Sitzung voraus (``SyncOrdnerZugriffsSitzung``).
+        guard let syncOrdner = SyncOrdnerZugriffsSitzung.offen else {
             SyncDebugLogger.log(.ordnerZugriffFehlgeschlagen, details: "importiereSnapshots")
             return false
-        }
-        defer {
-            syncOrdner.stopAccessingSecurityScopedResource()
-            SyncOrdnerZugriffsDiagnose.markiereSchliessen(aufrufstelle: "importiereSnapshots")
         }
 
         let peersOrdner = syncOrdner.appendingPathComponent("peers", isDirectory: true)
@@ -2136,16 +2130,12 @@ enum SyncSnapshotImportService {
     @discardableResult
     @MainActor
     static func raeumeVerwaisteFremdeExportsAuf() async -> Bool {
-        guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return true }
-        let zugriffErfolgreich = syncOrdner.startAccessingSecurityScopedResource()
-        SyncOrdnerZugriffsDiagnose.markiereOeffnen(aufrufstelle: "raeumeVerwaisteFremdeExportsAuf", erfolgreich: zugriffErfolgreich)
-        guard zugriffErfolgreich else {
+        guard SyncOrdnerService.gewaehlterOrdner() != nil else { return true }
+        // GitHub #171: kein eigener Security-Scope mehr — manueller
+        // Debug-Button, deshalb ``sicherstellenOffen()``.
+        guard SyncOrdnerZugriffsSitzung.sicherstellenOffen(), let syncOrdner = SyncOrdnerZugriffsSitzung.offen else {
             SyncDebugLogger.log(.ordnerZugriffFehlgeschlagen, details: "raeumeVerwaisteFremdeExportsAuf")
             return false
-        }
-        defer {
-            syncOrdner.stopAccessingSecurityScopedResource()
-            SyncOrdnerZugriffsDiagnose.markiereSchliessen(aufrufstelle: "raeumeVerwaisteFremdeExportsAuf")
         }
 
         let peersOrdner = syncOrdner.appendingPathComponent("peers", isDirectory: true)

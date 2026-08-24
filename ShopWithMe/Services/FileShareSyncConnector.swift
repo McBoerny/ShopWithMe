@@ -5,10 +5,18 @@ import Foundation
 /// `SyncOrdnerService`, `SyncExportService`, `SyncSnapshotExportService` und
 /// `SyncKaeufeExportService`. Workstream 1a (docs/SYNC_CONNECTOR_ARCHITEKTUR.md).
 ///
-/// **Security-Scope-Invariante**: `beginneZugriff()` öffnet den Bookmark genau
-/// einmal und speichert die geöffnete URL in `offenerSyncOrdner`. Alle
-/// Methoden außer `binIchNochMitglied()` und `multipeerGruppenID()` setzen
-/// einen aktiven Scope voraus. `SyncOrdnerService`-Methoden, die intern
+/// **Security-Scope-Invariante**: der Scope wird sitzungsweit über
+/// ``SyncOrdnerZugriffsSitzung`` verwaltet, nicht mehr pro Aufruf (GitHub
+/// #171 — wiederholtes Öffnen/Schließen desselben Bookmarks über viele
+/// Sync-Zyklen destabilisierte den Zugriff auf echten Geräten dauerhaft).
+/// `beginneZugriff()`/`beendeZugriff()` bleiben als Protokoll-Kontrakt
+/// erhalten (Aufrufer wie `DebuggingView` rufen sie weiterhin paarweise
+/// auf), wirken aber nur noch als dünne, idempotente Absicherung — das
+/// tatsächliche Öffnen/Schließen übernimmt ausschließlich
+/// ``SyncOrdnerZugriffsSitzung`` (getrieben vom App-Vordergrund-Lebenszyklus
+/// in `SyncPollingService.starten(context:)`/`stoppen()`). Alle Methoden
+/// außer `binIchNochMitglied()` und `multipeerGruppenID()` setzen einen
+/// aktiven Scope voraus. `SyncOrdnerService`-Methoden, die intern
 /// `startAccessingSecurityScopedResource()` aufrufen (`binIchNochMitglied(in:)`,
 /// `entfernePeer(_:in:context:)`), werden hier NICHT delegiert, um
 /// Scope-Verschachtelung auf demselben Bookmark zu vermeiden (GitHub §30-Bug,
@@ -16,26 +24,17 @@ import Foundation
 @MainActor
 final class FileShareSyncConnector: SyncConnector {
 
-    private var offenerSyncOrdner: URL?
+    private var offenerSyncOrdner: URL? { SyncOrdnerZugriffsSitzung.offen }
 
     // MARK: - Lebenszyklus
 
     func beginneZugriff() async -> Bool {
-        guard let ordner = SyncOrdnerService.gewaehlterOrdner() else { return false }
-        let erfolgreich = ordner.startAccessingSecurityScopedResource()
-        SyncOrdnerZugriffsDiagnose.markiereOeffnen(
-            aufrufstelle: "FileShareSyncConnector.beginneZugriff", erfolgreich: erfolgreich
-        )
-        guard erfolgreich else { return false }
-        offenerSyncOrdner = ordner
-        return true
+        SyncOrdnerZugriffsSitzung.sicherstellenOffen()
     }
 
     func beendeZugriff() {
-        guard let ordner = offenerSyncOrdner else { return }
-        ordner.stopAccessingSecurityScopedResource()
-        SyncOrdnerZugriffsDiagnose.markiereSchliessen(aufrufstelle: "FileShareSyncConnector.beginneZugriff")
-        offenerSyncOrdner = nil
+        // Bewusst kein Schließen mehr hier — die Sitzung lebt unabhängig von
+        // einzelnen Aufrufern weiter, siehe Typ-Doku oben.
     }
 
     // MARK: - Peer-Verwaltung

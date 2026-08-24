@@ -47,7 +47,7 @@ enum SyncExportService {
     @discardableResult
     @MainActor
     static func exportiereNeueEvents(context: ModelContext) async -> Bool {
-        guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return true }
+        guard SyncOrdnerService.gewaehlterOrdner() != nil else { return true }
 
         var beschreibung = FetchDescriptor<SyncEvent>(
             predicate: #Predicate { $0.hochgeladen == false }
@@ -55,15 +55,11 @@ enum SyncExportService {
         beschreibung.sortBy = [SortDescriptor(\.lamportZaehler)]
         guard let ausstehende = try? context.fetch(beschreibung), !ausstehende.isEmpty else { return true }
 
-        let zugriffErfolgreich = syncOrdner.startAccessingSecurityScopedResource()
-        SyncOrdnerZugriffsDiagnose.markiereOeffnen(aufrufstelle: "exportiereNeueEvents", erfolgreich: zugriffErfolgreich)
-        guard zugriffErfolgreich else {
+        // GitHub #171: kein eigener Security-Scope mehr — setzt die
+        // sitzungsweit bereits offene Sitzung voraus (``SyncOrdnerZugriffsSitzung``).
+        guard let syncOrdner = SyncOrdnerZugriffsSitzung.offen else {
             SyncDebugLogger.log(.ordnerZugriffFehlgeschlagen, details: "exportiereNeueEvents")
             return false
-        }
-        defer {
-            syncOrdner.stopAccessingSecurityScopedResource()
-            SyncOrdnerZugriffsDiagnose.markiereSchliessen(aufrufstelle: "exportiereNeueEvents")
         }
 
         let eventsOrdner = eigenerEventsOrdner(in: syncOrdner)
@@ -142,26 +138,19 @@ enum SyncExportService {
         }
         letzteEventBereinigung = Date()
 
-        guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return }
-        // Eigener, in sich abgeschlossener Security-Scoped-Zugriff — VOR dem
-        // Öffnen des eigenen Scopes unten aufgerufen, nicht von innen heraus,
-        // um keinen verschachtelten/überlappenden Zugriff auf denselben
-        // Bookmark zu erzeugen (siehe ``SyncOrdnerZugriffsDiagnose``-Typ-Doku).
+        guard SyncOrdnerService.gewaehlterOrdner() != nil else { return }
+        // GitHub #171: kein eigener Security-Scope mehr — kann außerhalb
+        // eines laufenden Polling-Zyklus aufgerufen werden (RootView-Task,
+        // manueller DebuggingView-Button), deshalb ``sicherstellenOffen()``
+        // statt nur ``offen`` zu lesen.
+        guard SyncOrdnerZugriffsSitzung.sicherstellenOffen(), let syncOrdner = SyncOrdnerZugriffsSitzung.offen else {
+            SyncDebugLogger.log(.ordnerZugriffFehlgeschlagen, details: "raeumeAlteEigeneEventDateienAuf")
+            return
+        }
         let berechneterWasserstand = erzwungenerWasserstand == nil
             ? await SyncSnapshotImportService.aktuellerAufraeumWasserstand(in: syncOrdner)
             : erzwungenerWasserstand
         guard let wasserstand = berechneterWasserstand else { return }
-
-        let zugriffErfolgreich = syncOrdner.startAccessingSecurityScopedResource()
-        SyncOrdnerZugriffsDiagnose.markiereOeffnen(aufrufstelle: "raeumeAlteEigeneEventDateienAuf", erfolgreich: zugriffErfolgreich)
-        guard zugriffErfolgreich else {
-            SyncDebugLogger.log(.ordnerZugriffFehlgeschlagen, details: "raeumeAlteEigeneEventDateienAuf")
-            return
-        }
-        defer {
-            syncOrdner.stopAccessingSecurityScopedResource()
-            SyncOrdnerZugriffsDiagnose.markiereSchliessen(aufrufstelle: "raeumeAlteEigeneEventDateienAuf")
-        }
 
         let eventsOrdner = eigenerEventsOrdner(in: syncOrdner)
         guard let dateien = await Task.detached(priority: .utility, operation: {

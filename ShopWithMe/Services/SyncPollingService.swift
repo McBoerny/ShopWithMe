@@ -103,6 +103,10 @@ final class SyncPollingService: ObservableObject {
     /// abgewartet wird.
     func starten(context: ModelContext) {
         self.context = context
+        // GitHub #171: Security-Scope einmal für die gesamte Vordergrund-
+        // Sitzung öffnen, statt jeden Sync-Zyklus erneut — siehe
+        // ``SyncOrdnerZugriffsSitzung``.
+        SyncOrdnerZugriffsSitzung.oeffnen()
         icloudBeobachter.starten { [weak self] in
             Task { @MainActor [weak self] in
                 await self?.syncZyklus()
@@ -156,6 +160,7 @@ final class SyncPollingService: ObservableObject {
         schleife?.cancel()
         schleife = nil
         icloudBeobachter.stoppen()
+        SyncOrdnerZugriffsSitzung.schliessen()
     }
 
     /// Rückgabewert meldet, ob der Ordnerzugriff in allen fünf Teilschritten
@@ -193,11 +198,12 @@ final class SyncPollingService: ObservableObject {
         defer { SyncImportService.beendeVollstaendigenZyklus() }
         // Kein Sync-Ordner konfiguriert: nichts zu tun, kein Fehler.
         guard SyncOrdnerService.gewaehlterOrdner() != nil else { return true }
-        // Scope einmalig für den gesamten Zyklus öffnen — die fünf Teil-Services
-        // öffnen ihn darunter nochmals (Ref-Count ≥ 1 bleibt garantiert); verhindert
-        // das bisherige Auf-0-Fallen zwischen den Service-Aufrufen.
-        guard await connector.beginneZugriff() else { return false }
-        defer { connector.beendeZugriff() }
+        // GitHub #171: Scope wird nicht mehr pro Zyklus geöffnet/geschlossen
+        // (das destabilisierte den Zugriff auf echten Geräten dauerhaft, siehe
+        // ``SyncOrdnerZugriffsSitzung``-Typ-Doku) — die Sitzung läuft bereits
+        // seit ``starten(context:)``. Fehlt sie ausnahmsweise (z.B. Ordner
+        // zwischenzeitlich entfernt), erneut versuchen statt hart zu scheitern.
+        guard SyncOrdnerZugriffsSitzung.offen != nil || SyncOrdnerZugriffsSitzung.oeffnen() else { return false }
         SyncDebugLogger.log(.zyklusStart, details: einkaufAktiv ? "einkaufAktiv" : "ruhend")
         let start = ContinuousClock.now
 

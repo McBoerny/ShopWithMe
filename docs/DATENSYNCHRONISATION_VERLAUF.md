@@ -4169,4 +4169,54 @@ iCloud Drive).
   Lesezugriff auf die vom System gelieferte, außerhalb der eigenen Sandbox
   liegende URL, da `fileImporter` sonst je nach Quelle stumm fehlschlagen
   kann.
+
+## 63. Live-Fund: dauerhafter Sandbox-Zugriffsverlust nach ca. 14 Minuten Dauerbetrieb (GitHub #171)
+
+**Symptom:** Nach ca. 10–15 Minuten Dauerbetrieb im aktiven Einkaufsmodus
+(kurzes Polling-Intervall) begann das Debug-Protokoll bei jedem Sync-Zyklus
+`sandbox_extension_consume error=[12: Cannot allocate memory]` zu melden,
+gefolgt von `sync_scope_zugriff: FileShareSyncConnector.beginneZugriff
+erfolgreich=false`. Ab diesem Zeitpunkt scheiterte **jeder** weitere
+Sync-Zyklus für den Rest der App-Sitzung — keine Selbstheilung, nur ein
+App-Neustart half.
+
+**Root Cause:** dasselbe Fehlerbild wie Abschnitt 30 (verschachteltes
+wiederholtes Öffnen/Schließen desselben Security-Scoped-Bookmarks
+destabilisiert den Zugriff auf echten Geräten dauerhaft), diesmal aber nicht
+innerhalb eines einzelnen Zyklus verschachtelt, sondern **über viele Zyklen
+hinweg wiederholt**: praktisch jede Sync-Teilfunktion öffnete und schloss
+ihren eigenen Security-Scope auf demselben Bookmark — 6–7 unabhängige
+Öffnungen pro Zyklus (`SyncPollingService`, `SyncICloudAenderungsBeobachter`,
+`SyncSnapshotImportService`, `SyncImportService`, `SyncExportService`,
+`SyncSnapshotExportService`, `SyncKaeufeExportService`), alle 2–60s. Eine
+reine Reduktion der Öffnungen pro Zyklus hätte die Erschöpfung nur zeitlich
+verschoben (verifiziert: Abschnitt 30s Fund trat nach ~190 Öffnungen in
+einem Zyklus auf, dieser Fund nach mehreren hundert Öffnungen über ~14
+Minuten — dieselbe Größenordnung, nur anders verteilt).
+
+**Fix:** neuer Typ ``SyncOrdnerZugriffsSitzung`` (`Services/SyncOrdnerZugriffsSitzung.swift`)
+verwaltet den Security-Scope sitzungsweit statt pro Operation — geöffnet
+genau einmal pro App-Vordergrund-Sitzung (`SyncPollingService.starten(context:)`),
+geschlossen bei `stoppen()` bzw. bei Ordnerwechsel/-entfernen
+(zentral in `SyncOrdnerService.ordnerFestlegen(_:)`/`ordnerEntfernen()`
+verankert, damit auch Testfälle, die direkt gegen diese Funktionen
+aufsetzen, automatisch einen offenen Scope bekommen). Alle zuvor
+unabhängig öffnenden Stellen (10 Dateien: die sieben oben, dazu
+`MultipeerSyncService`, `DebuggingView`, sowie mehrere Debug-/Aufräum-
+Funktionen in `SyncImportService`/`SyncSnapshotImportService`/
+`SyncKaeufeExportService`) lesen jetzt nur noch den bereits offenen Ordner
+(``SyncOrdnerZugriffsSitzung/offen``) bzw. öffnen bei Bedarf idempotent
+(``SyncOrdnerZugriffsSitzung/sicherstellenOffen()``) für einmalige,
+nutzerausgelöste Aktionen außerhalb des Polling-Loops. Drei Dateien öffnen
+bewusst weiterhin einen eigenen, kurzlebigen Scope auf einer GANZ ANDEREN,
+vom Nutzer frisch gewählten Einzeldatei (Backup-Restore in
+`SyncOrdnerSettingsView`, `MilkForUsImportView`, `BelegScanView`) — kein
+Bezug zum Sync-Ordner-Bookmark, unverändert gelassen.
+
+**Verifikationsstand:** `xcodegen generate` + `xcodebuild build` sauber,
+keine neuen Warnungen. Vollständiger Testlauf (448 Tests, 49 Suiten) grün
+bis auf `BelegScanIntegrationTests` (22 vorbestehende, vom Refactor
+unabhängige Fehlschläge — bestätigt per Vergleichslauf auf unverändertem
+`main`). Noch nicht auf einem echten Gerät über einen längeren Zeitraum
+(30–45 Minuten Dauerbetrieb) nachverifiziert.
 `ausstehendeAktion` gewährte.

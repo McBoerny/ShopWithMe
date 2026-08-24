@@ -429,18 +429,14 @@ enum SyncSnapshotExportService {
     @discardableResult
     @MainActor
     static func exportierePaket(context: ModelContext, importErfolgreich: Bool = true) async -> Bool {
-        guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return true }
+        guard SyncOrdnerService.gewaehlterOrdner() != nil else { return true }
         let teile = erstellePaketTeile(context: context)
 
-        let zugriffErfolgreich = syncOrdner.startAccessingSecurityScopedResource()
-        SyncOrdnerZugriffsDiagnose.markiereOeffnen(aufrufstelle: "exportierePaket", erfolgreich: zugriffErfolgreich)
-        guard zugriffErfolgreich else {
+        // GitHub #171: kein eigener Security-Scope mehr — setzt die
+        // sitzungsweit bereits offene Sitzung voraus (``SyncOrdnerZugriffsSitzung``).
+        guard let syncOrdner = SyncOrdnerZugriffsSitzung.offen else {
             SyncDebugLogger.log(.ordnerZugriffFehlgeschlagen, details: "exportierePaket")
             return false
-        }
-        defer {
-            syncOrdner.stopAccessingSecurityScopedResource()
-            SyncOrdnerZugriffsDiagnose.markiereSchliessen(aufrufstelle: "exportierePaket")
         }
 
         let eigenerOrdner = peerOrdner(fuer: SyncOrdnerService.eigenerPeerOrdnerName(in: syncOrdner), in: syncOrdner)

@@ -45,19 +45,15 @@ enum SyncKaeufeExportService {
     @discardableResult
     @MainActor
     static func exportiereNeueKaeufe(context: ModelContext) async -> Bool {
-        guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return true }
+        guard SyncOrdnerService.gewaehlterOrdner() != nil else { return true }
         let alleLokalen = (try? context.fetch(FetchDescriptor<KaufEintrag>())) ?? []
         guard !alleLokalen.isEmpty else { return true }
 
-        let zugriffErfolgreich = syncOrdner.startAccessingSecurityScopedResource()
-        SyncOrdnerZugriffsDiagnose.markiereOeffnen(aufrufstelle: "exportiereNeueKaeufe", erfolgreich: zugriffErfolgreich)
-        guard zugriffErfolgreich else {
+        // GitHub #171: kein eigener Security-Scope mehr — setzt die
+        // sitzungsweit bereits offene Sitzung voraus (``SyncOrdnerZugriffsSitzung``).
+        guard let syncOrdner = SyncOrdnerZugriffsSitzung.offen else {
             SyncDebugLogger.log(.ordnerZugriffFehlgeschlagen, details: "exportiereNeueKaeufe")
             return false
-        }
-        defer {
-            syncOrdner.stopAccessingSecurityScopedResource()
-            SyncOrdnerZugriffsDiagnose.markiereSchliessen(aufrufstelle: "exportiereNeueKaeufe")
         }
 
         let ordner = SyncSnapshotExportService.eigenerKaeufeOrdner(in: syncOrdner)
@@ -144,7 +140,7 @@ enum SyncKaeufeExportService {
     /// zu melden. Ohne hinterlegten Sync-Ordner ohne Wirkung.
     @MainActor
     static func raeumeVerwaisteDateienAuf(context: ModelContext) async {
-        guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return }
+        guard SyncOrdnerService.gewaehlterOrdner() != nil else { return }
 
         let lokaleIDs = Set(
             ((try? context.fetch(FetchDescriptor<KaufEintrag>())) ?? [])
@@ -152,13 +148,10 @@ enum SyncKaeufeExportService {
         )
         let grenze = Date().addingTimeInterval(-KaufEintragBereinigungService.karenzzeit)
 
-        let zugriffErfolgreich = syncOrdner.startAccessingSecurityScopedResource()
-        SyncOrdnerZugriffsDiagnose.markiereOeffnen(aufrufstelle: "raeumeVerwaisteDateienAuf", erfolgreich: zugriffErfolgreich)
-        guard zugriffErfolgreich else { return }
-        defer {
-            syncOrdner.stopAccessingSecurityScopedResource()
-            SyncOrdnerZugriffsDiagnose.markiereSchliessen(aufrufstelle: "raeumeVerwaisteDateienAuf")
-        }
+        // GitHub #171: kein eigener Security-Scope mehr — täglicher Timer,
+        // kann außerhalb eines laufenden Polling-Zyklus feuern, deshalb
+        // ``sicherstellenOffen()``.
+        guard SyncOrdnerZugriffsSitzung.sicherstellenOffen(), let syncOrdner = SyncOrdnerZugriffsSitzung.offen else { return }
 
         let ordner = SyncSnapshotExportService.eigenerKaeufeOrdner(in: syncOrdner)
         let anzahl = await Task.detached(priority: .utility) {
@@ -210,14 +203,10 @@ enum SyncKaeufeExportService {
     @MainActor
     static func entferneDateien(fuerKaufEintragIDs ids: [UUID]) {
         guard !ids.isEmpty else { return }
-        guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return }
-        let zugriffErfolgreich = syncOrdner.startAccessingSecurityScopedResource()
-        SyncOrdnerZugriffsDiagnose.markiereOeffnen(aufrufstelle: "entferneDateien", erfolgreich: zugriffErfolgreich)
-        guard zugriffErfolgreich else { return }
-        defer {
-            syncOrdner.stopAccessingSecurityScopedResource()
-            SyncOrdnerZugriffsDiagnose.markiereSchliessen(aufrufstelle: "entferneDateien")
-        }
+        // GitHub #171: kein eigener Security-Scope mehr — kann außerhalb
+        // eines laufenden Polling-Zyklus aufgerufen werden
+        // (``KaufEintragBereinigungService``), deshalb ``sicherstellenOffen()``.
+        guard SyncOrdnerZugriffsSitzung.sicherstellenOffen(), let syncOrdner = SyncOrdnerZugriffsSitzung.offen else { return }
         let ordner = SyncSnapshotExportService.eigenerKaeufeOrdner(in: syncOrdner)
         for id in ids {
             SyncDateiZugriff.loescheKoordiniert(ordner.appendingPathComponent("\(id.uuidString).json"))

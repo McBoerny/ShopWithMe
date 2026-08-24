@@ -65,12 +65,13 @@ final class SyncICloudAenderungsBeobachter {
     /// erkannt würde. Wirkungslos (kein Neuaufbau), solange sich weder der
     /// Ordner noch die bekannte Peer-Liste geändert haben.
     func aktualisiereScopeFallsNoetig() {
-        guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else {
+        // GitHub #171: kein eigener Security-Scope mehr — setzt die
+        // sitzungsweit (über ``SyncOrdnerZugriffsSitzung``) bereits offene
+        // Sitzung voraus, statt selbst zu öffnen/schließen.
+        guard let syncOrdner = SyncOrdnerZugriffsSitzung.offen else {
             beendeAktuelleQuery()
             return
         }
-        guard syncOrdner.startAccessingSecurityScopedResource() else { return }
-        defer { syncOrdner.stopAccessingSecurityScopedResource() }
 
         let peersOrdner = syncOrdner.appendingPathComponent("peers", isDirectory: true)
         let peerNamen = Set(

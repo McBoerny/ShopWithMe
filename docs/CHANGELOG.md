@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.17 (Build 361) — Sync: dauerhaften Sandbox-Zugriffsverlust bei Dauerbetrieb behoben (#171)
+
+- **#171:** Nach ca. 10–15 Minuten Dauerbetrieb im aktiven Einkaufsmodus konnte der
+  Zugriff auf den Sync-Ordner dauerhaft abbrechen (kein Sync mehr bis zum App-Neustart).
+  Ursache war wiederholtes Öffnen/Schließen desselben externen Ordner-Zugriffs bei
+  jedem Sync-Zyklus statt einmalig pro App-Sitzung — jetzt zentral über
+  `SyncOrdnerZugriffsSitzung` verwaltet (Details: `docs/DATENSYNCHRONISATION_VERLAUF.md`
+  §63). Rein internes Verhalten, keine sichtbare Funktionsänderung.
+
 ## v0.17 (Build 359) — Artikelauswahl: ganze Zeile tappbar + Wischgesten (#169, #170)
 
 - **#169:** In „Artikel hinzufügen" ist jetzt die ganze Zeile (nicht mehr nur der

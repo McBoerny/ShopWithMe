@@ -477,7 +477,7 @@ private struct AufraeumWasserstandSection: View {
     private func pruefeEinzigerPeerUndFrage() {
         guard !wirdAusgefuehrt else { return }
         Task {
-            guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return }
+            guard SyncOrdnerZugriffsSitzung.sicherstellenOffen(), let syncOrdner = SyncOrdnerZugriffsSitzung.offen else { return }
             if await SyncSnapshotImportService.istAktuellEinzigerPeer(in: syncOrdner) {
                 zeigeEinzigerPeerBestaetigung = true
             } else {
@@ -503,7 +503,7 @@ private struct AufraeumWasserstandSection: View {
 
     @MainActor
     private func berechne() async -> Ergebnis {
-        guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else {
+        guard SyncOrdnerZugriffsSitzung.sicherstellenOffen(), let syncOrdner = SyncOrdnerZugriffsSitzung.offen else {
             return Ergebnis(wasserstand: nil, tombstoneAnzahl: 0, eventDateiAnzahl: 0)
         }
         let wasserstand = await SyncSnapshotImportService.aktuellerAufraeumWasserstand(in: syncOrdner)
@@ -517,8 +517,7 @@ private struct AufraeumWasserstandSection: View {
         }
 
         let eventDateiAnzahl: Int
-        if let ws = wasserstand, syncOrdner.startAccessingSecurityScopedResource() {
-            defer { syncOrdner.stopAccessingSecurityScopedResource() }
+        if let ws = wasserstand {
             let eventsOrdner = SyncExportService.eigenerEventsOrdner(in: syncOrdner)
             let dateien = await Task.detached(priority: .utility) {
                 SyncDateiZugriff.listeKoordiniert(eventsOrdner) ?? []

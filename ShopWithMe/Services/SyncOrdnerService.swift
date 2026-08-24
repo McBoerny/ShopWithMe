@@ -91,6 +91,14 @@ enum SyncOrdnerService {
     /// Legt den Sync-Ordner fest und merkt ihn sich per Security-Scoped-Bookmark.
     /// Es wird nichts kopiert oder verschoben — der Ordner dient ausschließlich
     /// als Ziel für Peer-Exportdateien.
+    ///
+    /// **`@MainActor`** (GitHub #171): stellt die sitzungsweite
+    /// ``SyncOrdnerZugriffsSitzung`` sofort auf den neuen Ordner um (alten
+    /// Scope schließen, neuen öffnen) — sonst würde ein Ordnerwechsel bei
+    /// laufender App erst nach einem Hintergrund/Vordergrund-Wechsel wirksam,
+    /// und Testfälle, die direkt gegen diese Funktion aufsetzen, hätten nie
+    /// einen offenen Scope.
+    @MainActor
     static func ordnerFestlegen(_ ordner: URL) throws {
         guard ordner.startAccessingSecurityScopedResource() else {
             throw SyncOrdnerError.zugriffVerweigert
@@ -99,13 +107,19 @@ enum SyncOrdnerService {
 
         let bookmark = try ordner.bookmarkData()
         UserDefaults.standard.set(bookmark, forKey: bookmarkSchluessel)
+        SyncOrdnerZugriffsSitzung.oeffnen()
     }
 
     /// Entfernt den hinterlegten Sync-Ordner — Datensynchronisation ist danach
     /// deaktiviert (``SyncExportService`` schreibt nichts mehr), bereits
     /// geschriebene Peer-Dateien im Ordner bleiben unangetastet liegen.
+    /// **`@MainActor`** (GitHub #171): schließt zusätzlich die sitzungsweite
+    /// ``SyncOrdnerZugriffsSitzung`` — Single Source of Truth für alle
+    /// Aufrufer (UI-Deaktivierung, Rückkehrer-Ausschluss, Testfälle).
+    @MainActor
     static func ordnerEntfernen() {
         UserDefaults.standard.removeObject(forKey: bookmarkSchluessel)
+        SyncOrdnerZugriffsSitzung.schliessen()
     }
 
     /// Wie ``ordnerEntfernen()``, vergisst zusätzlich alle lokal gemerkten

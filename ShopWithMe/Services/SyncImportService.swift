@@ -159,19 +159,15 @@ enum SyncImportService {
         // einmaliger Schnappschuss macht die Reihenfolge irrelevant, statt sie
         // implizit vorauszusetzen.
         let aliase = SyncEntitaetsAliasService.alleAliaseNachArt(context: context)
-        guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return true }
-        let zugriffErfolgreich = syncOrdner.startAccessingSecurityScopedResource()
-        SyncOrdnerZugriffsDiagnose.markiereOeffnen(aufrufstelle: "importiereNeueEvents", erfolgreich: zugriffErfolgreich)
-        guard zugriffErfolgreich else {
+        guard SyncOrdnerService.gewaehlterOrdner() != nil else { return true }
+        // GitHub #171: kein eigener Security-Scope mehr — setzt die
+        // sitzungsweit bereits offene Sitzung voraus (``SyncOrdnerZugriffsSitzung``).
+        guard let syncOrdner = SyncOrdnerZugriffsSitzung.offen else {
             SyncDebugLogger.log(.ordnerZugriffFehlgeschlagen, details: "importiereNeueEvents")
             return false
         }
         batchZyklusLaeuft = true
-        defer {
-            syncOrdner.stopAccessingSecurityScopedResource()
-            SyncOrdnerZugriffsDiagnose.markiereSchliessen(aufrufstelle: "importiereNeueEvents")
-            batchZyklusLaeuft = false
-        }
+        defer { batchZyklusLaeuft = false }
 
         let peersOrdner = syncOrdner.appendingPathComponent("peers", isDirectory: true)
         let eigeneGeraeteID = DatabaseLeaseService.geraeteID
@@ -268,9 +264,9 @@ enum SyncImportService {
     /// Ergebnis auf (leeres statt Null-Eintrag).
     @MainActor
     static func ausstehendeEventAnzahlJePeer(context: ModelContext) async -> [String: Int] {
-        guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return [:] }
-        guard syncOrdner.startAccessingSecurityScopedResource() else { return [:] }
-        defer { syncOrdner.stopAccessingSecurityScopedResource() }
+        // GitHub #171: kein eigener Security-Scope mehr — läuft alle 5s als
+        // `DebuggingView`-Auto-Refresh, deshalb ``sicherstellenOffen()``.
+        guard SyncOrdnerZugriffsSitzung.sicherstellenOffen(), let syncOrdner = SyncOrdnerZugriffsSitzung.offen else { return [:] }
 
         let peersOrdner = syncOrdner.appendingPathComponent("peers", isDirectory: true)
         let eigeneGeraeteID = DatabaseLeaseService.geraeteID
