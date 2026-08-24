@@ -101,6 +101,23 @@ final class MultipeerSyncService: NSObject, ObservableObject {
     /// beim Session-Abbau in ``beendeAdvertisingUndBrowsing()``.
     @Published private(set) var verbundenePeerNamen: [String] = []
 
+    /// Ergebnis eines Empfangsversuchs für ein Bereich-B/C/D-Catch-up-Paket
+    /// (``wendeCatchUpPaketAn(_:context:)``) — unterscheidet, ob Multipeer
+    /// tatsächlich gegriffen hat oder wegen eines laufenden Datei-Zyklus auf
+    /// den Datei-Fallback zurückgefallen ist (Re-Entranz-Schutz).
+    enum CatchUpErgebnis {
+        case angewendet
+        case uebersprungen
+    }
+
+    /// Letztes Ergebnis eines empfangenen Catch-up-Pakets je Peer-Gerätename
+    /// (`geraeteName` aus dem Paket-Manifest, nicht `peerID.displayName`,
+    /// damit es sich stabil mit den übrigen Sync-Status-Anzeigen deckt) —
+    /// Grundlage für die Diagnose-Übersicht (`DebuggingView`), ob der
+    /// Multipeer-Kanal für einen Peer zuletzt wirklich gegriffen hat. Rein
+    /// diagnostisch, ohne jeden Einfluss auf den Merge-Ablauf selbst.
+    @Published private(set) var letzterCatchUpVersuch: [String: (zeitpunkt: Date, ergebnis: CatchUpErgebnis)] = [:]
+
     private var context: ModelContext?
     private var session: MCSession?
     private var advertiser: MCNearbyServiceAdvertiser?
@@ -459,6 +476,7 @@ final class MultipeerSyncService: NSObject, ObservableObject {
     private func wendeCatchUpPaketAn(_ paket: MultipeerCatchUpPaket, context: ModelContext) {
         guard SyncImportService.versucheVollstaendigenZyklusZuStarten() else {
             SyncDebugLogger.log(.multipeerCatchUpUebersprungen, details: paket.teile.manifest.geraeteName)
+            letzterCatchUpVersuch[paket.teile.manifest.geraeteName] = (Date(), .uebersprungen)
             return
         }
         defer { SyncImportService.beendeVollstaendigenZyklus() }
@@ -472,6 +490,7 @@ final class MultipeerSyncService: NSObject, ObservableObject {
         )
         try? context.save()
         SyncDebugLogger.log(.multipeerCatchUpAngewendet, details: paket.teile.manifest.geraeteName)
+        letzterCatchUpVersuch[paket.teile.manifest.geraeteName] = (Date(), .angewendet)
     }
 
     /// Verifiziert im Advertiser einen per Einladungs-`context` empfangenen

@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.16 (Build 350) — Sync-Status-Übersicht: Live-Diagnose für Peers, ausstehende Events und Multipeer-Catch-up
+
+Neue Sektion in `DebuggingView` (Einstellungen → Debugging): zeigt live (alle
+5s, solange der Bildschirm offen ist) die Anzahl bekannter Peers, je Peer
+noch nicht importierte Event-Dateien, ob der letzte empfangene
+Multipeer-Catch-up (Bereich B/C/D) tatsächlich angewendet oder wegen eines
+gleichzeitig laufenden Datei-Zyklus übersprungen wurde, sowie den Zeitpunkt
+des letzten vollständig erfolgreichen Sync-Zyklus. Live-Fund, der diese
+Sektion motiviert hat: ein stabiler, mehrere Minuten unveränderter
+Sicherheitsnetz-Stillstand (`docs/DATENSYNCHRONISATION.md` §4.7) war aus den
+bisherigen Log-Dateien allein nur mühsam von einem noch laufenden Nachhol-Sync
+zu unterscheiden — "0 ausstehende Events, trotzdem Divergenz" macht diesen
+Fall jetzt auf einen Blick sichtbar. `MultipeerSyncService` bekam dafür einen
+neuen `@Published`-Zustand (`letzterCatchUpVersuch`), `SyncImportService` eine
+neue rein lesende Zählfunktion (`ausstehendeEventAnzahlJePeer`).
+
 ## v0.16 (Build 348) — Mögliche Duplikate: aktive Rückfrage statt passivem Badge
 
 Die "N mögliche Duplikate prüfen"-Warteschlange (`SyncAbgleichKandidat`) war

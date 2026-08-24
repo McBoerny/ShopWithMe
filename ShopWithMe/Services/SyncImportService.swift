@@ -241,6 +241,42 @@ enum SyncImportService {
         return true
     }
 
+    /// Reine Diagnose-Zählung für die Sync-Status-Übersicht (`DebuggingView`):
+    /// wie viele Event-Dateien je Peer beim nächsten Zyklus noch übernommen
+    /// würden — derselbe Vorfilter (Dateiname minus ``bekannteIDs``) wie in
+    /// ``importiereNeueEvents(context:)``, aber rein lesend, ohne
+    /// ``batchZyklusLaeuft`` zu setzen und ohne die Dateien selbst zu laden/zu
+    /// dekodieren (nur ihre Anzahl interessiert hier). Peers ohne
+    /// Events-Ordner oder mit null ausstehenden Dateien tauchen NICHT im
+    /// Ergebnis auf (leeres statt Null-Eintrag).
+    @MainActor
+    static func ausstehendeEventAnzahlJePeer(context: ModelContext) async -> [String: Int] {
+        guard let syncOrdner = SyncOrdnerService.gewaehlterOrdner() else { return [:] }
+        guard syncOrdner.startAccessingSecurityScopedResource() else { return [:] }
+        defer { syncOrdner.stopAccessingSecurityScopedResource() }
+
+        let peersOrdner = syncOrdner.appendingPathComponent("peers", isDirectory: true)
+        let eigeneGeraeteID = DatabaseLeaseService.geraeteID
+        guard let peerVerzeichnisse = await SyncDateiZugriff.mitZeitlimit({ SyncDateiZugriff.listeKoordiniert(peersOrdner) }) ?? nil else {
+            return [:]
+        }
+        let bekannteIDs = SyncEventService.alleAktuellenGewinnerUndBekannteIDs(context: context).bekannteIDs
+
+        var ergebnis: [String: Int] = [:]
+        for peerOrdner in peerVerzeichnisse where !PeerOrdnerName.gehoertZu(peerOrdner.lastPathComponent, geraeteID: eigeneGeraeteID) {
+            let eventsOrdner = SyncExportService.eventsOrdner(fuerPeer: peerOrdner.lastPathComponent, in: syncOrdner)
+            guard let dateien = await SyncDateiZugriff.mitZeitlimit({ SyncDateiZugriff.listeKoordiniert(eventsOrdner) }) ?? nil else { continue }
+            let anzahl = dateien.filter { $0.pathExtension == "json" }.filter { url in
+                guard let id = eventID(ausDateiname: url) else { return true }
+                return !bekannteIDs.contains(id)
+            }.count
+            if anzahl > 0 {
+                ergebnis[peerOrdner.lastPathComponent] = anzahl
+            }
+        }
+        return ergebnis
+    }
+
     /// Wendet ein einzeln empfangenes Event sofort an (Multipeer-
     /// Beschleunigungskanal, GitHub #49, ``MultipeerSyncService``) — dieselbe
     /// Konfliktauflösung/Materialisierung wie beim Datei-Import

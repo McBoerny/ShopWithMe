@@ -61,6 +61,8 @@ struct DebuggingView: View {
 
             MultipeerStatusSection()
 
+            SyncStatusUebersichtSection()
+
             StatuskonsolidierungSection()
 
             AufraeumWasserstandSection()
@@ -201,6 +203,94 @@ private struct MultipeerStatusSection: View {
         text += " „Multipeer erzwingen“ startet/stoppt den Kanal testweise unabhängig vom Einkaufen-Bildschirm — wird beim nächsten Betreten/Verlassen dieses Bildschirms wieder überschrieben."
         #endif
         return text
+    }
+}
+
+/// Live-Übersicht über den aktuellen Sync-Zustand — beantwortet ohne Log-Wühlen
+/// die Fragen, die bei einer beobachteten Listen-Divergenz zuerst auftauchen:
+/// wie viele Peers sieht dieses Gerät gerade, hat jeder Peer noch
+/// unverarbeitete Event-Dateien liegen, hat der Multipeer-Kanal für einen
+/// verbundenen Peer zuletzt tatsächlich gegriffen oder ist er auf den
+/// Datei-Fallback zurückgefallen, und wann lief der letzte vollständig
+/// erfolgreiche Sync-Zyklus. Aktualisiert sich selbst alle paar Sekunden,
+/// solange die Sektion sichtbar ist (`.task`, automatisch abgebrochen beim
+/// Verlassen der Ansicht) — bewusst kein manueller „Aktualisieren"-Button wie
+/// bei den übrigen Sektionen dieser Ansicht, da hier gerade das Beobachten
+/// eines sich (nicht) verändernden Zustands über die Zeit der Zweck ist (z.B.
+/// ob ein Sicherheitsnetz-Stillstand nach §4.7 fortbesteht).
+private struct SyncStatusUebersichtSection: View {
+    @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var multipeerSyncService: MultipeerSyncService
+    @State private var peerAnzahl: Int?
+    @State private var ausstehendeEventsJePeer: [String: Int] = [:]
+    @State private var letzterZyklus: Date?
+
+    private static let aktualisierungsIntervall: Duration = .seconds(5)
+
+    var body: some View {
+        if SyncOrdnerService.gewaehlterOrdner() != nil {
+            Section {
+                if let peerAnzahl {
+                    LabeledContent("Bekannte Peers", value: "\(peerAnzahl)")
+                } else {
+                    LabeledContent("Bekannte Peers", value: "…")
+                }
+
+                if ausstehendeEventsJePeer.isEmpty {
+                    LabeledContent("Ausstehende Events", value: "keine")
+                } else {
+                    ForEach(ausstehendeEventsJePeer.sorted(by: { $0.key < $1.key }), id: \.key) { peer, anzahl in
+                        LabeledContent("Ausstehend: \(peer)", value: "\(anzahl)")
+                    }
+                }
+
+                if multipeerSyncService.letzterCatchUpVersuch.isEmpty {
+                    LabeledContent("Multipeer-Catch-up", value: "noch keiner")
+                } else {
+                    ForEach(multipeerSyncService.letzterCatchUpVersuch.sorted(by: { $0.key < $1.key }), id: \.key) { peer, versuch in
+                        LabeledContent {
+                            Text(versuch.zeitpunkt.formatted(date: .omitted, time: .standard))
+                        } label: {
+                            Label(peer, systemImage: versuch.ergebnis == .angewendet ? "bolt.fill" : "doc.fill")
+                                .foregroundStyle(versuch.ergebnis == .angewendet ? .green : .secondary)
+                        }
+                    }
+                }
+
+                if let letzterZyklus {
+                    LabeledContent("Letzter voller Sync-Zyklus", value: letzterZyklus.formatted(date: .abbreviated, time: .standard))
+                } else {
+                    LabeledContent("Letzter voller Sync-Zyklus", value: "noch nie")
+                }
+            } header: {
+                Text("Sync-Status-Übersicht")
+            } footer: {
+                Text("Aktualisiert sich automatisch alle \(Int(Self.aktualisierungsIntervall.components.seconds))s, solange dieser Bildschirm offen ist. „Ausstehende Events“: Event-Dateien eines Peers, die beim nächsten Zyklus noch übernommen würden. „Multipeer-Catch-up“: ob der letzte Empfangsversuch eines Bereich-B/C/D-Pakets tatsächlich angewendet wurde (⚡, grün) oder wegen eines gleichzeitig laufenden Datei-Zyklus übersprungen wurde (📄, dann übernimmt der Datei-Kanal oder der nächste Reconnect).")
+            }
+            .task {
+                await aktualisiereWiederkehrend()
+            }
+        }
+    }
+
+    private func aktualisiereWiederkehrend() async {
+        while !Task.isCancelled {
+            await aktualisiere()
+            try? await Task.sleep(for: Self.aktualisierungsIntervall)
+        }
+    }
+
+    private func aktualisiere() async {
+        letzterZyklus = SyncAktualitaetsService.zuletztErfolgreichSynchronisiertAm
+        ausstehendeEventsJePeer = await SyncImportService.ausstehendeEventAnzahlJePeer(context: modelContext)
+
+        let connector = FileShareSyncConnector()
+        guard await connector.beginneZugriff() else {
+            peerAnzahl = nil
+            return
+        }
+        peerAnzahl = await connector.bekanntePeers().count
+        connector.beendeZugriff()
     }
 }
 
