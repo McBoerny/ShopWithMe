@@ -28,9 +28,12 @@ enum EinkaufslistenAnzeigeService {
         context: ModelContext
     ) -> [EinkaufslistenEintrag] {
         guard let geschaeft, !zeigeAlleArtikel else { return eintraege }
+        // Einmal pro Aufruf geladen statt in ``ArtikelVerfuegbarkeitService/istVerfuegbar(_:in:alleAbteilungen:context:)``
+        // pro Element neu zu fetchen (Performance-Fund #152).
+        let alleAbteilungen = (try? context.fetch(FetchDescriptor<Abteilung>())) ?? []
         return eintraege.filter { eintrag in
             guard let artikel = eintrag.artikel else { return false }
-            return ArtikelVerfuegbarkeitService.istVerfuegbar(artikel, in: geschaeft, context: context)
+            return ArtikelVerfuegbarkeitService.istVerfuegbar(artikel, in: geschaeft, alleAbteilungen: alleAbteilungen, context: context)
         }
     }
 

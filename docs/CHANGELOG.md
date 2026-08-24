@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.17 (Build 354) — Performance: App-Start und Einkaufen-Hauptscreen entlastet (#152, #154)
+
+Erster Batch einer mehrteiligen Aufarbeitung von 13 Performance-Issues
+(#152–#164, KI-gestützte Review vom 2026-08-24): die beiden mit Abstand
+heißesten Pfade der App.
+
+- **#154:** `KaufEintrag.preisverlaufMigrierenFallsNoetig` fetchte bei jedem
+  App-Start die komplette `KaufEintrag`-Tabelle, obwohl nach der einmaligen
+  Migration nichts mehr zu tun ist — jetzt per `#Predicate` auf `preis != nil`
+  eingeschränkt. `DatenintegritaetsService.pruefe()` und
+  `migriereGeschaeftsAggregateFallsNoetig` fetchten `Einkaufsvorgang`
+  mehrfach unabhängig voneinander innerhalb derselben Funktion — auf je einen
+  gemeinsamen Fetch konsolidiert.
+- **#152:** `EinkaufenView` wertete beim Rendern jeder sichtbaren Zeile die
+  Mehrfachkategorisierung eines Artikels (inkl. SwiftData-Fetches) ein
+  zweites Mal aus, obwohl die bereits berechnete Abteilungs-Gruppierung
+  dieselbe Information enthält — jetzt einmal pro Render aus dieser Gruppierung
+  abgeleitet. `ArtikelVerfuegbarkeitService.istVerfuegbar` fetchte `Abteilung`
+  pro Listenelement neu statt einmal pro Aufruf des Aufrufers.
+
 ## v0.17 (Build 353) — Minor-Versionssprung: Sync-Diagnose & Sicherheitsnetz-Härtung gegen wiederbelebte Käufe
 
 Bündelt die vorangegangenen v0.16-Änderungen dieser Session zu einem

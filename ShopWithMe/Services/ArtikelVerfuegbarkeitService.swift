@@ -24,8 +24,12 @@ import SwiftData
 /// ``ArtikelGeschaeftVerfuegbarkeit`` ist eine eigene, dauerhafte Tatsache,
 /// unabhängig davon, ob der ursprüngliche ``Einkaufsvorgang`` noch existiert.
 enum ArtikelVerfuegbarkeitService {
-    static func istVerfuegbar(_ artikel: Artikel, in geschaeft: Geschaeft, context: ModelContext) -> Bool {
-        let alleAbteilungen = (try? context.fetch(FetchDescriptor<Abteilung>())) ?? []
+    /// `alleAbteilungen` bewusst als Parameter statt intern gefetcht — der
+    /// einzige Aufrufer (``EinkaufslistenAnzeigeService/verfuegbarkeitsgefiltert(_:geschaeft:zeigeAlleArtikel:context:)``)
+    /// ruft diese Funktion pro Listenelement auf; ein interner Fetch hätte pro
+    /// Element einen eigenen `Abteilung`-Roundtrip bedeutet statt einmal pro
+    /// Aufruf des Aufrufers (Performance-Fund #152).
+    static func istVerfuegbar(_ artikel: Artikel, in geschaeft: Geschaeft, alleAbteilungen: [Abteilung], context: ModelContext) -> Bool {
         let verfuegbareAbteilungen = geschaeft.verfuegbareAbteilungen(alleAbteilungen: alleAbteilungen)
         guard verfuegbareAbteilungen.isEmpty else {
             let abteilungen = artikel.effektiveAbteilungen(context: context)

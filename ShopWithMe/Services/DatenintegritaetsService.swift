@@ -83,7 +83,11 @@ enum DatenintegritaetsService {
         let gueltigeProduktIDs = Set(((try? context.fetch(FetchDescriptor<Produkt>())) ?? []).map(\.persistentModelID))
         let gueltigeAbteilungIDs = Set(((try? context.fetch(FetchDescriptor<Abteilung>())) ?? []).map(\.persistentModelID))
         let gueltigeEinkaufslistenIDs = Set(((try? context.fetch(FetchDescriptor<Einkaufsliste>())) ?? []).map(\.persistentModelID))
-        let gueltigeEinkaufsvorgangIDs = Set(((try? context.fetch(FetchDescriptor<Einkaufsvorgang>())) ?? []).map(\.persistentModelID))
+        // Einmal geladen, statt wie zuvor dreimal in dieser Funktion neu zu
+        // fetchen (Performance-Fund #154) — alle drei Verwendungen weiter
+        // unten lasen exakt denselben Bestand.
+        let alleEinkaufsvorgaenge = (try? context.fetch(FetchDescriptor<Einkaufsvorgang>())) ?? []
+        let gueltigeEinkaufsvorgangIDs = Set(alleEinkaufsvorgaenge.map(\.persistentModelID))
 
         var befunde: [Befund] = []
 
@@ -160,7 +164,7 @@ enum DatenintegritaetsService {
             ))
         }
 
-        for vorgang in (try? context.fetch(FetchDescriptor<Einkaufsvorgang>())) ?? [] {
+        for vorgang in alleEinkaufsvorgaenge {
             let datum = vorgang.startZeit.formatted(date: .abbreviated, time: .omitted)
             if istBaumelnd(vorgang.geschaeft, gueltigeIDs: gueltigeGeschaeftIDs) {
                 let vermutetesGeschaeft = vorgang.kaufEintraege.map(\.geschaeftNameSnapshot).first { !$0.isEmpty }
@@ -183,7 +187,7 @@ enum DatenintegritaetsService {
         // akkumulieren kann. Als EINE aggregierte Zeile statt einer je
         // betroffenem Vorgang, damit ein künftiger ähnlicher Bug den Bericht
         // nicht selbst wieder unbrauchbar macht (siehe Fund: 907 Einträge).
-        let listenloseVorgaenge = ((try? context.fetch(FetchDescriptor<Einkaufsvorgang>())) ?? []).filter { $0.einkaufsliste == nil }
+        let listenloseVorgaenge = alleEinkaufsvorgaenge.filter { $0.einkaufsliste == nil }
         if !listenloseVorgaenge.isEmpty {
             let mitKaeufen = listenloseVorgaenge.filter { !$0.kaufEintraege.isEmpty }
             let kaeufeGesamt = mitKaeufen.reduce(0) { $0 + $1.kaufEintraege.count }
@@ -268,11 +272,14 @@ enum DatenintegritaetsService {
             guard let artikel = eintrag.artikel, let geschaeft = eintrag.geschaeft else { continue }
             ArtikelVerfuegbarkeitService.vermerkeGekauft(artikel: artikel, geschaeft: geschaeft, context: context)
         }
-        for vorgang in (try? context.fetch(FetchDescriptor<Einkaufsvorgang>())) ?? [] where vorgang.endZeit != nil {
+        // Einmal geladen, statt wie zuvor zweimal in dieser Funktion neu zu
+        // fetchen (Performance-Fund #154).
+        let alleVorgaenge = (try? context.fetch(FetchDescriptor<Einkaufsvorgang>())) ?? []
+        for vorgang in alleVorgaenge where vorgang.endZeit != nil {
             GeschaeftBesuchService.erfassen(fuer: vorgang, context: context)
         }
 
-        let verwaist = ((try? context.fetch(FetchDescriptor<Einkaufsvorgang>())) ?? []).filter { $0.einkaufsliste == nil }
+        let verwaist = alleVorgaenge.filter { $0.einkaufsliste == nil }
         guard !verwaist.isEmpty else { return }
         for vorgang in verwaist { context.delete(vorgang) }
         try? context.save()

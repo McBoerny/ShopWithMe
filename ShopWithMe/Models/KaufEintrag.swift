@@ -135,7 +135,14 @@ extension KaufEintrag {
     /// doppelte ``Preispunkt``e bei jedem weiteren App-Start.
     @MainActor
     static func preisverlaufMigrierenFallsNoetig(context: ModelContext) {
-        let deskriptor = FetchDescriptor<KaufEintrag>(sortBy: [SortDescriptor(\.datum, order: .forward)])
+        // `#Predicate` auf `preis != nil`: nach der einmaligen Migration ist
+        // das Feld bei jedem `KaufEintrag` `nil` (siehe unten, wird nach dem
+        // Migrieren zurückgesetzt) — ohne dieses Predicate würde jeder
+        // App-Start auf Dauer die komplette Tabelle laden, obwohl danach kein
+        // einziger Eintrag mehr etwas zu migrieren hat (Performance-Fund #154).
+        let deskriptor = FetchDescriptor<KaufEintrag>(
+            predicate: #Predicate { $0.preis != nil }, sortBy: [SortDescriptor(\.datum, order: .forward)]
+        )
         let alle = (try? context.fetch(deskriptor)) ?? []
         for eintrag in alle {
             // Produkt-Pflicht bei ``Preispunkt``: ohne Artikel-Zuordnung lässt

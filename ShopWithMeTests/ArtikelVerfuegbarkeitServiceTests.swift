@@ -39,8 +39,8 @@ struct ArtikelVerfuegbarkeitServiceTests {
         context.insert(apfel)
         context.insert(shampoo)
 
-        #expect(ArtikelVerfuegbarkeitService.istVerfuegbar(apfel, in: geschaeft, context: context))
-        #expect(!ArtikelVerfuegbarkeitService.istVerfuegbar(shampoo, in: geschaeft, context: context))
+        #expect(ArtikelVerfuegbarkeitService.istVerfuegbar(apfel, in: geschaeft, alleAbteilungen: [obst, drogerie], context: context))
+        #expect(!ArtikelVerfuegbarkeitService.istVerfuegbar(shampoo, in: geschaeft, alleAbteilungen: [obst, drogerie], context: context))
     }
 
     @Test
@@ -57,13 +57,13 @@ struct ArtikelVerfuegbarkeitServiceTests {
         let kaugummi = Artikel(name: "Kaugummi", symbolName: "shippingbox.fill", farbeHex: "#8E8E93", abteilungen: [sonstiges])
         context.insert(kaugummi)
 
-        #expect(!ArtikelVerfuegbarkeitService.istVerfuegbar(kaugummi, in: kiosk, context: context))
+        #expect(!ArtikelVerfuegbarkeitService.istVerfuegbar(kaugummi, in: kiosk, alleAbteilungen: [sonstiges], context: context))
 
         let einkauf = Einkaufsvorgang(geschaeft: kiosk)
         context.insert(einkauf)
         einkauf.artikelAbhaken(kaugummi, context: context)
 
-        #expect(ArtikelVerfuegbarkeitService.istVerfuegbar(kaugummi, in: kiosk, context: context))
+        #expect(ArtikelVerfuegbarkeitService.istVerfuegbar(kaugummi, in: kiosk, alleAbteilungen: [sonstiges], context: context))
     }
 
     @Test
@@ -86,8 +86,8 @@ struct ArtikelVerfuegbarkeitServiceTests {
         context.insert(einkauf)
         einkauf.artikelAbhaken(kaugummi, context: context)
 
-        #expect(ArtikelVerfuegbarkeitService.istVerfuegbar(kaugummi, in: anderesGeschaeft, context: context))
-        #expect(!ArtikelVerfuegbarkeitService.istVerfuegbar(kaugummi, in: kiosk, context: context))
+        #expect(ArtikelVerfuegbarkeitService.istVerfuegbar(kaugummi, in: anderesGeschaeft, alleAbteilungen: [sonstiges], context: context))
+        #expect(!ArtikelVerfuegbarkeitService.istVerfuegbar(kaugummi, in: kiosk, alleAbteilungen: [sonstiges], context: context))
     }
 
     /// Regressionstest für `docs/GESCHAEFTS_AGGREGATE.md`: die Verfügbarkeit
@@ -117,7 +117,7 @@ struct ArtikelVerfuegbarkeitServiceTests {
         context.delete(liste)
         try context.save()
 
-        #expect(ArtikelVerfuegbarkeitService.istVerfuegbar(kaugummi, in: kiosk, context: context))
+        #expect(ArtikelVerfuegbarkeitService.istVerfuegbar(kaugummi, in: kiosk, alleAbteilungen: [sonstiges], context: context))
         #expect(try context.fetchCount(FetchDescriptor<Einkaufsvorgang>()) == 0)
     }
 }

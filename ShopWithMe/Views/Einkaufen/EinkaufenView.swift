@@ -1154,30 +1154,12 @@ private struct EinkaufslisteView: View {
     /// (impliziten) Standort. Ohne genügend gelernte Daten
     /// (``AbteilungsDistanzService/genuegendDatenVerfuegbar(fuer:)``) bleibt es
     /// bei alphabetischer Reihenfolge.
-    ///
-    /// Abteilungen, unter denen `artikel` in dieser Liste angezeigt wird: normalerweise
-    /// alle zugeordneten (``Artikel/effektiveAbteilungen(context:)``) — außer bei
-    /// gewähltem ``geschaeft`` liegt für `artikel` bereits eine eindeutig genug
-    /// gelernte Abteilung vor
-    /// (``AbteilungsDistanzService/gelernteAbteilung(fuer:in:context:)``, GitHub-
-    /// Nachfolgefund zu #36): dann nur noch diese eine, statt weiter alle
-    /// zugeordneten Abschnitte zu duplizieren. Ohne Geschäft (globale
-    /// Listenansicht) bleibt es bei allen zugeordneten Abteilungen, da dort keine
-    /// geschäftsspezifische Kaufhistorie zur Auswahl herangezogen werden kann.
-    ///
-    /// Bei aktivem ``zeigeAlleArtikel`` (Lernmodus) bewusst immer ungefiltert —
-    /// derselbe Bypass wie in ``verfuegbarkeitsgefiltert(_:)``: der Lernmodus soll
-    /// gezielt ALLES zeigen, auch um eine zuvor gelernte, aber inzwischen falsche
-    /// Zuordnung sichtbar korrigieren zu können.
-    private func abteilungenFuerAnzeige(_ artikel: Artikel) -> [Abteilung] {
-        EinkaufslistenAnzeigeService.abteilungenFuerAnzeige(artikel, geschaeft: geschaeft, zeigeAlleArtikel: zeigeAlleArtikel, context: modelContext)
-    }
-
     /// Ein Artikel mit mehreren Abteilungen (``Artikel/effektiveAbteilungen(context:)``,
     /// z.B. Ohropax unter "Drogerie" UND "Reisebedarf") landet in JEDER
     /// zugehörigen Gruppe statt nur in einer einzigen "führenden" — solange
-    /// ``abteilungenFuerAnzeige(_:)`` für dieses Geschäft noch keine eindeutig
-    /// gelernte Abteilung liefert (siehe dort): eine Duplizierung ist bis dahin
+    /// ``EinkaufslistenAnzeigeService/abteilungenFuerAnzeige(_:geschaeft:zeigeAlleArtikel:context:)``
+    /// für dieses Geschäft noch keine eindeutig gelernte Abteilung liefert
+    /// (siehe dort): eine Duplizierung ist bis dahin
     /// gewollt (der Nutzer tappt ihn dort ab, wo er im jeweiligen Geschäft
     /// tatsächlich steht), außerdem hing die frühere Einzelauswahl von der nicht
     /// ordnungsgarantierten SwiftData-Relationship ``Artikel/abteilungen`` ab und
@@ -1297,8 +1279,25 @@ private struct EinkaufslisteView: View {
         abgehakteKaufEintraege.filter { $0.artikel == artikel }
     }
 
+    /// Artikel-IDs, die in mehr als einer ``AbteilungGruppe`` von `gruppen`
+    /// vorkommen — genau die Fälle, in denen
+    /// ``EinkaufslistenAnzeigeService/abteilungenFuerAnzeige(_:geschaeft:zeigeAlleArtikel:context:)``
+    /// mehr als eine Abteilung geliefert hätte. Aus dem bereits berechneten
+    /// `gruppen` abgeleitet, statt diese Funktion (inkl. darin enthaltener
+    /// SwiftData-Fetches) pro sichtbarer Zeile ein zweites Mal auszuwerten
+    /// (Performance-Fund #152) — analog zum bestehenden Muster bei
+    /// ``sortierStatusHinweis(gruppen:)``.
+    private func mehrfachKategorisierteArtikelIDs(in gruppen: [AbteilungGruppe]) -> Set<PersistentIdentifier> {
+        var vorkommen: [PersistentIdentifier: Int] = [:]
+        for element in gruppen.flatMap(\.elemente) {
+            vorkommen[element.artikel.persistentModelID, default: 0] += 1
+        }
+        return Set(vorkommen.filter { $0.value > 1 }.keys)
+    }
+
     var body: some View {
         let gruppen = abteilungGruppen()
+        let mehrfachKategorisierteIDs = mehrfachKategorisierteArtikelIDs(in: gruppen)
         EinkaufslisteDarstellungsView(
             gruppen: gruppen,
             offeneEintraegeAnzahl: offeneEintraege.count,
@@ -1306,7 +1305,7 @@ private struct EinkaufslisteView: View {
             einkaufslistenName: einkaufsliste.name,
             istAbgehakt: istAbgehakt(_:),
             menge: menge(fuer:),
-            mehrfachKategorisiert: { element in abteilungenFuerAnzeige(element.artikel).count > 1 },
+            mehrfachKategorisiert: { element in mehrfachKategorisierteIDs.contains(element.artikel.persistentModelID) },
             abhaken: umschalten(_:abteilung:),
             mengeErhoehen: mengeErhoehen(_:),
             mengeVerringern: mengeVerringern(_:),
