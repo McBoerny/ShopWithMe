@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.17 (Build 355) — Performance: Sync-Merge-Batching (#155, #159, #160)
+
+Zweiter Batch der Performance-Aufarbeitung (#152–#164). Sync-Merge-Pfade, die
+bisher pro Remote-Eintrag/Event einen eigenen SwiftData-Fetch auslösten, statt
+vorhandene Batch-Muster derselben Datei wiederzuverwenden:
+
+- **#155:** `SyncPeerZaehlerStand`/`WarengruppenDistanzPeerZaehlerStand`
+  (G-Counter-Peerzähler) laden ihre Zeilen jetzt einmal pro Merge-Lauf
+  (`mergeGeschaefte`/`mergeWarengruppenDistanzen`) in ein Dictionary vor,
+  analog dem bereits vorhandenen `LokalerBestandCache`-Muster.
+- **#160:** `mergeArtikelGeschaeftVerfuegbarkeiten` nutzt jetzt ein
+  vorgeladenes Set aus (Artikel, Geschäft)-Paaren statt eines linearen
+  `contains(where:)`-Scans pro Remote-Eintrag.
+- **#159:** Der Bereich-A-Event-Replay (`SyncImportService.importiereNeueEvents`)
+  nutzt für das `ArtikelListenKauf`-Sicherheitsnetz-Faktum jetzt denselben
+  einmal geladenen Batch-Cache statt bei jedem Event auf den teuren
+  Namens-Scan-Fallback zurückzufallen — neue `...AlsEventReplay`-Schreibpfade
+  auf `Einkaufsliste`/`Einkaufsvorgang`, die sich die komplette
+  Dedupe-/KaufEintrag-Logik mit den bestehenden Funktionen teilen (Single
+  Source of Truth, kein Duplikat). Bewusst NICHT für den
+  Multipeer-Einzelevent-Pfad geändert, wo ein Vorab-Laden sich nie amortisiert.
+
+**#153 zurückgestellt:** der naheliegende Fix (Fetch+Mapping beim
+Sync-Snapshot-Export überspringen, wenn sich seit dem letzten Zyklus nichts
+geändert hat) wurde vor der Umsetzung verifiziert und dabei als auf Basis von
+`LamportClock` unsicher erkannt — die Bereich-C/D-Merge-Pfade (Käufe, Preise,
+Besuche) bumpen diesen Zähler nicht, ein darauf basierender Skip hätte echte
+lokale Änderungen fälschlich nicht an Dritt-Peers weitergereicht. Finding
+dokumentiert in GitHub #153, keine Umsetzung ohne sichere Grundlage.
+
 ## v0.17 (Build 354) — Performance: App-Start und Einkaufen-Hauptscreen entlastet (#152, #154)
 
 Erster Batch einer mehrteiligen Aufarbeitung von 13 Performance-Issues

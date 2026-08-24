@@ -137,6 +137,50 @@ final class Einkaufsvorgang {
         abteilung abteilungUeberschreibung: Abteilung? = nil,
         geschaeft geschaeftUeberschreibung: Geschaeft?? = nil
     ) -> AbhakErgebnis {
+        artikelAbhakenKern(
+            artikel, produkt: produkt, am: datum, context: context, ursprungsGeraeteID: ursprungsGeraeteID,
+            abteilung: abteilungUeberschreibung, geschaeft: geschaeftUeberschreibung
+        ) { einkaufsliste, eintragDatum in
+            ArtikelListenKaufService.vermerkeAbgehakt(artikel: artikel, einkaufsliste: einkaufsliste, am: eintragDatum, context: context)
+        }
+    }
+
+    /// Wie ``artikelAbhakenOhneEventAufzeichnung(_:produkt:am:context:ursprungsGeraeteID:abteilung:geschaeft:)``,
+    /// nutzt aber für das ``ArtikelListenKauf``-Sicherheitsnetz-Faktum die
+    /// Batch-Variante ``ArtikelListenKaufService/vermerkeAbgehaktFallsNoetig(artikel:einkaufsliste:am:bekannt:context:)``
+    /// statt eines eigenen Fetches pro Aufruf — für ``SyncImportService``s
+    /// Bereich-A-Batch-Import, der `bekannt` einmal pro Import-Durchlauf lädt
+    /// und über viele Events hinweg wiederverwendet (Performance-Fund #159).
+    @discardableResult
+    func artikelAbhakenAlsEventReplay(
+        _ artikel: Artikel, produkt: Produkt? = nil, am datum: Date, context: ModelContext, ursprungsGeraeteID: String? = nil,
+        abteilung abteilungUeberschreibung: Abteilung? = nil,
+        geschaeft geschaeftUeberschreibung: Geschaeft?? = nil,
+        bekannt: inout [ArtikelListenKaufService.Schluessel: ArtikelListenKauf]
+    ) -> AbhakErgebnis {
+        artikelAbhakenKern(
+            artikel, produkt: produkt, am: datum, context: context, ursprungsGeraeteID: ursprungsGeraeteID,
+            abteilung: abteilungUeberschreibung, geschaeft: geschaeftUeberschreibung
+        ) { einkaufsliste, eintragDatum in
+            ArtikelListenKaufService.vermerkeAbgehaktFallsNoetig(
+                artikel: artikel, einkaufsliste: einkaufsliste, am: eintragDatum, bekannt: &bekannt, context: context
+            )
+        }
+    }
+
+    /// Gemeinsamer Kern von ``artikelAbhakenOhneEventAufzeichnung(_:produkt:am:context:ursprungsGeraeteID:abteilung:geschaeft:)``
+    /// und ``artikelAbhakenAlsEventReplay(_:produkt:am:context:ursprungsGeraeteID:abteilung:geschaeft:bekannt:)``
+    /// — beide unterscheiden sich nur darin, WIE das abschließende
+    /// ``ArtikelListenKauf``-Sicherheitsnetz-Faktum vermerkt wird (Einzel-Fetch
+    /// vs. vorgeladenes Batch-Dictionary); die komplette Dedupe-/KaufEintrag-Logik
+    /// bleibt dadurch an genau einer Stelle (Single Source of Truth statt
+    /// Duplikat-Pflege).
+    private func artikelAbhakenKern(
+        _ artikel: Artikel, produkt: Produkt?, am datum: Date, context: ModelContext, ursprungsGeraeteID: String?,
+        abteilung abteilungUeberschreibung: Abteilung?,
+        geschaeft geschaeftUeberschreibung: Geschaeft??,
+        vermerkeAbgehakt: (Einkaufsliste, Date) -> Void
+    ) -> AbhakErgebnis {
         // Dedupe-Schutz gegen das in `docs/DATABASE_CONCURRENCY.md` dokumentierte
         // Restrisiko (Sync-Latenz-Kollisionsfenster bei zeitgleichem Abhaken auf zwei
         // Geräten) — bewusst LISTE-weit über alle noch offenen Vorgänge geprüft,
@@ -196,7 +240,7 @@ final class Einkaufsvorgang {
             // GitHub #99: dauerhaftes Faktum fürs Sicherheitsnetz gegen
             // wiederbelebte Käufe, unabhängig davon, ob dieser KaufEintrag
             // später per KaufEintragBereinigungService gelöscht wird.
-            ArtikelListenKaufService.vermerkeAbgehakt(artikel: artikel, einkaufsliste: einkaufsliste, am: eintrag.datum, context: context)
+            vermerkeAbgehakt(einkaufsliste, eintrag.datum)
         }
         return .abgehakt
     }

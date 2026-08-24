@@ -199,6 +199,12 @@ enum SyncImportService {
         // für die Begründung, warum derselbe Schutz jetzt auch hier (Bereich A)
         // gilt. Einmal pro Batch geladen statt pro Event, analog `aliase` oben.
         let abgehaktZeitstempel = ArtikelListenKaufService.alleZeitstempel(context: context)
+        // Batch-Cache fürs `ArtikelListenKauf`-Sicherheitsnetz-Faktum selbst
+        // (Performance-Fund #159) — ohne diesen fiel jeder per Bereich-A-Event
+        // materialisierte Eintrag auf einen eigenen Fetch pro Event zurück,
+        // bei einem vollständigen Event-Log-Replay nach Geräte-Neuaufbau
+        // potenziell hunderte Male. Analog `abgehaktZeitstempel` oben.
+        var artikelListenKaufBekannt = ArtikelListenKaufService.alleEintraege(context: context)
 
         for peerOrdner in peerVerzeichnisse where !PeerOrdnerName.gehoertZu(peerOrdner.lastPathComponent, geraeteID: eigeneGeraeteID) {
             let eventsOrdner = SyncExportService.eventsOrdner(fuerPeer: peerOrdner.lastPathComponent, in: syncOrdner)
@@ -234,7 +240,10 @@ enum SyncImportService {
                 .sorted { $0.lamportZaehler < $1.lamportZaehler }
 
             for empfangen in empfangeneEvents {
-                wendeAn(empfangen, gewinner: &gewinner, aliase: aliase, abgehaktZeitstempel: abgehaktZeitstempel, context: context)
+                wendeAnAlsBatch(
+                    empfangen, gewinner: &gewinner, aliase: aliase, abgehaktZeitstempel: abgehaktZeitstempel,
+                    artikelListenKaufBekannt: &artikelListenKaufBekannt, context: context
+                )
             }
         }
 
@@ -373,6 +382,41 @@ enum SyncImportService {
         _ empfangen: SyncEventExportDarstellung, gewinner: inout [SyncEventService.PaarSchluessel: SyncEvent],
         aliase: [String: [UUID: UUID]], abgehaktZeitstempel: [ArtikelListenKaufService.Schluessel: Date?], context: ModelContext
     ) {
+        wendeAnKern(empfangen, gewinner: &gewinner, aliase: aliase, context: context) { art, nutzlast, autorGeraeteID, wallClock in
+            materialisiere(
+                art, nutzlast: nutzlast, autorGeraeteID: autorGeraeteID, wallClock: wallClock,
+                aliase: aliase, abgehaktZeitstempel: abgehaktZeitstempel, context: context
+            )
+        }
+    }
+
+    /// Batch-Variante für ``importiereNeueEvents(context:)`` — reicht
+    /// `artikelListenKaufBekannt` bis zu ``materialisiereAlsBatch(_:nutzlast:autorGeraeteID:wallClock:aliase:abgehaktZeitstempel:artikelListenKaufBekannt:context:)``
+    /// durch (Performance-Fund #159).
+    @MainActor
+    private static func wendeAnAlsBatch(
+        _ empfangen: SyncEventExportDarstellung, gewinner: inout [SyncEventService.PaarSchluessel: SyncEvent],
+        aliase: [String: [UUID: UUID]], abgehaktZeitstempel: [ArtikelListenKaufService.Schluessel: Date?],
+        artikelListenKaufBekannt: inout [ArtikelListenKaufService.Schluessel: ArtikelListenKauf], context: ModelContext
+    ) {
+        wendeAnKern(empfangen, gewinner: &gewinner, aliase: aliase, context: context) { art, nutzlast, autorGeraeteID, wallClock in
+            materialisiereAlsBatch(
+                art, nutzlast: nutzlast, autorGeraeteID: autorGeraeteID, wallClock: wallClock,
+                aliase: aliase, abgehaktZeitstempel: abgehaktZeitstempel, artikelListenKaufBekannt: &artikelListenKaufBekannt, context: context
+            )
+        }
+    }
+
+    /// Gemeinsamer Kern von ``wendeAn(_:gewinner:aliase:abgehaktZeitstempel:context:)``
+    /// und ``wendeAnAlsBatch(_:gewinner:aliase:abgehaktZeitstempel:artikelListenKaufBekannt:context:)``
+    /// — beide unterscheiden sich nur darin, welche ``materialisiere``-Variante
+    /// aufgerufen wird.
+    @MainActor
+    private static func wendeAnKern(
+        _ empfangen: SyncEventExportDarstellung, gewinner: inout [SyncEventService.PaarSchluessel: SyncEvent],
+        aliase: [String: [UUID: UUID]], context: ModelContext,
+        materialisierer: (SyncEventArt, SyncEventNutzlast, String, Date) -> MaterialisierungsErgebnis
+    ) {
         guard !SyncEventService.istBereitsBekannt(empfangen.id, context: context) else { return }
 
         guard let art = SyncEventArt(rawValue: empfangen.art),
@@ -396,10 +440,7 @@ enum SyncImportService {
             return
         }
 
-        let materialisierungsErgebnis = materialisiere(
-            art, nutzlast: nutzlast, autorGeraeteID: empfangen.autorGeraeteID, wallClock: empfangen.wallClock,
-            aliase: aliase, abgehaktZeitstempel: abgehaktZeitstempel, context: context
-        )
+        let materialisierungsErgebnis = materialisierer(art, nutzlast, empfangen.autorGeraeteID, empfangen.wallClock)
         guard materialisierungsErgebnis == .erfolgreich else {
             guard !referenzDauerhaftGeloescht(art: art, bezugsID: nutzlast.bezugsID, artikelID: nutzlast.artikelID, aliase: aliase, context: context) else {
                 // Liste/Einkauf/Artikel wurde absichtlich gelöscht (Tombstone) und
@@ -531,6 +572,65 @@ enum SyncImportService {
         _ art: SyncEventArt, nutzlast: SyncEventNutzlast, autorGeraeteID: String, wallClock: Date,
         aliase: [String: [UUID: UUID]], abgehaktZeitstempel: [ArtikelListenKaufService.Schluessel: Date?], context: ModelContext
     ) -> MaterialisierungsErgebnis {
+        materialisiereKern(
+            art, nutzlast: nutzlast, autorGeraeteID: autorGeraeteID, wallClock: wallClock,
+            aliase: aliase, abgehaktZeitstempel: abgehaktZeitstempel, context: context,
+            artikelHinzufuegen: { liste, artikel, zeitpunkt in
+                liste.artikelHinzufuegenOhneEventAufzeichnung(artikel, am: zeitpunkt, context: context)
+            },
+            artikelAbhaken: { vorgang, artikel, zeitpunkt, ursprungsGeraeteID, geschaeftUeberschreibung in
+                vorgang.artikelAbhakenOhneEventAufzeichnung(
+                    artikel, am: zeitpunkt, context: context, ursprungsGeraeteID: ursprungsGeraeteID, geschaeft: geschaeftUeberschreibung
+                )
+            }
+        )
+    }
+
+    /// Batch-Variante für ``importiereNeueEvents(context:)``s Datei-Batch-Import
+    /// (Performance-Fund #159): nutzt die ``ArtikelListenKauf``-Batch-Schreibpfade
+    /// (``Einkaufsliste/artikelHinzufuegenAlsEventReplay(_:produkt:am:bekannt:context:)``/
+    /// ``Einkaufsvorgang/artikelAbhakenAlsEventReplay(_:produkt:am:context:ursprungsGeraeteID:abteilung:geschaeft:bekannt:)``)
+    /// statt eines eigenen Fetches pro Event — `artikelListenKaufBekannt` wird
+    /// vom Aufrufer einmal pro Batch geladen und über den gesamten
+    /// Import-Zyklus wiederverwendet. Bewusst NICHT für den
+    /// Multipeer-Einzelevent-Pfad (``wendeEinzelnesEmpfangenesEventAn(_:context:)``)
+    /// verwendet — dort gilt laut dessen eigener Typ-Doku „Kein
+    /// Batch-Index-Aufbau": ein einzelnes Event amortisiert die Kosten eines
+    /// vollständigen Vorab-Ladens nie.
+    @MainActor
+    private static func materialisiereAlsBatch(
+        _ art: SyncEventArt, nutzlast: SyncEventNutzlast, autorGeraeteID: String, wallClock: Date,
+        aliase: [String: [UUID: UUID]], abgehaktZeitstempel: [ArtikelListenKaufService.Schluessel: Date?],
+        artikelListenKaufBekannt: inout [ArtikelListenKaufService.Schluessel: ArtikelListenKauf], context: ModelContext
+    ) -> MaterialisierungsErgebnis {
+        materialisiereKern(
+            art, nutzlast: nutzlast, autorGeraeteID: autorGeraeteID, wallClock: wallClock,
+            aliase: aliase, abgehaktZeitstempel: abgehaktZeitstempel, context: context,
+            artikelHinzufuegen: { liste, artikel, zeitpunkt in
+                liste.artikelHinzufuegenAlsEventReplay(artikel, am: zeitpunkt, bekannt: &artikelListenKaufBekannt, context: context)
+            },
+            artikelAbhaken: { vorgang, artikel, zeitpunkt, ursprungsGeraeteID, geschaeftUeberschreibung in
+                vorgang.artikelAbhakenAlsEventReplay(
+                    artikel, am: zeitpunkt, context: context, ursprungsGeraeteID: ursprungsGeraeteID,
+                    geschaeft: geschaeftUeberschreibung, bekannt: &artikelListenKaufBekannt
+                )
+            }
+        )
+    }
+
+    /// Gemeinsamer Kern von ``materialisiere(_:nutzlast:autorGeraeteID:wallClock:aliase:abgehaktZeitstempel:context:)``
+    /// und ``materialisiereAlsBatch(_:nutzlast:autorGeraeteID:wallClock:aliase:abgehaktZeitstempel:artikelListenKaufBekannt:context:)``
+    /// — beide unterscheiden sich nur darin, WIE die beiden
+    /// `ArtikelListenKauf`-Schreibfälle (`.artikelHinzugefuegt`/`.artikelAbgehakt`)
+    /// das Sicherheitsnetz-Faktum vermerken; die restliche Referenzauflösung/
+    /// Fallunterscheidung bleibt an genau einer Stelle.
+    @MainActor
+    private static func materialisiereKern(
+        _ art: SyncEventArt, nutzlast: SyncEventNutzlast, autorGeraeteID: String, wallClock: Date,
+        aliase: [String: [UUID: UUID]], abgehaktZeitstempel: [ArtikelListenKaufService.Schluessel: Date?], context: ModelContext,
+        artikelHinzufuegen: (Einkaufsliste, Artikel, Date) -> Void,
+        artikelAbhaken: (Einkaufsvorgang, Artikel, Date, String?, Geschaeft??) -> Void
+    ) -> MaterialisierungsErgebnis {
         switch art {
         case .artikelHinzugefuegt:
             let liste = einkaufsliste(mitID: nutzlast.bezugsID, aliase: aliase, context: context)
@@ -556,7 +656,7 @@ enum SyncImportService {
                 )
                 return .erfolgreich
             }
-            liste.artikelHinzufuegenOhneEventAufzeichnung(artikel, am: wallClock, context: context)
+            artikelHinzufuegen(liste, artikel, wallClock)
             return .erfolgreich
         case .artikelEntfernt:
             let liste = einkaufsliste(mitID: nutzlast.bezugsID, aliase: aliase, context: context)
@@ -589,9 +689,7 @@ enum SyncImportService {
             // ohne diese Weitergabe bekäme jeder per Event-Replay materialisierte
             // ``KaufEintrag`` fälschlich den aktuellen Import-Zeitpunkt statt des
             // tatsächlichen historischen Kaufdatums.
-            vorgang.artikelAbhakenOhneEventAufzeichnung(
-                artikel, am: wallClock, context: context, ursprungsGeraeteID: autorGeraeteID, geschaeft: geschaeftUeberschreibung
-            )
+            artikelAbhaken(vorgang, artikel, wallClock, autorGeraeteID, geschaeftUeberschreibung)
             return .erfolgreich
         case .artikelAbgewaehlt:
             let vorgang = einkaufsvorgang(mitID: nutzlast.bezugsID, aliase: aliase, context: context)

@@ -41,12 +41,14 @@ extension WarengruppenDistanzPeerZaehlerStand {
     /// tatsächliche Zuwachs seit dem zuletzt gesehenen Stand darf einfließen,
     /// sonst würde ein unveränderter, wiederholt gesyncter Wert bei jedem
     /// Zyklus erneut Richtung Peer-Wert verschoben.
-    static func zuletztGesehenerWert(peerGeraeteID: String, distanzID: UUID, context: ModelContext) -> Int {
-        var deskriptor = FetchDescriptor<WarengruppenDistanzPeerZaehlerStand>(
-            predicate: #Predicate { $0.peerGeraeteID == peerGeraeteID && $0.distanzID == distanzID }
-        )
-        deskriptor.fetchLimit = 1
-        return (try? context.fetch(deskriptor))?.first?.zuletztGesehenerWert ?? 0
+    /// `bekannt`: alle Zeilen DIESES `peerGeraeteID` vorab per
+    /// `#Predicate { $0.peerGeraeteID == peerGeraeteID }` geladen und nach
+    /// `distanzID` indiziert — vom Aufrufer EINMAL pro Merge-Lauf gebaut
+    /// (``SyncSnapshotImportService/mergeWarengruppenDistanzen``) statt hier
+    /// (und in ``merkeEigenenZuwachsDesPeers(bekannt:peerGeraeteID:distanzID:eigenerWertDesPeers:context:)``)
+    /// je zwei eigene Fetches pro Remote-Eintrag auszulösen (Performance-Fund #155).
+    static func zuletztGesehenerWert(bekannt: [UUID: WarengruppenDistanzPeerZaehlerStand], distanzID: UUID) -> Int {
+        bekannt[distanzID]?.zuletztGesehenerWert ?? 0
     }
 
     /// Merkt sich (aktualisiert) den zuletzt von `peerGeraeteID` für diese
@@ -59,17 +61,15 @@ extension WarengruppenDistanzPeerZaehlerStand {
     /// Entscheidungslogik dafür geteilt mit ``SyncPeerZaehlerStand``, siehe
     /// ``GCounterPeerZustandService``.
     static func merkeEigenenZuwachsDesPeers(
-        peerGeraeteID: String, distanzID: UUID, eigenerWertDesPeers: Int, context: ModelContext
+        bekannt: inout [UUID: WarengruppenDistanzPeerZaehlerStand], peerGeraeteID: String, distanzID: UUID, eigenerWertDesPeers: Int,
+        context: ModelContext
     ) {
-        var deskriptor = FetchDescriptor<WarengruppenDistanzPeerZaehlerStand>(
-            predicate: #Predicate { $0.peerGeraeteID == peerGeraeteID && $0.distanzID == distanzID }
-        )
-        deskriptor.fetchLimit = 1
-        let bestehender = try? context.fetch(deskriptor).first
         GCounterPeerZustandService.merkeEigenenZuwachsDesPeers(
-            bestehender: bestehender, eigenerWertDesPeers: eigenerWertDesPeers, zuletztGesehenerWert: \.zuletztGesehenerWert,
+            bestehender: bekannt[distanzID], eigenerWertDesPeers: eigenerWertDesPeers, zuletztGesehenerWert: \.zuletztGesehenerWert,
             erzeugeNeuen: {
-                WarengruppenDistanzPeerZaehlerStand(peerGeraeteID: peerGeraeteID, distanzID: distanzID, zuletztGesehenerWert: eigenerWertDesPeers)
+                let neu = WarengruppenDistanzPeerZaehlerStand(peerGeraeteID: peerGeraeteID, distanzID: distanzID, zuletztGesehenerWert: eigenerWertDesPeers)
+                bekannt[distanzID] = neu
+                return neu
             },
             context: context
         )

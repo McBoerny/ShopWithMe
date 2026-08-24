@@ -133,7 +133,37 @@ extension Einkaufsliste {
     /// ``KaufEintrag/datum`` in ``SyncSnapshotImportService/mergeKaufEintraege(_:artikelZuordnung:einkaufsvorgangZuordnung:geschaeftZuordnung:abteilungZuordnung:peerGeraeteID:context:)``).
     @discardableResult
     func artikelHinzufuegenOhneEventAufzeichnung(_ artikel: Artikel, produkt: Produkt? = nil, am zeitpunkt: Date = Date(), context: ModelContext) -> EinkaufslistenEintrag {
-        ArtikelListenKaufService.vermerkeHinzugefuegt(artikel: artikel, einkaufsliste: self, am: zeitpunkt, context: context)
+        artikelHinzufuegenKern(artikel, produkt: produkt, am: zeitpunkt, context: context) {
+            ArtikelListenKaufService.vermerkeHinzugefuegt(artikel: artikel, einkaufsliste: self, am: zeitpunkt, context: context)
+        }
+    }
+
+    /// Wie ``artikelHinzufuegenOhneEventAufzeichnung(_:produkt:am:context:)``,
+    /// nutzt aber für das ``ArtikelListenKauf``-Sicherheitsnetz-Faktum die
+    /// Batch-Variante ``ArtikelListenKaufService/vermerkeHinzugefuegtFallsNoetig(artikel:einkaufsliste:am:bekannt:context:)``
+    /// statt eines eigenen Fetches pro Aufruf — analoges Gegenstück zu
+    /// ``Einkaufsvorgang/artikelAbhakenAlsEventReplay(_:produkt:am:context:ursprungsGeraeteID:abteilung:geschaeft:bekannt:)``
+    /// (Performance-Fund #159).
+    @discardableResult
+    func artikelHinzufuegenAlsEventReplay(
+        _ artikel: Artikel, produkt: Produkt? = nil, am zeitpunkt: Date, bekannt: inout [ArtikelListenKaufService.Schluessel: ArtikelListenKauf],
+        context: ModelContext
+    ) -> EinkaufslistenEintrag {
+        artikelHinzufuegenKern(artikel, produkt: produkt, am: zeitpunkt, context: context) {
+            ArtikelListenKaufService.vermerkeHinzugefuegtFallsNoetig(
+                artikel: artikel, einkaufsliste: self, am: zeitpunkt, bekannt: &bekannt, context: context
+            )
+        }
+    }
+
+    /// Gemeinsamer Kern von ``artikelHinzufuegenOhneEventAufzeichnung(_:produkt:am:context:)``
+    /// und ``artikelHinzufuegenAlsEventReplay(_:produkt:am:bekannt:context:)`` —
+    /// Single Source of Truth für die Eintrags-Anlage/-Aktualisierung, beide
+    /// unterscheiden sich nur im Vermerken des Sicherheitsnetz-Fakts.
+    private func artikelHinzufuegenKern(
+        _ artikel: Artikel, produkt: Produkt?, am zeitpunkt: Date, context: ModelContext, vermerkeHinzugefuegt: () -> Void
+    ) -> EinkaufslistenEintrag {
+        vermerkeHinzugefuegt()
         // ``eintragNamensgleich`` statt ``eintrag(fuer:produkt:)`` (Namens-
         // Backstop, siehe dortige Doku) — verhindert eine zweite Zeile für
         // dieselbe logische Position, falls dieser Aufrufer (Bereich-A-Event)

@@ -39,6 +39,11 @@ final class SyncPeerZaehlerStand {
 }
 
 extension SyncPeerZaehlerStand {
+    /// `bekannt`: alle Zeilen DIESES `peerGeraeteID` vorab per
+    /// `#Predicate { $0.peerGeraeteID == peerGeraeteID }` geladen und nach
+    /// `geschaeftID` indiziert — vom Aufrufer EINMAL pro Merge-Lauf gebaut
+    /// (z.B. ``SyncSnapshotImportService/mergeGeschaefte``) statt hier pro
+    /// Remote-Eintrag einen eigenen Fetch auszulösen (Performance-Fund #155).
     /// Merkt sich (aktualisiert) den zuletzt von `peerGeraeteID` für dieses
     /// (bereits lokal aufgelöste) Geschäft gemeldeten eigenen Beitrag. Reines
     /// Ablegen ohne Arithmetik — ``Geschaeft/anzahlEinkaufsvorgaenge`` bildet
@@ -48,16 +53,15 @@ extension SyncPeerZaehlerStand {
     /// ``SyncPeerInfo``); Entscheidungslogik dafür geteilt mit
     /// ``WarengruppenDistanzPeerZaehlerStand``, siehe ``GCounterPeerZustandService``.
     static func merkeEigenenZuwachsDesPeers(
-        peerGeraeteID: String, geschaeftID: UUID, eigenerWertDesPeers: Int, context: ModelContext
+        bekannt: inout [UUID: SyncPeerZaehlerStand], peerGeraeteID: String, geschaeftID: UUID, eigenerWertDesPeers: Int, context: ModelContext
     ) {
-        var deskriptor = FetchDescriptor<SyncPeerZaehlerStand>(
-            predicate: #Predicate { $0.peerGeraeteID == peerGeraeteID && $0.geschaeftID == geschaeftID }
-        )
-        deskriptor.fetchLimit = 1
-        let bestehender = try? context.fetch(deskriptor).first
         GCounterPeerZustandService.merkeEigenenZuwachsDesPeers(
-            bestehender: bestehender, eigenerWertDesPeers: eigenerWertDesPeers, zuletztGesehenerWert: \.zuletztGesehenerWert,
-            erzeugeNeuen: { SyncPeerZaehlerStand(peerGeraeteID: peerGeraeteID, geschaeftID: geschaeftID, zuletztGesehenerWert: eigenerWertDesPeers) },
+            bestehender: bekannt[geschaeftID], eigenerWertDesPeers: eigenerWertDesPeers, zuletztGesehenerWert: \.zuletztGesehenerWert,
+            erzeugeNeuen: {
+                let neu = SyncPeerZaehlerStand(peerGeraeteID: peerGeraeteID, geschaeftID: geschaeftID, zuletztGesehenerWert: eigenerWertDesPeers)
+                bekannt[geschaeftID] = neu
+                return neu
+            },
             context: context
         )
     }

@@ -818,6 +818,13 @@ enum SyncSnapshotImportService {
         var zuordnung: [UUID: Geschaeft] = [:]
         var cache = LokalerBestandCache<Geschaeft>(context: context)
         let geloeschteIDs = SyncTombstoneService.geloeschteIDs(art: SyncEntitaetsArt.geschaeft, context: context)
+        // Einmal pro Merge-Lauf geladen statt pro Remote-Eintrag ein eigener
+        // Fetch (Performance-Fund #155) — analog `LokalerBestandCache` oben.
+        var peerZaehlerBekannt: [UUID: SyncPeerZaehlerStand] = {
+            let deskriptor = FetchDescriptor<SyncPeerZaehlerStand>(predicate: #Predicate { $0.peerGeraeteID == peerGeraeteID })
+            let alle = (try? context.fetch(deskriptor)) ?? []
+            return Dictionary(alle.map { ($0.geschaeftID, $0) }, uniquingKeysWith: { erster, _ in erster })
+        }()
         for eintrag in remote {
             let remoteKoordinaten: (breitengrad: Double, laengengrad: Double)? = {
                 guard let b = eintrag.breitengrad, let l = eintrag.laengengrad else { return nil }
@@ -908,7 +915,7 @@ enum SyncSnapshotImportService {
             // EIGENEN Beitrag unter der bereits lokal aufgelösten `lokal.id` —
             // `Geschaeft.anzahlEinkaufsvorgaenge` summiert beim Lesen selbst.
             SyncPeerZaehlerStand.merkeEigenenZuwachsDesPeers(
-                peerGeraeteID: peerGeraeteID, geschaeftID: lokal.id,
+                bekannt: &peerZaehlerBekannt, peerGeraeteID: peerGeraeteID, geschaeftID: lokal.id,
                 eigenerWertDesPeers: eintrag.eigeneAnzahlEinkaufsvorgaenge, context: context
             )
             lokal.umbauVerdacht = lokal.umbauVerdacht || eintrag.umbauVerdacht
@@ -1976,6 +1983,13 @@ enum SyncSnapshotImportService {
         peerGeraeteID: String, context: ModelContext
     ) {
         let alleLokalen = (try? context.fetch(FetchDescriptor<WarengruppenDistanz>())) ?? []
+        // Einmal pro Merge-Lauf geladen statt pro Remote-Eintrag zwei eigene
+        // Fetches (Performance-Fund #155).
+        var peerZaehlerBekannt: [UUID: WarengruppenDistanzPeerZaehlerStand] = {
+            let deskriptor = FetchDescriptor<WarengruppenDistanzPeerZaehlerStand>(predicate: #Predicate { $0.peerGeraeteID == peerGeraeteID })
+            let alle = (try? context.fetch(deskriptor)) ?? []
+            return Dictionary(alle.map { ($0.distanzID, $0) }, uniquingKeysWith: { erster, _ in erster })
+        }()
         for eintrag in remote {
             guard let abteilungA = abteilungZuordnung[eintrag.abteilungAID],
                   let abteilungB = abteilungZuordnung[eintrag.abteilungBID]
@@ -1996,7 +2010,7 @@ enum SyncSnapshotImportService {
 
             let neuerPeerWert = max(eintrag.eigeneAnzahlBeobachtungen, 0)
             let vorherigerPeerWert = WarengruppenDistanzPeerZaehlerStand.zuletztGesehenerWert(
-                peerGeraeteID: peerGeraeteID, distanzID: vorhandener.id, context: context
+                bekannt: peerZaehlerBekannt, distanzID: vorhandener.id
             )
             let peerZuwachs = min(max(neuerPeerWert - vorherigerPeerWert, 0), WarengruppenDistanz.maximaleMergeGewichtung)
             let lokaleGewichtung = vorhandener.mergeGewichtung
@@ -2005,7 +2019,7 @@ enum SyncSnapshotImportService {
                     / Double(lokaleGewichtung + peerZuwachs)
             }
             WarengruppenDistanzPeerZaehlerStand.merkeEigenenZuwachsDesPeers(
-                peerGeraeteID: peerGeraeteID, distanzID: vorhandener.id,
+                bekannt: &peerZaehlerBekannt, peerGeraeteID: peerGeraeteID, distanzID: vorhandener.id,
                 eigenerWertDesPeers: neuerPeerWert, context: context
             )
         }
@@ -2022,10 +2036,23 @@ enum SyncSnapshotImportService {
         _ remote: [ArtikelGeschaeftVerfuegbarkeitSnapshot], artikelZuordnung: [UUID: Artikel], geschaeftZuordnung: [UUID: Geschaeft],
         context: ModelContext
     ) {
-        let alleLokalen = (try? context.fetch(FetchDescriptor<ArtikelGeschaeftVerfuegbarkeit>())) ?? []
+        // Vorgeladenes Set statt linearem `contains(where:)`-Scan pro
+        // Remote-Eintrag (Performance-Fund #160) — reiner Existenz-Check auf
+        // ein (Artikel, Geschäft)-Paar, keine Locale-/Ambiguitäts-Logik wie
+        // bei den übrigen Merge-Funktionen dieser Datei.
+        struct ArtikelGeschaeftPaar: Hashable {
+            let artikelID: PersistentIdentifier
+            let geschaeftID: PersistentIdentifier
+        }
+        let bekanntePaare = Set(((try? context.fetch(FetchDescriptor<ArtikelGeschaeftVerfuegbarkeit>())) ?? []).compactMap {
+            eintrag -> ArtikelGeschaeftPaar? in
+            guard let artikel = eintrag.artikel, let geschaeft = eintrag.geschaeft else { return nil }
+            return ArtikelGeschaeftPaar(artikelID: artikel.persistentModelID, geschaeftID: geschaeft.persistentModelID)
+        })
         for eintrag in remote {
             guard let artikel = artikelZuordnung[eintrag.artikelID], let geschaeft = geschaeftZuordnung[eintrag.geschaeftID] else { continue }
-            guard !alleLokalen.contains(where: { $0.artikel == artikel && $0.geschaeft == geschaeft }) else { continue }
+            let paar = ArtikelGeschaeftPaar(artikelID: artikel.persistentModelID, geschaeftID: geschaeft.persistentModelID)
+            guard !bekanntePaare.contains(paar) else { continue }
             context.insert(ArtikelGeschaeftVerfuegbarkeit(artikel: artikel, geschaeft: geschaeft))
         }
     }
