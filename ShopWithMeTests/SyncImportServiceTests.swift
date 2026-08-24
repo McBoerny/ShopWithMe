@@ -509,4 +509,108 @@ struct SyncImportServiceTests {
         #expect(neuerVorgang.kaufEintraege.isEmpty)
         #expect(!liste.enthaelt(apfel))
     }
+
+    /// Regressionstest für GitHub #165 (Korrektur eines ursprünglichen
+    /// Fehlbefunds im Code-Review): eine ``ArtikelListenKauf``-Zeile mit
+    /// `zuletztAbgehaktAm == nil` bedeutet NICHT zwingend "schon mal gekauft,
+    /// Zeitstempel verloren" — sie kann auch nur aus dem symmetrischen
+    /// `zuletztHinzugefuegtAm`-Fakt entstanden sein (Artikel wurde zur Liste
+    /// hinzugefügt, aber nie gekauft). Das Sicherheitsnetz gegen wiederbelebte
+    /// Käufe (GitHub #99) darf ein `.artikelHinzugefuegt`-Fremdevent für so
+    /// einen Artikel NICHT blockieren — sonst reproduziert sich exakt der
+    /// Regressionsfund vor dem v0.17-Release (siehe
+    /// `docs/DATENSYNCHRONISATION.md` §4.7). Analoger Bereich-B-Test:
+    /// `SyncSnapshotImportServiceTests.vonSicherheitsnetzGeerbterEintragTaeuschtBeiWeitergabeKeineFrischeVor`.
+    @Test
+    func artikelHinzugefuegtNichtBlockiertDurchNurHinzugefuegtFaktumOhneKauf() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759")
+        context.insert(apfel)
+        // Zeile existiert NUR wegen des "hinzugefügt"-Fakts (z.B. aus einer
+        // früheren Sitzung, in der der Artikel wieder entfernt wurde, bevor er
+        // je gekauft wurde) — `zuletztAbgehaktAm` bewusst nicht gesetzt.
+        context.insert(ArtikelListenKauf(artikel: apfel, einkaufsliste: liste, zuletztHinzugefuegtAm: Date()))
+        try context.save()
+
+        let fremdesEvent = SyncEventExportDarstellung(
+            id: UUID(), art: SyncEventArt.artikelHinzugefuegt.rawValue,
+            nutzlast: try JSONEncoder().encode(SyncEventNutzlast(bezugsID: liste.id, artikelID: apfel.id)),
+            lamportZaehler: 1, lamportGeraeteID: "fremdes-geraet", autorGeraeteID: "fremdes-geraet", wallClock: Date()
+        )
+        try schreibeFremdesEvent(fremdesEvent, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncImportService.importiereNeueEvents(context: context)
+
+        #expect(liste.enthaelt(apfel))
+    }
+
+    /// Regressionstest für GitHub #166: Der Batch-Cache fürs Sicherheitsnetz
+    /// gegen wiederbelebte Käufe (``ArtikelListenKaufService/alleEintraege(context:)``,
+    /// einmal pro Import-Zyklus geladen) muss innerhalb DESSELBEN Zyklus aktuell
+    /// bleiben. Beide Events kommen aus demselben Fremd-Peer-Ordner, deren
+    /// Verarbeitung nach `lamportZaehler` sortiert (also deterministisch) ist:
+    /// zuerst ein `.artikelAbgehakt` (echter Kauf), danach ein zeitlich
+    /// ÄLTERES, aber im selben Batch NACH dem Kauf verarbeitetes
+    /// `.artikelHinzugefuegt` für denselben Artikel/dieselbe Liste. Ohne den
+    /// Fix (separater, vor dem Batch geladener Zeitstempel-Snapshot statt des
+    /// bereits live gehaltenen ``ArtikelListenKauf``-Caches) sähe das zweite
+    /// Event den Kauf des ersten nicht und würde den Artikel fälschlich wieder
+    /// auf die offene Liste setzen.
+    @Test
+    func artikelHinzugefuegtNachAbhakenImSelbenBatchWirdBlockiert() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let typ = GeschaeftTyp(name: "Lebensmittel", symbolName: "cart.fill")
+        context.insert(typ)
+        let geschaeft = Geschaeft(name: "Testladen", typen: [typ])
+        context.insert(geschaeft)
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
+        let apfel = Artikel(name: "Apfel", symbolName: "carrot.fill", farbeHex: "#34C759")
+        context.insert(apfel)
+        // Bewusst NICHT vorher auf die Liste gesetzt: das Abhaken-Event
+        // braucht keinen bestehenden ``EinkaufslistenEintrag`` (der Dedupe-
+        // Schutz in `artikelAbhakenKern` ist optional), und ein bereits
+        // bestehender, vom Kauf-Event gelöschter Eintrag würde vom
+        // `.artikelHinzugefuegt`-Event unten ggf. nur wiederverwendet
+        // (`eintragNamensgleich`) statt neu angelegt — das ließe den Test
+        // unabhängig vom eigentlich geprüften Sicherheitsnetz grün werden.
+        let einkauf = Einkaufsvorgang(geschaeft: geschaeft, einkaufsliste: liste)
+        context.insert(einkauf)
+        try context.save()
+
+        let kaufZeitpunkt = Date()
+        let abgehaktEvent = SyncEventExportDarstellung(
+            id: UUID(), art: SyncEventArt.artikelAbgehakt.rawValue,
+            nutzlast: try JSONEncoder().encode(SyncEventNutzlast(bezugsID: einkauf.id, artikelID: apfel.id)),
+            lamportZaehler: 1, lamportGeraeteID: "fremdes-geraet", autorGeraeteID: "fremdes-geraet", wallClock: kaufZeitpunkt
+        )
+        try schreibeFremdesEvent(abgehaktEvent, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        // Zeitlich ÄLTER als der Kauf, aber mit höherem Lamport-Zähler
+        // (kommt im selben Peer-Ordner NACH dem Abhaken zur Verarbeitung).
+        let staleHinzugefuegtEvent = SyncEventExportDarstellung(
+            id: UUID(), art: SyncEventArt.artikelHinzugefuegt.rawValue,
+            nutzlast: try JSONEncoder().encode(SyncEventNutzlast(bezugsID: liste.id, artikelID: apfel.id)),
+            lamportZaehler: 2, lamportGeraeteID: "fremdes-geraet", autorGeraeteID: "fremdes-geraet",
+            wallClock: kaufZeitpunkt.addingTimeInterval(-3600)
+        )
+        try schreibeFremdesEvent(staleHinzugefuegtEvent, fremdeGeraeteID: "fremdes-geraet", in: syncOrdner)
+
+        await SyncImportService.importiereNeueEvents(context: context)
+
+        #expect(!einkauf.kaufEintraege.isEmpty)
+        #expect(!liste.enthaelt(apfel))
+    }
 }

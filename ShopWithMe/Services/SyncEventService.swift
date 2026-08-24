@@ -74,7 +74,7 @@ enum SyncEventService {
     ///
     /// Genutzt sowohl von ``SyncImportService`` (Konfliktprüfung vor dem
     /// Anwenden eines neu empfangenen Events) als auch vom Überkauf-Hinweis
-    /// (GitHub #48, ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:)``),
+    /// (GitHub #48, ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:produkt:am:context:ursprungsGeraeteID:abteilung:geschaeft:)``),
     /// um herauszufinden, welches Gerät einen bereits vorhandenen `KaufEintrag`
     /// ursprünglich ausgelöst hat.
     ///

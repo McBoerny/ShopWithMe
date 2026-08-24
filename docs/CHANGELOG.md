@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.17 (Build 358) — Code-Review-Nachfassung: Bereich-A-Sicherheitsnetz (#165–#168)
+
+Ein automatisierter Code-Review (`/code-review high`) der v0.17-Sicherheitsnetz-
+Härtung (Build 353/355) fand 4 Kandidaten, gegen den inzwischen fortgeschrittenen
+Stand neu geprüft:
+
+- **#166 (echter Bug, gefixt):** Der zwischenzeitliche Performance-Umbau
+  (Sync-Merge-Batching, Build 354) führte für den Datei-Batch-Import einen
+  während des gesamten Batches live aktuell gehaltenen `ArtikelListenKauf`-Cache
+  ein, ohne das Sicherheitsnetz gegen wiederbelebte Käufe (GitHub #99) im
+  `.artikelHinzugefuegt`-Zweig daran anzuschließen — es las weiterhin aus einem
+  separaten, vor dem Batch eingefrorenen Snapshot und übersah dadurch ein
+  früher im selben Batch verarbeitetes `.artikelAbgehakt`-Event fürs selbe
+  Artikel/Liste-Paar. Jetzt liest der Batch-Pfad direkt aus dem bereits
+  vorhandenen Live-Cache (auch ein Tabellenfetch pro Batch-Zyklus weniger).
+- **#165 (Fehlbefund, zurückgenommen):** die ursprüngliche Meldung ging davon
+  aus, eine bekannte `ArtikelListenKauf`-Zeile ohne Zeitstempel müsse weiterhin
+  blocken. Tatsächlich ist das aktuelle Verhalten korrekt und folgt bereits dem
+  an `SyncSnapshotImportService.istBereitsAbgehakt` etablierten,
+  regressionsgetesteten Muster (gaten auf den Zeitstempel selbst, nicht auf
+  Zeilen-Existenz). Kommentare präzisiert, Regressionstest ergänzt, damit ein
+  künftiger Fix-Versuch nicht denselben Fehlschluss wiederholt.
+- **#167/#168 (gefixt):** mehrere DocC-Symbolverweise auf
+  `Einkaufsvorgang.artikelAbhakenOhneEventAufzeichnung`/
+  `Einkaufsliste.artikelHinzufuegenOhneEventAufzeichnung` waren seit deren
+  `am:`-Parameter (Build 353) veraltet — an allen Fundstellen korrigiert.
+
+Details: `docs/DATENSYNCHRONISATION.md` §4.7.
+
 ## v0.17 (Build 357) — Performance: kleine Render-Redundanzen behoben (#163, #164)
 
 Vierter und letzter Batch der Performance-Aufarbeitung (#152–#164):

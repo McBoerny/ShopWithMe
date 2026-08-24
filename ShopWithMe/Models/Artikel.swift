@@ -219,7 +219,7 @@ extension Artikel {
     /// Beste Schätzung der Abteilung eines Artikels in `geschaeft`, wenn keine
     /// explizite Sektionsauswahl vorliegt (Belegscan, Preisschild-Scan,
     /// Sync-Import empfangener Bereich-A-Events — siehe
-    /// ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:abteilung:)``,
+    /// ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:produkt:am:context:ursprungsGeraeteID:abteilung:geschaeft:)``,
     /// deren `abteilung`-Parameter für die reguläre Einkaufsliste bevorzugt
     /// genutzt wird).
     ///

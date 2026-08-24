@@ -69,7 +69,7 @@ final class KaufEintrag {
     /// fälschlich als eigene Beobachtung in die lokal gelernte, ladenspezifische
     /// Distanzmatrix (``AbteilungsDistanzService``) einfließen. Vorher war diese
     /// Regel nur an den beiden Konstruktions-Call-Sites von Hand nachgebildet
-    /// (``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:abteilung:geschaeft:)``,
+    /// (``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:produkt:am:context:ursprungsGeraeteID:abteilung:geschaeft:)``,
     /// ``SyncSnapshotImportService``) — hier im Typ selbst gilt sie automatisch
     /// für jeden, auch künftigen, Konstruktionsort.
     var ursprungsGeraeteID: String?

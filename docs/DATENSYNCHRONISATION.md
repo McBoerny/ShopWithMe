@@ -851,6 +851,46 @@ automatisierte Tests schlugen sofort fehl (u.a.
 bekannter, konkreter `zuletztAbgehaktAm`-Zeitstempel blockt, ein fehlender
 Dictionary-Eintrag lässt das Hinzufügen unverändert zu.
 
+**Nachtrag (Korrektur eines Code-Review-Fehlbefunds, 2026-08-24, GitHub
+#165/#166):** Ein automatisierter Review deutete den obigen Fix zunächst als
+unvollständig — eine bekannte ``ArtikelListenKauf``-Zeile OHNE
+`zuletztAbgehaktAm` (Altbestand) werde nun fälschlich NICHT mehr geblockt.
+Bei genauerer Prüfung zeigte sich: das ist kein Bug, sondern bereits
+korrektes Verhalten, nur missverständlich kommentiert. Eine Zeile mit
+`zuletztAbgehaktAm == nil` bedeutet in diesem Code NIE „sicher gekauft, nur
+Zeitstempel verloren" — jede echte Kauf-Aufzeichnung
+(``ArtikelListenKaufService/vermerkeAbgehakt(artikel:einkaufsliste:am:context:)``)
+verlangt zwingend ein konkretes `Date`; `nil` entsteht ausschließlich über
+``ArtikelListenKaufService/vermerkeAbgehaktFallsNoetig(artikel:einkaufsliste:am:bekannt:context:)``
+(Peer-Merge/Migration) und bedeutet dort durchgehend „bislang nirgends im
+Sync-Mesh ein bestätigter Kauf bekannt" — z.B. eine Zeile, die nur wegen
+eines `zuletztHinzugefuegtAm`-Fakts existiert. Genau diese Falle ist bereits
+an anderer Stelle dokumentiert und regressionsgetestet: `istBereitsAbgehakt`
+(siehe oben, „Gate bewusst auf zuletztAbgehaktAm, NICHT auf bekannterEintrag
+selbst") gated aus exakt diesem Grund NICHT auf „Zeile bekannt", sondern
+direkt auf den Zeitstempel — getestet durch
+`SyncSnapshotImportServiceTests.vonSicherheitsnetzGeerbterEintragTaeuschtBeiWeitergabeKeineFrischeVor`.
+Der obige Fix folgt also bereits demselben, bereits validierten Muster.
+Regressionstest für den hiesigen Bereich-A-Fall:
+`SyncImportServiceTests.artikelHinzugefuegtNichtBlockiertDurchNurHinzugefuegtFaktumOhneKauf`.
+
+**Der zweite Teil des Reviews war dagegen ein echter Bug (GitHub #166) und
+wurde gefixt:** Der Performance-Umbau (`docs/CHANGELOG.md`, „Sync-Merge-
+Batching") führte für den Datei-Batch-Pfad einen LIVE, während des gesamten
+Batches aktuell gehaltenen `ArtikelListenKauf`-Cache ein
+(`artikelListenKaufBekannt`). Das obige Sicherheitsnetz las aber weiterhin
+aus einem SEPARATEN, einmalig VOR dem Batch geladenen `Date?`-Snapshot
+(`abgehaktZeitstempel`) — dieser sah ein früher im selben Batch verarbeitetes
+`.artikelAbgehakt`-Event für dasselbe (Artikel, Liste)-Paar nicht. **Fix:**
+der Batch-Pfad (`SyncImportService.materialisiereAlsBatch`) liest das
+Sicherheitsnetz jetzt direkt aus `artikelListenKaufBekannt` statt aus dem
+separaten Snapshot — der Snapshot-Parameter entfällt dort komplett (auch ein
+voller `ArtikelListenKauf`-Tabellenfetch pro Batch-Zyklus weniger). Der
+Einzelevent-Pfad (`SyncImportService.materialisiere`, Multipeer-Kanal) ist
+von diesem Bug nicht betroffen (kein Batch, siehe dessen eigene Typ-Doku) und
+bleibt unverändert. Regressionstest:
+`SyncImportServiceTests.artikelHinzugefuegtNachAbhakenImSelbenBatchWirdBlockiert`.
+
 **Nachtrag (direkter Folgefund, Live-Fund 2026-08-24): derselbe
 Event-Replay-Nachhol-Lauf stempelte auch falsche `KaufEintrag.datum`-Werte.**
 Beim Aufspüren des Fundes oben fiel eine zweite, verwandte Lücke auf:
@@ -870,7 +910,7 @@ als beim Fund oben unterläuft ein zu JUNGER Zeitstempel die Schutzwirkung
 zwar nicht (macht die Prüfung höchstens konservativer), verfälscht aber die
 angezeigten Kaufdaten. **Fix:** neuer optionaler `am:`-Parameter (Default
 weiterhin `Date()` für lokales Abhaken), analog dem bereits bestehenden `am:`
-von ``Einkaufsliste/artikelHinzufuegenOhneEventAufzeichnung(_:context:)`` —
+von ``Einkaufsliste/artikelHinzufuegenOhneEventAufzeichnung(_:produkt:am:context:)`` —
 `SyncImportService.materialisiere` übergibt jetzt den ursprünglichen
 ``SyncEvent/wallClock`` des Events.
 

@@ -181,7 +181,7 @@ extension Einkaufsliste {
         return neuer
     }
 
-    /// Wie ``artikelHinzufuegenOhneEventAufzeichnung(_:context:)``, zeichnet
+    /// Wie ``artikelHinzufuegenOhneEventAufzeichnung(_:produkt:am:context:)``, zeichnet
     /// zusätzlich ein ``SyncEventArt/artikelHinzugefuegt``-Event auf (Phase 0,
     /// `docs/DATENSYNCHRONISATION_VERLAUF.md`) — die Stelle für alle lokal
     /// ausgelösten Aktionen, die einen Artikel (neu oder erneut) auf eine Liste
@@ -199,7 +199,7 @@ extension Einkaufsliste {
     }
 
     /// Nimmt `artikel` wieder von dieser Liste — Gegenstück zu
-    /// ``artikelHinzufuegenOhneEventAufzeichnung(_:context:)``, ohne Wirkung falls
+    /// ``artikelHinzufuegenOhneEventAufzeichnung(_:produkt:am:context:)``, ohne Wirkung falls
     /// er nicht darauf steht. Reine Zustandsmutation ohne Event-Aufzeichnung,
     /// siehe ``artikelEntfernen(_:context:)``. Liefert `true`, falls tatsächlich
     /// etwas entfernt wurde (Grundlage dafür, ob die aufzeichnende Variante ein

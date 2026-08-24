@@ -346,7 +346,7 @@ enum DatenintegritaetsService {
     /// SELBEN ``Einkaufsvorgang`` abbilden — strukturell IMMER ein Fehler
     /// (ein Artikel wird pro Einkaufsvorgang höchstens einmal gekauft, siehe
     /// den lokalen `bereitsVorhanden`-Schutz in
-    /// ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:produkt:context:ursprungsGeraeteID:abteilung:geschaeft:)``).
+    /// ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:produkt:am:context:ursprungsGeraeteID:abteilung:geschaeft:)``).
     /// Dieser Schutz greift nur beim direkten lokalen Abhaken —
     /// ``SyncSnapshotImportService/mergeKaufEintraege(_:artikelZuordnung:einkaufsvorgangZuordnung:geschaeftZuordnung:abteilungZuordnung:peerGeraeteID:context:)``
     /// legt `KaufEintrag`e aus einem Bereich-C-Snapshot ohne dieselbe Prüfung

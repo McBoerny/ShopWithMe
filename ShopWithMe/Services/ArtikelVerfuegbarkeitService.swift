@@ -52,7 +52,7 @@ enum ArtikelVerfuegbarkeitService {
     }
 
     /// Vermerkt dauerhaft, dass ``artikel`` in ``geschaeft`` gekauft wurde —
-    /// aufgerufen aus ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:abteilung:geschaeft:)``.
+    /// aufgerufen aus ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:produkt:am:context:ursprungsGeraeteID:abteilung:geschaeft:)``.
     /// Idempotent: eine bereits bekannte Kombination erzeugt keine weitere
     /// Zeile (reine Existenz-Tatsache, kein Zähler).
     static func vermerkeGekauft(artikel: Artikel, geschaeft: Geschaeft, context: ModelContext) {

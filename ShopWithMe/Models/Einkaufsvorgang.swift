@@ -130,7 +130,7 @@ final class Einkaufsvorgang {
     /// (über ``ArtikelListenKaufService/vermerkeAbgehakt(artikel:einkaufsliste:am:context:)``
     /// unten) den `zuletztAbgehaktAm`-Vergleichswert des Sicherheitsnetzes
     /// (Abschnitt 4.7). Analog zum bereits bestehenden `am:`-Parameter von
-    /// ``Einkaufsliste/artikelHinzufuegenOhneEventAufzeichnung(_:context:)``.
+    /// ``Einkaufsliste/artikelHinzufuegenOhneEventAufzeichnung(_:produkt:am:context:)``.
     @discardableResult
     func artikelAbhakenOhneEventAufzeichnung(
         _ artikel: Artikel, produkt: Produkt? = nil, am datum: Date = Date(), context: ModelContext, ursprungsGeraeteID: String? = nil,
@@ -245,7 +245,7 @@ final class Einkaufsvorgang {
         return .abgehakt
     }
 
-    /// Wie ``artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:abteilung:geschaeft:)``,
+    /// Wie ``artikelAbhakenOhneEventAufzeichnung(_:produkt:am:context:ursprungsGeraeteID:abteilung:geschaeft:)``,
     /// zeichnet zusätzlich (nur bei tatsächlicher Neuanlage) ein
     /// ``SyncEventArt/artikelAbgehakt``-Event auf (Phase 0,
     /// `docs/DATENSYNCHRONISATION_VERLAUF.md`) — inklusive des eigenen
@@ -264,7 +264,7 @@ final class Einkaufsvorgang {
     /// Macht ``artikelAbhaken(_:context:)`` rückgängig: löscht den zugehörigen
     /// ``KaufEintrag`` und setzt den Artikel zurück auf ``einkaufsliste`` (inkl.
     /// Zurücksetzen von Menge/temporärer Notiz, siehe
-    /// ``Einkaufsliste/artikelHinzufuegenOhneEventAufzeichnung(_:context:)``).
+    /// ``Einkaufsliste/artikelHinzufuegenOhneEventAufzeichnung(_:produkt:am:context:)``).
     /// Reine Zustandsmutation ohne eigene Event-Aufzeichnung, siehe
     /// ``artikelAbwaehlen(_:context:)``. Liefert `true`, falls tatsächlich ein
     /// ``KaufEintrag`` gelöscht wurde.
@@ -335,7 +335,7 @@ final class Einkaufsvorgang {
     /// Sucht bewusst nur unter Einträgen mit BEREITS VORHANDENEM Index (nicht per
     /// simplem `first(where:)` über die ungeordnete `kaufEintraege`-Relationship):
     /// seit remote materialisierte/gemergte Einträge bewusst `abteilungBesuchsIndex
-    /// == nil` bekommen (siehe ``artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:abteilung:)``),
+    /// == nil` bekommen (siehe ``artikelAbhakenOhneEventAufzeichnung(_:produkt:am:context:ursprungsGeraeteID:abteilung:geschaeft:)``),
     /// könnte die ungeordnete Aufzählung sonst zuerst auf so einen `nil`-Eintrag
     /// treffen und fälschlich einen NEUEN Index für eine Abteilung vergeben, die
     /// lokal bereits einen echten Index hat — zwei Besuchs-Slots für dieselbe

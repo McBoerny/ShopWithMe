@@ -152,7 +152,7 @@ enum ArtikelListenKaufService {
 
     /// Vermerkt dauerhaft, dass `artikel` von `einkaufsliste` abgehakt wurde —
     /// aufgerufen aus
-    /// ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:abteilung:geschaeft:)``.
+    /// ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:produkt:am:context:ursprungsGeraeteID:abteilung:geschaeft:)``.
     /// Existiert bereits ein Eintrag für dieses Paar, wird `zuletztAbgehaktAm`
     /// nur nach VORNE (später) korrigiert, nie zurück — für den
     /// Einzelaufruf-Fall (ein Abhaken = eine Aktualisierung). Für Merge-Batches

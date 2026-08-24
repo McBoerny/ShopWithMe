@@ -1751,7 +1751,7 @@ enum SyncSnapshotImportService {
     /// gemergten lokalen Gegenstücke umgebogen).
     ///
     /// **`abteilungBesuchsIndex` wird bewusst NICHT aus dem Snapshot
-    /// übernommen** (analog ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:)``
+    /// übernommen** (analog ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:produkt:am:context:ursprungsGeraeteID:abteilung:geschaeft:)``
     /// für den entsprechenden Bereich-A-Fall) — durchgesetzt über
     /// ``KaufEintrag/ursprungsGeraeteID`` (`peerGeraeteID`), das
     /// ``KaufEintrag/init(artikel:geschaeft:abteilung:preis:menge:datum:abteilungBesuchsIndex:ursprungsGeraeteID:)``
@@ -1833,7 +1833,7 @@ enum SyncSnapshotImportService {
 
             if let artikel = neuer.artikel, let einkaufsliste = neuer.einkaufsvorgang?.einkaufsliste {
                 // Nutzerbericht (2026-08-10): anders als das lokale Abhaken
-                // (``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:context:ursprungsGeraeteID:abteilung:geschaeft:)``,
+                // (``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:produkt:am:context:ursprungsGeraeteID:abteilung:geschaeft:)``,
                 // löscht dort explizit den offenen `EinkaufslistenEintrag``)
                 // entfernte dieser Zweig den entsprechenden offenen Listen-
                 // Eintrag ursprünglich NIE — ein Gerät, das den Artikel noch

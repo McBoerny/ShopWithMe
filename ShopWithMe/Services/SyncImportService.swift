@@ -193,17 +193,19 @@ enum SyncImportService {
         // Gewinner-Index während der Verarbeitung selbst aktuell, siehe dort.
         // `bekannteIDs` dient unten als Vorfilter gegen unnötige Datei-Lesevorgänge.
         var (gewinner, bekannteIDs) = SyncEventService.alleAktuellenGewinnerUndBekannteIDs(context: context)
-        // Sicherheitsnetz gegen wiederbelebte Käufe (GitHub #99), bisher nur
-        // in ``SyncSnapshotImportService/mergeEinkaufslistenEintraege(_:listeZuordnung:artikelZuordnung:produktZuordnung:context:)``
-        // (Bereich B) angewendet — siehe ``wendeAn(_:gewinner:aliase:abgehaktZeitstempel:context:)``
-        // für die Begründung, warum derselbe Schutz jetzt auch hier (Bereich A)
-        // gilt. Einmal pro Batch geladen statt pro Event, analog `aliase` oben.
-        let abgehaktZeitstempel = ArtikelListenKaufService.alleZeitstempel(context: context)
-        // Batch-Cache fürs `ArtikelListenKauf`-Sicherheitsnetz-Faktum selbst
-        // (Performance-Fund #159) — ohne diesen fiel jeder per Bereich-A-Event
-        // materialisierte Eintrag auf einen eigenen Fetch pro Event zurück,
-        // bei einem vollständigen Event-Log-Replay nach Geräte-Neuaufbau
-        // potenziell hunderte Male. Analog `abgehaktZeitstempel` oben.
+        // Batch-Cache fürs `ArtikelListenKauf`-Sicherheitsnetz-Faktum (GitHub #99)
+        // UND fürs Sicherheitsnetz-Faktum selbst (Performance-Fund #159) — dient
+        // beiden Zwecken: (a) ``materialisiereAlsBatch(_:nutzlast:autorGeraeteID:wallClock:aliase:artikelListenKaufBekannt:context:)``s
+        // `.artikelHinzugefuegt`-Zweig liest daraus, ob der Artikel bereits
+        // bekannt gekauft wurde (GitHub #166: bewusst dieser LIVE, während des
+        // Batches aktuell gehaltene Cache statt eines separaten Vor-Batch-
+        // Snapshots — sonst sieht ein später im selben Batch verarbeitetes
+        // `.artikelHinzugefuegt`-Event ein davor im selben Batch verarbeitetes
+        // `.artikelAbgehakt`-Event für dasselbe Paar nicht); (b) vermeidet einen
+        // eigenen Fetch pro Event beim Vermerken des Sicherheitsnetz-Fakts
+        // selbst, bei einem vollständigen Event-Log-Replay nach Geräte-Neuaufbau
+        // potenziell hunderte Male. Einmal pro Batch geladen statt pro Event,
+        // analog `aliase` oben.
         var artikelListenKaufBekannt = ArtikelListenKaufService.alleEintraege(context: context)
 
         for peerOrdner in peerVerzeichnisse where !PeerOrdnerName.gehoertZu(peerOrdner.lastPathComponent, geraeteID: eigeneGeraeteID) {
@@ -241,7 +243,7 @@ enum SyncImportService {
 
             for empfangen in empfangeneEvents {
                 wendeAnAlsBatch(
-                    empfangen, gewinner: &gewinner, aliase: aliase, abgehaktZeitstempel: abgehaktZeitstempel,
+                    empfangen, gewinner: &gewinner, aliase: aliase,
                     artikelListenKaufBekannt: &artikelListenKaufBekannt, context: context
                 )
             }
@@ -391,24 +393,27 @@ enum SyncImportService {
     }
 
     /// Batch-Variante für ``importiereNeueEvents(context:)`` — reicht
-    /// `artikelListenKaufBekannt` bis zu ``materialisiereAlsBatch(_:nutzlast:autorGeraeteID:wallClock:aliase:abgehaktZeitstempel:artikelListenKaufBekannt:context:)``
-    /// durch (Performance-Fund #159).
+    /// `artikelListenKaufBekannt` bis zu ``materialisiereAlsBatch(_:nutzlast:autorGeraeteID:wallClock:aliase:artikelListenKaufBekannt:context:)``
+    /// durch (Performance-Fund #159). Kein separater `abgehaktZeitstempel`-Parameter
+    /// mehr (GitHub #166) — `artikelListenKaufBekannt` ist bereits während des
+    /// gesamten Batches aktuell gehalten und deckt denselben Bedarf ab, siehe
+    /// dortige Typ-Doku.
     @MainActor
     private static func wendeAnAlsBatch(
         _ empfangen: SyncEventExportDarstellung, gewinner: inout [SyncEventService.PaarSchluessel: SyncEvent],
-        aliase: [String: [UUID: UUID]], abgehaktZeitstempel: [ArtikelListenKaufService.Schluessel: Date?],
+        aliase: [String: [UUID: UUID]],
         artikelListenKaufBekannt: inout [ArtikelListenKaufService.Schluessel: ArtikelListenKauf], context: ModelContext
     ) {
         wendeAnKern(empfangen, gewinner: &gewinner, aliase: aliase, context: context) { art, nutzlast, autorGeraeteID, wallClock in
             materialisiereAlsBatch(
                 art, nutzlast: nutzlast, autorGeraeteID: autorGeraeteID, wallClock: wallClock,
-                aliase: aliase, abgehaktZeitstempel: abgehaktZeitstempel, artikelListenKaufBekannt: &artikelListenKaufBekannt, context: context
+                aliase: aliase, artikelListenKaufBekannt: &artikelListenKaufBekannt, context: context
             )
         }
     }
 
     /// Gemeinsamer Kern von ``wendeAn(_:gewinner:aliase:abgehaktZeitstempel:context:)``
-    /// und ``wendeAnAlsBatch(_:gewinner:aliase:abgehaktZeitstempel:artikelListenKaufBekannt:context:)``
+    /// und ``wendeAnAlsBatch(_:gewinner:aliase:artikelListenKaufBekannt:context:)``
     /// — beide unterscheiden sich nur darin, welche ``materialisiere``-Variante
     /// aufgerufen wird.
     @MainActor
@@ -555,18 +560,18 @@ enum SyncImportService {
     /// auf die offene Liste, obwohl derselbe Merge-Durchlauf ihn Sekunden
     /// zuvor über den Snapshot-Kanal bereits korrekt ausgeschlossen hatte
     /// (live bestätigt: 22 Artikel sprangen nach Reset+Event-Replay von
-    /// korrekt 1239 zurück auf 1265). Nur der zeitstempel-basierte Vergleich
-    /// wird hier repliziert (direkt, NICHT über
-    /// ``ArtikelListenKaufService/istOffen(hinzugefuegtAm:abgehaktAm:)`` —
-    /// dessen Vertrag behandelt ein fehlendes `abgehaktAm` immer als „nicht
-    /// offen", was hier den weitaus häufigeren Fall „noch nie gekauft" fälschlich
-    /// geblockt hätte, siehe Kommentar an der Aufrufstelle unten), NICHT der
-    /// `alleVorgaenge`-Fallback von
-    /// ``SyncSnapshotImportService/istBereitsAbgehakt(_:aufListe:alleVorgaenge:istAusDerZeitGefallen:bekannterEintrag:)``
-    /// für Altbestand ohne Zeitstempel — bewusste Vereinfachung, da dieser
-    /// Zweig zuvor GAR keinen Schutz hatte (reine Verbesserung) und der
-    /// Fallback zusätzliches Batch-Fetching von `Einkaufsvorgang`en erfordert
-    /// hätte.
+    /// korrekt 1239 zurück auf 1265).
+    ///
+    /// **Bewusst NICHT über ``ArtikelListenKaufService/istOffen(hinzugefuegtAm:abgehaktAm:)``
+    /// direkt mit dem rohen Dictionary-Lookup verwendet** (siehe Kommentar an
+    /// der Aufrufstelle in ``materialisiereKern(_:nutzlast:autorGeraeteID:wallClock:aliase:context:zuletztAbgehaktAm:artikelHinzufuegen:artikelAbhaken:)``
+    /// für die aktuelle Begründung, GitHub #165/#166) — folgt demselben,
+    /// bereits an ``SyncSnapshotImportService/istBereitsAbgehakt(_:aufListe:alleVorgaenge:istAusDerZeitGefallen:bekannterEintrag:)``
+    /// etablierten und regressionsgetesteten Muster: eine bekannte
+    /// ``ArtikelListenKauf``-Zeile OHNE `zuletztAbgehaktAm` (z.B. eine nur vom
+    /// symmetrischen `zuletztHinzugefuegtAm`-Fakt erzeugte Zeile, nie ein
+    /// bestätigter Kauf) blockt NICHT — nur ein tatsächlich bekannter,
+    /// konkreter Zeitstempel tut das.
     @MainActor
     private static func materialisiere(
         _ art: SyncEventArt, nutzlast: SyncEventNutzlast, autorGeraeteID: String, wallClock: Date,
@@ -574,7 +579,8 @@ enum SyncImportService {
     ) -> MaterialisierungsErgebnis {
         materialisiereKern(
             art, nutzlast: nutzlast, autorGeraeteID: autorGeraeteID, wallClock: wallClock,
-            aliase: aliase, abgehaktZeitstempel: abgehaktZeitstempel, context: context,
+            aliase: aliase, context: context,
+            zuletztAbgehaktAm: { abgehaktZeitstempel[$0] ?? nil },
             artikelHinzufuegen: { liste, artikel, zeitpunkt in
                 liste.artikelHinzufuegenOhneEventAufzeichnung(artikel, am: zeitpunkt, context: context)
             },
@@ -597,15 +603,32 @@ enum SyncImportService {
     /// verwendet — dort gilt laut dessen eigener Typ-Doku „Kein
     /// Batch-Index-Aufbau": ein einzelnes Event amortisiert die Kosten eines
     /// vollständigen Vorab-Ladens nie.
+    ///
+    /// **Speist das Sicherheitsnetz gegen wiederbelebte Käufe (GitHub #99) aus
+    /// `artikelListenKaufBekannt` selbst, statt aus einem separaten Vor-Batch-
+    /// Snapshot (GitHub #166-Fix):** `artikelListenKaufBekannt` wird während
+    /// des gesamten Batches laufend aktuell gehalten (jedes materialisierte
+    /// `.artikelAbgehakt`-Event aktualisiert es sofort über
+    /// ``Einkaufsvorgang/artikelAbhakenAlsEventReplay(_:produkt:am:context:ursprungsGeraeteID:abteilung:geschaeft:bekannt:)``
+    /// → ``ArtikelListenKaufService/vermerkeAbgehaktFallsNoetig(artikel:einkaufsliste:am:bekannt:context:)``).
+    /// Ein separater, einmalig VOR dem Batch geladener Snapshot (wie er hier
+    /// bis GitHub #166 zusätzlich existierte) sieht Änderungen aus früher im
+    /// selben Batch verarbeiteten Events nicht — ein `.artikelAbgehakt`-Event
+    /// gefolgt von einem `.artikelHinzugefuegt`-Event für dasselbe
+    /// (Artikel, Liste)-Paar im selben Batch (z.B. von zwei verschiedenen
+    /// Peer-Ordnern, deren Verarbeitungsreihenfolge nicht garantiert ist)
+    /// hätte die Sperre sonst verpasst, siehe
+    /// `SyncImportServiceTests/artikelHinzugefuegtNachAbhakenImSelbenBatchWirdBlockiert`.
     @MainActor
     private static func materialisiereAlsBatch(
         _ art: SyncEventArt, nutzlast: SyncEventNutzlast, autorGeraeteID: String, wallClock: Date,
-        aliase: [String: [UUID: UUID]], abgehaktZeitstempel: [ArtikelListenKaufService.Schluessel: Date?],
+        aliase: [String: [UUID: UUID]],
         artikelListenKaufBekannt: inout [ArtikelListenKaufService.Schluessel: ArtikelListenKauf], context: ModelContext
     ) -> MaterialisierungsErgebnis {
         materialisiereKern(
             art, nutzlast: nutzlast, autorGeraeteID: autorGeraeteID, wallClock: wallClock,
-            aliase: aliase, abgehaktZeitstempel: abgehaktZeitstempel, context: context,
+            aliase: aliase, context: context,
+            zuletztAbgehaktAm: { artikelListenKaufBekannt[$0]?.zuletztAbgehaktAm },
             artikelHinzufuegen: { liste, artikel, zeitpunkt in
                 liste.artikelHinzufuegenAlsEventReplay(artikel, am: zeitpunkt, bekannt: &artikelListenKaufBekannt, context: context)
             },
@@ -619,15 +642,17 @@ enum SyncImportService {
     }
 
     /// Gemeinsamer Kern von ``materialisiere(_:nutzlast:autorGeraeteID:wallClock:aliase:abgehaktZeitstempel:context:)``
-    /// und ``materialisiereAlsBatch(_:nutzlast:autorGeraeteID:wallClock:aliase:abgehaktZeitstempel:artikelListenKaufBekannt:context:)``
+    /// und ``materialisiereAlsBatch(_:nutzlast:autorGeraeteID:wallClock:aliase:artikelListenKaufBekannt:context:)``
     /// — beide unterscheiden sich nur darin, WIE die beiden
     /// `ArtikelListenKauf`-Schreibfälle (`.artikelHinzugefuegt`/`.artikelAbgehakt`)
-    /// das Sicherheitsnetz-Faktum vermerken; die restliche Referenzauflösung/
-    /// Fallunterscheidung bleibt an genau einer Stelle.
+    /// das Sicherheitsnetz-Faktum vermerken bzw. abfragen (`zuletztAbgehaktAm`);
+    /// die restliche Referenzauflösung/Fallunterscheidung bleibt an genau
+    /// einer Stelle.
     @MainActor
     private static func materialisiereKern(
         _ art: SyncEventArt, nutzlast: SyncEventNutzlast, autorGeraeteID: String, wallClock: Date,
-        aliase: [String: [UUID: UUID]], abgehaktZeitstempel: [ArtikelListenKaufService.Schluessel: Date?], context: ModelContext,
+        aliase: [String: [UUID: UUID]], context: ModelContext,
+        zuletztAbgehaktAm: (ArtikelListenKaufService.Schluessel) -> Date?,
         artikelHinzufuegen: (Einkaufsliste, Artikel, Date) -> Void,
         artikelAbhaken: (Einkaufsvorgang, Artikel, Date, String?, Geschaeft??) -> Void
     ) -> MaterialisierungsErgebnis {
@@ -638,18 +663,27 @@ enum SyncImportService {
             guard let liste, let artikel else { return fehlendeReferenz(bezug: liste, artikel: artikel) }
             let schluessel = ArtikelListenKaufService.Schluessel(artikelID: artikel.id, einkaufslisteID: liste.id)
             // NICHT ``ArtikelListenKaufService/istOffen(hinzugefuegtAm:abgehaktAm:)``
-            // direkt mit dem Dictionary-Lookup verwendet: dessen Vertrag
-            // behandelt ein fehlendes `abgehaktAm` IMMER als „nicht offen"
-            // (siehe dortige Typ-Doku „kein Default-offen bei fehlendem
-            // abgehaktAm") — passend für eine BEKANNTE ``ArtikelListenKauf``-
-            // Zeile ohne Zeitstempel (Altbestand), aber falsch für den hier
-            // weitaus häufigeren Fall „noch nie gekauft" (Schlüssel fehlt
-            // komplett im Dictionary). Ein direkter Aufruf hätte JEDES normale
-            // `artikelHinzugefuegt`-Event blockiert (Regressionsfund im
-            // Test-Lauf vor dem v0.17-Release, siehe
-            // `SyncImportServiceTests/importiertArtikelHinzugefuegtVonFremdemGeraet`).
-            // Nur ein tatsächlich bekannter, konkreter Zeitstempel blockt hier.
-            if let zuletztAbgehaktAm = abgehaktZeitstempel[schluessel] ?? nil, wallClock <= zuletztAbgehaktAm {
+            // direkt mit dem rohen `zuletztAbgehaktAm(schluessel)`-Ergebnis
+            // verwendet: dessen Vertrag behandelt ein fehlendes `abgehaktAm`
+            // IMMER als „nicht offen" (siehe dortige Typ-Doku „kein
+            // Default-offen bei fehlendem abgehaktAm"). Das passt für eine
+            // ``ArtikelListenKauf``-Zeile, die tatsächlich einen bekannten Kauf
+            // repräsentiert, aber `zuletztAbgehaktAm` ist AUCH bei einer Zeile
+            // `nil`, die nur wegen des symmetrischen `zuletztHinzugefuegtAm`-
+            // Fakts existiert (Artikel wurde nur zur Liste hinzugefügt, nie
+            // gekauft) — der hier weitaus häufigere Fall. Ein direkter
+            // `istOffen`-Aufruf würde diese beiden Fälle nicht unterscheiden
+            // können und JEDES normale `artikelHinzugefuegt`-Event blockieren
+            // (Regressionsfund im Test-Lauf vor dem v0.17-Release, siehe
+            // `SyncImportServiceTests/importiertArtikelHinzugefuegtVonFremdemGeraet`) —
+            // exakt dieselbe Falle, vor der ``SyncSnapshotImportService/istBereitsAbgehakt(_:aufListe:alleVorgaenge:istAusDerZeitGefallen:bekannterEintrag:)``
+            // bereits schützt (dort per `bekannterEintrag?.zuletztAbgehaktAm`
+            // statt `if let bekannterEintrag`, siehe
+            // `SyncSnapshotImportServiceTests/vonSicherheitsnetzGeerbterEintragTaeuschtBeiWeitergabeKeineFrischeVor`
+            // sowie `SyncImportServiceTests/artikelHinzugefuegtNichtBlockiertDurchNurHinzugefuegtFaktumOhneKauf`
+            // für den hiesigen Bereich-A-Fall). Nur ein tatsächlich bekannter,
+            // konkreter Zeitstempel blockt hier.
+            if let bekannt = zuletztAbgehaktAm(schluessel), wallClock <= bekannt {
                 SyncDebugLogger.log(
                     .einkaufslistenEintragSicherheitsnetzUebersprungen,
                     details: "artikel=\(artikel.name) liste=\(liste.name) pfad=bereichA"
