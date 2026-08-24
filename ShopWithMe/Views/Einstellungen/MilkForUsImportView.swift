@@ -36,6 +36,11 @@ struct MilkForUsImportView: View {
     @State private var fehlermeldung: String?
     @State private var gruppen: [MilkForUsKategorieGruppe]?
     @State private var zielListe: Einkaufsliste?
+    /// Existenz-Set aus ``alleArtikel``/``alleProduktnamen`` für den Duplikat-
+    /// Hinweis in ``VorschauListe`` — einmalig berechnet, wenn ``gruppen``
+    /// gesetzt wird (``verarbeite(text:)``), statt bei jedem Render neu aus
+    /// den vollen `@Query`-Ergebnissen gebaut (Performance-Fund #163).
+    @State private var bestehendeArtikelNamen: Set<String> = []
 
     private var kannUebernehmen: Bool {
         !uebernimmt && zielListe != nil && !(gruppen?.allSatisfy { $0.artikelNamen.isEmpty } ?? true)
@@ -50,7 +55,7 @@ struct MilkForUsImportView: View {
                     VorschauListe(
                         gruppen: Binding(get: { gruppen }, set: { self.gruppen = $0 }),
                         bestehendeAbteilungen: alleAbteilungen,
-                        bestehendeArtikelNamen: Set(alleArtikel.map { $0.name.lowercased() } + alleProduktnamen.map { $0.name.lowercased() }),
+                        bestehendeArtikelNamen: bestehendeArtikelNamen,
                         alleListen: alleListen,
                         zielListe: $zielListe
                     )
@@ -134,6 +139,7 @@ struct MilkForUsImportView: View {
             ) { erledigt, gesamt in
                 fortschritt = (erledigt, gesamt)
             }
+            bestehendeArtikelNamen = Set(alleArtikel.map { $0.name.lowercased() } + alleProduktnamen.map { $0.name.lowercased() })
         }
     }
 

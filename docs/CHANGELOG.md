@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.17 (Build 357) — Performance: kleine Render-Redundanzen behoben (#163, #164)
+
+Vierter und letzter Batch der Performance-Aufarbeitung (#152–#164):
+
+- **#164:** `ArtikelHinzufuegenView` berechnet `gefilterteArtikel` jetzt
+  einmal pro Render statt zweimal (Gruppierung + Empty-State-Check).
+- **#163:** `MilkForUsImportView`s Existenz-Set aus `alleArtikel`/
+  `alleProduktnamen` wird jetzt einmalig berechnet, wenn die Import-Vorschau
+  entsteht, statt bei jedem Render der Vorschau (Swipe-Delete,
+  Kategorie-Zuordnung, Zielliste wählen) neu aus den vollen `@Query`-
+  Ergebnissen gebaut zu werden.
+
+**#161** (wiederholtes "volle Tabelle laden um Validity-Set zu bauen"-Muster)
+geprüft: der Hauptfall ist bereits durch Batch A (`DatenintegritaetsService`)
+abgedeckt. Eine weitere tatsächliche Im-selben-Arbeitsschritt-Dopplung
+gefunden (`ArtikelZusammenfuehrungsService.referenzenUmhaengen` fetcht
+`Einkaufsliste` selbst UND erneut indirekt über
+`ArtikelListenKaufService.alleEintraege`) — bewusst nicht behoben: seltene,
+nutzerausgelöste Aktion (Artikel-Zusammenführung), keine Hot-Path-Relevanz,
+der Fix würde neue API-Fläche für einen einzigen Aufrufer schaffen. Details
+in GitHub #161.
+
+**#162** (`Geschaeft.anzahlEinkaufsvorgaenge` fetcht bei jedem Zugriff neu)
+geprüft, kein Fix nötig: alle Aufrufer sind ein Detail-Sheet
+(`GeschaeftStammdatenEditView`) und Einzel-Checks in
+`AbteilungsDistanzService` — keine Listenzeile, also keine Häufung.
+
 ## v0.17 (Build 356) — Performance: Preisverdichtung, Favoriten-Query, Artikelliste (#156, #157, #158)
 
 Dritter Batch der Performance-Aufarbeitung (#152–#164), isolierte

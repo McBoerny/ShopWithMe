@@ -108,13 +108,14 @@ struct ArtikelHinzufuegenView: View {
         }
     }
 
-    /// ``gefilterteArtikel(produkteNachArtikelID:)`` gruppiert nach
-    /// Anfangsbuchstaben, alphabetisch — die Grundlage für die automatische
-    /// A–Z-Sprungleiste (GitHub #8). Umlaute einsortiert bei ihrem
-    /// Basisbuchstaben (GitHub #34).
-    private func gruppierteArtikel(produkteNachArtikelID: [UUID: [Produkt]]) -> [(buchstabe: String, artikel: [Artikel])] {
-        let sortiert = gefilterteArtikel(produkteNachArtikelID: produkteNachArtikelID)
-            .sorted { $0.name.vergleicheAlphabetisch(mit: $1.name) == .orderedAscending }
+    /// Gruppiert `gefilterteArtikel` (vom Aufrufer bereits einmal pro Render
+    /// berechnet statt hier ein zweites Mal via
+    /// ``gefilterteArtikel(produkteNachArtikelID:)`` neu gefiltert,
+    /// Performance-Fund #164) nach Anfangsbuchstaben, alphabetisch — die
+    /// Grundlage für die automatische A–Z-Sprungleiste (GitHub #8). Umlaute
+    /// einsortiert bei ihrem Basisbuchstaben (GitHub #34).
+    private func gruppierteArtikel(_ gefilterteArtikel: [Artikel]) -> [(buchstabe: String, artikel: [Artikel])] {
+        let sortiert = gefilterteArtikel.sorted { $0.name.vergleicheAlphabetisch(mit: $1.name) == .orderedAscending }
         let gruppen = Dictionary(grouping: sortiert) { $0.name.alphabetischerAnfangsbuchstabe }
         return gruppen.keys.sorted().map { buchstabe in (buchstabe, gruppen[buchstabe] ?? []) }
     }
@@ -145,6 +146,9 @@ struct ArtikelHinzufuegenView: View {
 
     var body: some View {
         let produkteNachArtikelID = produkteNachArtikelID
+        // Einmal pro Render berechnet statt zweimal (Gruppierung +
+        // Empty-State-Check unten) neu gefiltert (Performance-Fund #164).
+        let gefiltert = gefilterteArtikel(produkteNachArtikelID: produkteNachArtikelID)
         NavigationStack {
             List {
                 if !getrimmterSuchtext.isEmpty && !existiertGenau {
@@ -157,7 +161,7 @@ struct ArtikelHinzufuegenView: View {
                     }
                 }
 
-                ForEach(gruppierteArtikel(produkteNachArtikelID: produkteNachArtikelID), id: \.buchstabe) { gruppe in
+                ForEach(gruppierteArtikel(gefiltert), id: \.buchstabe) { gruppe in
                     Section(gruppe.buchstabe) {
                         ForEach(gruppe.artikel) { artikel in
                             let bereitsAufListe = !einkaufsliste.alleEintraege(fuer: artikel).isEmpty
@@ -289,7 +293,7 @@ struct ArtikelHinzufuegenView: View {
                     }
                 }
 
-                if gefilterteArtikel(produkteNachArtikelID: produkteNachArtikelID).isEmpty && getrimmterSuchtext.isEmpty {
+                if gefiltert.isEmpty && getrimmterSuchtext.isEmpty {
                     ContentUnavailableView(
                         "Keine Artikel",
                         systemImage: "carrot.fill",
