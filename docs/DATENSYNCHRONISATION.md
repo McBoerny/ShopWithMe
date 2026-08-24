@@ -861,21 +861,38 @@ in `MultipeerSyncService.swift`).
 
 **Zweiter Live-Fund (2026-08-24, mit Stacktrace belegt): Absturz im
 `sendResource`-Completion-Handler.** `MCSession.sendResource` ruft seinen
-Completion-Handler nie auf dem `MainActor` auf, sondern auf einer eigenen
-internen `com.apple.MCSession.callbackQueue`. Ein Closure-Literal, das direkt
-inline innerhalb der `@MainActor`-Methode geschrieben wird, erbt ohne
+Completion-Handler nie auf dem `MainActor` auf, sondern synchron auf einer
+eigenen internen `com.apple.MCSession.callbackQueue`. Ein Closure-Literal, das
+direkt inline innerhalb der `@MainActor`-Methode geschrieben wird, erbt ohne
 Gegenmaßnahme trotzdem `MainActor`-Isolation (Swifts Standard-Inferenzregel
-für Closures in aktor-isolierten Methoden) — beim tatsächlichen Aufruf
-erzwingt Swift dann eine Laufzeit-Isolationsprüfung und bricht hart ab
-(`dispatch_assert_queue`-Fail), weil der Aufruf nachweislich nicht auf dem
-`MainActor` läuft. Fix: der Completion-Handler ist jetzt ein lokaler, explizit
-als `@Sendable (Error?) -> Void` (nicht-isoliert) typisierter Wert — der
-Closure-Körper berührt ohnehin nur den Sendable-Wert `tempURL`, keine
-`MainActor`-isolierten Properties, die vorherige Einschränkung entstand rein
-durch den lexikalischen Schreibort. Dasselbe Muster wird bereits an anderer
-Stelle in dieser Klasse korrekt verwendet (`invitationHandler: @escaping
-@Sendable (Bool, MCSession?) -> Void` in
-`advertiser(_:didReceiveInvitationFromPeer:withContext:invitationHandler:)`).
+für Closures in aktor-isolierten Methoden) — beim tatsächlichen, synchronen
+Aufruf durch `MCSession` erzwingt Swift dann eine Laufzeit-Isolationsprüfung
+und bricht hart ab (`dispatch_assert_queue`-Fail,
+`_swift_task_checkIsolatedSwift`), weil ein synchroner Aufruf nicht in den
+`MainActor` „hinüberhüpfen" kann.
+
+**Erster Fix-Versuch reichte NICHT aus** (derselbe Absturz trat unverändert
+wieder auf): der Completion-Handler wurde nur als lokaler, explizit
+`@Sendable (Error?) -> Void` typisierter Wert deklariert statt inline
+geschrieben. Grund für den Fehlschlag: `@Sendable` und Aktor-Isolation sind
+orthogonale Eigenschaften — ein `@Sendable`-Closure kann trotzdem
+`MainActor`-isoliert sein, `@Sendable` allein erzwingt keine Nicht-Isolation,
+nur die Sendable-Sicherheit über Isolationsgrenzen hinweg. Ein innerhalb einer
+`@MainActor`-Methode geschriebenes Closure-Literal bleibt trotz
+`@Sendable`-Typannotation der Ziel-Variable weiterhin `MainActor`-isoliert.
+
+**Tatsächlicher Fix:** eine echte `nonisolated static`-Methode
+(`MultipeerSyncService.sendeCatchUpDateiUndBereinige(_:tempURL:resourceName:an:)`)
+— `nonisolated`-Methoden gehören zu keinem Aktor, ein darin geschriebener
+Closure hat deshalb von vornherein keine Aktor-Isolation zu erben. Nur DAS
+durchbricht die Inferenzkette zuverlässig, keine bloße Typannotation.
+`invitationHandler: @escaping @Sendable (Bool, MCSession?) -> Void`
+(`advertiser(_:didReceiveInvitationFromPeer:withContext:invitationHandler:)`)
+funktioniert an anderer Stelle in dieser Klasse korrekt, aber aus einem
+anderen Grund: dort wird ein bereits von außen als Parameter einer
+`nonisolated func` empfangener Closure lediglich synchron aufgerufen, nie neu
+erzeugt — kein Analogiefall für „ein neues Closure-Literal @Sendable
+typisieren reicht".
 
 **Anwendung:** dieselbe, bereits idempotente Merge-Funktion wie der
 Datei-Import,

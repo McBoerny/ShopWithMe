@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.16 (Build 346) — Multipeer-Catch-up: erster Absturz-Fix reichte nicht, jetzt mit nonisolated-Methode behoben
+
+Derselbe Absturz aus dem letzten Eintrag (`dispatch_assert_queue`-Fail im
+`sendResource`-Completion-Handler) trat nach dem ersten Fix-Versuch
+unverändert erneut auf, erneut mit Stacktrace belegt. Ursache des
+Fehlschlags: der Handler wurde nur als lokaler, `@Sendable`-typisierter Wert
+deklariert — `@Sendable` und Aktor-Isolation sind aber orthogonal, ein
+innerhalb einer `@MainActor`-Methode geschriebenes Closure-Literal bleibt
+trotz `@Sendable`-Typannotation weiterhin `MainActor`-isoliert. Tatsächlicher
+Fix: eine echte `nonisolated static`-Methode
+(`sendeCatchUpDateiUndBereinige`) — nur `nonisolated`-Methoden gehören zu
+keinem Aktor und erzeugen Closures ganz ohne Aktor-Zugehörigkeit. Details:
+`docs/DATENSYNCHRONISATION.md` §4.8.
+
 ## v0.16 (Build 345) — Multipeer-Catch-up: harter Absturz im sendResource-Completion-Handler behoben
 
 Nutzerbericht mit Stacktrace: Absturz auf `com.apple.MCSession.callbackQueue`
