@@ -38,8 +38,10 @@ struct AbteilungenVerwaltungView: View {
                             .foregroundStyle(Color(hex: kategorie.standardFarbeHex))
                     }
                 }
+                .accessibilityIdentifier(A11yID.AbteilungenVerwaltung.kategorieRow(kategorie.id))
             }
         }
+        .accessibilityIdentifier(A11yID.AbteilungenVerwaltung.list)
         .navigationTitle("Abteilungen")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -49,6 +51,7 @@ struct AbteilungenVerwaltungView: View {
                 } label: {
                     Label("Abteilung hinzufügen", systemImage: "plus")
                 }
+                .accessibilityIdentifier(A11yID.AbteilungenVerwaltung.hinzufuegenButton)
             }
         }
         .sheet(isPresented: $zeigeNeueKategorie) {
@@ -113,6 +116,7 @@ private struct AbteilungBearbeitenView: View {
                 } label: {
                     Label("Artikel hinzufügen", systemImage: "plus")
                 }
+                .accessibilityIdentifier(A11yID.AbteilungBearbeiten.artikelHinzufuegenButton)
             } header: {
                 Text("Artikel")
             } footer: {

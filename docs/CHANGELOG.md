@@ -1,5 +1,113 @@
 # Changelog
 
+## v0.16 (Build 333) — Einkaufsliste: offene Artikel löschen, Produktname statt Artikelname anzeigen
+
+GitHub #136: In der laufenden Einkaufsliste (`EinkaufenView`) gab es für noch
+offene (nicht abgehakte) Einträge keine Möglichkeit, sie per Wischgeste von
+der Liste zu entfernen — nur „Menge verringern“/„Menge erhöhen“. Der
+vorhandene „Dauerhaft entfernen“-Papierkorb-Swipe wirkte ausschließlich auf
+bereits abgehakte (gekaufte) Artikel. Neue Methode
+`EinkaufenView.entferneVonListe(_:)` nutzt dafür das bereits bestehende
+`Einkaufsliste.artikelEntfernen(_:produkt:context:)` (gleiches Muster wie
+`ArtikelHinzufuegenView.entfernen(_:)`) und wird für offene Zeilen jetzt
+ebenfalls als Trailing-Swipe-Aktion angeboten — Beschriftung „Löschen“
+(destructive), getrennt von „Dauerhaft entfernen“ bei bereits abgehakten
+Zeilen. „Menge erhöhen“ bleibt wie bisher die per vollem Swipe auslösbare
+Standardoption.
+
+GitHub #135: Wurde beim Hinzufügen ein konkretes Produkt statt nur des
+generischen Artikels gewählt, zeigte `ArtikelAbhakZeile` bisher trotzdem den
+Artikelnamen als Titel und den Produktnamen zusätzlich in einer eigenen
+Zeile vor der Notiz. Der Titel zeigt jetzt `eintrag?.produkt?.name ?? artikel.name`
+— die zweite Zeile ist damit wieder ausschließlich der Notiz vorbehalten.
+
+## v0.16 — MilkForUs-Import: schneller bei großen Listen, Fortschrittsanzeige, Importieren-Button oben rechts
+
+Nutzerbericht 2026-08-24: der Import sehr großer MilkForUs-Listen dauerte lange,
+ohne dass währenddessen sichtbar war, was passiert.
+
+**Performance** (siehe `docs/MILKFORUS_IMPORT.md` → „Performance bei sehr großen
+Listen“ für Details): der KI-Kategorieabgleich lief vorher streng nacheinander,
+läuft jetzt mit bis zu 4 Kategorien gleichzeitig; die Artikel-Zuordnung beim
+Übernehmen durchsuchte vorher für jeden importierten Artikel linear den kompletten
+bestehenden Bestand, ist jetzt nach kleingeschriebenem Namen indiziert.
+
+**Fortschrittsanzeige:** `ArtikelHinzufuegenService.gruppenMitVorschlag`/
+`uebernehmen` melden optional `(erledigt, gesamt)` — `uebernehmen` läuft dafür
+zusätzlich in Chunks à 25 Artikeln (je ein eigener kurzer Micro-Lease, statt
+eines einzigen langen Schreibvorgangs ohne Zwischen-Renders). `MilkForUsImportView`
+zeigt in beiden Phasen einen Balken mit Zähler statt nur eines unbestimmten
+Spinners.
+
+**„Importieren“-Button** sitzt jetzt in der Navigationsleiste oben rechts
+(`.confirmationAction`), nicht mehr als großer Button am unteren Bildschirmrand.
+
+Neue Regressionstests in `MilkForUsImportServiceTests` (Chunk-Verarbeitung legt
+Kategorie nur einmal an, Fortschritts-Meldungen vollständig).
+
+## v0.16 — Fix: gesamte Zeile in „Artikel hinzufügen“ tappbar zum An-/Abwählen
+
+In `ArtikelHinzufuegenView` reagierte nur der tatsächlich sichtbare Inhalt
+(Badge + Name) einer Zeile auf Tap, nicht die leere Fläche bis zum Haken
+rechts — `.frame(maxWidth: .infinity)` allein macht diesen Bereich in SwiftUI
+noch nicht tappbar. Alle drei betroffenen Zeilen-Buttons (Artikel-Hauptzeile,
+„Kein bestimmtes Produkt", Produkt-Unterzeile) haben jetzt zusätzlich
+`.contentShape(Rectangle())`, damit die komplette Zeilenbreite zum An-/
+Abwählen reagiert.
+
+## v0.16 — Fix: Absturz beim Hinzufügen, wenn eine andere Liste einen bereits gelöschten Artikel referenzierte
+
+`ArtikelListenKaufService.bestehenderEintragNamensgleich` durchsucht beim
+Hinzufügen/Abhaken eines Artikels alle `ArtikelListenKauf`-Zeilen derselben
+Liste nach einem namensgleichen Artikel. `ArtikelListenKauf.artikel` ist
+(dokumentiert, analog `ArtikelGeschaeftVerfuegbarkeit`) ohne `inverse`
+referenziert — wurde der referenzierte Artikel andernorts (typischerweise per
+Sync-Merge eines Peers) gelöscht, blieb die Zeile mit einer baumelnden
+`Artikel`-Referenz bestehen. Der Code las `$0.artikel?.name` ungeprüft, was
+bei genau so einer Zeile mit dem bekannten SwiftData-Fatal-Error „This model
+instance was invalidated because its backing data could no longer be found
+in the store" abstürzte (Nutzerbericht 2026-08-24, Absturz beim Hinzufügen
+eines Artikels über `ArtikelHinzufuegenView`). Jetzt wird — wie an allen
+anderen Stellen dieser Datei bereits gehandhabt — vorab die Menge tatsächlich
+noch existierender Artikel-IDs eingesammelt und jeder Kandidat per
+`persistentModelID` dagegen geprüft, bevor `.name` gelesen wird. Neuer
+Regressionstest `vermerkeHinzugefuegtStuerztBeiBaumelnderNachbarzeileNichtAb`
+in `ArtikelListenKaufServiceTests`.
+
+## v0.16 — Fix (Folgefund): wiederholte `Locale`-Neukonstruktion bei Artikel-Sortierung/-Suche
+
+Nach dem ersten Performance-Fix (unten) blieb die Suche in
+`ArtikelHinzufuegenView` bei ca. 1200 Artikeln weiter spürbar langsam.
+`String.vergleicheAlphabetisch(mit:)` (app-weit für locale-bewusste
+Sortierung genutzt, u.a. beim Gruppieren der Suchtreffer) und
+`String.diakritikGefaltet` (Singular/Plural-Suche) erzeugten bei **jedem**
+Aufruf ein neues `Locale(identifier: "de_DE")` — `vergleicheAlphabetisch`
+läuft beim Sortieren von n Artikeln n·log(n)-mal, bei 1200 Artikeln also
+mehrere Tausend Locale-Neukonstruktionen pro Tastendruck. Beide nutzen jetzt
+ein einmalig angelegtes `static let`-`Locale`; `diakritikGefaltet` cacht
+zusätzlich (wie zuvor schon `lemma`) den gefalteten Wortstamm pro
+Eingabe-String.
+
+## v0.16 — Fix: Artikel-hinzufügen-Suche bei >1000 Artikeln praktisch unbenutzbar
+
+`ArtikelHinzufuegenView.gefilterteArtikel` filterte für **jeden** Artikel erneut
+über die komplette `alleProdukte`-Liste (`alleProdukte.contains { $0.artikel ==
+artikel ... }`), ebenso `produkte(fuer:)` — zusammen O(Artikel × Produkte) statt
+O(Artikel + Produkte). Jetzt werden Top-Level-Produkte einmal pro `body`-Durchlauf
+per `Dictionary(grouping:)` nach `Artikel.id` gruppiert (``produkteNachArtikelID``)
+und beide Stellen schlagen dort nur noch nach.
+
+Zusätzlich rief `String.passtAlsSingularPluralZu(_:)` (Singular/Plural-unabhängige
+Suche, GitHub #44) bei jedem Nicht-Treffer der schnellen Heuristik ein
+`NLTagger`-Lemma **neu** ab — auch für den Suchtext, der über einen kompletten
+Filterdurchlauf unverändert bleibt. `String.lemma` cacht das Ergebnis jetzt nach
+Eingabe-String (``String+SingularPlural.lemmaCache``).
+
+Nutzerbericht 2026-08-24: bei ca. 1200 Artikeln schränkte das Suchfeld beim
+Hinzufügen von Artikeln zu einer Einkaufsliste die Trefferliste nur noch extrem
+langsam ein, ein Artikel ließ sich praktisch nicht mehr hinzufügen (jeder Tap löst
+über `@Query` einen vollen Re-Render mit denselben teuren Berechnungen aus).
+
 ## v0.16 (Build 332) — Artikel manuell als Produkt/Alias eines anderen Artikels zusammenführen
 
 `ArtikelEditView` hat eine neue Sektion „Zusammenführen" (nur bei bestehendem,

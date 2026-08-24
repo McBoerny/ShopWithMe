@@ -1335,7 +1335,8 @@ private struct EinkaufslisteView: View {
             abhaken: umschalten(_:kategorie:),
             mengeErhoehen: mengeErhoehen(_:),
             mengeVerringern: mengeVerringern(_:),
-            dauerhaftEntfernen: entferneDauerhaft(_:)
+            dauerhaftEntfernen: entferneDauerhaft(_:),
+            entferneVonListe: entferneVonListe(_:)
         )
         .refreshable { await pullToRefreshSynchronisieren() }
         .safeAreaInset(edge: .top) {
@@ -1533,6 +1534,28 @@ private struct EinkaufslisteView: View {
         }
     }
 
+    /// Nimmt `element` von ``einkaufsliste`` — Gegenstück zu ``entferneDauerhaft(_:)``
+    /// für noch offene (nicht abgehakte) Einträge, siehe GitHub #136:
+    /// ``entferneDauerhaft(_:)`` wirkt nur auf bereits abgehakte ``KaufEintrag``e,
+    /// für offene Einträge gibt es noch keinen — hier existiert nur der
+    /// ``EinkaufslistenEintrag`` selbst, den ``Einkaufsliste/artikelEntfernen(_:produkt:context:)``
+    /// entfernt (bereits etabliertes Muster, siehe ``ArtikelHinzufuegenView/entfernen(_:)``).
+    private func entferneVonListe(_ element: KategorieGruppe.Element) {
+        interaktionRegistrieren()
+        let einkaufslisteReferenz = ModelReference(einkaufsliste)
+        let artikelReferenz = ModelReference(element.artikel)
+        let produktReferenz = ModelReference(element.eintrag?.produkt)
+        Task {
+            await DatabaseLeaseService.performMicroLease(context: modelContext) {
+                guard let einkaufslisteFrisch = einkaufslisteReferenz.resolved(in: modelContext),
+                      let artikelFrisch = artikelReferenz.resolved(in: modelContext)
+                else { return }
+                let produktFrisch = produktReferenz?.resolved(in: modelContext)
+                einkaufslisteFrisch.artikelEntfernen(artikelFrisch, produkt: produktFrisch, context: modelContext)
+            }
+        }
+    }
+
     /// Diskrete Einzelaktion wie das Abhaken (``umschalten``) — jeder Tap ist ein
     /// abgeschlossener Schreibvorgang und wird deshalb ebenso per Micro-Lease
     /// abgesichert (siehe `docs/DATABASE_CONCURRENCY.md` → „Vollständiger
@@ -1676,8 +1699,14 @@ struct ArtikelAbhakZeile: View {
 
     @State private var zeigeMengenSheet = false
 
-    private var produktText: String? {
-        eintrag?.produkt?.name
+    /// Zeigt bei einem konkreten, beim Hinzufügen gewählten Produkt (GitHub #47)
+    /// dessen Namen statt des generischen Artikelnamens (GitHub #135) — die
+    /// zweite Zeile bleibt dadurch ausschließlich der Notiz vorbehalten, statt
+    /// sich Produktname und Notiz zu teilen. Fällt auf ``artikel/name`` zurück,
+    /// wenn kein Produkt gewählt wurde oder der Eintrag bereits abgehakt ist
+    /// (dann existiert kein ``eintrag`` mehr).
+    private var anzeigeName: String {
+        eintrag?.produkt?.name ?? artikel.name
     }
 
     private var preisSpanneText: String? {
@@ -1707,7 +1736,7 @@ struct ArtikelAbhakZeile: View {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 4) {
-                        Text(artikel.name)
+                        Text(anzeigeName)
                             .strikethrough(istAbgehakt)
                             .foregroundStyle(istAbgehakt ? .secondary : .primary)
                         if mehrfachKategorisiert {
@@ -1716,11 +1745,6 @@ struct ArtikelAbhakZeile: View {
                                 .foregroundStyle(.secondary)
                                 .accessibilityLabel("Artikel gehört mehreren Kategorien an und erscheint in mehreren Abschnitten")
                         }
-                    }
-                    if let pt = produktText {
-                        Text(pt)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                     }
                     if let notiz = eintrag?.notiz, !notiz.isEmpty {
                         Text(notiz)
@@ -1757,7 +1781,7 @@ struct ArtikelAbhakZeile: View {
         .swipeActions(edge: .trailing, allowsFullSwipe: dauerhaftEntfernen == nil) {
             if let dauerhaftEntfernen {
                 Button(role: .destructive, action: dauerhaftEntfernen) {
-                    Label("Dauerhaft entfernen", systemImage: "trash")
+                    Label(istAbgehakt ? "Dauerhaft entfernen" : "Löschen", systemImage: "trash")
                 }
             }
             Button(action: mengeErhoehen) {

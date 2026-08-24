@@ -177,4 +177,80 @@ struct MilkForUsImportServiceTests {
         #expect(try context.fetchCount(FetchDescriptor<ArtikelKategorie>()) == 0)
         #expect(liste.eintraege.isEmpty)
     }
+
+    /// Regressionstest für die Chunk-Verarbeitung (Performance-/Fortschritts-Fund
+    /// 2026-08-24, sehr große MilkForUs-Listen): eine einzelne `.neuAnlegen`-Gruppe
+    /// mit mehr Artikeln als die interne `chunkGroesse` (25) darf ihre Kategorie
+    /// trotz Aufteilung auf mehrere Micro-Lease-Chunks nur EINMAL anlegen.
+    @Test
+    func neuanlegenGruppeUeberMehrereChunksLegtKategorieNurEinmalAn() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let liste = Einkaufsliste(name: "Test")
+        context.insert(liste)
+
+        let vieleArtikel = (1...60).map { "Artikel \($0)" }
+        let gruppe = MilkForUsKategorieGruppe(
+            kategorieName: "Große Abteilung",
+            zuordnung: .neuAnlegen(name: "Große Abteilung"),
+            artikelNamen: vieleArtikel
+        )
+        await MilkForUsImportService.uebernehmen(gruppen: [gruppe], in: liste, context: context)
+
+        let kategorien = try context.fetch(FetchDescriptor<ArtikelKategorie>())
+        #expect(kategorien.map(\.name) == ["Große Abteilung"])
+        #expect(try context.fetchCount(FetchDescriptor<Artikel>()) == 60)
+        #expect(liste.eintraege.count == 60)
+    }
+
+    /// `fortschritt` muss am Ende jeder Phase `erledigt == gesamt` melden — Grundlage
+    /// für die Fortschrittsanzeige in ``MilkForUsImportView``.
+    @Test
+    func uebernehmenMeldetVollstaendigenFortschritt() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let liste = Einkaufsliste(name: "Test")
+        context.insert(liste)
+
+        let gruppe = MilkForUsKategorieGruppe(
+            kategorieName: "Getränke",
+            zuordnung: .neuAnlegen(name: "Getränke"),
+            artikelNamen: (1...30).map { "Artikel \($0)" }
+        )
+
+        var meldungen: [(Int, Int)] = []
+        await MilkForUsImportService.uebernehmen(gruppen: [gruppe], in: liste, context: context, fortschritt: { erledigt, gesamt in
+            meldungen.append((erledigt, gesamt))
+        })
+
+        #expect(meldungen.first?.0 == 0)
+        #expect(meldungen.last?.0 == 30)
+        #expect(meldungen.allSatisfy { $0.1 == 30 })
+        // Mehr als eine Meldung (Start + mindestens ein Chunk-Ende), da 30
+        // Artikel bei `chunkGroesse == 25` auf zwei Chunks aufgeteilt werden.
+        #expect(meldungen.count >= 3)
+    }
+
+    @Test
+    func gruppenMitVorschlagMeldetVollstaendigenFortschritt() async throws {
+        let eintraege = [
+            MilkForUsEintrag(kategorieName: "Brot", artikelName: "Brot"),
+            MilkForUsEintrag(kategorieName: "Getränke", artikelName: "Wasser"),
+        ]
+
+        var meldungen: [(Int, Int)] = []
+        let gruppen = await MilkForUsImportService.gruppenMitVorschlag(
+            aus: eintraege,
+            bestehendeKategorien: [],
+            fortschritt: { erledigt, gesamt in
+                meldungen.append((erledigt, gesamt))
+            }
+        )
+
+        #expect(gruppen.count == 2)
+        #expect(meldungen.first?.0 == 0)
+        #expect(meldungen.first?.1 == 2)
+        #expect(meldungen.last?.0 == 2)
+        #expect(meldungen.allSatisfy { $0.1 == 2 })
+    }
 }

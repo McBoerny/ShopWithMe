@@ -23,6 +23,7 @@ struct EinkaufslisteDarstellungsView: View {
     let mengeErhoehen: (KategorieGruppe.Element) -> Void
     let mengeVerringern: (KategorieGruppe.Element) -> Void
     let dauerhaftEntfernen: (KategorieGruppe.Element) -> Void
+    let entferneVonListe: (KategorieGruppe.Element) -> Void
 
     @AppStorage(DarstellungsKey.modus) private var modus = EinkaufslisteDarstellungsModus.liste
 
@@ -41,7 +42,8 @@ struct EinkaufslisteDarstellungsView: View {
                     abhaken: abhaken,
                     mengeErhoehen: mengeErhoehen,
                     mengeVerringern: mengeVerringern,
-                    dauerhaftEntfernen: dauerhaftEntfernen
+                    dauerhaftEntfernen: dauerhaftEntfernen,
+                    entferneVonListe: entferneVonListe
                 )
             case .kacheln:
                 KachelInhaltView(
@@ -75,6 +77,7 @@ private struct ListenInhaltView: View {
     let mengeErhoehen: (KategorieGruppe.Element) -> Void
     let mengeVerringern: (KategorieGruppe.Element) -> Void
     let dauerhaftEntfernen: (KategorieGruppe.Element) -> Void
+    let entferneVonListe: (KategorieGruppe.Element) -> Void
 
     @AppStorage(DarstellungsKey.listenTyp)    private var listenTyp        = ListenAnzeigeTyp.klassisch
     @AppStorage(DarstellungsKey.akkordeon)    private var akkordeon        = false
@@ -137,7 +140,7 @@ private struct ListenInhaltView: View {
                     abhaken: { abhaken(element, kategorie) },
                     mengeErhoehen: { mengeErhoehen(element) },
                     mengeVerringern: { mengeVerringern(element) },
-                    dauerhaftEntfernen: istAbgehakt(element) ? { dauerhaftEntfernen(element) } : nil
+                    dauerhaftEntfernen: istAbgehakt(element) ? { dauerhaftEntfernen(element) } : { entferneVonListe(element) }
                 )
             }
         } header: {
@@ -172,7 +175,7 @@ private struct ListenInhaltView: View {
                     abhaken: { abhaken(element, kategorie) },
                     mengeErhoehen: { mengeErhoehen(element) },
                     mengeVerringern: { mengeVerringern(element) },
-                    dauerhaftEntfernen: istAbgehakt(element) ? { dauerhaftEntfernen(element) } : nil
+                    dauerhaftEntfernen: istAbgehakt(element) ? { dauerhaftEntfernen(element) } : { entferneVonListe(element) }
                 )
             }
         } label: {

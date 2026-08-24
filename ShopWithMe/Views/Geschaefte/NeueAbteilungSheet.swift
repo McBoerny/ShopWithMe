@@ -23,6 +23,7 @@ struct NeueAbteilungSheet: View {
                         GlassSymbolBadge(symbolName: symbolName, farbe: Color(hex: farbeHex), groesse: 56)
                         TextField("Name", text: $name)
                             .font(.title3)
+                            .accessibilityIdentifier(A11yID.NeueAbteilungSheet.nameField)
                     }
                     SymbolFarbAuswahlZeile(symbolName: $symbolName, farbeHex: $farbeHex)
                 }
@@ -50,6 +51,7 @@ struct NeueAbteilungSheet: View {
                         }
                     }
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .accessibilityIdentifier(A11yID.NeueAbteilungSheet.sichernButton)
                 }
             }
         }

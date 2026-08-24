@@ -60,6 +60,19 @@ struct ArtikelHinzufuegenView: View {
         wirksamerSuchtext.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// Eigene, oberste-Ebene-Produkte aller Artikel (GitHub #47) — ohne das
+    /// automatisch angelegte Platzhalter-Produkt (``Produkt/istStandard``) und
+    /// ohne Unter-Produkte (keine Rekursions-UI, siehe ``ProduktEditView``) —
+    /// einmalig aus ``alleProdukte`` nach ``Artikel/id`` gruppiert. Vorher
+    /// filterte sowohl ``gefilterteArtikel`` als auch ``produkte(fuer:in:)``
+    /// pro Artikel erneut über die komplette Produktliste (O(Artikel ×
+    /// Produkte)) — bei ca. 1200 Artikeln machte das Suche und Listenaufbau
+    /// praktisch unbenutzbar (Nutzerbericht 2026-08-24).
+    private var produkteNachArtikelID: [UUID: [Produkt]] {
+        let relevante = alleProdukte.filter { !$0.istStandard && $0.elternProdukt == nil && $0.artikel != nil }
+        return Dictionary(grouping: relevante) { $0.artikel!.id }
+    }
+
     /// Zusätzlich zum Teilstring-Vergleich auch Singular/Plural-unabhängig
     /// (GitHub #44, ``String/passtAlsSingularPluralZu(_:)``) — pro Wort des
     /// Artikelnamens, damit auch mehrteilige Namen (z.B. "Roter Apfel") erfasst
@@ -67,7 +80,7 @@ struct ArtikelHinzufuegenView: View {
     /// ``Artikel/alternativeNamen`` (GitHub #111/#128, z.B. "Zahncreme" für
     /// "Zahnpasta") und über Produktnamen (z.B. "Sebamed" für "Shampoo") —
     /// derselbe Artikel bleibt dabei einmalig in der Ergebnisliste.
-    private var gefilterteArtikel: [Artikel] {
+    private func gefilterteArtikel(produkteNachArtikelID: [UUID: [Produkt]]) -> [Artikel] {
         guard !getrimmterSuchtext.isEmpty else { return alleArtikel }
         return alleArtikel.filter { artikel in
             artikel.name.localizedCaseInsensitiveContains(getrimmterSuchtext)
@@ -77,18 +90,16 @@ struct ArtikelHinzufuegenView: View {
                 || artikel.alternativeNamen.contains {
                     $0.localizedCaseInsensitiveContains(getrimmterSuchtext)
                 }
-                || alleProdukte.contains {
-                    $0.artikel == artikel && !$0.istStandard && $0.elternProdukt == nil
-                        && $0.name.localizedCaseInsensitiveContains(getrimmterSuchtext)
+                || (produkteNachArtikelID[artikel.id] ?? []).contains {
+                    $0.name.localizedCaseInsensitiveContains(getrimmterSuchtext)
                 }
         }
     }
 
-    /// Eigene, oberste-Ebene-Produkte von `artikel` (GitHub #47) — ohne das
-    /// automatisch angelegte Platzhalter-Produkt (``Produkt/istStandard``) und
-    /// ohne Unter-Produkte (keine Rekursions-UI, siehe ``ProduktEditView``).
-    private func produkte(fuer artikel: Artikel) -> [Produkt] {
-        alleProdukte.filter { $0.artikel == artikel && !$0.istStandard && $0.elternProdukt == nil }
+    /// Eigene, oberste-Ebene-Produkte von `artikel` — Nachschlag in der
+    /// einmalig berechneten ``produkteNachArtikelID``-Gruppierung.
+    private func produkte(fuer artikel: Artikel, in produkteNachArtikelID: [UUID: [Produkt]]) -> [Produkt] {
+        produkteNachArtikelID[artikel.id] ?? []
     }
 
     private var existiertGenau: Bool {
@@ -97,11 +108,13 @@ struct ArtikelHinzufuegenView: View {
         }
     }
 
-    /// ``gefilterteArtikel`` gruppiert nach Anfangsbuchstaben, alphabetisch — die
-    /// Grundlage für die automatische A–Z-Sprungleiste (GitHub #8). Umlaute
-    /// einsortiert bei ihrem Basisbuchstaben (GitHub #34).
-    private var gruppierteArtikel: [(buchstabe: String, artikel: [Artikel])] {
-        let sortiert = gefilterteArtikel.sorted { $0.name.vergleicheAlphabetisch(mit: $1.name) == .orderedAscending }
+    /// ``gefilterteArtikel(produkteNachArtikelID:)`` gruppiert nach
+    /// Anfangsbuchstaben, alphabetisch — die Grundlage für die automatische
+    /// A–Z-Sprungleiste (GitHub #8). Umlaute einsortiert bei ihrem
+    /// Basisbuchstaben (GitHub #34).
+    private func gruppierteArtikel(produkteNachArtikelID: [UUID: [Produkt]]) -> [(buchstabe: String, artikel: [Artikel])] {
+        let sortiert = gefilterteArtikel(produkteNachArtikelID: produkteNachArtikelID)
+            .sorted { $0.name.vergleicheAlphabetisch(mit: $1.name) == .orderedAscending }
         let gruppen = Dictionary(grouping: sortiert) { $0.name.alphabetischerAnfangsbuchstabe }
         return gruppen.keys.sorted().map { buchstabe in (buchstabe, gruppen[buchstabe] ?? []) }
     }
@@ -131,6 +144,7 @@ struct ArtikelHinzufuegenView: View {
     }
 
     var body: some View {
+        let produkteNachArtikelID = produkteNachArtikelID
         NavigationStack {
             List {
                 if !getrimmterSuchtext.isEmpty && !existiertGenau {
@@ -143,11 +157,11 @@ struct ArtikelHinzufuegenView: View {
                     }
                 }
 
-                ForEach(gruppierteArtikel, id: \.buchstabe) { gruppe in
+                ForEach(gruppierteArtikel(produkteNachArtikelID: produkteNachArtikelID), id: \.buchstabe) { gruppe in
                     Section(gruppe.buchstabe) {
                         ForEach(gruppe.artikel) { artikel in
                             let bereitsAufListe = !einkaufsliste.alleEintraege(fuer: artikel).isEmpty
-                            let produkteDesArtikels = produkte(fuer: artikel)
+                            let produkteDesArtikels = produkte(fuer: artikel, in: produkteNachArtikelID)
                             let aufgeklappt = istAufgeklappt(artikel)
                             let gewaehltesProduktnamen: String? = {
                                 let namen = einkaufsliste.alleEintraege(fuer: artikel).compactMap(\.produkt?.name)
@@ -174,6 +188,7 @@ struct ArtikelHinzufuegenView: View {
                                 }
                                 .buttonStyle(.plain)
                                 .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
 
                                 if bereitsAufListe && produkteDesArtikels.isEmpty,
                                    let eintrag = einkaufsliste.eintrag(fuer: artikel) {
@@ -219,6 +234,7 @@ struct ArtikelHinzufuegenView: View {
                                     }
                                     .buttonStyle(.plain)
                                     .frame(maxWidth: .infinity, alignment: .leading)
+                                    .contentShape(Rectangle())
 
                                     if nilGewaehlt, let eintrag = nilEintrag {
                                         Button {
@@ -249,6 +265,7 @@ struct ArtikelHinzufuegenView: View {
                                         }
                                         .buttonStyle(.plain)
                                         .frame(maxWidth: .infinity, alignment: .leading)
+                                        .contentShape(Rectangle())
 
                                         if istGewaehlt, let eintrag = produktEintrag {
                                             Button {
@@ -272,7 +289,7 @@ struct ArtikelHinzufuegenView: View {
                     }
                 }
 
-                if gefilterteArtikel.isEmpty && getrimmterSuchtext.isEmpty {
+                if gefilterteArtikel(produkteNachArtikelID: produkteNachArtikelID).isEmpty && getrimmterSuchtext.isEmpty {
                     ContentUnavailableView(
                         "Keine Artikel",
                         systemImage: "carrot.fill",

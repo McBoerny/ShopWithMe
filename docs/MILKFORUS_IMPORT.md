@@ -48,9 +48,12 @@ den leeren Kategorienamen `""`.
    UTType `.plainText`) oder vorbefüllt über `initialText`, gesetzt von `RootView`
    nachdem die Share Extension einen Text bereitgelegt hat (siehe unten).
 2. **Parsen** (`MilkForUsParser.parsen(text:)`) → `[MilkForUsEintrag]`.
-3. **Gruppieren + Kategorie-Abgleich** (`MilkForUsImportService.gruppenMitVorschlag(aus:bestehendeKategorien:)`):
+3. **Gruppieren + Kategorie-Abgleich** (`MilkForUsImportService.gruppenMitVorschlag(aus:bestehendeKategorien:fortschritt:)`):
    pro distinktem Kategorienamen (Reihenfolge des ersten Auftretens in der Datei)
-   wird eine `KategorieZuordnung` vorgeschlagen:
+   wird eine `KategorieZuordnung` vorgeschlagen. Der KI-Abgleich (Schritt 2 unten)
+   läuft für bis zu 4 Kategorien gleichzeitig statt streng nacheinander (siehe
+   „Performance“ unten); `fortschritt` (optional) meldet nach jeder fertigen
+   Kategorie `(erledigt, gesamt)`:
    1. Exakter, Groß-/Kleinschreibung ignorierender Namenstreffer gegen bestehende
       `ArtikelKategorie`n → `.bestehend`.
    2. Sonst, falls `AISuggestionService.istVerfuegbar`: KI-Best-Match
@@ -66,14 +69,40 @@ den leeren Kategorienamen `""`.
    Kategorie / neu anlegen / Sonstiges), Artikel-Zeilen mit „vorhanden“/„neu“-Badge
    (Abgleich gegen `Artikel.name`, case-insensitive), Swipe-to-delete zum Ausschließen
    einzelner Artikel. Picker zur Ziel-`Einkaufsliste` (Default:
-   `Einkaufsliste.standard(context:)`).
-5. **Übernahme** (`MilkForUsImportService.uebernehmen(gruppen:in:context:)`, ein
-   einziger `DatabaseLeaseService.performMicroLease`): legt neue Kategorien an
-   (Default-Symbol/-Farbe wie `NeueKategorieSheet`), findet oder erstellt je
-   Artikelname einen `Artikel` (bestehende Artikel bleiben inkl. ihrer Kategorie
-   unangetastet), ruft `Einkaufsliste.artikelHinzufuegen(_:context:)` auf. Gruppen
-   ohne verbliebene Artikel (z.B. alle in der Vorschau entfernt) werden übersprungen,
-   damit keine ungenutzten neuen Kategorien entstehen.
+   `Einkaufsliste.standard(context:)`). Der „Importieren“-Button sitzt in der
+   Navigationsleiste oben rechts (`.confirmationAction`), nicht mehr am unteren
+   Bildschirmrand.
+5. **Übernahme** (`MilkForUsImportService.uebernehmen(gruppen:in:context:fortschritt:)`):
+   legt neue Kategorien an (Default-Symbol/-Farbe wie `NeueKategorieSheet`), findet
+   oder erstellt je Artikelname einen `Artikel` (bestehende Artikel bleiben inkl.
+   ihrer Kategorie unangetastet), ruft `Einkaufsliste.artikelHinzufuegen(_:context:)`
+   auf. Gruppen ohne verbliebene Artikel (z.B. alle in der Vorschau entfernt) werden
+   übersprungen, damit keine ungenutzten neuen Kategorien entstehen. Läuft in Chunks
+   à 25 Artikeln, je einem eigenen kurzen `DatabaseLeaseService.performMicroLease`
+   (siehe „Performance“ unten); `fortschritt` (optional) meldet nach jedem Chunk
+   `(erledigt, gesamt)` in Artikeln. Während dieser Phase zeigt `MilkForUsImportView`
+   eine Fortschrittsansicht (Balken + Zähler) statt der Vorschauliste.
+
+## Performance bei sehr großen Listen (Nutzerbericht 2026-08-24)
+
+Zwei Engpässe behoben, die den Import bei vielen Kategorien/Artikeln spürbar
+langsam machten:
+
+- **KI-Kategorieabgleich parallelisiert:** `gruppenMitVorschlag` fragte vorher
+  jede Kategorie einzeln nacheinander bei der KI an. Läuft jetzt mit bis zu 4
+  Kategorien gleichzeitig über eine `TaskGroup` (`vorschlagsName(fuerKategorieName:bekannteKategorienNamen:)`,
+  Sendable-sicher — arbeitet bewusst nur mit Kategorie-NAMEN statt
+  `ArtikelKategorie`-Objekten, da SwiftData-`@Model`-Typen nicht `Sendable` sind).
+- **Artikel-Zuordnung indiziert statt linear durchsucht:** `uebernehmen` suchte
+  vorher für JEDEN importierten Artikelnamen per linearem Scan im kompletten
+  bestehenden Artikelbestand (`alleArtikel.first { ... }`) — bei mehreren hundert
+  bestehenden Artikeln O(n) pro Import-Artikel. Jetzt einmalig nach
+  kleingeschriebenem Namen indiziert (`[String: Artikel]`).
+- **Chunk-Verarbeitung statt eines einzigen Lease-Blocks:** zusätzlich zur
+  Performance auch Grundlage für die Fortschrittsanzeige — ein einziger,
+  durchgehend synchroner Micro-Lease-Block hätte weder Zeit für Zwischen-Renders
+  gelassen noch dem Micro-Lease-Prinzip „nur Sekundenbruchteile halten“
+  entsprochen (siehe `docs/DATABASE_CONCURRENCY.md`).
 
 ## Teilen-Funktion: `ShopWithMeShareExtension`
 

@@ -50,6 +50,7 @@ struct SettingsView: View {
                     NavigationLink(value: SettingsNavigationsziel.kategorien) {
                         Label("Abteilungen", systemImage: "tag")
                     }
+                    .accessibilityIdentifier(A11yID.Settings.abteilungenRow)
                     NavigationLink(value: SettingsNavigationsziel.produkte) {
                         Label("Produkte", systemImage: "shippingbox")
                     }

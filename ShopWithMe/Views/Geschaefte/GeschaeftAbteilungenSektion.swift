@@ -60,6 +60,7 @@ struct GeschaeftAbteilungenSektion: View {
             } label: {
                 Label("Abteilung hinzufügen", systemImage: "plus")
             }
+            .accessibilityIdentifier(A11yID.GeschaeftAbteilungenSektion.hinzufuegenButton)
         } header: {
             Text("Abteilungen")
         } footer: {

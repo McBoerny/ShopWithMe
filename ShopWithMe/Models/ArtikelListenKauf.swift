@@ -135,7 +135,19 @@ enum ArtikelListenKaufService {
         let listeID = einkaufsliste.persistentModelID
         let deskriptor = FetchDescriptor<ArtikelListenKauf>(predicate: #Predicate { $0.einkaufsliste?.persistentModelID == listeID })
         guard let kandidaten = try? context.fetch(deskriptor) else { return nil }
-        return kandidaten.first { $0.artikel?.name.localizedCaseInsensitiveCompare(artikel.name) == .orderedSame }
+        // Absturzfund 2026-08-24: `$0.artikel` ist hier (siehe Typ-Doku
+        // ``alleSchluessel(context:)``) ohne `inverse`-Deklaration referenziert
+        // und kann daher baumeln, wenn der referenzierte Artikel andernorts
+        // (z.B. per Sync-Merge) gelöscht wurde. `persistentModelID` bleibt
+        // darauf sicher lesbar, jede andere Eigenschaft — auch `.name` — stürzt
+        // sonst mit einem SwiftData-Fatal-Error ab. Deshalb erst gegen die
+        // Menge tatsächlich noch existierender Artikel-IDs prüfen, bevor
+        // `.name` gelesen wird (dasselbe Muster wie ``alleGueltigenEintraege``).
+        let gueltigeArtikelIDs = Set(((try? context.fetch(FetchDescriptor<Artikel>())) ?? []).map(\.persistentModelID))
+        return kandidaten.first {
+            guard let kandidatArtikel = $0.artikel, gueltigeArtikelIDs.contains(kandidatArtikel.persistentModelID) else { return false }
+            return kandidatArtikel.name.localizedCaseInsensitiveCompare(artikel.name) == .orderedSame
+        }
     }
 
     /// Vermerkt dauerhaft, dass `artikel` von `einkaufsliste` abgehakt wurde —

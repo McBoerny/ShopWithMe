@@ -202,4 +202,44 @@ struct ArtikelListenKaufServiceTests {
         // Komplett unbekannt: Schlüssel fehlt ganz.
         #expect(!zeitstempel.keys.contains(unbekannterSchluessel))
     }
+
+    /// Regressionstest für einen Live-Absturz (Nutzerbericht 2026-08-24):
+    /// `vermerkeHinzugefuegt`/`vermerkeAbgehakt` durchsuchen über
+    /// `bestehenderEintragNamensgleich` ALLE `ArtikelListenKauf`-Zeilen einer
+    /// Liste nach einem namensgleichen Artikel — dabei geriet eine Zeile mit
+    /// baumelnder `artikel`-Referenz (Artikel andernorts per Sync-Merge
+    /// gelöscht, siehe ``alleSchluesselStuerztBeiBaumelnderArtikelReferenzNichtAb``)
+    /// unter den Kandidaten und `.name` wurde ungeprüft darauf gelesen —
+    /// SwiftData-Fatal-Error „invalidated because its backing data could no
+    /// longer be found in the store". Ein Aufruf für einen ANDEREN, weiterhin
+    /// gültigen Artikel derselben Liste darf trotz der baumelnden Nachbarzeile
+    /// nicht abstürzen.
+    @Test
+    func vermerkeHinzugefuegtStuerztBeiBaumelnderNachbarzeileNichtAb() throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+
+        let liste = Einkaufsliste(name: "Urlaub")
+        context.insert(liste)
+        let geloeschterArtikel = Artikel(name: "Sonnencreme", symbolName: "sun.max.fill", farbeHex: "#FFCC00")
+        context.insert(geloeschterArtikel)
+        ArtikelListenKaufService.vermerkeAbgehakt(artikel: geloeschterArtikel, einkaufsliste: liste, context: context)
+        try context.save()
+
+        // Baumelnde Referenz erzeugen: der referenzierte Artikel wird gelöscht,
+        // die Zeile selbst (ohne `inverse`-Deklaration, siehe Typ-Doku) bleibt
+        // bestehen.
+        context.delete(geloeschterArtikel)
+        try context.save()
+
+        let neuerArtikel = Artikel(name: "Handtuch", symbolName: "sun.max.fill", farbeHex: "#FFCC00")
+        context.insert(neuerArtikel)
+
+        ArtikelListenKaufService.vermerkeHinzugefuegt(artikel: neuerArtikel, einkaufsliste: liste, context: context)
+
+        let neueZeile = try context.fetch(FetchDescriptor<ArtikelListenKauf>()).first {
+            $0.artikel?.persistentModelID == neuerArtikel.persistentModelID
+        }
+        #expect(neueZeile?.zuletztHinzugefuegtAm != nil)
+    }
 }

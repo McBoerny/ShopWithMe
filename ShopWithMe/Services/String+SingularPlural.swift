@@ -1,5 +1,6 @@
 import Foundation
 import NaturalLanguage
+import os
 
 /// Singular-/Plural-unabhängiger Wortvergleich für die Artikelsuche (GitHub #44).
 ///
@@ -18,19 +19,50 @@ import NaturalLanguage
 extension String {
     private static let gaengigePluralEndungen: Set<String> = ["en", "er", "e", "n", "s"]
 
+    /// Cache für ``lemma`` nach Eingabe-String, per ``OSAllocatedUnfairLock``
+    /// synchronisiert (statt `@MainActor`, damit die weiterhin rein
+    /// synchrone, von jedem Kontext aufrufbare API erhalten bleibt — u.a.
+    /// direkt von ``StringSingularPluralTests`` außerhalb des Main Actors
+    /// genutzt). `NLTagger`-Aufrufe (Allokation + Tagging) sind einzeln teuer;
+    /// ohne Cache berechnet ``passtAlsSingularPluralZu(_:)`` z.B. das Lemma
+    /// des Suchtexts bei jedem Artikel/Wort-Vergleich neu, obwohl der
+    /// Suchtext über einen kompletten Filterdurchlauf (bei >1000 Artikeln in
+    /// ``ArtikelHinzufuegenView`` entsprechend oft) unverändert bleibt —
+    /// Nutzerbericht 2026-08-24: Suche bei ca. 1200 Artikeln praktisch
+    /// unbenutzbar langsam.
+    private static let lemmaCache = OSAllocatedUnfairLock<[String: String?]>(initialState: [:])
+
+    /// Wiederverwendetes `Locale` statt einer Neukonstruktion pro
+    /// ``diakritikGefaltet``-Aufruf — dieselbe Ursache/derselbe Fund wie bei
+    /// ``lemmaCache`` (Nutzerbericht 2026-08-24, Folgefund).
+    private static let vergleichsLocale = Locale(identifier: "de_DE")
+
+    /// Cache für ``diakritikGefaltet`` nach Eingabe-String, analog
+    /// ``lemmaCache``: `andere` (der Suchtext) bleibt über einen kompletten
+    /// Filterdurchlauf unverändert, würde ohne Cache aber pro verglichenem
+    /// Artikel/Wort erneut gefaltet.
+    private static let stammCache = OSAllocatedUnfairLock<[String: String]>(initialState: [:])
+
     /// Umlaut-gefaltete, kleingeschriebene Form für den Wortstamm-Vergleich.
+    /// Über ``stammCache`` gecacht.
     private var diakritikGefaltet: String {
-        folding(options: .diacriticInsensitive, locale: Locale(identifier: "de_DE")).lowercased()
+        if let cached = Self.stammCache.withLock({ $0[self] }) { return cached }
+        let ergebnis = folding(options: .diacriticInsensitive, locale: Self.vergleichsLocale).lowercased()
+        Self.stammCache.withLock { $0[self] = ergebnis }
+        return ergebnis
     }
 
     /// `NLTagger`-Lemma (Grundform) dieses (einzelnen) Wortes — `nil`, wenn
     /// keins ermittelbar ist. Siehe Typ-Dokumentation: nur als Zusatzsignal
-    /// verwenden, nie als alleinige Grundlage.
+    /// verwenden, nie als alleinige Grundlage. Über ``lemmaCache`` gecacht.
     private var lemma: String? {
         guard !isEmpty else { return nil }
+        if let cached = Self.lemmaCache.withLock({ $0[self] }) { return cached }
         let tagger = NLTagger(tagSchemes: [.lemma])
         tagger.string = self
-        return tagger.tag(at: startIndex, unit: .word, scheme: .lemma).0?.rawValue
+        let ergebnis = tagger.tag(at: startIndex, unit: .word, scheme: .lemma).0?.rawValue
+        Self.lemmaCache.withLock { $0[self] = ergebnis }
+        return ergebnis
     }
 
     /// Ob sich `self` und `andere` nur durch Singular/Plural unterscheiden

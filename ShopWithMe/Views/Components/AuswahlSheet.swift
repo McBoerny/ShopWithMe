@@ -159,6 +159,7 @@ struct AuswahlSheet<Item: Identifiable & Hashable, NeuAnlegenContent: View>: Vie
                                 Label(neuAnlegenTitel(getrimmterSuchtext), systemImage: "plus.circle.fill")
                             }
                             .foregroundStyle(.tint)
+                            .accessibilityIdentifier(A11yID.AuswahlSheet.neuAnlegenButton)
                         }
                     }
                     .overlay {
@@ -170,6 +171,7 @@ struct AuswahlSheet<Item: Identifiable & Hashable, NeuAnlegenContent: View>: Vie
                             )
                         }
                     }
+                    .accessibilityIdentifier(A11yID.AuswahlSheet.list)
                     if items.count >= schnellnavigationAbAnzahl {
                         schnellnavigationsleiste(scrollProxy: scrollProxy)
                     }
@@ -182,6 +184,7 @@ struct AuswahlSheet<Item: Identifiable & Hashable, NeuAnlegenContent: View>: Vie
                 if zeigeAbbrechen {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Abbrechen") { dismiss() }
+                            .accessibilityIdentifier(A11yID.AuswahlSheet.abbrechenButton)
                     }
                 }
                 if case .mehrfach = modus {
@@ -191,6 +194,7 @@ struct AuswahlSheet<Item: Identifiable & Hashable, NeuAnlegenContent: View>: Vie
                         } label: {
                             Image(systemName: "checkmark")
                         }
+                        .accessibilityIdentifier(A11yID.AuswahlSheet.bestaetigenButton)
                     }
                 }
             }
@@ -232,6 +236,7 @@ struct AuswahlSheet<Item: Identifiable & Hashable, NeuAnlegenContent: View>: Vie
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier(A11yID.AuswahlSheet.zeile(item.id))
     }
 
     /// Schmale, alphabetische Schnellnavigationsleiste an der rechten Kante

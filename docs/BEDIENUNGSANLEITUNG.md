@@ -211,8 +211,13 @@ dem Abschließen ein kurzer Hinweis, dass sich die App automatisch anpasst.
   antippen macht das Abhaken rückgängig); langer Tap öffnet den Lernmodus, der alle
   Artikel der Liste einblendet, auch bislang nicht als verfügbar geltende — dadurch
   lernt die App sie für dieses Geschäft als verfügbar.
-- Per Wischgeste lässt sich ein bereits abgehakter Artikel dauerhaft aus dieser
-  Ansicht entfernen (landet dann nicht wieder auf der offenen Liste).
+- Per Wischgeste (Papierkorb-Symbol) lässt sich auch ein noch offener Artikel
+  von der Liste löschen, ohne ihn erst abzuhaken. Ein bereits abgehakter
+  Artikel lässt sich genauso per Wischgeste dauerhaft aus dieser Ansicht
+  entfernen (landet dann nicht wieder auf der offenen Liste) — der Button
+  heißt dort „Dauerhaft entfernen" statt „Löschen".
+- Wurde beim Hinzufügen ein konkretes Produkt gewählt (siehe unten), zeigt die
+  Zeile dessen Produktnamen statt des allgemeinen Artikelnamens.
 - Ein Einkauf lässt sich jederzeit abschließen, auch mit offenen Artikeln — die
   bleiben einfach auf der globalen Liste. Der „Einkauf abschließen"-Button zeigt
   dabei die Anzahl bereits abgehakter Artikel und färbt sich in der Akzentfarbe,
@@ -320,7 +325,8 @@ du je MilkForUs-Kategorie, ob eine bestehende Abteilung automatisch erkannt wurd
 lässt sich das auf eine andere bestehende Abteilung oder „Sonstiges" umstellen.
 Bereits vorhandene Artikel werden nur auf die gewählte Liste gesetzt, nie
 dupliziert; einzelne Artikel lassen sich vor dem Übernehmen per Wischgeste aus dem
-Import ausschließen.
+Import ausschließen. Bei sehr großen Listen zeigt sowohl der Kategorieabgleich als
+auch das abschließende Übernehmen einen Fortschrittsbalken mit Zähler.
 
 ## Datensynchronisation (gemeinsam einkaufen)
 

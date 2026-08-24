@@ -22,24 +22,34 @@ struct MilkForUsImportView: View {
 
     @State private var zeigeDateiPicker = false
     @State private var laedt = false
+    @State private var uebernimmt = false
+    /// Fortschritt der jeweils laufenden Phase (Kategorieabgleich ODER
+    /// Übernehmen) — `nil` außerhalb beider Phasen bzw. kurz vor dem allerersten
+    /// Fortschritts-Callback (siehe ``MilkForUsImportService``).
+    @State private var fortschritt: (erledigt: Int, gesamt: Int)?
     @State private var fehlermeldung: String?
     @State private var gruppen: [MilkForUsKategorieGruppe]?
     @State private var zielListe: Einkaufsliste?
 
+    private var kannUebernehmen: Bool {
+        !uebernimmt && zielListe != nil && !(gruppen?.allSatisfy { $0.artikelNamen.isEmpty } ?? true)
+    }
+
     var body: some View {
         NavigationStack {
             Group {
-                if let gruppen {
+                if uebernimmt {
+                    FortschrittsAnsicht(titel: "Artikel werden übernommen…", fortschritt: fortschritt)
+                } else if let gruppen {
                     VorschauListe(
                         gruppen: Binding(get: { gruppen }, set: { self.gruppen = $0 }),
                         bestehendeKategorien: alleKategorien,
                         bestehendeArtikelNamen: Set(alleArtikel.map { $0.name.lowercased() }),
                         alleListen: alleListen,
-                        zielListe: $zielListe,
-                        uebernehmen: uebernehmen
+                        zielListe: $zielListe
                     )
                 } else {
-                    StartAnsicht(laedt: laedt, fehlermeldung: fehlermeldung) {
+                    StartAnsicht(laedt: laedt, fortschritt: fortschritt, fehlermeldung: fehlermeldung) {
                         zeigeDateiPicker = true
                     }
                 }
@@ -49,6 +59,13 @@ struct MilkForUsImportView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Abbrechen") { dismiss() }
+                        .disabled(uebernimmt)
+                }
+                if gruppen != nil {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Importieren", action: uebernehmen)
+                            .disabled(!kannUebernehmen)
+                    }
                 }
             }
         }
@@ -87,14 +104,23 @@ struct MilkForUsImportView: View {
     private func verarbeite(text: String) {
         laedt = true
         fehlermeldung = nil
+        fortschritt = nil
         Task {
-            defer { laedt = false }
+            defer {
+                laedt = false
+                fortschritt = nil
+            }
             let eintraege = MilkForUsParser.parsen(text: text)
             guard !eintraege.isEmpty else {
                 fehlermeldung = "In dieser Datei wurden keine Artikel gefunden."
                 return
             }
-            gruppen = await MilkForUsImportService.gruppenMitVorschlag(aus: eintraege, bestehendeKategorien: alleKategorien)
+            gruppen = await MilkForUsImportService.gruppenMitVorschlag(
+                aus: eintraege,
+                bestehendeKategorien: alleKategorien
+            ) { erledigt, gesamt in
+                fortschritt = (erledigt, gesamt)
+            }
         }
     }
 
@@ -102,23 +128,62 @@ struct MilkForUsImportView: View {
         guard let gruppen, let zielListe else { return }
         // Live-Fund EinkaufenView (Build 308, `DatabaseLeaseService/gehoertZuAktuellemContext(_:context:)`).
         guard DatabaseLeaseService.gehoertZuAktuellemContext(zielListe, context: modelContext) else { return }
+        uebernimmt = true
+        fortschritt = nil
         Task {
-            await MilkForUsImportService.uebernehmen(gruppen: gruppen, in: zielListe, context: modelContext)
+            await MilkForUsImportService.uebernehmen(
+                gruppen: gruppen,
+                in: zielListe,
+                context: modelContext
+            ) { erledigt, gesamt in
+                fortschritt = (erledigt, gesamt)
+            }
             dismiss()
         }
+    }
+}
+
+/// Fortschrittsanzeige für beide (potenziell lange) Import-Phasen — Kategorieabgleich
+/// und abschließendes Übernehmen (GitHub-Nutzerbericht 2026-08-24, sehr große
+/// MilkForUs-Listen). Solange `fortschritt` noch `nil` ist (kurzes Zeitfenster vor
+/// dem allerersten Callback, siehe ``MilkForUsImportService``), erscheint ein
+/// unbestimmter Spinner statt eines Balkens bei 0%.
+private struct FortschrittsAnsicht: View {
+    let titel: String
+    let fortschritt: (erledigt: Int, gesamt: Int)?
+
+    var body: some View {
+        VStack(spacing: 16) {
+            if let fortschritt, fortschritt.gesamt > 0 {
+                ProgressView(value: Double(fortschritt.erledigt), total: Double(fortschritt.gesamt))
+                    .progressViewStyle(.linear)
+                    .frame(maxWidth: 240)
+                Text("\(fortschritt.erledigt) von \(fortschritt.gesamt)")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                ProgressView()
+            }
+            Text(titel)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding()
     }
 }
 
 /// Aufforderung, eine MilkForUs-Textdatei auszuwählen.
 private struct StartAnsicht: View {
     let laedt: Bool
+    let fortschritt: (erledigt: Int, gesamt: Int)?
     let fehlermeldung: String?
     let dateiWaehlen: () -> Void
 
     var body: some View {
         VStack(spacing: 16) {
             if laedt {
-                ProgressView("Datei wird verarbeitet…")
+                FortschrittsAnsicht(titel: "Kategorien werden abgeglichen…", fortschritt: fortschritt)
             } else {
                 ContentUnavailableView {
                     Label("MilkForUs-Liste importieren", systemImage: "square.and.arrow.down.on.square")
@@ -147,7 +212,6 @@ private struct VorschauListe: View {
     let bestehendeArtikelNamen: Set<String>
     let alleListen: [Einkaufsliste]
     @Binding var zielListe: Einkaufsliste?
-    let uebernehmen: () -> Void
 
     var body: some View {
         List {
@@ -177,12 +241,6 @@ private struct VorschauListe: View {
             } footer: {
                 Text("Abteilung antippen, um sie einer bestehenden Abteilung oder „Sonstiges“ zuzuordnen, statt eine neue anzulegen. Nicht benötigte Artikel nach links wischen.")
             }
-        }
-        .safeAreaInset(edge: .bottom) {
-            Button("Importieren", action: uebernehmen)
-                .buttonStyle(.glass)
-                .padding()
-                .disabled(zielListe == nil || gruppen.allSatisfy { $0.artikelNamen.isEmpty })
         }
     }
 }

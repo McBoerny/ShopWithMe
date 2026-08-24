@@ -42,12 +42,15 @@ struct RootView: View {
             Tab("Einkaufen", systemImage: "checklist") {
                 EinkaufenView()
             }
+            .accessibilityIdentifier(A11yID.Tab.einkaufen)
             Tab("Scannen", systemImage: "camera.viewfinder") {
                 BelegScanView(istEigenerTab: true)
             }
+            .accessibilityIdentifier(A11yID.Tab.scannen)
             Tab("Einstellungen", systemImage: "gearshape.fill") {
                 SettingsView()
             }
+            .accessibilityIdentifier(A11yID.Tab.einstellungen)
         }
         .task {
             await PreisHistorieBereinigungService.automatischBereinigenFallsFaellig(context: modelContext)

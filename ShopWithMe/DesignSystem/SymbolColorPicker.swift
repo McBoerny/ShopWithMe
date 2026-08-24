@@ -17,6 +17,19 @@ enum SymbolPalette {
         "gift.fill", "shippingbox.fill", "cart.fill", "house.fill", "drop.fill",
         "flame.fill", "star.fill", "heart.fill", "faucet.fill", "toilet.fill",
         "shower.fill", "bathtub.fill", "scissors",
+        "globe", "party.popper.fill", "balloon.2.fill", "sofa.fill",
+        "sportscourt.fill", "sunrise.fill", "cpu.fill", "tv.fill",
+        "popcorn.fill", "tree.fill", "paintpalette.fill", "banknote.fill",
+        "creditcard.fill", "teddybear.fill", "gamecontroller.fill",
+        "cylinder.fill", "screwdriver.fill", "cube.fill",
+        "car.fill", "bicycle", "fuelpump.fill", "camera.fill",
+        "music.note", "headphones", "phone.fill", "envelope.fill",
+        "laptopcomputer", "wifi", "clock.fill", "key.fill",
+        "umbrella.fill", "calendar", "trophy.fill", "dumbbell.fill",
+        "puzzlepiece.fill", "theatermasks.fill", "crown.fill", "moon.fill",
+        "sun.max.fill", "cloud.fill", "thermometer", "syringe.fill",
+        "stethoscope", "eyeglasses", "figure.and.child.holdinghands",
+        "server.rack",
     ]
 }
 
