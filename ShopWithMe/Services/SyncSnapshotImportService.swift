@@ -52,6 +52,18 @@ import SwiftUI
 ///    einem Peer, der es noch in seinem eigenen Snapshot führt, unwissentlich
 ///    wiederbelebt wird — der bislang rein additive Merge kannte keine
 ///    Löschsemantik.
+///
+/// **Pflichtlektüre vor jeder neuen/geänderten Existenzprüfung in einer
+/// `mergeX`-Funktion: `docs/DATENSYNCHRONISATION.md` §4.9.** `mergePaket`
+/// läuft einmal PRO Peer-Ordner, sequentiell, in EINEM `ModelContext`, mit
+/// `context.save()` erst nach der kompletten Peer-Schleife — eine
+/// Existenzprüfung über eine `@Relationship`-Sammlung (statt `context.fetch`
+/// oder einem `inout`-nachgeführten Dictionary/Set) sieht einen soeben von
+/// einem ANDEREN, bereits abgeschlossenen Peer-Aufruf eingefügten Datensatz
+/// nicht zuverlässig (GitHub #175, live bestätigt über drei gleichzeitig
+/// synchronisierende Geräte — siehe `docs/DATENSYNCHRONISATION_VERLAUF.md`
+/// Abschnitt 68 für Root Cause, Fix und die dort dokumentierte Gegenregel
+/// für rein lokale Einzelaktionen).
 enum SyncSnapshotImportService {
     /// Snapshots älter als dieser Wert werden beim Import ignoriert (Peer wird
     /// so behandelt, als wäre er nicht vorhanden) — verhindert, dass verwaiste
@@ -927,7 +939,18 @@ enum SyncSnapshotImportService {
             for name in eintrag.alternativeNamen {
                 lokal.alternativenNamenLernen(name)
             }
-            let bereitsIgnoriert = Set(lokal.ignorierteArtikel.map { $0.erkannterName.lowercased() })
+            // GitHub #175, Nachtrag: `context.fetch` statt `lokal.ignorierteArtikel`
+            // (Relationship-Sammlung) — dieselbe Klasse Live-Fund wie bei
+            // ``Einkaufsliste/eintragNamensgleich(fuer:produkt:context:)``, siehe
+            // dortige Doku. Zwei Peers, die im selben Importlauf für dasselbe
+            // (bereits aufgelöste) `lokal`-Geschäft denselben ignorierten Namen
+            // melden, sähen sich sonst gegenseitig nicht und legten je eine
+            // Dublette an.
+            let lokalID = lokal.persistentModelID
+            let bereitsIgnoriert = Set(
+                (try? context.fetch(FetchDescriptor<IgnorierterArtikel>(predicate: #Predicate { $0.geschaeft?.persistentModelID == lokalID })))
+                    .map { $0.map { $0.erkannterName.lowercased() } } ?? []
+            )
             for name in eintrag.ignorierteArtikelNamen where !bereitsIgnoriert.contains(name.lowercased()) {
                 context.insert(IgnorierterArtikel(erkannterName: name, geschaeft: lokal))
             }
@@ -1324,7 +1347,7 @@ enum SyncSnapshotImportService {
             // im selben Zyklus bereits einen Eintrag für ein noch nicht per
             // Alias zusammengeführtes, aber namensgleiches lokales
             // ``Artikel``-Objekt angelegt hat.
-            guard !liste.enthaeltNamensgleich(artikel, produkt: produkt) else { continue }
+            guard !liste.enthaeltNamensgleich(artikel, produkt: produkt, context: context) else { continue }
             // Architektur-Review (2026-08-10, siehe ArtikelListenKauf-Typ-Doku
             // „zuletztHinzugefuegtAm"): die Meldung dieses Peers zuerst
             // DAUERHAFT als robustes, additiv gemergtes Faktum vermerken —
@@ -1594,6 +1617,22 @@ enum SyncSnapshotImportService {
         // tauglichen Schlüssel aus `endZeit`/`geschaeft`/`einkaufsliste` prüft).
         var alleLokalenNachID = Dictionary(alleLokalen.map { ($0.id, $0) }, uniquingKeysWith: { erster, _ in erster })
         let geloeschteIDs = SyncTombstoneService.geloeschteIDs(art: SyncEntitaetsArt.einkaufsvorgang, context: context)
+        // GitHub #175, Nachtrag: `kandidat.kaufEintraege` (Relationship-
+        // Sammlung, siehe `offenerTreffer`-Zweig unten) könnte einen im
+        // selben Importlauf durch einen ANDEREN, bereits verarbeiteten Peer
+        // per `context.insert` eingefügten `KaufEintrag` nicht zuverlässig
+        // widerspiegeln — derselbe Live-Fund wie an
+        // ``Einkaufsliste/eintragNamensgleich(fuer:produkt:context:)``
+        // dokumentiert, hier aber mit einer PERMANENTEN statt einer
+        // selbstheilenden Konsequenz: der `offenerTreffer`-Zweig registriert
+        // bei einem fälschlich als „noch käufefrei" gelesenen Kandidaten
+        // einen dauerhaften ``SyncEntitaetsAlias`` zwischen zwei in
+        // Wahrheit unabhängigen Einkaufsvorgängen. Einmal frisch gefetchtes
+        // Set statt der Relationship-Sammlung, analog `bekannteIDs`/
+        // `geloeschteIDs` oben.
+        let vorgaengeMitKaufEintraegen = Set(
+            ((try? context.fetch(FetchDescriptor<KaufEintrag>())) ?? []).compactMap { $0.einkaufsvorgang?.persistentModelID }
+        )
         for eintrag in remote {
             let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(fuer: eintrag.id, art: SyncEntitaetsArt.einkaufsvorgang, in: aliase)
             let remoteGeschaeft = eintrag.geschaeftID.flatMap { geschaeftZuordnung[$0] }
@@ -1639,7 +1678,7 @@ enum SyncSnapshotImportService {
                 // u.U. längst veralteten Käufe zusätzlich in die listenweite
                 // "abgehakt"-Ansicht des zusammengeführten Vorgangs
                 // einfließen.
-                guard kandidat.endZeit == nil, kandidat.kaufEintraege.isEmpty,
+                guard kandidat.endZeit == nil, !vorgaengeMitKaufEintraegen.contains(kandidat.persistentModelID),
                       kandidat.geschaeft == remoteGeschaeft, kandidat.einkaufsliste == remoteListe
                 else { return false }
                 // Timing-Plausibilität VOR der Aliasierung (Nutzerbericht
@@ -2025,8 +2064,18 @@ enum SyncSnapshotImportService {
             // Artikels. Der aus der Nutzlast aufgelöste `produkt` macht
             // sowohl die Suche als auch den `zuletztHinzugefuegtAm`-Schlüssel
             // produktscharf.
+            //
+            // **`eintragNamensgleich` statt `eintrag(fuer:produkt:)` (GitHub
+            // #175, Nachtrag zu Abschnitt 68):** der gemeldete Kauf kann
+            // einen ANDEREN, noch nicht per Alias zusammengeführten
+            // `Artikel` referenzieren als der noch offene Listeneintrag
+            // desselben logischen Artikels (z.B. weil ihn ein ANDERER Peer
+            // im selben Importlauf per Bereich-B-Sicherheitsnetz unter
+            // dessen eigenem Artikel-Objekt angelegt hat) — reine
+            // Objekt-Identität fände diese Zeile nicht, sie bliebe
+            // fälschlich offen stehen.
             let produkt = eintrag.produktID.flatMap { produktZuordnung[$0] }
-            let listenEintrag = einkaufsliste.eintrag(fuer: artikel, produkt: produkt)
+            let listenEintrag = einkaufsliste.eintragNamensgleich(fuer: artikel, produkt: produkt, context: context)
             let schluessel = ArtikelListenKaufService.Schluessel(
                 artikelID: artikel.id, produktID: produkt?.id, einkaufslisteID: einkaufsliste.id
             )

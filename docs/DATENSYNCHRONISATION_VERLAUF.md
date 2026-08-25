@@ -4484,3 +4484,123 @@ lokale Objekte verteilt).
 sauber, bestehende `SyncSnapshotImportServiceTests`-Suite (69 Tests) weiterhin
 grün, kein neuer Regressionstest (reines Logging, keine Verhaltensänderung).
 Noch nicht mit einem dritten Testlauf verifiziert.
+
+## 68. GitHub #175, dritter Nachtrag: Root Cause gefunden — `context.fetch` vs. Relationship-Sammlung in Mehrfach-Peer-Merges
+
+**Der dritte Testlauf (drei Geräte, mit dem erweiterten Logging aus Abschnitt
+67) lieferte den entscheidenden Beleg.** Neues Ereignis
+`sync_listeneintrag_sicherheitsnetz_angelegt` zeigte: Peer `D364C488`
+("Bernhard") legte um 13:44:09 zwölf Artikel für „Einkaufsliste" an
+(u.a. „Flohsamen", „Muscheln", „Binden") — SECHS SEKUNDEN SPÄTER, im
+SELBEN Importlauf (`sync_zyklus_start` 13:44:08 bis `sync_zyklus_ende`
+13:44:54), legte Peer `F8D47C0C` ("Karin_d3") für DIESELBE Liste
+GRÖSSTENTEILS DIESELBEN Artikelnamen erneut an (11 von 13 identisch) —
+jedes Mal mit `bekanntZuletztAbgehaktAm=-` (kein Kauf-Faktum bekannt, die
+„erneutes Hinzufügen"-Zeitstempel-Logik aus Abschnitt 55 war also gar nicht
+der Grund). Zwei verschiedene Peers meldeten denselben Artikel — je über
+ein eigenes, noch nicht per Alias zusammengeführtes lokales `Artikel`-Objekt
+— und BEIDE Meldungen wurden trotz des dafür vorgesehenen
+`Einkaufsliste.enthaeltNamensgleich`-Backstops als neue Zeile übernommen.
+
+**Root Cause:** `SyncSnapshotImportService.importiereSnapshots(context:)`
+ruft `mergePaket(...)` einmal PRO Peer-Ordner auf, sequentiell, in EINEM
+`ModelContext`, und speichert erst NACH der kompletten Schleife
+(`context.save()` ganz am Ende). `Einkaufsliste.eintragNamensgleich`
+prüfte bis dahin `self.eintraege` — die `@Relationship(inverse:)`-Sammlung
+— um festzustellen, ob für den gemeldeten Artikelnamen bereits eine Zeile
+existiert. Diese Sammlung spiegelte einen `context.insert(...)`, den ein
+ANDERER, bereits abgeschlossener Aufruf DERSELBEN Funktion (für den
+vorherigen Peer) Sekundenbruchteile zuvor im selben Importlauf ausgeführt
+hatte, nicht zuverlässig — Peer 2s Prüfung sah Peer 1s frisch eingefügte
+Zeile nicht und legte eine zweite an.
+
+**Bestätigt per Regressionstest**
+(`mergeEinkaufslistenEintraegeVonZweiPeersMitGleichemArtikelnamenErzeugtNurEinenEintrag`,
+zwei Peer-Ordner mit demselben Artikelnamen, aber unterschiedlicher
+`artikelID`, in EINEM `importiereSnapshots`-Aufruf): ohne Fix `2`, mit Fix
+`1` passende `EinkaufslistenEintrag`-Zeile.
+
+**Fix:** `eintragNamensgleich`s Namens-Backstop läuft jetzt über
+`context.fetch(FetchDescriptor<EinkaufslistenEintrag>(predicate:))` statt
+über `eintraege` — dasselbe Muster, das `ArtikelListenKaufService.bestehenderEintragNamensgleich`
+für exakt dasselbe Problem bereits verwendete (siehe dessen Doku).
+
+**Regressionsfund beim ersten Fix-Versuch, sofort per Testlauf abgefangen:**
+ein erster Versuch, AUCH den exakten Treffer (bisher `eintrag(fuer:produkt:)`,
+ebenfalls über `eintraege`) auf `context.fetch` umzustellen, brach
+`EinkaufsvorgangTests.abwaehlenMachtAbhakenRueckgaengig()` — ein per
+`context.delete(...)` INNERHALB DERSELBEN, noch nicht gespeicherten
+Aktion (Abhaken, direkt gefolgt von Abwählen, kein Merge, kein zweiter
+Peer beteiligt) entfernter Eintrag tauchte in einem direkt danach
+ausgeführten `context.fetch` weiterhin als Kandidat auf und wurde fälschlich
+als „bestehend" wiederverwendet, mit seinen alten, eigentlich
+zurückzusetzenden Werten (`menge`/`notiz`). **Das ergibt zusammen eine
+zweiseitige Regel** (ausformuliert in `docs/DATENSYNCHRONISATION.md` §4.9):
+`context.fetch` sieht einen fremden, GERADE-eingefügten Eintrag zuverlässiger
+als `eintraege`, aber `eintraege` spiegelt eine LOKALE Löschung auf
+demselben Objektgraphen zuverlässiger als ein direkt darauffolgendes
+`context.fetch`. Der exakte Treffer bleibt deshalb bei `eintrag(fuer:produkt:)`
+(`eintraege`), nur der Namens-Backstop nutzt `context.fetch`.
+
+**Systematischer Sweep (Nutzeranfrage: „wir haben 3 Peers, alle Tests auf
+Mehrfach-Peer-Konflikte erweitern") über alle von `mergePaket` aufgerufenen
+`mergeX`-Funktionen** — gesucht wurde jeder Existenz-/Dubletten-Check, der
+eine `@Relationship(inverse:)`-Sammlung statt einer frischen Quelle liest.
+Drei weitere, bestätigte Treffer derselben Fehlerklasse behoben:
+
+1. `mergeGeschaefte` — `lokal.ignorierteArtikel` (strukturell identisch zum
+   Flohsamen-Fall: zwei Peers, die im selben Importlauf für dasselbe,
+   bereits aufgelöste Geschäft denselben ignorierten Belegtext melden,
+   sahen sich nicht gegenseitig). Fix: `context.fetch` statt der
+   Relationship-Sammlung.
+2. `mergeKaufEintraege`s Listeneintrag-Aufräumung (Abschnitt 66) nutzte
+   noch `eintrag(fuer:produkt:)` — dieselbe Lücke wie der ursprüngliche
+   Flohsamen-Fall, nur an einer zweiten Stelle: der gemeldete Kauf kann
+   einen ANDEREN, noch nicht per Alias zusammengeführten `Artikel`
+   referenzieren als der noch offene Listeneintrag desselben logischen
+   Artikels. Fix: nutzt jetzt `eintragNamensgleich` (also den bereits
+   fetch-gehärteten Namens-Backstop).
+3. `mergeEinkaufsvorgaenge`s `offenerTreffer`-Zweig prüfte
+   `kandidat.kaufEintraege.isEmpty`, um sicherzustellen, dass ein
+   Kandidat-Vorgang noch käufefrei ist, bevor er einen fremden Vorgang per
+   `SyncEntitaetsAlias` dauerhaft auf sich aliasiert. **Höheres Risiko als
+   die anderen Funde: die Konsequenz ist PERMANENT, nicht selbstheilend**
+   — ein fälschlich als „käufefrei" gelesener Kandidat (weil ein anderer,
+   bereits abgeschlossener Peer-Aufruf im selben Importlauf soeben einen
+   `KaufEintrag` daran gehängt hat) würde zwei tatsächlich unabhängige
+   Einkaufsvorgänge dauerhaft zusammenführen. Fix: einmalig frisch
+   gefetchtes `Set<PersistentIdentifier>` aller Vorgänge mit mindestens
+   einem `KaufEintrag`, statt der Relationship-Sammlung pro Kandidat —
+   bewusst NICHT den Rest dieses historisch empfindlichen Zweigs
+   angefasst (siehe dessen eigene, mehrfach live-geschärfte Historie oben).
+
+Zwei weitere, niedriger priorisierte Funde bewusst NICHT verändert
+(begründete Abwägung, kein Zeitdruck zur sofortigen Härtung):
+`istBereitsAbgehakt`s `vorgaengeFuerListe`-Fallback (nur relevant für
+Alt­bestand ohne `ArtikelListenKauf`-Zeitstempel — der primäre,
+bereits robuste Pfad greift in der Praxis vorher) sowie derselbe
+`kaufEintraege.isEmpty`-Fallback-Charakter an einer zweiten, selteneren
+Stelle.
+
+**Root-Cause-Frage (Nutzeranfrage): war das ein Architekturproblem?**
+Teilweise ja. Das Pipeline-Muster selbst — `mergePaket` einmal pro Peer,
+EIN `context.save()` erst nach der gesamten Schleife — ist bewusst und
+sinnvoll (Performance, siehe `LokalerBestandCache`-Doku). Es erzeugt aber
+eine STILLSCHWEIGENDE Anforderung an jede Existenzprüfung innerhalb dieser
+Pipeline: robust gegen einen soeben von einem ANDEREN, bereits
+abgeschlossenen Funktionsaufruf eingefügten Datensatz zu sein. Diese
+Anforderung war nie explizit festgehalten — an mehreren Stellen (
+`LokalerBestandCache`, `bekannteIDs`/`geloeschteIDs`-Sets,
+`ArtikelListenKaufService.bestehenderEintragNamensgleich`) bereits korrekt
+befolgt, an anderen (`Einkaufsliste.eintraege`, `Geschaeft.ignorierteArtikel`,
+`Einkaufsvorgang.kaufEintraege`) nicht. **Regel jetzt explizit in
+`docs/DATENSYNCHRONISATION.md` §4.9 festgehalten**, mit Verweis von
+`mergePaket`s Typ-Doku aus — jede künftige `mergeX`-Funktion soll dort
+nachschlagen, bevor sie eine neue Existenzprüfung schreibt.
+
+**Verifikationsstand (2026-08-25):** `xcodegen generate` + `xcodebuild build`
++ `build-for-testing` sauber. Vollständige `ShopWithMeTests`-Suite grün bis
+auf `BelegScanIntegrationTests` (OCR-Trefferquote) — per `git stash`
+verifiziert bereits auf dem Stand VOR diesem Fix fehlschlagend, also
+vorbestehend und unabhängig von dieser Änderung. Neuer Regressionstest:
+`mergeEinkaufslistenEintraegeVonZweiPeersMitGleichemArtikelnamenErzeugtNurEinenEintrag`.

@@ -2648,6 +2648,53 @@ struct SyncSnapshotImportServiceTests {
         #expect(try context.fetch(FetchDescriptor<KaufEintrag>()).count == 1)
     }
 
+    /// Live-Fund (2026-08-25, Nachtrag zu GitHub #175/Abschnitt 67, per neuem
+    /// `sync_listeneintrag_sicherheitsnetz_angelegt`-Log konkret beobachtet):
+    /// zwei unterschiedliche Peers melden denselben Artikel (je ein eigenes,
+    /// noch nicht per Alias zusammengeführtes lokales ``Artikel``-Objekt mit
+    /// GLEICHEM Namen) für dieselbe Liste als aktuell offen — im selben
+    /// Importlauf (zwei Peer-Ordner, eine ``SyncSnapshotImportService/importiereSnapshots(context:)``-
+    /// Runde) entstanden dafür live TROTZ ``Einkaufsliste/enthaeltNamensgleich(_:produkt:)``
+    /// zwei separate ``EinkaufslistenEintrag``-Zeilen statt einer — sichtbar
+    /// als doppelter Artikel auf der Liste.
+    @Test
+    func mergeEinkaufslistenEintraegeVonZweiPeersMitGleichemArtikelnamenErzeugtNurEinenEintrag() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
+        try context.save()
+
+        func macheSnapshot(geraeteID: String, artikelID: UUID) -> SyncSnapshot {
+            var snapshot = leererSnapshot(geraeteID: geraeteID)
+            snapshot.artikel = [
+                ArtikelSnapshot(
+                    id: artikelID, name: "Flohsamen", symbolName: "leaf.fill", farbeHex: "#34C759",
+                    abteilungIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+                ),
+            ]
+            snapshot.einkaufslisten = [EinkaufslisteSnapshot(id: liste.id, name: "Einkaufsliste", erstelltAm: liste.erstelltAm)]
+            snapshot.einkaufslistenEintraege = [
+                EinkaufslistenEintragSnapshot(
+                    einkaufslisteID: liste.id, artikelID: artikelID, menge: 1, notiz: nil, produktID: nil, erstelltAm: Date()
+                ),
+            ]
+            return snapshot
+        }
+
+        try schreibeFremdenSnapshot(macheSnapshot(geraeteID: "peer-a", artikelID: UUID()), fremdeGeraeteID: "peer-a", in: syncOrdner)
+        try schreibeFremdenSnapshot(macheSnapshot(geraeteID: "peer-b", artikelID: UUID()), fremdeGeraeteID: "peer-b", in: syncOrdner)
+
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        let alle = try context.fetch(FetchDescriptor<EinkaufslistenEintrag>())
+        #expect(alle.filter { $0.artikel?.name == "Flohsamen" }.count == 1)
+    }
+
     /// Wie ``kaufEintragMergeUebersprintBereitsBekannteEintraege``, für
     /// ``mergePreispunkte``.
     @Test

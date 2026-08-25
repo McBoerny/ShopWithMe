@@ -1182,6 +1182,74 @@ Wasserstand-Zeitstempel ausschließlich vom Dateikanal geschrieben werden
 nach hinreichend vielen Zyklen identisch zu reinem Datei-Abgleich — Multipeer
 verändert nur die Latenz, nie das Ergebnis.
 
+### 4.9 Pflichtregel: Existenzprüfungen in `mergeX`-Funktionen nie über eine `@Relationship`-Sammlung
+
+**Verbindlich für jede neue oder geänderte `mergeX`-Funktion** (aufgerufen
+aus `mergePaket`, das `importiereSnapshots(context:)` einmal PRO Peer-Ordner
+aufruft, sequentiell, in EINEM `ModelContext`, mit `context.save()` erst
+NACH der kompletten Peer-Schleife) — Root Cause und Live-Fund:
+`docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 68 (GitHub #175).
+
+**Die Regel:** Jede Prüfung „existiert für dieses (Name/Koordinate/anderes
+weiches Kriterium) bereits ein passender Datensatz" MUSS eine Quelle lesen,
+die einen `context.insert(...)` eines ANDEREN, bereits abgeschlossenen
+Aufrufs derselben oder einer vorgelagerten `mergeX`-Funktion (für einen
+FRÜHEREN Peer im selben Importlauf) garantiert widerspiegelt. Eine
+`@Relationship(inverse:)`-Sammlung, gelesen direkt auf einem bereits
+aufgelösten Model-Objekt (z.B. `liste.eintraege`, `geschaeft.ignorierteArtikel`,
+`vorgang.kaufEintraege`), erfüllt das NICHT zuverlässig — live bestätigt
+(zwei Peers meldeten im selben Importlauf denselben, noch nicht per Alias
+zusammengeführten Artikelnamen; die zweite Prüfung sah die von der ersten
+gerade eingefügte Zeile nicht und legte eine Dublette an).
+
+**Zwei bereits etablierte, korrekte Alternativen** (beide im Code an
+mehreren Stellen bereits vorhanden, jetzt verbindlich statt optional):
+
+1. **`context.fetch(FetchDescriptor<...>(predicate:))`**, frisch bei jedem
+   Aufruf (nicht vorab in einer Variable gecacht) — Vorbild:
+   `ArtikelListenKaufService.bestehenderEintragNamensgleich`,
+   `Einkaufsliste.eintragNamensgleich`s Namens-Backstop. Bevorzugt für
+   Prüfungen, die über NAMEN/andere weiche Kriterien laufen (kein
+   Dictionary-Schlüssel möglich, siehe `LokalerBestandCache`-Doku).
+2. **Ein `inout` durchgereichtes, explizit bei jeder Neuanlage
+   nachgeführtes Dictionary/Set** — Vorbild: `bekannteIDs`/`geloeschteIDs`
+   (einmal pro Funktionsaufruf frisch gefetcht, dann nur noch gelesen, nie
+   erneut befüllt — sicher, weil `mergeX` innerhalb EINES Aufrufs ohnehin
+   sequentiell verarbeitet), `LokalerBestandCache.nachfuehren` (fetch +
+   explizites Nachführen bei Neuanlage — nötig, wenn derselbe Peer im
+   selben Batch mehrfach denselben neuen Namen meldet). Bevorzugt bei
+   ID-basierten Prüfungen mit klarem Dictionary-Schlüssel.
+
+**Gegenregel, ebenfalls verbindlich (Live-Fund beim ersten Fix-Versuch,
+Abschnitt 68):** `context.fetch` ist NICHT pauschal die sicherere Wahl —
+für eine LOKALE Lösch-dann-Neuanlage-Abfolge INNERHALB EINER Aktion (kein
+Merge, kein zweiter Peer beteiligt, z.B. Abhaken direkt gefolgt von
+Abwählen) spiegelte ein direkt auf ein `context.delete(...)` folgendes
+`context.fetch` das gelöschte Objekt weiterhin als Kandidaten — die
+`@Relationship`-Sammlung dagegen reflektierte dieselbe lokale Löschung
+korrekt. Für rein lokale Einzelaktions-Aufrufer außerhalb der `mergeX`-
+Pipeline (UI, `Einkaufsvorgang.artikelAbhakenKern`) bleibt die
+Relationship-Sammlung (`eintrag(fuer:produkt:)`, `enthaelt(_:produkt:)`)
+deshalb weiterhin die richtige, schnelle Wahl — NICHT pauschal auf
+`context.fetch` umstellen.
+
+**Checkliste vor jeder neuen/geänderten Existenzprüfung in einer
+`mergeX`-Funktion:**
+
+- Läuft diese Prüfung innerhalb der Peer-Schleife (`mergePaket`,
+  `importiereSnapshots`/Multipeer-Catch-up)? Wenn nein (reiner
+  Einzelaktions-Aufrufer), gilt diese Regel nicht — Relationship-Sammlung
+  ist hier schnell und korrekt.
+- Wenn ja: liest die Prüfung eine `@Relationship`-Sammlung auf einem
+  bereits (per ID/Alias) aufgelösten Objekt? Wenn ja, austauschen gegen
+  `context.fetch` oder ein `inout`-Dictionary nach obigem Muster.
+- Ist die Konsequenz eines übersehenen Treffers eine harmlose, im nächsten
+  Zyklus selbstheilende Dublette, oder eine PERMANENTE Fehlentscheidung
+  (z.B. ein dauerhafter `SyncEntitaetsAlias` zwischen zwei tatsächlich
+  unabhängigen Entitäten, siehe `mergeEinkaufsvorgaenge`s `offenerTreffer`)?
+  Bei permanenter Konsequenz höhere Priorität, auch wenn das
+  Auslöse-Fenster selten ist.
+
 ## 5. Sync-Zyklus und adaptives Polling
 
 `SyncPollingService` führt einen vollständigen Zyklus (Import Bereich A →

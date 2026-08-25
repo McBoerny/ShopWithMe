@@ -78,9 +78,9 @@ extension Einkaufsliste {
     }
 
     /// Wie ``enthaelt(_:produkt:)``, mit demselben Namens-Backstop wie
-    /// ``eintragNamensgleich(fuer:produkt:)`` (siehe dortige Doku).
-    func enthaeltNamensgleich(_ artikel: Artikel, produkt: Produkt? = nil) -> Bool {
-        eintragNamensgleich(fuer: artikel, produkt: produkt) != nil
+    /// ``eintragNamensgleich(fuer:produkt:context:)`` (siehe dortige Doku).
+    func enthaeltNamensgleich(_ artikel: Artikel, produkt: Produkt? = nil, context: ModelContext) -> Bool {
+        eintragNamensgleich(fuer: artikel, produkt: produkt, context: context) != nil
     }
 
     /// Wie ``eintrag(fuer:produkt:)``, mit zusätzlichem Namens-Backstop: findet
@@ -96,11 +96,52 @@ extension Einkaufsliste {
     /// war, von 8 auf 9 Einträge — beide bereits per ID/Alias fast-path
     /// aufgelösten Pfade prüften nur exakte Objekt-Identität und übersahen so
     /// den jeweils anderen Eintrag).
-    func eintragNamensgleich(fuer artikel: Artikel, produkt: Produkt? = nil) -> EinkaufslistenEintrag? {
+    ///
+    /// **Live-Fund (2026-08-25, GitHub #175): über `context.fetch` statt der
+    /// `eintraege`-Relationship-Sammlung geprüft.** Ein direkter Scan über
+    /// `eintraege` (vormals hier) sah einen im SELBEN, noch nicht
+    /// gespeicherten Importlauf zuvor per `context.insert(...)` eingefügten
+    /// Eintrag NICHT zuverlässig, wenn der Einfüger ein anderer Aufruf
+    /// derselben Merge-Funktion für einen ANDEREN Peer war (``SyncSnapshotImportService/importiereSnapshots(context:)``
+    /// ruft ``SyncSnapshotImportService/mergePaket(tombstones:stamm:listen:lernen:vorgaenge:preise:kaeufe:geraeteName:peerGeraeteID:erzeugtAm:context:)``
+    /// einmal PRO Peer-Ordner auf). Live bestätigt über drei gleichzeitig
+    /// synchronisierende Geräte: zwei Peers meldeten denselben (noch nicht
+    /// per Alias zusammengeführten) Artikelnamen für dieselbe Liste im
+    /// selben Importlauf — trotz dieses eigentlich dafür gedachten
+    /// Backstops entstanden zwei separate Zeilen statt einer, sichtbar als
+    /// doppelter Artikel. ``ArtikelListenKaufService/bestehenderEintragNamensgleich(artikel:produkt:einkaufsliste:context:)``
+    /// löste exakt dasselbe Problem bereits über `context.fetch` statt der
+    /// Relationship-Sammlung (siehe dortige Doku) — dasselbe, jetzt hier
+    /// übernommene Muster. Details: `docs/DATENSYNCHRONISATION_VERLAUF.md`
+    /// Abschnitt 68.
+    ///
+    /// **Nachtrag (2026-08-25): der exakte Treffer läuft bewusst weiterhin
+    /// über ``eintrag(fuer:produkt:)`` (`eintraege`-Relationship-Sammlung),
+    /// NICHT über `context.fetch`.** Ein erster Versuch, auch den exakten
+    /// Treffer über `context.fetch` zu prüfen, brach
+    /// `EinkaufsvorgangTests.abwaehlenMachtAbhakenRueckgaengig()`: ein per
+    /// `context.delete(...)` INNERHALB DERSELBEN, noch nicht gespeicherten
+    /// Aktion (Abhaken, direkt gefolgt von Abwählen — kein Merge, kein
+    /// zweiter Peer beteiligt) entfernter Eintrag tauchte in einem direkt
+    /// danach ausgeführten `context.fetch` weiterhin als Kandidat auf und
+    /// wurde fälschlich als „bestehend" wiederverwendet (mit seinen alten,
+    /// eigentlich zurückzusetzenden Werten). Die `eintraege`-Sammlung
+    /// dagegen spiegelt einen Löschvorgang auf DEMSELBEN Objektgraphen
+    /// zuverlässig — nur einen Einfügevorgang eines ANDEREN, bereits
+    /// abgeschlossenen Funktionsaufrufs (der eigentliche GitHub-#175-Fall,
+    /// zwei verschiedene Peers im selben Importlauf) nicht. Der
+    /// Namens-Backstop unten bleibt deshalb bei `context.fetch` (dort nie
+    /// derselbe Artikel, also nie vom Lösch-Fall betroffen), der exakte
+    /// Treffer bei der Relationship-Sammlung.
+    func eintragNamensgleich(fuer artikel: Artikel, produkt: Produkt? = nil, context: ModelContext) -> EinkaufslistenEintrag? {
         if let exakt = eintrag(fuer: artikel, produkt: produkt) { return exakt }
-        return eintraege.first {
-            $0.produkt == produkt && $0.artikel?.name.localizedCaseInsensitiveCompare(artikel.name) == .orderedSame
-        }
+        let listeID = persistentModelID
+        let produktID = produkt?.persistentModelID
+        let deskriptor = FetchDescriptor<EinkaufslistenEintrag>(
+            predicate: #Predicate { $0.einkaufsliste?.persistentModelID == listeID && $0.produkt?.persistentModelID == produktID }
+        )
+        guard let kandidaten = try? context.fetch(deskriptor) else { return nil }
+        return kandidaten.first { $0.artikel?.name.localizedCaseInsensitiveCompare(artikel.name) == .orderedSame }
     }
 
     /// Alle ``EinkaufslistenEintrag``e für `artikel` auf dieser Liste — unabhängig vom
@@ -172,7 +213,7 @@ extension Einkaufsliste {
         // und das Bereich-B-„Sicherheitsnetz" denselben Artikel im selben
         // Zyklus auf zwei noch nicht per Alias zusammengeführte lokale
         // ``Artikel``-Objekte auflösen.
-        if let bestehender = eintragNamensgleich(fuer: artikel, produkt: produkt) {
+        if let bestehender = eintragNamensgleich(fuer: artikel, produkt: produkt, context: context) {
             bestehender.menge = artikel.mengenSchritt
             bestehender.notiz = nil
             return bestehender

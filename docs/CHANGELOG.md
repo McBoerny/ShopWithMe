@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.17 (Build 369) — Sync: Artikel-Dubletten bei Mehrfach-Peer-Konflikten behoben (#175, Root Cause)
+
+- **#175 (Root Cause):** Mit dem erweiterten Logging aus Build 368 direkt
+  beobachtet: zwei verschiedene Peers meldeten im selben Importlauf
+  denselben (noch nicht per Alias zusammengeführten) Artikelnamen für
+  dieselbe Liste — `Einkaufsliste.eintragNamensgleich`s Namens-Backstop
+  prüfte die `eintraege`-Relationship-Sammlung, die einen soeben von einem
+  ANDEREN, bereits abgeschlossenen Peer-Aufruf im selben Importlauf
+  eingefügten Eintrag nicht zuverlässig widerspiegelte — beide Meldungen
+  wurden übernommen, sichtbar als doppelter Artikel. Fix: `context.fetch`
+  statt der Relationship-Sammlung (analog dem bereits bestehenden Muster in
+  `ArtikelListenKaufService.bestehenderEintragNamensgleich`).
+- Systematischer Sweep über alle `mergeX`-Funktionen (Nutzeranfrage: „wir
+  haben 3 Peers") deckte drei weitere Stellen derselben Fehlerklasse auf,
+  jetzt ebenfalls behoben: `mergeGeschaefte`s ignorierte-Artikel-Dedup,
+  `mergeKaufEintraege`s Listeneintrag-Aufräumung, sowie
+  `mergeEinkaufsvorgaenge`s `offenerTreffer`-Zweig (hier mit permanenter
+  statt selbstheilender Konsequenz — falsch dauerhaft aliasierte
+  Einkaufsvorgänge).
+- Neue Pflichtregel für alle künftigen `mergeX`-Funktionen dokumentiert:
+  `docs/DATENSYNCHRONISATION.md` §4.9, referenziert aus `mergePaket`s
+  Typ-Doku und dem `shopwithme-conventions`-Skill. Details:
+  `docs/DATENSYNCHRONISATION_VERLAUF.md` §68.
+
 ## v0.17 (Build 368) — Sync: Logging für #175 erweitert (Fix aus Build 367 reicht laut Retest nicht)
 
 - **#175 (Nachtrag):** Retest zeigt weiterhin Artikel-Dubletten, jetzt aber als

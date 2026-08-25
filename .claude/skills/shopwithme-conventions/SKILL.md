@@ -151,3 +151,19 @@ verlinken, statt den vollen Inhalt zu duplizieren — Muster wie `docs/BELEGSCAN
 `docs/DATABASE_CONCURRENCY.md`, `docs/LOGGING.md`, `docs/BUILD_WORKFLOW.md`.
 `docs/DECISIONS.md` bleibt nur für kleinere, kurze Einzelentscheidungen (z.B.
 Bundle-ID, Git-Autor).
+
+## Sync-Merge-Existenzprüfungen — bekannte Fehlerquelle (GitHub #175)
+
+Vor jeder neuen/geänderten Existenzprüfung („gibt es dafür schon eine Zeile")
+in einer `mergeX`-Funktion (`SyncSnapshotImportService.swift`, aufgerufen aus
+`mergePaket`/`importiereSnapshots`): **`docs/DATENSYNCHRONISATION.md` §4.9
+lesen.** Kurzfassung: `mergePaket` läuft einmal pro Peer-Ordner, sequentiell,
+in einem `ModelContext`, `context.save()` erst nach der kompletten
+Peer-Schleife — eine Existenzprüfung über eine `@Relationship`-Sammlung
+(z.B. `liste.eintraege`) sieht einen soeben von einem ANDEREN, bereits
+abgeschlossenen Peer-Aufruf eingefügten Datensatz nicht zuverlässig (live
+bestätigt: zwei Peers meldeten denselben Artikelnamen im selben Importlauf,
+beide legten eine Zeile an). Pflicht stattdessen: `context.fetch(...)` oder
+ein `inout`-nachgeführtes Dictionary/Set. Gegenregel für rein lokale
+Einzelaktionen (kein Merge, kein zweiter Peer) steht ebenfalls dort —
+`context.fetch` ist NICHT pauschal die sicherere Wahl.
