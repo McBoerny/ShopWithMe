@@ -324,13 +324,15 @@ enum DatenintegritaetsService {
         for eintrag in (try? context.fetch(FetchDescriptor<KaufEintrag>())) ?? [] {
             guard let artikel = eintrag.artikel, let einkaufsliste = eintrag.einkaufsvorgang?.einkaufsliste else { continue }
             ArtikelListenKaufService.vermerkeAbgehaktFallsNoetig(
-                artikel: artikel, einkaufsliste: einkaufsliste, am: eintrag.datum, bekannt: &bekannt, context: context
+                artikel: artikel, produkt: eintrag.produkt, einkaufsliste: einkaufsliste, am: eintrag.datum, bekannt: &bekannt,
+                context: context
             )
         }
         for eintrag in (try? context.fetch(FetchDescriptor<EinkaufslistenEintrag>())) ?? [] {
             guard let artikel = eintrag.artikel, let einkaufsliste = eintrag.einkaufsliste else { continue }
             ArtikelListenKaufService.vermerkeHinzugefuegtFallsNoetig(
-                artikel: artikel, einkaufsliste: einkaufsliste, am: eintrag.erstelltAm, bekannt: &bekannt, context: context
+                artikel: artikel, produkt: eintrag.produkt, einkaufsliste: einkaufsliste, am: eintrag.erstelltAm, bekannt: &bekannt,
+                context: context
             )
         }
         let neuVermerkt = bekannt.count - vorherAnzahl
@@ -362,9 +364,16 @@ enum DatenintegritaetsService {
     /// Woche); ein Vergleich gegen ``ArtikelListenKauf/zuletztHinzugefuegtAm``
     /// (wie in `mergeKaufEintraege`) würde dort fälschlich echte Kaufhistorie
     /// löschen. Nur die enge, unzweideutige Bedingung „zwei `KaufEintrag`e,
-    /// ein Vorgang, ein Artikel" ist in jedem Fall ein Fehler. Behält den
-    /// `KaufEintrag` mit dem SPÄTEREN `datum` (der zuletzt bestätigte Stand),
-    /// löscht + tombstoned die übrigen.
+    /// ein Vorgang, ein Artikel, dasselbe Produkt" ist in jedem Fall ein
+    /// Fehler. Behält den `KaufEintrag` mit dem SPÄTEREN `datum` (der zuletzt
+    /// bestätigte Stand), löscht + tombstoned die übrigen.
+    ///
+    /// **Produkt-Vergleich (GitHub #172):** vor diesem Fix gruppierte diese
+    /// Bereinigung rein nach (Vorgang, Artikel) — zwei ECHTE, unterschiedliche
+    /// Produkte desselben generischen Artikels, die beide im selben Vorgang
+    /// gekauft wurden (z.B. zwei verschiedene Batterie-Typen in einem
+    /// Einkauf), hätte sie fälschlich als Duplikat behandelt und den
+    /// KaufEintrag des älteren Produkts dauerhaft gelöscht.
     ///
     /// Läuft dauerhaft bei jedem App-Start (kein einmaliges Migrationsflag,
     /// anders als ``migriereGeschaeftsAggregateFallsNoetig(context:)``) — dient
@@ -378,11 +387,15 @@ enum DatenintegritaetsService {
         struct Schluessel: Hashable {
             let vorgangID: PersistentIdentifier
             let artikelID: PersistentIdentifier
+            let produktID: PersistentIdentifier?
         }
         var gruppen: [Schluessel: [KaufEintrag]] = [:]
         for eintrag in (try? context.fetch(FetchDescriptor<KaufEintrag>())) ?? [] {
             guard let vorgang = eintrag.einkaufsvorgang, let artikel = eintrag.artikel else { continue }
-            gruppen[Schluessel(vorgangID: vorgang.persistentModelID, artikelID: artikel.persistentModelID), default: []].append(eintrag)
+            gruppen[
+                Schluessel(vorgangID: vorgang.persistentModelID, artikelID: artikel.persistentModelID, produktID: eintrag.produkt?.persistentModelID),
+                default: []
+            ].append(eintrag)
         }
 
         var entfernt = 0

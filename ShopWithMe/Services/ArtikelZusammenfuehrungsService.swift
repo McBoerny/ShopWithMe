@@ -157,10 +157,12 @@ enum ArtikelZusammenfuehrungsService {
             for kauf in listenKaeufe {
                 if let einkaufsliste = kauf.einkaufsliste, gueltigeEinkaufslistenIDs.contains(einkaufsliste.persistentModelID) {
                     ArtikelListenKaufService.vermerkeAbgehaktFallsNoetig(
-                        artikel: ziel, einkaufsliste: einkaufsliste, am: kauf.zuletztAbgehaktAm, bekannt: &bekannt, context: context
+                        artikel: ziel, produkt: kauf.produkt, einkaufsliste: einkaufsliste, am: kauf.zuletztAbgehaktAm,
+                        bekannt: &bekannt, context: context
                     )
                     ArtikelListenKaufService.vermerkeHinzugefuegtFallsNoetig(
-                        artikel: ziel, einkaufsliste: einkaufsliste, am: kauf.zuletztHinzugefuegtAm, bekannt: &bekannt, context: context
+                        artikel: ziel, produkt: kauf.produkt, einkaufsliste: einkaufsliste, am: kauf.zuletztHinzugefuegtAm,
+                        bekannt: &bekannt, context: context
                     )
                 }
                 context.delete(kauf)

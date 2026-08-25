@@ -657,7 +657,9 @@ enum SyncImportService {
             let liste = einkaufsliste(mitID: nutzlast.bezugsID, aliase: aliase, context: context)
             let artikel = artikel(mitID: nutzlast.artikelID, aliase: aliase, context: context)
             guard let liste, let artikel else { return fehlendeReferenz(bezug: liste, artikel: artikel) }
-            let schluessel = ArtikelListenKaufService.Schluessel(artikelID: artikel.id, einkaufslisteID: liste.id)
+            // produktID: nil — Bereich-A-Events (``SyncEventNutzlast``) kennen
+            // (noch) keine Produktauswahl, siehe deren Typ-Doku.
+            let schluessel = ArtikelListenKaufService.Schluessel(artikelID: artikel.id, produktID: nil, einkaufslisteID: liste.id)
             // NICHT ``ArtikelListenKaufService/istOffen(hinzugefuegtAm:abgehaktAm:)``
             // direkt mit dem rohen `zuletztAbgehaktAm(schluessel)`-Ergebnis
             // verwendet: dessen Vertrag behandelt ein fehlendes `abgehaktAm`

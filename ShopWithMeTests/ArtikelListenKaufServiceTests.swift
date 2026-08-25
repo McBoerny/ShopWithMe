@@ -137,7 +137,7 @@ struct ArtikelListenKaufServiceTests {
         let zeitpunkt = Date()
         ArtikelListenKaufService.vermerkeAbgehakt(artikel: artikel, einkaufsliste: liste, am: zeitpunkt, context: context)
 
-        let schluessel = ArtikelListenKaufService.Schluessel(artikelID: artikel.id, einkaufslisteID: liste.id)
+        let schluessel = ArtikelListenKaufService.Schluessel(artikelID: artikel.id, produktID: nil, einkaufslisteID: liste.id)
         #expect(ArtikelListenKaufService.alleZeitstempel(context: context)[schluessel] == zeitpunkt)
     }
 
@@ -154,7 +154,7 @@ struct ArtikelListenKaufServiceTests {
         context.insert(liste)
         let artikel = Artikel(name: "Sonnencreme", symbolName: "sun.max.fill", farbeHex: "#FFCC00")
         context.insert(artikel)
-        let schluessel = ArtikelListenKaufService.Schluessel(artikelID: artikel.id, einkaufslisteID: liste.id)
+        let schluessel = ArtikelListenKaufService.Schluessel(artikelID: artikel.id, produktID: nil, einkaufslisteID: liste.id)
 
         let spaeter = Date()
         let frueher = spaeter.addingTimeInterval(-3600)
@@ -191,9 +191,9 @@ struct ArtikelListenKaufServiceTests {
 
         let zeitstempel = ArtikelListenKaufService.alleZeitstempel(context: context)
 
-        let mitSchluessel = ArtikelListenKaufService.Schluessel(artikelID: mitZeitstempel.id, einkaufslisteID: liste.id)
-        let ohneSchluessel = ArtikelListenKaufService.Schluessel(artikelID: ohneZeitstempel.id, einkaufslisteID: liste.id)
-        let unbekannterSchluessel = ArtikelListenKaufService.Schluessel(artikelID: unbekannt.id, einkaufslisteID: liste.id)
+        let mitSchluessel = ArtikelListenKaufService.Schluessel(artikelID: mitZeitstempel.id, produktID: nil, einkaufslisteID: liste.id)
+        let ohneSchluessel = ArtikelListenKaufService.Schluessel(artikelID: ohneZeitstempel.id, produktID: nil, einkaufslisteID: liste.id)
+        let unbekannterSchluessel = ArtikelListenKaufService.Schluessel(artikelID: unbekannt.id, produktID: nil, einkaufslisteID: liste.id)
 
         #expect(zeitstempel[mitSchluessel] != nil)
         // Bekannt, aber ohne Zeitstempel: Schlüssel IST enthalten, Wert ist `nil`.

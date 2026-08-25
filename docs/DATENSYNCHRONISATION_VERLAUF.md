@@ -4220,3 +4220,85 @@ unabhängige Fehlschläge — bestätigt per Vergleichslauf auf unverändertem
 `main`). Noch nicht auf einem echten Gerät über einen längeren Zeitraum
 (30–45 Minuten Dauerbetrieb) nachverifiziert.
 `ausstehendeAktion` gewährte.
+
+## 64. Live-Fund: Artikel mit mehreren Produkten verschwinden beim Sync-Merge (GitHub #172)
+
+**Symptom (Nutzerbericht 2026-08-25):** Batterien wurden mit Produkt „Babycell
+LR14" zur Einkaufsliste hinzugefügt und verschwanden kurz danach wieder,
+ohne abgehakt worden zu sein. Issue #172 („Artikel verschwinden") beschreibt
+denselben Effekt allgemeiner: „Aufgefallen: Artikel werden leise gelöscht.
+Scheinbar diejenigen die einzelne Produkte haben."
+
+**Root Cause, per Live-Log rekonstruiert** (`Bernhard DB Debug.log`,
+`sync-debug.log`):
+
+```
+[2026-08-25T08:03:41Z] [Bernhard] [sync_kaufeintrag_merge_listeneintrag_entfernt]
+artikel=Batterie liste=Einkaufsliste listenEintragGefunden=true entfernt=true
+zuletztHinzugefuegtAm=2026-08-25 08:00:44 +0000 kaufDatum=2026-08-25 08:02:46 +0000
+```
+
+``KaufEintrag`` kannte bis zu diesem Fix **kein** ``Produkt`` — eine bewusste
+Vereinfachung aus GitHub #76, die zum damaligen Zeitpunkt korrekt war (die
+Preishistorien-Rolle, für die Produkt relevant war, wanderte komplett zu
+``Preispunkt``). Seit GitHub #47 kann ein ``EinkaufslistenEintrag`` aber
+sehr wohl ein konkretes ``Produkt`` desselben generischen ``Artikel``s tragen
+(z.B. „Batterie" mit Produkt „Babycell LR14"). Dadurch waren drei
+Stellen, die „schon gekauft" feststellen, **produktblind**:
+
+1. Der Dedupe-Schutz in ``Einkaufsvorgang/artikelAbhakenKern`` (matchte
+   `KaufEintrag`e nur über `artikel`, nie über `produkt`).
+2. Das ``ArtikelListenKauf``-Sicherheitsnetz (GitHub #99): Schlüssel war
+   `(Artikel, Einkaufsliste)`, nie `(Artikel, Produkt, Einkaufsliste)`.
+3. Die Bereich-C-Merge-Löschung in
+   ``SyncSnapshotImportService/mergeKaufEintraege(...)`` — Zeile
+   `einkaufsliste.eintrag(fuer: artikel)` (ohne `produkt`-Parameter) suchte
+   den zu löschenden Listeneintrag rein artikelweit.
+
+Konkret rekonstruiert: ein Peer legte „Batterie" um 08:00:44 auf die
+gemeinsame Liste und kaufte (eigenständig, unabhängig von Bernhards
+späterer Ergänzung) irgendeine Batterie um 08:02:46. Bernhards Gerät
+fügte kurz danach „Batterie"/„Babycell LR14" hinzu. Beim nächsten Merge
+(08:03:41) verglich der Bereich-C-Zweig das fremde Kaufdatum (08:02:46) nur
+gegen den **artikelweiten** `zuletztHinzugefuegtAm`-Zeitstempel (08:00:44)
+— sah „Kauf ist neuer als letztes bekanntes Hinzufügen" und löschte den
+Listeneintrag, obwohl der mit dem fremden Kauf inhaltlich nichts zu tun
+hatte.
+
+**Fix:** ``Produkt`` durchgängig durch die komplette Kauf-Pipeline
+nachgerüstet, additiv-optional (kein neues `SchemaVN` nötig, siehe
+`docs/BUILD_WORKFLOW.md` → „SwiftData-Migration"):
+
+- `KaufEintrag.produkt: Produkt?` (+ `KaufEintragSnapshot.produktID`) —
+  wird jetzt beim Abhaken (`artikelAbhakenKern`) und beim Bereich-C-Merge
+  gesetzt.
+- `ArtikelListenKauf.produkt: Produkt?` (+
+  `ArtikelListenKaufSnapshot.produktID`), `ArtikelListenKaufService.Schluessel`
+  jetzt `(artikelID, produktID, einkaufslisteID)` statt nur
+  `(artikelID, einkaufslisteID)` — durchgereicht durch alle
+  `vermerkeAbgehakt(FallsNoetig)`/`vermerkeHinzugefuegt(FallsNoetig)`/
+  `alleEintraege`/`alleZeitstempel`-Pfade sowie durch
+  `ArtikelZusammenfuehrungsService.referenzenUmhaengen` (Artikel-Alias-Merge).
+- Dedupe-`FetchDescriptor` in `artikelAbhakenKern` vergleicht jetzt zusätzlich
+  `produkt?.persistentModelID`.
+- `mergeKaufEintraege`s Löschzeile nutzt jetzt `einkaufsliste.eintrag(fuer:
+  artikel, produkt: neuer.produkt)` statt der artikelweiten Suche;
+  `istBereitsAbgehakt` bekommt denselben Produkt-Parameter für seinen
+  `KaufEintrag`-Fallback-Zweig.
+- Nebenbefund derselben Wurzelursache in
+  `DatenintegritaetsService.bereinigeDoppelteKaufEintraegeFallsNoetig`
+  (GitHub #126): gruppierte Duplikat-Erkennung bislang nur nach
+  `(Vorgang, Artikel)` — hätte zwei ECHTE, unterschiedliche Produkte
+  desselben Artikels im selben Einkauf fälschlich als Duplikat gelöscht.
+  Jetzt zusätzlich nach `produkt` gruppiert.
+- Bereich-A (`SyncEventNutzlast`, Echtzeit-Event-Kanal) bleibt bewusst
+  weiterhin ohne Produkt-Feld — dort wird `produkt` durchgängig als `nil`
+  behandelt (unverändertes Verhalten, kein Rückschritt), eine Erweiterung
+  wäre eine eigene, größere Änderung (neues Snapshot-Feld auf `SyncEvent`
+  selbst).
+
+**Verifikationsstand (2026-08-25):** `xcodegen generate` +
+`xcodebuild build` (App-Target) sauber, `xcodebuild build-for-testing`
+(Test-Target inkl. UI-Tests) sauber, keine neuen Warnungen. Kein
+automatisierter Testlauf durch die KI (Nutzer-Vorgabe) — noch nicht auf
+einem Gerät im Mehrgeräte-Betrieb nachverifiziert.

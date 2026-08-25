@@ -134,7 +134,9 @@ extension Einkaufsliste {
     @discardableResult
     func artikelHinzufuegenOhneEventAufzeichnung(_ artikel: Artikel, produkt: Produkt? = nil, am zeitpunkt: Date = Date(), context: ModelContext) -> EinkaufslistenEintrag {
         artikelHinzufuegenKern(artikel, produkt: produkt, am: zeitpunkt, context: context) {
-            ArtikelListenKaufService.vermerkeHinzugefuegt(artikel: artikel, einkaufsliste: self, am: zeitpunkt, context: context)
+            ArtikelListenKaufService.vermerkeHinzugefuegt(
+                artikel: artikel, produkt: produkt, einkaufsliste: self, am: zeitpunkt, context: context
+            )
         }
     }
 
@@ -151,7 +153,7 @@ extension Einkaufsliste {
     ) -> EinkaufslistenEintrag {
         artikelHinzufuegenKern(artikel, produkt: produkt, am: zeitpunkt, context: context) {
             ArtikelListenKaufService.vermerkeHinzugefuegtFallsNoetig(
-                artikel: artikel, einkaufsliste: self, am: zeitpunkt, bekannt: &bekannt, context: context
+                artikel: artikel, produkt: produkt, einkaufsliste: self, am: zeitpunkt, bekannt: &bekannt, context: context
             )
         }
     }

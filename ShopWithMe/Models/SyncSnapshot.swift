@@ -289,6 +289,12 @@ struct KaufEintragSnapshot: Codable {
     var datum: Date
     var menge: Double
     var abteilungBesuchsIndex: Int?
+    /// Additiv-optional (GitHub #172), siehe ``KaufEintrag/produkt``. Ein
+    /// Peer auf einer älteren App-Version schreibt dieses Feld noch nicht,
+    /// Swifts synthetisierter Decoder liest einen fehlenden Schlüssel für ein
+    /// optionales Feld automatisch als `nil` (gleiches Muster wie
+    /// ``EinkaufslistenEintragSnapshot/produktID``).
+    var produktID: UUID?
 }
 
 struct WarengruppenDistanzSnapshot: Codable {
@@ -345,6 +351,10 @@ struct ArtikelListenKaufSnapshot: Codable {
     /// 2026-08-10, siehe ``ArtikelListenKauf/zuletztHinzugefuegtAm``-Typ-Doku)
     /// — `nil` bei einem Peer auf einer älteren App-Version ohne dieses Feld.
     var zuletztHinzugefuegtAm: Date?
+    /// Additiv-optional (GitHub #172), siehe ``ArtikelListenKauf/produkt``.
+    /// `nil` sowohl bei genereller Auswahl ohne Produktwahl als auch bei
+    /// einem Peer auf einer älteren App-Version ohne dieses Feld.
+    var produktID: UUID?
 }
 
 struct PreispunktSnapshot: Codable {

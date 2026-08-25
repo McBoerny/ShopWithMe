@@ -188,7 +188,8 @@ enum SyncSnapshotExportService {
                     geschaeftNameSnapshot: $0.geschaeftNameSnapshot,
                     datum: $0.datum,
                     menge: $0.menge,
-                    abteilungBesuchsIndex: $0.abteilungBesuchsIndex
+                    abteilungBesuchsIndex: $0.abteilungBesuchsIndex,
+                    produktID: sichereID($0.produkt, gueltigeIDs: gueltigeProduktIDs)
                 )
             }
             : []
@@ -253,7 +254,8 @@ enum SyncSnapshotExportService {
                 else { return nil }
                 return ArtikelListenKaufSnapshot(
                     artikelID: artikelID, einkaufslisteID: einkaufslisteID, zuletztAbgehaktAm: eintrag.zuletztAbgehaktAm,
-                    zuletztHinzugefuegtAm: eintrag.zuletztHinzugefuegtAm
+                    zuletztHinzugefuegtAm: eintrag.zuletztHinzugefuegtAm,
+                    produktID: sichereID(eintrag.produkt, gueltigeIDs: gueltigeProduktIDs)
                 )
             }
 

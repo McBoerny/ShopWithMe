@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.17 (Build 363) — Sync: Artikel mit mehreren Produkten verschwinden nicht mehr (#172)
+
+- **#172:** Ein Artikel mit mehreren echten Produkt-Varianten (z.B. „Batterie" mit
+  Produkt „Babycell LR14") konnte beim Sync-Merge spurlos von der Liste
+  verschwinden, sobald IRGENDEIN Produkt desselben generischen Artikels gekauft
+  wurde — `KaufEintrag` kannte bislang gar kein `Produkt` (Vereinfachung aus
+  GitHub #76), wodurch Dedupe-Schutz, `ArtikelListenKauf`-Sicherheitsnetz und
+  Bereich-C-Merge-Löschung produktblind arbeiteten und dabei den Listeneintrag
+  eines völlig anderen Produkts mitlöschten. `Produkt` jetzt additiv-optional
+  end-to-end durch die komplette Kauf-Pipeline nachgerüstet, keine Migration
+  nötig. Details/Root-Cause-Log: `docs/DATENSYNCHRONISATION_VERLAUF.md` §64.
+
 ## v0.17 (Build 362) — Artikel hinzufügen: Suchfeld-Fokus über `.searchFocused` statt `.searchable(isPresented:)`
 
 - In „Artikel hinzufügen" benötigte das Schließen des Sheets über „Fertig" bislang

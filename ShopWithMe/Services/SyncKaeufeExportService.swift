@@ -78,6 +78,7 @@ enum SyncKaeufeExportService {
         let gueltigeGeschaeftIDs = Set((try? context.fetch(FetchDescriptor<Geschaeft>()))?.map(\.persistentModelID) ?? [])
         let gueltigeEinkaufsvorgangIDs = Set((try? context.fetch(FetchDescriptor<Einkaufsvorgang>()))?.map(\.persistentModelID) ?? [])
         let gueltigeAbteilungIDs = Set((try? context.fetch(FetchDescriptor<Abteilung>()))?.map(\.persistentModelID) ?? [])
+        let gueltigeProduktIDs = Set((try? context.fetch(FetchDescriptor<Produkt>()))?.map(\.persistentModelID) ?? [])
 
         for eintrag in fehlende {
             let zielURL = ordner.appendingPathComponent("\(eintrag.id.uuidString).json")
@@ -91,7 +92,8 @@ enum SyncKaeufeExportService {
                 geschaeftNameSnapshot: eintrag.geschaeftNameSnapshot,
                 datum: eintrag.datum,
                 menge: eintrag.menge,
-                abteilungBesuchsIndex: eintrag.abteilungBesuchsIndex
+                abteilungBesuchsIndex: eintrag.abteilungBesuchsIndex,
+                produktID: SyncSnapshotExportService.sichereID(eintrag.produkt, gueltigeIDs: gueltigeProduktIDs)
             )
             guard let daten = try? SyncSnapshotExportService.encoder.encode(snapshot) else { continue }
             _ = SyncSnapshotExportService.schreibeBlocking(daten, nach: zielURL)
@@ -113,6 +115,7 @@ enum SyncKaeufeExportService {
         let gueltigeGeschaeftIDs = Set((try? context.fetch(FetchDescriptor<Geschaeft>()))?.map(\.persistentModelID) ?? [])
         let gueltigeEinkaufsvorgangIDs = Set((try? context.fetch(FetchDescriptor<Einkaufsvorgang>()))?.map(\.persistentModelID) ?? [])
         let gueltigeAbteilungIDs = Set((try? context.fetch(FetchDescriptor<Abteilung>()))?.map(\.persistentModelID) ?? [])
+        let gueltigeProduktIDs = Set((try? context.fetch(FetchDescriptor<Produkt>()))?.map(\.persistentModelID) ?? [])
 
         return alleLokalen.map { eintrag in
             KaufEintragSnapshot(
@@ -125,7 +128,8 @@ enum SyncKaeufeExportService {
                 geschaeftNameSnapshot: eintrag.geschaeftNameSnapshot,
                 datum: eintrag.datum,
                 menge: eintrag.menge,
-                abteilungBesuchsIndex: eintrag.abteilungBesuchsIndex
+                abteilungBesuchsIndex: eintrag.abteilungBesuchsIndex,
+                produktID: SyncSnapshotExportService.sichereID(eintrag.produkt, gueltigeIDs: gueltigeProduktIDs)
             )
         }
     }

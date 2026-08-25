@@ -927,7 +927,7 @@ struct SyncSnapshotImportServiceTests {
         _ = vorgang.artikelAbhakenOhneEventAufzeichnung(artikelA, context: contextA)
         try contextA.save()
         let kaufzeitpunkt: Date? = ArtikelListenKaufService.alleZeitstempel(context: contextA)[
-            ArtikelListenKaufService.Schluessel(artikelID: artikelA.id, einkaufslisteID: listeA.id)
+            ArtikelListenKaufService.Schluessel(artikelID: artikelA.id, produktID: nil, einkaufslisteID: listeA.id)
         ] ?? nil
         _ = try #require(kaufzeitpunkt)
 
@@ -2128,7 +2128,7 @@ struct SyncSnapshotImportServiceTests {
         let liste = Einkaufsliste(name: "Urlaub")
         context.insert(liste)
         try context.save()
-        let schluessel = ArtikelListenKaufService.Schluessel(artikelID: apfel.id, einkaufslisteID: liste.id)
+        let schluessel = ArtikelListenKaufService.Schluessel(artikelID: apfel.id, produktID: nil, einkaufslisteID: liste.id)
 
         let mittlererZeitpunkt = Date()
         var ersterSnapshot = leererSnapshot(geraeteID: "fremdes-geraet")

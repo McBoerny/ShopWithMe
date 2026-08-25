@@ -141,7 +141,9 @@ final class Einkaufsvorgang {
             artikel, produkt: produkt, am: datum, context: context, ursprungsGeraeteID: ursprungsGeraeteID,
             abteilung: abteilungUeberschreibung, geschaeft: geschaeftUeberschreibung
         ) { einkaufsliste, eintragDatum in
-            ArtikelListenKaufService.vermerkeAbgehakt(artikel: artikel, einkaufsliste: einkaufsliste, am: eintragDatum, context: context)
+            ArtikelListenKaufService.vermerkeAbgehakt(
+                artikel: artikel, produkt: produkt, einkaufsliste: einkaufsliste, am: eintragDatum, context: context
+            )
         }
     }
 
@@ -163,7 +165,7 @@ final class Einkaufsvorgang {
             abteilung: abteilungUeberschreibung, geschaeft: geschaeftUeberschreibung
         ) { einkaufsliste, eintragDatum in
             ArtikelListenKaufService.vermerkeAbgehaktFallsNoetig(
-                artikel: artikel, einkaufsliste: einkaufsliste, am: eintragDatum, bekannt: &bekannt, context: context
+                artikel: artikel, produkt: produkt, einkaufsliste: einkaufsliste, am: eintragDatum, bekannt: &bekannt, context: context
             )
         }
     }
@@ -193,7 +195,16 @@ final class Einkaufsvorgang {
         // `KaufEintrag`e, von denen „Abwählen" pro Tap nur EINEN entfernte; der
         // Artikel blieb scheinbar dauerhaft „abgehakt" hängen.
         let artikelID = artikel.persistentModelID
-        let deskriptor = FetchDescriptor<KaufEintrag>(predicate: #Predicate { $0.artikel?.persistentModelID == artikelID })
+        // Produkt-Vergleich (GitHub #172): zwei unterschiedliche Produkte
+        // desselben generischen Artikels dürfen einander nicht als „schon
+        // abgehakt" ausbremsen — vor diesem Fix matchte der Dedupe-Schutz
+        // rein artikelweit und löschte dadurch den Listeneintrag eines ganz
+        // anderen Produkts, sobald irgendein Produkt des Artikels im selben
+        // Vorgang bereits einen offenen ``KaufEintrag`` hatte.
+        let produktID = produkt?.persistentModelID
+        let deskriptor = FetchDescriptor<KaufEintrag>(
+            predicate: #Predicate { $0.artikel?.persistentModelID == artikelID && $0.produkt?.persistentModelID == produktID }
+        )
         let listenEintrag = einkaufsliste?.eintrag(fuer: artikel, produkt: produkt)
         let bereitsVorhanden = ((try? context.fetch(deskriptor)) ?? []).first {
             $0.einkaufsvorgang?.einkaufsliste?.persistentModelID == einkaufsliste?.persistentModelID
@@ -210,7 +221,7 @@ final class Einkaufsvorgang {
             // gemeldeten Befund überhaupt ursächlich sein kann.
             DatabaseDebugLogger.log(
                 .dedupeConflictDetected,
-                details: "artikelAbhaken: \(artikel.name) listenEintragVorhanden=\(listenEintrag != nil)"
+                details: "artikelAbhaken: \(artikel.name) produkt=\(produkt?.name ?? "-") listenEintragVorhanden=\(listenEintrag != nil)"
             )
             if let listenEintrag { context.delete(listenEintrag) }
             let besitzerID = bereitsVorhanden.einkaufsvorgang?.id ?? id
@@ -225,6 +236,7 @@ final class Einkaufsvorgang {
             artikel: artikel,
             geschaeft: geschaeftFuerEintrag,
             abteilung: abteilung,
+            produkt: produkt,
             menge: listenEintrag?.menge ?? artikel.mengenSchritt,
             datum: datum,
             abteilungBesuchsIndex: index,

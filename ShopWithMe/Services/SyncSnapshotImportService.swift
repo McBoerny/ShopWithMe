@@ -469,7 +469,8 @@ enum SyncSnapshotImportService {
         )
         mergeKaufEintraege(
             kaeufe, artikelZuordnung: artikelZuordnung, einkaufsvorgangZuordnung: einkaufsvorgangZuordnung,
-            geschaeftZuordnung: geschaeftZuordnung, abteilungZuordnung: abteilungZuordnung, peerGeraeteID: peerGeraeteID, context: context
+            geschaeftZuordnung: geschaeftZuordnung, abteilungZuordnung: abteilungZuordnung, produktZuordnung: produktZuordnung,
+            peerGeraeteID: peerGeraeteID, context: context
         )
         mergePreispunkte(
             preise.preispunkte, produktZuordnung: produktZuordnung,
@@ -484,7 +485,10 @@ enum SyncSnapshotImportService {
             lernen.artikelGeschaeftVerfuegbarkeiten, artikelZuordnung: artikelZuordnung, geschaeftZuordnung: geschaeftZuordnung, context: context
         )
         mergeGeschaeftBesuche(lernen.geschaeftBesuche, geschaeftZuordnung: geschaeftZuordnung, context: context)
-        mergeArtikelListenKaeufe(lernen.artikelListenKaeufe, artikelZuordnung: artikelZuordnung, listeZuordnung: listeZuordnung, context: context)
+        mergeArtikelListenKaeufe(
+            lernen.artikelListenKaeufe, artikelZuordnung: artikelZuordnung, produktZuordnung: produktZuordnung,
+            listeZuordnung: listeZuordnung, context: context
+        )
     }
 
     /// **Nur noch für den lokalen Backup-/Wiederherstellungs-Pfad**
@@ -525,7 +529,8 @@ enum SyncSnapshotImportService {
         )
         mergeKaufEintraege(
             snapshot.kaufEintraege, artikelZuordnung: artikelZuordnung, einkaufsvorgangZuordnung: einkaufsvorgangZuordnung,
-            geschaeftZuordnung: geschaeftZuordnung, abteilungZuordnung: abteilungZuordnung, peerGeraeteID: peerGeraeteID, context: context
+            geschaeftZuordnung: geschaeftZuordnung, abteilungZuordnung: abteilungZuordnung, produktZuordnung: produktZuordnung,
+            peerGeraeteID: peerGeraeteID, context: context
         )
         mergePreispunkte(
             snapshot.preispunkte, produktZuordnung: produktZuordnung,
@@ -541,7 +546,8 @@ enum SyncSnapshotImportService {
         )
         mergeGeschaeftBesuche(snapshot.geschaeftBesuche, geschaeftZuordnung: geschaeftZuordnung, context: context)
         mergeArtikelListenKaeufe(
-            snapshot.artikelListenKaeufe, artikelZuordnung: artikelZuordnung, listeZuordnung: listeZuordnung, context: context
+            snapshot.artikelListenKaeufe, artikelZuordnung: artikelZuordnung, produktZuordnung: produktZuordnung,
+            listeZuordnung: listeZuordnung, context: context
         )
     }
 
@@ -1242,9 +1248,9 @@ enum SyncSnapshotImportService {
             // symmetrische Entscheidung statt eines Vergleichs gegen den
             // unprotected Rohwert nur dieses einen Peers.
             ArtikelListenKaufService.vermerkeHinzugefuegtFallsNoetig(
-                artikel: artikel, einkaufsliste: liste, am: eintrag.erstelltAm, bekannt: &bekannt, context: context
+                artikel: artikel, produkt: produkt, einkaufsliste: liste, am: eintrag.erstelltAm, bekannt: &bekannt, context: context
             )
-            let schluessel = ArtikelListenKaufService.Schluessel(artikelID: artikel.id, einkaufslisteID: liste.id)
+            let schluessel = ArtikelListenKaufService.Schluessel(artikelID: artikel.id, produktID: produkt?.id, einkaufslisteID: liste.id)
             // Diagnose (Nutzerbericht 2026-08-10, Folgefund zu Abschnitt 53):
             // dieser Zweig war bisher komplett stumm — weder „übersprungen,
             // weil bereits abgehakt" noch „übersprungen, weil unauflösbar"
@@ -1252,7 +1258,7 @@ enum SyncSnapshotImportService {
             // beim vorherigen Nutzerbericht (fehlender Artikel nach frischem
             // Neuaufbau) den entscheidenden Hinweis geliefert hätte.
             guard !istBereitsAbgehakt(
-                artikel, aufListe: liste, alleVorgaenge: alleVorgaenge, istAusDerZeitGefallen: istAusDerZeitGefallen,
+                artikel, produkt: produkt, aufListe: liste, alleVorgaenge: alleVorgaenge, istAusDerZeitGefallen: istAusDerZeitGefallen,
                 bekannterEintrag: bekannt[schluessel]
             ) else {
                 if SyncDebugLogger.istAktiv {
@@ -1395,8 +1401,8 @@ enum SyncSnapshotImportService {
     /// Veto ohne Vergleichswert auf beiden Seiten, wie im Absatz oben
     /// beschrieben).
     private static func istBereitsAbgehakt(
-        _ artikel: Artikel, aufListe liste: Einkaufsliste, alleVorgaenge: [Einkaufsvorgang], istAusDerZeitGefallen: Bool,
-        bekannterEintrag: ArtikelListenKauf?
+        _ artikel: Artikel, produkt: Produkt? = nil, aufListe liste: Einkaufsliste, alleVorgaenge: [Einkaufsvorgang],
+        istAusDerZeitGefallen: Bool, bekannterEintrag: ArtikelListenKauf?
     ) -> Bool {
         // Gate bewusst auf `zuletztAbgehaktAm`, NICHT auf `bekannterEintrag`
         // selbst (Regressionsfund: ``vonSicherheitsnetzGeerbterEintragTaeuschtBeiWeitergabeKeineFrischeVor()``,
@@ -1415,7 +1421,8 @@ enum SyncSnapshotImportService {
             return !ArtikelListenKaufService.istOffen(hinzugefuegtAm: bekannterEintrag?.zuletztHinzugefuegtAm, abgehaktAm: zuletztAbgehaktAm)
         }
         let vorgaengeFuerListe = alleVorgaenge.filter { $0.einkaufsliste == liste }
-        guard vorgaengeFuerListe.contains(where: { $0.kaufEintraege.contains { $0.artikel == artikel } }) else { return false }
+        guard vorgaengeFuerListe.contains(where: { $0.kaufEintraege.contains { $0.artikel == artikel && $0.produkt == produkt } })
+        else { return false }
         guard istAusDerZeitGefallen else { return true }
         return vorgaengeFuerListe.contains { $0.endZeit == nil }
     }
@@ -1777,7 +1784,8 @@ enum SyncSnapshotImportService {
     @MainActor
     private static func mergeKaufEintraege(
         _ remote: [KaufEintragSnapshot], artikelZuordnung: [UUID: Artikel], einkaufsvorgangZuordnung: [UUID: Einkaufsvorgang],
-        geschaeftZuordnung: [UUID: Geschaeft], abteilungZuordnung: [UUID: Abteilung], peerGeraeteID: String, context: ModelContext
+        geschaeftZuordnung: [UUID: Geschaeft], abteilungZuordnung: [UUID: Abteilung], produktZuordnung: [UUID: Produkt],
+        peerGeraeteID: String, context: ModelContext
     ) {
         let geloeschteIDs = SyncTombstoneService.geloeschteIDs(art: SyncEntitaetsArt.kaufEintrag, context: context)
         let bekannteIDs = Set(((try? context.fetch(FetchDescriptor<KaufEintrag>())) ?? []).map(\.id))
@@ -1813,6 +1821,7 @@ enum SyncSnapshotImportService {
                 artikel: eintrag.artikelID.flatMap { artikelZuordnung[$0] },
                 geschaeft: eintrag.geschaeftID.flatMap { geschaeftZuordnung[$0] },
                 abteilung: eintrag.abteilungID.flatMap { abteilungZuordnung[$0] },
+                produkt: eintrag.produktID.flatMap { produktZuordnung[$0] },
                 menge: eintrag.menge,
                 datum: eintrag.datum,
                 ursprungsGeraeteID: peerGeraeteID
@@ -1868,8 +1877,20 @@ enum SyncSnapshotImportService {
                 // ``istBereitsAbgehakt(_:aufListe:alleVorgaenge:istAusDerZeitGefallen:bekannterEintrag:)``,
                 // hier nur umgekehrt aufgerufen (kein Materialisieren, sondern
                 // ein Löschen, wenn NICHT mehr offen).
-                let listenEintrag = einkaufsliste.eintrag(fuer: artikel)
-                let schluessel = ArtikelListenKaufService.Schluessel(artikelID: artikel.id, einkaufslisteID: einkaufsliste.id)
+                //
+                // **Produkt-Vergleich (GitHub #172, „Batterien verschwinden"):**
+                // vor diesem Fix suchte `eintrag(fuer: artikel)` (ohne
+                // `produkt`) den Listeneintrag rein artikelweit — der Kauf
+                // EINES Produkts eines generischen Artikels löschte dadurch
+                // den noch offenen Listeneintrag eines komplett ANDEREN
+                // Produkts desselben Artikels. `neuer.produkt` ist jetzt Teil
+                // des `KaufEintrag`s selbst (siehe dessen Typ-Doku) und macht
+                // sowohl die Suche als auch den `zuletztHinzugefuegtAm`-Schlüssel
+                // produktscharf.
+                let listenEintrag = einkaufsliste.eintrag(fuer: artikel, produkt: neuer.produkt)
+                let schluessel = ArtikelListenKaufService.Schluessel(
+                    artikelID: artikel.id, produktID: neuer.produkt?.id, einkaufslisteID: einkaufsliste.id
+                )
                 let zuletztHinzugefuegtAm = bekannteArtikelListenEintraege[schluessel]?.zuletztHinzugefuegtAm
                 let listenEintragPasstZeitlich = !ArtikelListenKaufService.istOffen(
                     hinzugefuegtAm: zuletztHinzugefuegtAm, abgehaktAm: eintrag.datum
@@ -1888,13 +1909,14 @@ enum SyncSnapshotImportService {
                     // einem danach erneut angelegten Eintrag.
                     SyncDebugLogger.log(
                         .kaufEintragMergeListenEintragEntfernt,
-                        details: "artikel=\(artikel.name) liste=\(einkaufsliste.name) listenEintragGefunden=\(listenEintrag != nil) "
+                        details: "artikel=\(artikel.name) produkt=\(neuer.produkt?.name ?? "-") liste=\(einkaufsliste.name) "
+                            + "listenEintragGefunden=\(listenEintrag != nil) "
                             + "entfernt=\(listenEintrag != nil && listenEintragPasstZeitlich) "
                             + "zuletztHinzugefuegtAm=\(zuletztHinzugefuegtAm.map { "\($0)" } ?? "-") kaufDatum=\(eintrag.datum)"
                     )
                 }
                 ArtikelListenKaufService.vermerkeAbgehaktFallsNoetig(
-                    artikel: artikel, einkaufsliste: einkaufsliste, am: eintrag.datum,
+                    artikel: artikel, produkt: neuer.produkt, einkaufsliste: einkaufsliste, am: eintrag.datum,
                     bekannt: &bekannteArtikelListenEintraege, context: context
                 )
             }
@@ -2091,14 +2113,16 @@ enum SyncSnapshotImportService {
     /// nicht anzutasten.
     @MainActor
     private static func mergeArtikelListenKaeufe(
-        _ remote: [ArtikelListenKaufSnapshot], artikelZuordnung: [UUID: Artikel], listeZuordnung: [UUID: Einkaufsliste],
-        context: ModelContext
+        _ remote: [ArtikelListenKaufSnapshot], artikelZuordnung: [UUID: Artikel], produktZuordnung: [UUID: Produkt],
+        listeZuordnung: [UUID: Einkaufsliste], context: ModelContext
     ) {
         var bekannt = ArtikelListenKaufService.alleEintraege(context: context)
         for eintrag in remote {
             guard let artikel = artikelZuordnung[eintrag.artikelID], let einkaufsliste = listeZuordnung[eintrag.einkaufslisteID] else { continue }
+            let produkt = eintrag.produktID.flatMap { produktZuordnung[$0] }
             ArtikelListenKaufService.vermerkeAbgehaktFallsNoetig(
-                artikel: artikel, einkaufsliste: einkaufsliste, am: eintrag.zuletztAbgehaktAm, bekannt: &bekannt, context: context
+                artikel: artikel, produkt: produkt, einkaufsliste: einkaufsliste, am: eintrag.zuletztAbgehaktAm,
+                bekannt: &bekannt, context: context
             )
             // Symmetrisch zur obigen Zeile (Architektur-Review 2026-08-10,
             // siehe ``ArtikelListenKauf/zuletztHinzugefuegtAm``-Typ-Doku) —
@@ -2107,7 +2131,8 @@ enum SyncSnapshotImportService {
             // (nur wenn der Artikel beim Peer GERADE aktuell offen ist),
             // nicht direkt über diesen eigenen, dauerhaften Sync-Kanal.
             ArtikelListenKaufService.vermerkeHinzugefuegtFallsNoetig(
-                artikel: artikel, einkaufsliste: einkaufsliste, am: eintrag.zuletztHinzugefuegtAm, bekannt: &bekannt, context: context
+                artikel: artikel, produkt: produkt, einkaufsliste: einkaufsliste, am: eintrag.zuletztHinzugefuegtAm,
+                bekannt: &bekannt, context: context
             )
         }
     }

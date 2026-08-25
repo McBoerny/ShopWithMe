@@ -26,6 +26,20 @@ final class KaufEintrag {
     @Attribute(.unique) var id: UUID
     /// Der gekaufte Artikel (kann `nil` werden, wenn der Artikel später gelöscht wird).
     var artikel: Artikel?
+    /// Das konkrete Produkt, falls beim Abhaken eines von mehreren Produkten
+    /// des Artikels gewählt war (analog ``EinkaufslistenEintrag/produkt``) —
+    /// `nil` bei genereller Auswahl ohne Produktwahl. **Root Cause GitHub
+    /// #172 („Batterien verschwinden"):** bis zu diesem Feld kannte
+    /// `KaufEintrag` überhaupt kein Produkt (bewusste Entscheidung aus GitHub
+    /// #76, damals nur bezogen auf die inzwischen nach ``Preispunkt``
+    /// verschobene Preishistorien-Rolle) — jeder „schon gekauft"-Abgleich
+    /// (Dedupe in ``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:produkt:am:context:ursprungsGeraeteID:abteilung:geschaeft:)``,
+    /// das ``ArtikelListenKauf``-Sicherheitsnetz, der Bereich-C-Merge in
+    /// ``SyncSnapshotImportService``) konnte dadurch zwei unterschiedliche
+    /// Produkte desselben generischen Artikels nicht auseinanderhalten: der
+    /// Kauf des einen Produkts löschte den noch offenen Listeneintrag eines
+    /// komplett anderen Produkts. Additiv-optional, keine Migration nötig.
+    var produkt: Produkt?
     /// Der Einkaufsvorgang, zu dem dieser Kauf gehört.
     var einkaufsvorgang: Einkaufsvorgang?
     /// Das Geschäft, in dem der Kauf stattfand.
@@ -78,6 +92,7 @@ final class KaufEintrag {
         artikel: Artikel?,
         geschaeft: Geschaeft?,
         abteilung: Abteilung? = nil,
+        produkt: Produkt? = nil,
         preis: Decimal? = nil,
         menge: Double = 1,
         datum: Date = Date(),
@@ -87,6 +102,7 @@ final class KaufEintrag {
         self.id = UUID()
         self.artikel = artikel
         self.geschaeft = geschaeft
+        self.produkt = produkt
         self.abteilung = abteilung
         self.artikelNameSnapshot = artikel?.name ?? ""
         self.geschaeftNameSnapshot = geschaeft?.name ?? ""

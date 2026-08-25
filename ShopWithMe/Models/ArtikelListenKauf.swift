@@ -76,15 +76,29 @@ final class ArtikelListenKauf {
     /// Eindeutige Kennung.
     var id: UUID
     var artikel: Artikel?
+    /// Das konkrete Produkt, falls die Fakten dieser Zeile sich auf ein
+    /// bestimmtes Produkt des Artikels beziehen (analog
+    /// ``EinkaufslistenEintrag/produkt``) — `nil` bei genereller Auswahl ohne
+    /// Produktwahl. **GitHub #172:** vor diesem Feld war dieser ganze Typ rein
+    /// artikelweit geschlüsselt — der Kauf EINES Produkts eines generischen
+    /// Artikels (z.B. „Batterie") setzte dadurch das Sicherheitsnetz für ALLE
+    /// anderen, noch offenen Produkte desselben Artikels mit zurück und ließ
+    /// deren Listeneinträge beim nächsten Merge fälschlich als „schon
+    /// gekauft" verschwinden. Additiv-optional, keine Migration nötig.
+    var produkt: Produkt?
     var einkaufsliste: Einkaufsliste?
     /// Siehe Typ-Doku „``zuletztAbgehaktAm``" oben.
     var zuletztAbgehaktAm: Date?
     /// Siehe Typ-Doku „``zuletztHinzugefuegtAm``" oben.
     var zuletztHinzugefuegtAm: Date?
 
-    init(artikel: Artikel?, einkaufsliste: Einkaufsliste?, zuletztAbgehaktAm: Date? = nil, zuletztHinzugefuegtAm: Date? = nil) {
+    init(
+        artikel: Artikel?, produkt: Produkt? = nil, einkaufsliste: Einkaufsliste?,
+        zuletztAbgehaktAm: Date? = nil, zuletztHinzugefuegtAm: Date? = nil
+    ) {
         self.id = UUID()
         self.artikel = artikel
+        self.produkt = produkt
         self.einkaufsliste = einkaufsliste
         self.zuletztAbgehaktAm = zuletztAbgehaktAm
         self.zuletztHinzugefuegtAm = zuletztHinzugefuegtAm
@@ -99,39 +113,60 @@ enum ArtikelListenKaufService {
     /// verankert sind (analog ``SyncEventService/PaarSchluessel``).
     struct Schluessel: Hashable {
         let artikelID: UUID
+        /// `nil` bei genereller Auswahl ohne Produktwahl — siehe
+        /// ``ArtikelListenKauf/produkt``. Ein `nil`-Schlüssel ist ein
+        /// eigener, von jedem konkreten Produkt-Schlüssel unterschiedener
+        /// Eimer: zwei Personen, die BEIDE ohne Produktwahl hinzufügen,
+        /// teilen sich weiterhin bewusst dieselbe Zeile (so ist auch
+        /// ``Einkaufsliste/eintrag(fuer:produkt:)`` angelegt); erst ein
+        /// tatsächlich gewähltes, unterschiedliches ``Produkt`` trennt sie.
+        let produktID: UUID?
         let einkaufslisteID: UUID
     }
 
-    /// Ob `artikel` jemals von `einkaufsliste` abgehakt wurde.
-    static func istJemalsAbgehakt(artikel: Artikel, einkaufsliste: Einkaufsliste, context: ModelContext) -> Bool {
-        bestehenderEintrag(artikel: artikel, einkaufsliste: einkaufsliste, context: context) != nil
+    /// Ob `(artikel, produkt)` jemals von `einkaufsliste` abgehakt wurde.
+    static func istJemalsAbgehakt(artikel: Artikel, produkt: Produkt? = nil, einkaufsliste: Einkaufsliste, context: ModelContext) -> Bool {
+        bestehenderEintrag(artikel: artikel, produkt: produkt, einkaufsliste: einkaufsliste, context: context) != nil
     }
 
-    /// Der bestehende Eintrag für dieses Paar, falls vorhanden — `nil`-Limit
-    /// 1, da (Artikel, Einkaufsliste) faktisch eindeutig ist (siehe
+    /// Der bestehende Eintrag für dieses Tripel, falls vorhanden — `nil`-Limit
+    /// 1, da (Artikel, Produkt, Einkaufsliste) faktisch eindeutig ist (siehe
     /// `vermerkeAbgehakt`/`vermerkeAbgehaktFallsNoetig`, die nie eine zweite
-    /// Zeile für dasselbe Paar anlegen).
-    private static func bestehenderEintrag(artikel: Artikel, einkaufsliste: Einkaufsliste, context: ModelContext) -> ArtikelListenKauf? {
+    /// Zeile für dasselbe Tripel anlegen).
+    private static func bestehenderEintrag(
+        artikel: Artikel, produkt: Produkt?, einkaufsliste: Einkaufsliste, context: ModelContext
+    ) -> ArtikelListenKauf? {
         let artikelID = artikel.persistentModelID
+        let produktID = produkt?.persistentModelID
         let listeID = einkaufsliste.persistentModelID
         var deskriptor = FetchDescriptor<ArtikelListenKauf>(
-            predicate: #Predicate { $0.artikel?.persistentModelID == artikelID && $0.einkaufsliste?.persistentModelID == listeID }
+            predicate: #Predicate {
+                $0.artikel?.persistentModelID == artikelID && $0.produkt?.persistentModelID == produktID
+                    && $0.einkaufsliste?.persistentModelID == listeID
+            }
         )
         deskriptor.fetchLimit = 1
         if let exakt = (try? context.fetch(deskriptor))?.first { return exakt }
-        return bestehenderEintragNamensgleich(artikel: artikel, einkaufsliste: einkaufsliste, context: context)
+        return bestehenderEintragNamensgleich(artikel: artikel, produkt: produkt, einkaufsliste: einkaufsliste, context: context)
     }
 
     /// Namens-Backstop (siehe ``Einkaufsliste/eintragNamensgleich(fuer:produkt:)``
     /// für die ausführliche Begründung): findet einen bestehenden Eintrag für
-    /// dieselbe Liste, dessen ``ArtikelListenKauf/artikel`` zwar ein ANDERES
-    /// lokales Objekt als `artikel` ist, aber denselben Namen trägt (case-
-    /// insensitiv) — schützt vor einer gesplitteten „bereits hinzugefügt"/
-    /// „bereits abgehakt"-Historie für dieselbe logische Position, falls
-    /// Bereich-A-Event-Anwendung und Bereich-B-„Sicherheitsnetz" im selben
-    /// Zyklus denselben Artikel auf zwei noch nicht per Alias
-    /// zusammengeführte lokale ``Artikel``-Objekte auflösen.
-    private static func bestehenderEintragNamensgleich(artikel: Artikel, einkaufsliste: Einkaufsliste, context: ModelContext) -> ArtikelListenKauf? {
+    /// dieselbe Liste UND dasselbe Produkt, dessen ``ArtikelListenKauf/artikel``
+    /// zwar ein ANDERES lokales Objekt als `artikel` ist, aber denselben Namen
+    /// trägt (case-insensitiv) — schützt vor einer gesplitteten „bereits
+    /// hinzugefügt"/„bereits abgehakt"-Historie für dieselbe logische
+    /// Position, falls Bereich-A-Event-Anwendung und Bereich-B-„Sicherheitsnetz"
+    /// im selben Zyklus denselben Artikel auf zwei noch nicht per Alias
+    /// zusammengeführte lokale ``Artikel``-Objekte auflösen. Der Produkt-
+    /// Vergleich läuft bewusst über exakte Objektgleichheit statt eines
+    /// eigenen Namens-Backstops für ``Produkt`` — ein noch nicht per Alias
+    /// zusammengeführtes Produkt-Duplikat legt im schlimmsten Fall einmalig
+    /// eine zusätzliche Zeile an (harmlos), statt wie vor GitHub #172 quer
+    /// über unterschiedliche Produkte hinweg fälschlich zu blockieren.
+    private static func bestehenderEintragNamensgleich(
+        artikel: Artikel, produkt: Produkt?, einkaufsliste: Einkaufsliste, context: ModelContext
+    ) -> ArtikelListenKauf? {
         let listeID = einkaufsliste.persistentModelID
         let deskriptor = FetchDescriptor<ArtikelListenKauf>(predicate: #Predicate { $0.einkaufsliste?.persistentModelID == listeID })
         guard let kandidaten = try? context.fetch(deskriptor) else { return nil }
@@ -144,7 +179,9 @@ enum ArtikelListenKaufService {
         // Menge tatsächlich noch existierender Artikel-IDs prüfen, bevor
         // `.name` gelesen wird (dasselbe Muster wie ``alleGueltigenEintraege``).
         let gueltigeArtikelIDs = Set(((try? context.fetch(FetchDescriptor<Artikel>())) ?? []).map(\.persistentModelID))
+        let produktID = produkt?.persistentModelID
         return kandidaten.first {
+            guard $0.produkt?.persistentModelID == produktID else { return false }
             guard let kandidatArtikel = $0.artikel, gueltigeArtikelIDs.contains(kandidatArtikel.persistentModelID) else { return false }
             return kandidatArtikel.name.localizedCaseInsensitiveCompare(artikel.name) == .orderedSame
         }
@@ -158,14 +195,16 @@ enum ArtikelListenKaufService {
     /// Einzelaufruf-Fall (ein Abhaken = eine Aktualisierung). Für Merge-Batches
     /// mit potenziell mehreren Einträgen desselben Paares siehe
     /// ``vermerkeAbgehaktFallsNoetig(artikel:einkaufsliste:am:bekannt:context:)``.
-    static func vermerkeAbgehakt(artikel: Artikel, einkaufsliste: Einkaufsliste, am zeitpunkt: Date = Date(), context: ModelContext) {
-        if let bestehender = bestehenderEintrag(artikel: artikel, einkaufsliste: einkaufsliste, context: context) {
+    static func vermerkeAbgehakt(
+        artikel: Artikel, produkt: Produkt? = nil, einkaufsliste: Einkaufsliste, am zeitpunkt: Date = Date(), context: ModelContext
+    ) {
+        if let bestehender = bestehenderEintrag(artikel: artikel, produkt: produkt, einkaufsliste: einkaufsliste, context: context) {
             if bestehender.zuletztAbgehaktAm == nil || zeitpunkt > bestehender.zuletztAbgehaktAm! {
                 bestehender.zuletztAbgehaktAm = zeitpunkt
             }
             return
         }
-        context.insert(ArtikelListenKauf(artikel: artikel, einkaufsliste: einkaufsliste, zuletztAbgehaktAm: zeitpunkt))
+        context.insert(ArtikelListenKauf(artikel: artikel, produkt: produkt, einkaufsliste: einkaufsliste, zuletztAbgehaktAm: zeitpunkt))
     }
 
     /// Wie ``vermerkeAbgehakt(artikel:einkaufsliste:am:context:)``, hält aber
@@ -181,17 +220,17 @@ enum ArtikelListenKaufService {
     /// neuen Eintrag ohne `zuletztAbgehaktAm` an bzw. lässt einen bestehenden
     /// unverändert — verwässert einen bereits bekannten Zeitstempel nie.
     static func vermerkeAbgehaktFallsNoetig(
-        artikel: Artikel, einkaufsliste: Einkaufsliste, am zeitpunkt: Date?,
+        artikel: Artikel, produkt: Produkt? = nil, einkaufsliste: Einkaufsliste, am zeitpunkt: Date?,
         bekannt: inout [Schluessel: ArtikelListenKauf], context: ModelContext
     ) {
-        let schluessel = Schluessel(artikelID: artikel.id, einkaufslisteID: einkaufsliste.id)
+        let schluessel = Schluessel(artikelID: artikel.id, produktID: produkt?.id, einkaufslisteID: einkaufsliste.id)
         if let bestehender = bekannt[schluessel] {
             if let zeitpunkt, bestehender.zuletztAbgehaktAm == nil || zeitpunkt > bestehender.zuletztAbgehaktAm! {
                 bestehender.zuletztAbgehaktAm = zeitpunkt
             }
             return
         }
-        let neu = ArtikelListenKauf(artikel: artikel, einkaufsliste: einkaufsliste, zuletztAbgehaktAm: zeitpunkt)
+        let neu = ArtikelListenKauf(artikel: artikel, produkt: produkt, einkaufsliste: einkaufsliste, zuletztAbgehaktAm: zeitpunkt)
         context.insert(neu)
         bekannt[schluessel] = neu
     }
@@ -201,14 +240,16 @@ enum ArtikelListenKaufService {
     /// Begründung. Vermerkt dauerhaft, dass `artikel` auf `einkaufsliste`
     /// (neu oder erneut) gesetzt wurde; bewegt `zuletztHinzugefuegtAm` wie dort
     /// nur nach VORNE, nie zurück.
-    static func vermerkeHinzugefuegt(artikel: Artikel, einkaufsliste: Einkaufsliste, am zeitpunkt: Date = Date(), context: ModelContext) {
-        if let bestehender = bestehenderEintrag(artikel: artikel, einkaufsliste: einkaufsliste, context: context) {
+    static func vermerkeHinzugefuegt(
+        artikel: Artikel, produkt: Produkt? = nil, einkaufsliste: Einkaufsliste, am zeitpunkt: Date = Date(), context: ModelContext
+    ) {
+        if let bestehender = bestehenderEintrag(artikel: artikel, produkt: produkt, einkaufsliste: einkaufsliste, context: context) {
             if bestehender.zuletztHinzugefuegtAm == nil || zeitpunkt > bestehender.zuletztHinzugefuegtAm! {
                 bestehender.zuletztHinzugefuegtAm = zeitpunkt
             }
             return
         }
-        context.insert(ArtikelListenKauf(artikel: artikel, einkaufsliste: einkaufsliste, zuletztHinzugefuegtAm: zeitpunkt))
+        context.insert(ArtikelListenKauf(artikel: artikel, produkt: produkt, einkaufsliste: einkaufsliste, zuletztHinzugefuegtAm: zeitpunkt))
     }
 
     /// Batch-Variante von ``vermerkeHinzugefuegt(artikel:einkaufsliste:am:context:)``,
@@ -219,18 +260,18 @@ enum ArtikelListenKaufService {
     /// keinen neuen an (nichts Neues zu vermerken) — verwässert einen bereits
     /// bekannten Zeitstempel nie.
     static func vermerkeHinzugefuegtFallsNoetig(
-        artikel: Artikel, einkaufsliste: Einkaufsliste, am zeitpunkt: Date?,
+        artikel: Artikel, produkt: Produkt? = nil, einkaufsliste: Einkaufsliste, am zeitpunkt: Date?,
         bekannt: inout [Schluessel: ArtikelListenKauf], context: ModelContext
     ) {
         guard let zeitpunkt else { return }
-        let schluessel = Schluessel(artikelID: artikel.id, einkaufslisteID: einkaufsliste.id)
+        let schluessel = Schluessel(artikelID: artikel.id, produktID: produkt?.id, einkaufslisteID: einkaufsliste.id)
         if let bestehender = bekannt[schluessel] {
             if bestehender.zuletztHinzugefuegtAm == nil || zeitpunkt > bestehender.zuletztHinzugefuegtAm! {
                 bestehender.zuletztHinzugefuegtAm = zeitpunkt
             }
             return
         }
-        let neu = ArtikelListenKauf(artikel: artikel, einkaufsliste: einkaufsliste, zuletztHinzugefuegtAm: zeitpunkt)
+        let neu = ArtikelListenKauf(artikel: artikel, produkt: produkt, einkaufsliste: einkaufsliste, zuletztHinzugefuegtAm: zeitpunkt)
         context.insert(neu)
         bekannt[schluessel] = neu
     }
@@ -283,13 +324,17 @@ enum ArtikelListenKaufService {
     static func alleEintraege(context: ModelContext) -> [Schluessel: ArtikelListenKauf] {
         let gueltigeArtikelIDs = Set(((try? context.fetch(FetchDescriptor<Artikel>())) ?? []).map(\.persistentModelID))
         let gueltigeEinkaufslistenIDs = Set(((try? context.fetch(FetchDescriptor<Einkaufsliste>())) ?? []).map(\.persistentModelID))
+        // Wie `artikel`/`einkaufsliste` unten ohne `inverse`-Deklaration
+        // referenziert, also derselbe Baumel-Schutz vor dem Lesen von `.id`.
+        let gueltigeProduktIDs = Set(((try? context.fetch(FetchDescriptor<Produkt>())) ?? []).map(\.persistentModelID))
         let alle = (try? context.fetch(FetchDescriptor<ArtikelListenKauf>())) ?? []
         var ergebnis: [Schluessel: ArtikelListenKauf] = [:]
         for eintrag in alle {
             guard let artikel = eintrag.artikel, gueltigeArtikelIDs.contains(artikel.persistentModelID),
                   let einkaufsliste = eintrag.einkaufsliste, gueltigeEinkaufslistenIDs.contains(einkaufsliste.persistentModelID)
             else { continue }
-            ergebnis[Schluessel(artikelID: artikel.id, einkaufslisteID: einkaufsliste.id)] = eintrag
+            if let produkt = eintrag.produkt, !gueltigeProduktIDs.contains(produkt.persistentModelID) { continue }
+            ergebnis[Schluessel(artikelID: artikel.id, produktID: eintrag.produkt?.id, einkaufslisteID: einkaufsliste.id)] = eintrag
         }
         return ergebnis
     }
@@ -311,12 +356,14 @@ enum ArtikelListenKaufService {
     private static func alleGueltigenEintraege(context: ModelContext) -> [(Schluessel, Date?)] {
         let gueltigeArtikelIDs = Set(((try? context.fetch(FetchDescriptor<Artikel>())) ?? []).map(\.persistentModelID))
         let gueltigeEinkaufslistenIDs = Set(((try? context.fetch(FetchDescriptor<Einkaufsliste>())) ?? []).map(\.persistentModelID))
+        let gueltigeProduktIDs = Set(((try? context.fetch(FetchDescriptor<Produkt>())) ?? []).map(\.persistentModelID))
         let alle = (try? context.fetch(FetchDescriptor<ArtikelListenKauf>())) ?? []
         return alle.compactMap { eintrag -> (Schluessel, Date?)? in
             guard let artikel = eintrag.artikel, gueltigeArtikelIDs.contains(artikel.persistentModelID),
                   let einkaufsliste = eintrag.einkaufsliste, gueltigeEinkaufslistenIDs.contains(einkaufsliste.persistentModelID)
             else { return nil }
-            return (Schluessel(artikelID: artikel.id, einkaufslisteID: einkaufsliste.id), eintrag.zuletztAbgehaktAm)
+            if let produkt = eintrag.produkt, !gueltigeProduktIDs.contains(produkt.persistentModelID) { return nil }
+            return (Schluessel(artikelID: artikel.id, produktID: eintrag.produkt?.id, einkaufslisteID: einkaufsliste.id), eintrag.zuletztAbgehaktAm)
         }
     }
 }
