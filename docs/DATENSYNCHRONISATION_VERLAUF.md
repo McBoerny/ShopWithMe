@@ -4369,3 +4369,54 @@ produktscharfe Zeilen umstellen), nicht Teil dieses Fixes.
 (App-Target) sauber, `xcodebuild build-for-testing` (Test-Target inkl.
 UI-Tests) sauber, keine neuen Warnungen. Kein automatisierter Testlauf durch
 die KI (Nutzer-Vorgabe) — noch nicht im Mehrgeräte-Betrieb nachverifiziert.
+
+## 66. GitHub #175: Mehrgeräte-Nachverifikation von Abschnitt 64/65 deckt Artikel-Dubletten nach Geräte-Neuaufbau auf
+
+**Symptom (Nutzerbericht 2026-08-25):** genau die in Abschnitt 64/65 als
+„noch nicht im Mehrgeräte-Betrieb nachverifiziert" offen gelassene Probe —
+zwei Geräte kaufen gemeinsam an derselben Liste ein — zeigte nach einem
+Geräte-Neuaufbau Artikel doppelt/wiederbelebt auf der offenen Liste. Zwei
+angehängte Test-Läufe (`Backup DB Debug*.log`, `sync-debug*.log`).
+
+**Root Cause, per Log-Korrelation rekonstruiert:** Im ersten Testlauf schloss
+das „Backup"-Gerät um 10:00:13 UTC seinen eigenen Einkauf ab — „Einkaufsliste"
+fiel korrekt auf 0 offene Artikel. Um 10:01:27 UTC wurde ein zweiter,
+zeitgleich vom Peer „Bernhard" an derselben Liste abgeschlossener
+Einkaufsvorgang gemerged (per Alias auf einen bereits lokal existierenden
+Vorgang abgebildet) — direkt danach sprang „Einkaufsliste" von 0 auf 23,
+ohne dass für diese 23 Artikel ein `sicherheitsnetz_uebersprungen`-Log
+auftauchte. Bis zum Ende des aufgezeichneten Zyklus (mehrere weitere
+Sync-Durchläufe später) blieb der Stand unverändert bei 23 — keine
+Selbstheilung, obwohl genau die in Abschnitt 4.7 („Bewusst in Kauf
+genommener Randfall") beschriebene Selbstheilung das eigentlich hätte
+auflösen sollen.
+
+Ursache: `SyncSnapshotImportService.mergeKaufEintraege` löscht den
+zugehörigen offenen `EinkaufslistenEintrag`, sobald es einen neuen
+`KaufEintrag` eines Peers importiert (Abschnitt 4.7, Nachtrag 2026-08-10).
+Diese Löschung stand aber komplett innerhalb des
+`!bekannteIDs.contains(eintrag.id)`-Zweigs — lief also NUR beim
+allerersten Auftauchen eines gegebenen `KaufEintrag`s. Da beide Geräte in
+diesem Testlauf schon zuvor (in einem früheren Zyklus) voneinander erfahren
+hatten, war der jeweils andere Kauf zum Zeitpunkt der Resurrektion bereits
+`bekannt` — die Aufräumfunktion sprang für jeden weiteren Zyklus komplett,
+inklusive der Löschung, per `continue` ganz oben in der Schleife. Der als
+„selbst auflösender Randfall" akzeptierte Kompromiss aus Abschnitt 4.7 setzt
+implizit voraus, dass diese Aufräumung bei jedem weiteren Zyklus erneut
+liefe — genau das war nicht der Fall.
+
+**Fix:** `mergeKaufEintraege` trennt jetzt „lege ich einen neuen lokalen
+`KaufEintrag` an" (weiterhin `bekannteIDs`-gegated, damit keine ID doppelt
+eingefügt wird) von „räume ich den zugehörigen offenen Listeneintrag auf"
+(läuft jetzt für JEDEN auflösbaren Remote-Eintrag, unabhängig davon, ob der
+`KaufEintrag` selbst neu ist). Beide Teilschritte sind für sich idempotent —
+ein bereits fehlender Listeneintrag löst kein erneutes Löschen aus,
+`ArtikelListenKaufService.vermerkeAbgehaktFallsNoetig` bewegt den
+Vergleichszeitstempel nur nach vorne, nie zurück. Laufzeit unkritisch: die
+`remote`-Liste ist wie `bekannteIDs` durch `KaufEintragBereinigungService`s
+48h-Karenzzeit begrenzt (`SyncKaeufeExportService` exportiert je Peer nur
+dessen eigene, noch nicht bereinigte `KaufEintrag`e), nicht durch die volle
+Kaufhistorie.
+
+**Verifikationsstand (2026-08-25):** `xcodegen generate` + `xcodebuild build`
+— siehe Checkpoint-Commit für den aktuellen Stand.

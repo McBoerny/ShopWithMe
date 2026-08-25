@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.17 (Build 367) — Sync: Artikel-Dubletten nach Geräte-Neuaufbau behoben (#175)
+
+- **#175:** Meldete sich ein Gerät neu an (Geräte-Neuaufbau), tauchten bereits
+  gekaufte Artikel wieder doppelt/offen auf der Liste auf. Ursache:
+  `mergeKaufEintraege`s Aufräumung des zugehörigen offenen Listeneintrags lief
+  nur beim allerersten Auftauchen eines `KaufEintrag`s — war der Kauf bereits
+  bekannt, lief eine spätere Resurrektion (durch einen veralteten
+  Bereich-B-Snapshot eines Peers) nie mehr auf. Neuanlage und Aufräumung sind
+  jetzt entkoppelt; die Aufräumung läuft für jeden auflösbaren Remote-Eintrag,
+  nicht nur für neu angelegte. Details:
+  `docs/DATENSYNCHRONISATION_VERLAUF.md` §66.
+
 ## v0.17 (Build 365) — Abteilung hinzufügen: bereits aktive Abteilungen bleiben sichtbar (#174)
 
 - **#174:** „Abteilung hinzufügen" (Geschäft-Detailansicht) zeigte bisher nur

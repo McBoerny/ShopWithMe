@@ -2579,6 +2579,75 @@ struct SyncSnapshotImportServiceTests {
         #expect(alle.contains { $0.id == neueID })
     }
 
+    /// Regressionstest für den Live-Fund aus `docs/DATENSYNCHRONISATION_VERLAUF.md`
+    /// Abschnitt 66 (GitHub #175): Anders als ``kaufEintragMergeUebersprintBereitsBekannteEintraege``
+    /// oben (die NEUANLAGE eines bereits bekannten `KaufEintrag`s bleibt zu
+    /// Recht übersprungen) muss die Listeneintrag-Aufräumung darunter auch
+    /// für einen bereits bekannten `KaufEintrag` laufen — sonst bleibt eine
+    /// spätere Resurrektion des offenen Listeneintrags (z.B. durch einen
+    /// veralteten Bereich-B-Snapshot eines anderen Peers oder den separaten
+    /// Multipeer-Catch-up-Kanal, GitHub #125) dauerhaft bestehen, obwohl der
+    /// Kauf längst bekannt ist. Simuliert die Resurrektion hier bewusst durch
+    /// direktes Einfügen (isoliert die Verantwortung von `mergeKaufEintraege`
+    /// von der des Resurrektions-Auslösers selbst).
+    @Test
+    func mergeKaufEintraegeRaeumtResurrektionAuchBeiBereitsBekanntemKaufAuf() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let syncOrdner = macheTempSyncOrdner()
+        try SyncOrdnerService.ordnerFestlegen(syncOrdner)
+        defer { SyncOrdnerService.ordnerEntfernen() }
+
+        let liste = Einkaufsliste(name: "Einkaufsliste")
+        context.insert(liste)
+        let milch = Artikel(name: "Milch", symbolName: "drop.fill", farbeHex: "#34C759")
+        context.insert(milch)
+        try context.save()
+
+        let vorgangID = UUID()
+        var snapshot = leererSnapshot(geraeteID: "peer-a")
+        snapshot.artikel = [
+            ArtikelSnapshot(
+                id: milch.id, name: "Milch", symbolName: "drop.fill", farbeHex: "#34C759",
+                abteilungIDs: [], notiz: nil, einheit: "stueck", mengenSchritt: 1, erstelltAm: Date()
+            ),
+        ]
+        snapshot.einkaufslisten = [EinkaufslisteSnapshot(id: liste.id, name: "Einkaufsliste", erstelltAm: liste.erstelltAm)]
+        snapshot.einkaufsvorgaenge = [
+            EinkaufsvorgangSnapshot(id: vorgangID, geschaeftID: nil, einkaufslisteID: liste.id, startZeit: Date(), endZeit: Date()),
+        ]
+        snapshot.kaufEintraege = [
+            KaufEintragSnapshot(
+                id: UUID(), artikelID: milch.id, einkaufsvorgangID: vorgangID, geschaeftID: nil, abteilungID: nil,
+                artikelNameSnapshot: "Milch", geschaeftNameSnapshot: "",
+                datum: Date(), menge: 1, abteilungBesuchsIndex: nil
+            ),
+        ]
+        try schreibeFremdenSnapshot(snapshot, fremdeGeraeteID: "peer-a", in: syncOrdner)
+
+        // Erster Zyklus: Kauf wird bekannt, ArtikelListenKauf-Faktum gesetzt —
+        // noch kein Listeneintrag vorhanden, also nichts aufzuräumen.
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+        #expect(try context.fetch(FetchDescriptor<KaufEintrag>()).count == 1)
+        #expect(liste.eintrag(fuer: milch) == nil)
+
+        // Simuliert eine Resurrektion NACH diesem ersten Zyklus — der
+        // KaufEintrag ist zu diesem Zeitpunkt bereits lokal bekannt.
+        let resurrektion = EinkaufslistenEintrag(einkaufsliste: liste, artikel: milch, menge: 1)
+        context.insert(resurrektion)
+        try context.save()
+        #expect(liste.eintrag(fuer: milch) != nil)
+
+        // Zweiter Zyklus: derselbe (bereits bekannte) KaufEintrag wird erneut
+        // aus demselben Peer-Ordner gelesen (`kaeufe/`-Dateien bleiben bis zur
+        // 48h-Karenzzeit bestehen, siehe `SyncKaeufeExportService`-Typ-Doku)
+        // — die Aufräumung muss trotzdem erneut laufen.
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
+
+        #expect(liste.eintrag(fuer: milch) == nil)
+        #expect(try context.fetch(FetchDescriptor<KaufEintrag>()).count == 1)
+    }
+
     /// Wie ``kaufEintragMergeUebersprintBereitsBekannteEintraege``, für
     /// ``mergePreispunkte``.
     @Test

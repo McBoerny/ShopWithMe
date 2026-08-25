@@ -1866,6 +1866,37 @@ enum SyncSnapshotImportService {
     /// die lokale `KaufEintrag`-Tabelle durch die 48h-Karenzzeit + tägliche
     /// Automatik klein, unabhängig davon, ob ein Eintrag lokal oder per Sync
     /// entstanden ist.
+    ///
+    /// **Live-Fund (2026-08-25, gleichzeitiger Einkauf zweier Geräte an
+    /// derselben Liste): `bekannteIDs` durfte nur die NEUANLAGE des
+    /// `KaufEintrag`s gaten, nicht die Listeneintrag-Aufräumung darunter.**
+    /// Bis zu diesem Fix stand `guard !bekannteIDs.contains(eintrag.id) else
+    /// { continue }` ganz oben in der Schleife — ein bereits (aus einem
+    /// FRÜHEREN Zyklus) bekannter `KaufEintrag` übersprang dadurch die
+    /// komplette restliche Funktion, inklusive der Listeneintrag-Löschung
+    /// weiter unten. Der als „selbst auflösender Randfall" dokumentierte
+    /// Aufrufreihenfolge-Kompromiss (`docs/DATENSYNCHRONISATION.md` §4.7,
+    /// „Bewusst in Kauf genommener Randfall") stimmt aber nur, SOLANGE dieser
+    /// Zweig hier bei jedem weiteren Zyklus erneut liefe: `mergeEinkaufslistenEintraege`
+    /// (Bereich B, läuft VOR dieser Funktion) kann einen längst gekauften
+    /// Artikel jederzeit erneut fälschlich zurückholen — z.B. weil ein Peer
+    /// sein `listen.json` wegen des Fingerabdruck-Skips (Abschnitt 4.6) erst
+    /// Tage später neu schreibt. War der zugehörige `KaufEintrag` diesem
+    /// Gerät zu diesem späteren Zeitpunkt aber bereits bekannt, lief die
+    /// Aufräumung nie wieder — die Resurrektion blieb dauerhaft bestehen,
+    /// keine Selbstheilung. Live bestätigt: zwei Geräte kauften gleichzeitig
+    /// an derselben Liste ein, 23 Artikel blieben nach einem Geräte-Neuaufbau
+    /// dauerhaft doppelt offen. **Fix:** Neuanlage (weiterhin
+    /// `bekannteIDs`-gegated, idempotent per Konstruktion — dieselbe ID nie
+    /// zweimal eingefügt) und Listeneintrag-Aufräumung (ebenfalls idempotent:
+    /// Löschen eines bereits fehlenden Eintrags ist ein No-op,
+    /// `vermerkeAbgehaktFallsNoetig` bewegt nur nach vorne) sind jetzt
+    /// entkoppelt — die Aufräumung läuft für JEDEN auflösbaren Remote-
+    /// Eintrag, nicht nur für neu angelegte. Unkritisch für die Laufzeit:
+    /// `remote` ist durch dieselbe 48h-Karenzzeit begrenzt wie `bekannteIDs`
+    /// (siehe `SyncKaeufeExportService`-Typ-Doku — jedes Peer-Gerät
+    /// exportiert nur seine eigenen, noch nicht bereinigten `KaufEintrag`e).
+    /// Details: `docs/DATENSYNCHRONISATION_VERLAUF.md` §66.
     @MainActor
     private static func mergeKaufEintraege(
         _ remote: [KaufEintragSnapshot], artikelZuordnung: [UUID: Artikel], einkaufsvorgangZuordnung: [UUID: Einkaufsvorgang],
@@ -1882,7 +1913,6 @@ enum SyncSnapshotImportService {
         // laufen, bräuchte also sonst eine eigene Lücke im Sicherheitsnetz.
         var bekannteArtikelListenEintraege = ArtikelListenKaufService.alleEintraege(context: context)
         for eintrag in remote {
-            guard !bekannteIDs.contains(eintrag.id) else { continue }
             // Retention- oder manuell gelöschter Eintrag eines Peers, der ihn
             // selbst noch führt — Tombstone verhindert die Wiederbelebung
             // (analog Bereich-B-Merges).
@@ -1902,109 +1932,119 @@ enum SyncSnapshotImportService {
             if let einkaufsvorgangID = eintrag.einkaufsvorgangID, einkaufsvorgangZuordnung[einkaufsvorgangID] == nil {
                 continue
             }
-            let neuer = KaufEintrag(
-                artikel: eintrag.artikelID.flatMap { artikelZuordnung[$0] },
-                geschaeft: eintrag.geschaeftID.flatMap { geschaeftZuordnung[$0] },
-                abteilung: eintrag.abteilungID.flatMap { abteilungZuordnung[$0] },
-                produkt: eintrag.produktID.flatMap { produktZuordnung[$0] },
-                menge: eintrag.menge,
-                datum: eintrag.datum,
-                ursprungsGeraeteID: peerGeraeteID
-            )
-            neuer.id = eintrag.id
-            neuer.einkaufsvorgang = eintrag.einkaufsvorgangID.flatMap { einkaufsvorgangZuordnung[$0] }
-            // Original-Schnappschuss-Namen erhalten statt aus den (ggf. seither
-            // umbenannten) gemergten Objekten neu abzuleiten.
-            neuer.artikelNameSnapshot = eintrag.artikelNameSnapshot
-            neuer.geschaeftNameSnapshot = eintrag.geschaeftNameSnapshot
-            context.insert(neuer)
+            let einkaufsvorgang = eintrag.einkaufsvorgangID.flatMap { einkaufsvorgangZuordnung[$0] }
 
-            if let artikel = neuer.artikel, let einkaufsliste = neuer.einkaufsvorgang?.einkaufsliste {
-                // Nutzerbericht (2026-08-10): anders als das lokale Abhaken
-                // (``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:produkt:am:context:ursprungsGeraeteID:abteilung:geschaeft:)``,
-                // löscht dort explizit den offenen `EinkaufslistenEintrag``)
-                // entfernte dieser Zweig den entsprechenden offenen Listen-
-                // Eintrag ursprünglich NIE — ein Gerät, das den Artikel noch
-                // offen führt (z.B. aus einem älteren, noch nicht
-                // aktualisierten Bereich-B-Snapshot desselben Peers), behielt
-                // ihn dauerhaft gleichzeitig als „offen" UND „abgehakt": genau
-                // der Zustand, den ``EinkaufenView/offeneArtikel`` seit GitHub
-                // #52 zwar in der Anzeige herausfiltert, aber die verwaiste
-                // `EinkaufslistenEintrag`-Zeile blieb bestehen und blähte den
-                // „X von Y"-Gesamtwert künstlich auf (live bestätigt: Gerät
-                // zeigte „2 von 8" statt der tatsächlichen „2 von 6").
-                //
-                // Folgefund (2026-08-10, „kurzzeitiges Flackern der Liste
-                // während eines Mehrgeräte-Syncs"): die daraufhin eingeführte
-                // bedingungslose Löschung ging zu weit — sie griff auch, wenn
-                // der Artikel NACH diesem (oft längst historischen, gerade
-                // erst im Zuge eines großen Nachhol-Merges eintreffenden)
-                // Nachzügler-Kauf ERNEUT auf die Liste gesetzt wurde
-                // (typischer Fall: wiederkehrender Artikel). Ein direkter
-                // Vergleich gegen `listenEintrag.erstelltAm` half nur
-                // teilweise: dieses Feld übernimmt beim erneuten Hinzufügen
-                // über einen Peer bewusst dessen ORIGINAL-Zeitpunkt (siehe
-                // ``mergeEinkaufslistenEintraege(_:listeZuordnung:artikelZuordnung:produktZuordnung:context:)``)
-                // und kann seinerseits von einem DRITTEN Gerät geerbt,
-                // beliebig oft weitergereicht sein — ohne jede monotone
-                // Absicherung. Derselbe Nachhol-Merge-Fall schlug dadurch mit
-                // anderer Geräte-Verkettung erneut zu (live bestätigt: ein
-                // Artikel verschwand trotz bestandener `erstelltAm <=
-                // datum`-Prüfung noch einmal).
-                //
-                // Architektur-Review (2026-08-10): behoben durch das robuste,
-                // additiv gemergte Gegenstück ``ArtikelListenKauf/zuletztHinzugefuegtAm``
-                // (siehe dessen Typ-Doku für die Begründung) statt des rohen,
-                // ungeschützten `erstelltAm`-Feldes dieser einen Zeile — nur
-                // löschen, wenn NACHWEISLICH (über alle bekannten Geräte
-                // hinweg additiv gemergt) kein NEUERES Hinzufügen als dieser
-                // Kauf bekannt ist. Dieselbe Regel wie in
-                // ``istBereitsAbgehakt(_:aufListe:alleVorgaenge:istAusDerZeitGefallen:bekannterEintrag:)``,
-                // hier nur umgekehrt aufgerufen (kein Materialisieren, sondern
-                // ein Löschen, wenn NICHT mehr offen).
-                //
-                // **Produkt-Vergleich (GitHub #172, „Batterien verschwinden"):**
-                // vor diesem Fix suchte `eintrag(fuer: artikel)` (ohne
-                // `produkt`) den Listeneintrag rein artikelweit — der Kauf
-                // EINES Produkts eines generischen Artikels löschte dadurch
-                // den noch offenen Listeneintrag eines komplett ANDEREN
-                // Produkts desselben Artikels. `neuer.produkt` ist jetzt Teil
-                // des `KaufEintrag`s selbst (siehe dessen Typ-Doku) und macht
-                // sowohl die Suche als auch den `zuletztHinzugefuegtAm`-Schlüssel
-                // produktscharf.
-                let listenEintrag = einkaufsliste.eintrag(fuer: artikel, produkt: neuer.produkt)
-                let schluessel = ArtikelListenKaufService.Schluessel(
-                    artikelID: artikel.id, produktID: neuer.produkt?.id, einkaufslisteID: einkaufsliste.id
+            if !bekannteIDs.contains(eintrag.id) {
+                let neuer = KaufEintrag(
+                    artikel: eintrag.artikelID.flatMap { artikelZuordnung[$0] },
+                    geschaeft: eintrag.geschaeftID.flatMap { geschaeftZuordnung[$0] },
+                    abteilung: eintrag.abteilungID.flatMap { abteilungZuordnung[$0] },
+                    produkt: eintrag.produktID.flatMap { produktZuordnung[$0] },
+                    menge: eintrag.menge,
+                    datum: eintrag.datum,
+                    ursprungsGeraeteID: peerGeraeteID
                 )
-                let zuletztHinzugefuegtAm = bekannteArtikelListenEintraege[schluessel]?.zuletztHinzugefuegtAm
-                let listenEintragPasstZeitlich = !ArtikelListenKaufService.istOffen(
-                    hinzugefuegtAm: zuletztHinzugefuegtAm, abgehaktAm: eintrag.datum
-                )
-                if let listenEintrag, listenEintragPasstZeitlich {
-                    context.delete(listenEintrag)
-                }
-                if SyncDebugLogger.istAktiv {
-                    // Diagnose (Nutzerbericht 2026-08-10, „Backup schließt ab,
-                    // Artikel bleiben trotzdem auf der Liste", dann Folgefund
-                    // „kurzzeitiges Flackern"): zeigt die tatsächlich
-                    // verglichenen (robusten) Zeitstempel statt nur des
-                    // Ergebnis-Bools — bleibt der Artikel trotzdem sichtbar
-                    // offen, obwohl hier `entfernt=true` steht, liegt die
-                    // Ursache NICHT in diesem Merge-Zweig, sondern z.B. in
-                    // einem danach erneut angelegten Eintrag.
-                    SyncDebugLogger.log(
-                        .kaufEintragMergeListenEintragEntfernt,
-                        details: "artikel=\(artikel.name) produkt=\(neuer.produkt?.name ?? "-") liste=\(einkaufsliste.name) "
-                            + "listenEintragGefunden=\(listenEintrag != nil) "
-                            + "entfernt=\(listenEintrag != nil && listenEintragPasstZeitlich) "
-                            + "zuletztHinzugefuegtAm=\(zuletztHinzugefuegtAm.map { "\($0)" } ?? "-") kaufDatum=\(eintrag.datum)"
-                    )
-                }
-                ArtikelListenKaufService.vermerkeAbgehaktFallsNoetig(
-                    artikel: artikel, produkt: neuer.produkt, einkaufsliste: einkaufsliste, am: eintrag.datum,
-                    bekannt: &bekannteArtikelListenEintraege, context: context
+                neuer.id = eintrag.id
+                neuer.einkaufsvorgang = einkaufsvorgang
+                // Original-Schnappschuss-Namen erhalten statt aus den (ggf. seither
+                // umbenannten) gemergten Objekten neu abzuleiten.
+                neuer.artikelNameSnapshot = eintrag.artikelNameSnapshot
+                neuer.geschaeftNameSnapshot = eintrag.geschaeftNameSnapshot
+                context.insert(neuer)
+            }
+
+            // Ab hier bewusst UNABHÄNGIG von `bekannteIDs` (siehe Live-Fund-
+            // Kommentar an der Funktion oben) — läuft für jeden auflösbaren
+            // Remote-Eintrag, nicht nur für gerade neu angelegte, damit eine
+            // spätere Resurrektion des Listeneintrags (z.B. durch einen erst
+            // jetzt eintreffenden veralteten Bereich-B-Snapshot) auch für
+            // einen längst bekannten Kauf noch aufgeräumt wird.
+            guard let artikel = eintrag.artikelID.flatMap({ artikelZuordnung[$0] }), let einkaufsliste = einkaufsvorgang?.einkaufsliste
+            else { continue }
+            // Nutzerbericht (2026-08-10): anders als das lokale Abhaken
+            // (``Einkaufsvorgang/artikelAbhakenOhneEventAufzeichnung(_:produkt:am:context:ursprungsGeraeteID:abteilung:geschaeft:)``,
+            // löscht dort explizit den offenen `EinkaufslistenEintrag``)
+            // entfernte dieser Zweig den entsprechenden offenen Listen-
+            // Eintrag ursprünglich NIE — ein Gerät, das den Artikel noch
+            // offen führt (z.B. aus einem älteren, noch nicht
+            // aktualisierten Bereich-B-Snapshot desselben Peers), behielt
+            // ihn dauerhaft gleichzeitig als „offen" UND „abgehakt": genau
+            // der Zustand, den ``EinkaufenView/offeneArtikel`` seit GitHub
+            // #52 zwar in der Anzeige herausfiltert, aber die verwaiste
+            // `EinkaufslistenEintrag`-Zeile blieb bestehen und blähte den
+            // „X von Y"-Gesamtwert künstlich auf (live bestätigt: Gerät
+            // zeigte „2 von 8" statt der tatsächlichen „2 von 6").
+            //
+            // Folgefund (2026-08-10, „kurzzeitiges Flackern der Liste
+            // während eines Mehrgeräte-Syncs"): die daraufhin eingeführte
+            // bedingungslose Löschung ging zu weit — sie griff auch, wenn
+            // der Artikel NACH diesem (oft längst historischen, gerade
+            // erst im Zuge eines großen Nachhol-Merges eintreffenden)
+            // Nachzügler-Kauf ERNEUT auf die Liste gesetzt wurde
+            // (typischer Fall: wiederkehrender Artikel). Ein direkter
+            // Vergleich gegen `listenEintrag.erstelltAm` half nur
+            // teilweise: dieses Feld übernimmt beim erneuten Hinzufügen
+            // über einen Peer bewusst dessen ORIGINAL-Zeitpunkt (siehe
+            // ``mergeEinkaufslistenEintraege(_:listeZuordnung:artikelZuordnung:produktZuordnung:context:)``)
+            // und kann seinerseits von einem DRITTEN Gerät geerbt,
+            // beliebig oft weitergereicht sein — ohne jede monotone
+            // Absicherung. Derselbe Nachhol-Merge-Fall schlug dadurch mit
+            // anderer Geräte-Verkettung erneut zu (live bestätigt: ein
+            // Artikel verschwand trotz bestandener `erstelltAm <=
+            // datum`-Prüfung noch einmal).
+            //
+            // Architektur-Review (2026-08-10): behoben durch das robuste,
+            // additiv gemergte Gegenstück ``ArtikelListenKauf/zuletztHinzugefuegtAm``
+            // (siehe dessen Typ-Doku für die Begründung) statt des rohen,
+            // ungeschützten `erstelltAm`-Feldes dieser einen Zeile — nur
+            // löschen, wenn NACHWEISLICH (über alle bekannten Geräte
+            // hinweg additiv gemergt) kein NEUERES Hinzufügen als dieser
+            // Kauf bekannt ist. Dieselbe Regel wie in
+            // ``istBereitsAbgehakt(_:aufListe:alleVorgaenge:istAusDerZeitGefallen:bekannterEintrag:)``,
+            // hier nur umgekehrt aufgerufen (kein Materialisieren, sondern
+            // ein Löschen, wenn NICHT mehr offen).
+            //
+            // **Produkt-Vergleich (GitHub #172, „Batterien verschwinden"):**
+            // vor jenem Fix suchte `eintrag(fuer: artikel)` (ohne `produkt`)
+            // den Listeneintrag rein artikelweit — der Kauf EINES Produkts
+            // eines generischen Artikels löschte dadurch den noch offenen
+            // Listeneintrag eines komplett ANDEREN Produkts desselben
+            // Artikels. Der aus der Nutzlast aufgelöste `produkt` macht
+            // sowohl die Suche als auch den `zuletztHinzugefuegtAm`-Schlüssel
+            // produktscharf.
+            let produkt = eintrag.produktID.flatMap { produktZuordnung[$0] }
+            let listenEintrag = einkaufsliste.eintrag(fuer: artikel, produkt: produkt)
+            let schluessel = ArtikelListenKaufService.Schluessel(
+                artikelID: artikel.id, produktID: produkt?.id, einkaufslisteID: einkaufsliste.id
+            )
+            let zuletztHinzugefuegtAm = bekannteArtikelListenEintraege[schluessel]?.zuletztHinzugefuegtAm
+            let listenEintragPasstZeitlich = !ArtikelListenKaufService.istOffen(
+                hinzugefuegtAm: zuletztHinzugefuegtAm, abgehaktAm: eintrag.datum
+            )
+            if let listenEintrag, listenEintragPasstZeitlich {
+                context.delete(listenEintrag)
+            }
+            if SyncDebugLogger.istAktiv {
+                // Diagnose (Nutzerbericht 2026-08-10, „Backup schließt ab,
+                // Artikel bleiben trotzdem auf der Liste", dann Folgefund
+                // „kurzzeitiges Flackern"): zeigt die tatsächlich
+                // verglichenen (robusten) Zeitstempel statt nur des
+                // Ergebnis-Bools — bleibt der Artikel trotzdem sichtbar
+                // offen, obwohl hier `entfernt=true` steht, liegt die
+                // Ursache NICHT in diesem Merge-Zweig, sondern z.B. in
+                // einem danach erneut angelegten Eintrag.
+                SyncDebugLogger.log(
+                    .kaufEintragMergeListenEintragEntfernt,
+                    details: "artikel=\(artikel.name) produkt=\(produkt?.name ?? "-") liste=\(einkaufsliste.name) "
+                        + "listenEintragGefunden=\(listenEintrag != nil) "
+                        + "entfernt=\(listenEintrag != nil && listenEintragPasstZeitlich) "
+                        + "zuletztHinzugefuegtAm=\(zuletztHinzugefuegtAm.map { "\($0)" } ?? "-") kaufDatum=\(eintrag.datum)"
                 )
             }
+            ArtikelListenKaufService.vermerkeAbgehaktFallsNoetig(
+                artikel: artikel, produkt: produkt, einkaufsliste: einkaufsliste, am: eintrag.datum,
+                bekannt: &bekannteArtikelListenEintraege, context: context
+            )
         }
     }
 

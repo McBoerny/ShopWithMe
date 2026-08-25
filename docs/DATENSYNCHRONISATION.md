@@ -883,14 +883,19 @@ selbst gekauft hat) fälschlich Frische vor — das Sicherheitsnetz holt ihn
 dann trotz eines zwischenzeitlichen echten Kaufs zurück auf die offene
 Liste. Details: `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 56.
 
-**Bewusst in Kauf genommener Randfall:** `mergeKaufEintraege`/die neue
-`mergeArtikelListenKaeufe` laufen in der Aufrufreihenfolge (Abschnitt 4.2)
-NACH `mergeEinkaufslistenEintraege` — ein im selben Sync-Zyklus frisch
-eintreffender Beleg für „schon gekauft" wirkt sich deshalb erst im NÄCHSTEN
-Zyklus auf die Sicherheitsnetz-Prüfung aus, nicht rückwirkend im selben
-Durchlauf. Bewusst nicht behoben (würde eine Umstellung der seit mehreren
-Live-Tests bestätigten Abhängigkeitsreihenfolge erfordern) — der Randfall
-löst sich beim nächsten Zyklus von selbst auf.
+**Randfall (behoben 2026-08-25, GitHub #175 — siehe Nachtrag unten):**
+`mergeKaufEintraege`/die neue `mergeArtikelListenKaeufe` laufen in der
+Aufrufreihenfolge (Abschnitt 4.2) NACH `mergeEinkaufslistenEintraege` — ein im
+selben Sync-Zyklus frisch eintreffender Beleg für „schon gekauft" wirkt sich
+deshalb erst im NÄCHSTEN Zyklus auf die Sicherheitsnetz-Prüfung aus, nicht
+rückwirkend im selben Durchlauf. Ursprünglich bewusst nicht behoben (hätte
+eine Umstellung der seit mehreren Live-Tests bestätigten
+Abhängigkeitsreihenfolge erfordert) — mit der Annahme, der Randfall löse sich
+beim nächsten Zyklus von selbst auf. **Stimmte nicht:** `mergeKaufEintraege`s
+Listeneintrag-Aufräumung lief bis zum Fix unten NUR beim allerersten
+Auftauchen eines `KaufEintrag`s — war der Kauf diesem Gerät zum Zeitpunkt
+einer späteren Resurrektion bereits bekannt, lief die Aufräumung nie wieder,
+die Selbstheilung blieb aus.
 
 **Nachtrag (Live-Fund 2026-08-24): das Sicherheitsnetz deckte nur den
 Bereich-B-Snapshot-Merge ab, nicht die direkte Bereich-A-Event-Materialisierung.**
@@ -1049,6 +1054,25 @@ Regel `ArtikelListenKaufService.istOffen(hinzugefuegtAm:abgehaktAm:)` statt
 zweier unabhängiger Ad-hoc-Vergleiche. Architektur-Audit aller 19
 `mergeX`-Funktionen: dieselbe Asymmetrie kommt sonst nirgends vor. Details:
 `docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitte 58–60.
+
+**Nachtrag (Live-Fund 2026-08-25, GitHub #175): der oben als „selbst
+auflösend" akzeptierte Randfall heilte sich in der Praxis nie.**
+`mergeKaufEintraege`s Listeneintrag-Aufräumung stand bis zu diesem Fix
+komplett innerhalb des `!bekannteIDs.contains(eintrag.id)`-Zweigs, der einen
+bereits (aus einem früheren Zyklus) bekannten `KaufEintrag` per `continue`
+überspringt — inklusive der darunterliegenden Löschung des offenen
+`EinkaufslistenEintrag`s. War der Kauf diesem Gerät zum Zeitpunkt einer
+späteren Resurrektion (z.B. weil ein Peer sein `listen.json` erst Tage später
+neu schreibt, siehe Abschnitt 4.6) bereits bekannt, lief diese Aufräumung nie
+wieder — die Resurrektion blieb dauerhaft bestehen. Live bestätigt: zwei
+Geräte kauften gleichzeitig an derselben Liste ein, 23 Artikel blieben nach
+einem Geräte-Neuaufbau dauerhaft doppelt offen, über mehrere weitere
+Sync-Zyklen keine Selbstheilung. **Fix:** Neuanlage des `KaufEintrag`s
+(weiterhin `bekannteIDs`-gegated) und Listeneintrag-Aufräumung
+(idempotent — Löschen eines bereits fehlenden Eintrags ist ein No-op) sind
+jetzt entkoppelt; die Aufräumung läuft für jeden auflösbaren Remote-Eintrag,
+nicht nur für neu angelegte. Details:
+`docs/DATENSYNCHRONISATION_VERLAUF.md` Abschnitt 66.
 
 ### 4.8 Multipeer-Catch-up für Bereich B/C/D (GitHub #125)
 
