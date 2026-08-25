@@ -378,6 +378,26 @@ stumm; erlaubte die Live-Bestätigung des ursprünglichen Verdachts
 verbleibenden, tatsächlich unentscheidbaren Fälle (Altbestand ohne
 Zeitstempel, oder Peer auf älterer App-Version).
 
+**Nachtrag (2026-08-25, GitHub #175, Nutzerbericht „Artikel tauchen nach
+Geräte-Neuaufbau wieder doppelt auf"):** Gegenstück-Ereignis
+`sync_listeneintrag_sicherheitsnetz_angelegt` (Details: `artikel=… liste=…
+peer=… peerErstelltAm=… bekanntZuletztAbgehaktAm=…
+bekanntZuletztHinzugefuegtAm=…`) — der obige Skip-Log deckte nur ab, wenn das
+Sicherheitsnetz eine Resurrektion VERHINDERTE; der tatsächliche ANLEGE-Fall
+(Sicherheitsnetz lässt die Resurrektion zu) blieb komplett stumm. Ein
+Live-Fund nach dem Fix zu GitHub #175 zeigte ein oszillierendes Muster
+(`Einkaufsliste`-Stand sprang wiederholt zwischen 0 und 23 hin und her, statt
+sich dauerhaft zu stabilisieren) — der Fix selbst räumt eine Resurrektion
+zuverlässig auf, verhindert aber offenbar nicht, dass ein Peer dieselben
+Artikel im nächsten Zyklus erneut als „aktuell hinzugefügt" meldet. Dieses
+neue Ereignis zeigt bei jeder tatsächlichen Neuanlage sofort die komplette
+Entscheidungsgrundlage — insbesondere `peerErstelltAm`, um zu erkennen, ob
+ein Peer selbst einen künstlich verjüngten (statt des tatsächlichen,
+historischen) `erstelltAm`-Wert weiterreicht, was einen sich gegenseitig
+aufschaukelnden Resurrektions-Kreislauf zwischen zwei Geräten erklären würde.
+Analog trägt `sync_kaufeintrag_merge_listeneintrag_entfernt` jetzt zusätzlich
+`peer=…`, um beide Ereignisse über den meldenden Peer korrelieren zu können.
+
 **`sync_scope_zugriff`** (2026-08-02, Diagnose für einen Live-Test-Fund —
 permanenter `sync_ordner_zugriff_fehlgeschlagen` auf dem „Backup"-Gerät ohne
 erkennbaren Auslöser, siehe `docs/DATENSYNCHRONISATION_VERLAUF.md` §30/§32):

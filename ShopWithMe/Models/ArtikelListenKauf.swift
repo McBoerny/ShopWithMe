@@ -55,7 +55,7 @@ import SwiftData
 /// KEIN robustes Äquivalent — ``EinkaufslistenEintrag/erstelltAm`` sieht wie
 /// eine Vergleichsbasis aus, ist aber keine: die Zeile wird beim Abhaken
 /// gelöscht und beim erneuten Hinzufügen neu angelegt, und
-/// ``SyncSnapshotImportService/mergeEinkaufslistenEintraege(_:listeZuordnung:artikelZuordnung:produktZuordnung:context:)``
+/// ``SyncSnapshotImportService/mergeEinkaufslistenEintraege(_:listeZuordnung:artikelZuordnung:produktZuordnung:peerGeraeteID:context:)``
 /// übernimmt dabei bewusst den ORIGINAL-Zeitstempel des sendenden Geräts
 /// (verhindert, dass ein Artikel nach einem Neuaufbau künstlich frisch
 /// aussieht, siehe Nachtrag dort) — der kann seinerseits von einem DRITTEN

@@ -559,7 +559,7 @@ enum SyncImportService {
     ///
     /// `abgehaktZeitstempel`: Sicherheitsnetz gegen wiederbelebte Käufe
     /// (GitHub #99) — bisher nur beim Bereich-B-Snapshot-Merge angewendet
-    /// (``SyncSnapshotImportService/mergeEinkaufslistenEintraege(_:listeZuordnung:artikelZuordnung:produktZuordnung:context:)``).
+    /// (``SyncSnapshotImportService/mergeEinkaufslistenEintraege(_:listeZuordnung:artikelZuordnung:produktZuordnung:peerGeraeteID:context:)``).
     /// **Live-Fund (2026-08-24):** genau dieser Zweig hier hatte KEIN
     /// äquivalentes Sicherheitsnetz — nach einem Geräte-Neuaufbau, der die
     /// komplette historische Bereich-A-Event-Datei erneut abspielt, holte ein

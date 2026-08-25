@@ -63,6 +63,22 @@ enum SyncDebugLogger {
         /// erneutes Hinzufügen (z.B. wiederkehrender Artikel), dessen direktes
         /// `artikelHinzugefuegt`-Ereignis dieses Gerät nie erreicht hat.
         case einkaufslistenEintragSicherheitsnetzUebersprungen = "sync_listeneintrag_sicherheitsnetz_uebersprungen"
+        /// Gegenstück zu ``einkaufslistenEintragSicherheitsnetzUebersprungen``
+        /// (GitHub #175, Live-Fund 2026-08-25): der bisherige Zweig war für
+        /// den tatsächlichen ANLEGE-Fall komplett stumm — sichtbar war nur,
+        /// wenn das Sicherheitsnetz eine Resurrektion verhinderte, nie, wenn
+        /// es sie zuließ. Protokolliert deshalb bei jeder tatsächlichen
+        /// Neuanlage eines ``EinkaufslistenEintrag``s über dieses
+        /// Sicherheitsnetz die vollständige Entscheidungsgrundlage: welcher
+        /// Peer den Eintrag meldete, dessen behaupteter `erstelltAm`-Zeitpunkt,
+        /// sowie die zu diesem Zeitpunkt bekannten
+        /// ``ArtikelListenKauf/zuletztAbgehaktAm``/``ArtikelListenKauf/zuletztHinzugefuegtAm``-Werte
+        /// — damit sich im Nachhinein rekonstruieren lässt, ob ein Peer
+        /// tatsächlich einen neueren `erstelltAm`-Wert als den bekannten Kauf
+        /// meldet (legitimer Re-Add) oder ob die Entscheidungsgrundlage
+        /// selbst fehlerhaft ist (z.B. ein Peer, der seinerseits einen
+        /// künstlich verjüngten `erstelltAm`-Wert weiterreicht).
+        case einkaufslistenEintragSicherheitsnetzAngelegt = "sync_listeneintrag_sicherheitsnetz_angelegt"
         /// GitHub #89: ``SyncExportService/raeumeAlteEigeneEventDateienAufFallsFaellig()``
         /// hat eigene Event-Dateien gelöscht, die älter als der aktuelle
         /// dynamische Aufbewahrungs-Wasserstand waren (Peer-Lebenszyklus
@@ -109,7 +125,10 @@ enum SyncDebugLogger {
         /// frisch aus einem Peer-Snapshot angelegten ``KaufEintrag``, ob dabei
         /// tatsächlich ein offener ``EinkaufslistenEintrag`` für denselben
         /// Artikel/dieselbe Liste gefunden (und gelöscht) wurde. Details:
-        /// `artikel=… liste=… listenEintragGefunden=true/false`.
+        /// `artikel=… liste=… peer=… listenEintragGefunden=true/false`.
+        /// **Seit GitHub #175 läuft dieser Zweig für JEDEN auflösbaren
+        /// Remote-Eintrag, nicht mehr nur für neu angelegte** — siehe
+        /// Typ-Doku an ``SyncSnapshotImportService/mergeKaufEintraege(_:artikelZuordnung:einkaufsvorgangZuordnung:geschaeftZuordnung:abteilungZuordnung:produktZuordnung:peerGeraeteID:context:)``.
         case kaufEintragMergeListenEintragEntfernt = "sync_kaufeintrag_merge_listeneintrag_entfernt"
 
         /// GitHub #91 (dritter Anlauf): ``SyncICloudAenderungsBeobachter``
@@ -169,6 +188,7 @@ enum SyncDebugLogger {
                  .peerVerworfenAltersgrenze, .eventAufgegeben, .debugModeEnabled, .debugModeDisabled,
                  .einkaufsvorgangAbschlussNichtUebernommen, .einkaufsvorgangAbschlussUebernommen,
                  .einkaufsvorgangEintragUebersprungen, .einkaufslistenEintragSicherheitsnetzUebersprungen,
+                 .einkaufslistenEintragSicherheitsnetzAngelegt,
                  .eventDateienBereinigt, .tombstonesBereinigt, .kaeufeVerwaisteBereinigt,
                  .kaufEintragMergeListenEintragEntfernt,
                  .ausDerZeitGefallenErkannt, .vollAbgleichEingeleitet, .multipeerGruppenIDNichtAufloesbar:

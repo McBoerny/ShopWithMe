@@ -88,7 +88,7 @@ extension Einkaufsliste {
     /// ein ANDERES lokales Objekt als `artikel` ist, aber denselben Namen trägt
     /// (case-insensitiv) — Schutz gegen Dubletten, wenn zwei Sync-Merge-Pfade
     /// (Bereich-A-Event-Anwendung vs. Bereich-B-„Sicherheitsnetz" in
-    /// ``SyncSnapshotImportService/mergeEinkaufslistenEintraege(_:listeZuordnung:artikelZuordnung:produktZuordnung:context:)``)
+    /// ``SyncSnapshotImportService/mergeEinkaufslistenEintraege(_:listeZuordnung:artikelZuordnung:produktZuordnung:peerGeraeteID:context:)``)
     /// dieselbe logische Position auf zwei unterschiedlich aufgelöste
     /// ``Artikel``-Objekte abbilden, bevor ein ``SyncEntitaetsAlias`` beide
     /// zusammengeführt hat (Nutzerbericht 2026-08-21: „Testliste" sprang nach

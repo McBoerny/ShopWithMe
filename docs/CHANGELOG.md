@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.17 (Build 368) — Sync: Logging für #175 erweitert (Fix aus Build 367 reicht laut Retest nicht)
+
+- **#175 (Nachtrag):** Retest zeigt weiterhin Artikel-Dubletten, jetzt aber als
+  oszillierendes Muster (Liste springt wiederholt zwischen 0 und der vollen
+  Anzahl hin und her). Der Anlage-Fall im Bereich-B-Sicherheitsnetz
+  (`mergeEinkaufslistenEintraege`) war bisher komplett stumm — nur der
+  Verhindert-Fall wurde geloggt. Neues Ereignis
+  `sync_listeneintrag_sicherheitsnetz_angelegt` protokolliert jetzt bei jeder
+  tatsächlichen Neuanlage Artikel, meldenden Peer, dessen `erstelltAm` sowie
+  die bekannten Vergleichszeitstempel; `sync_kaufeintrag_merge_listeneintrag_entfernt`
+  trägt zusätzlich `peer=…`. Reines Logging, keine Verhaltensänderung. Details:
+  `docs/DATENSYNCHRONISATION_VERLAUF.md` §67, `docs/LOGGING.md`.
+
 ## v0.17 (Build 367) — Sync: Artikel-Dubletten nach Geräte-Neuaufbau behoben (#175)
 
 - **#175:** Meldete sich ein Gerät neu an (Geräte-Neuaufbau), tauchten bereits

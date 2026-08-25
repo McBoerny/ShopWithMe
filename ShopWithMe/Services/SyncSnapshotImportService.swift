@@ -41,7 +41,7 @@ import SwiftUI
 /// **Architektur-Revision „Alternative A" (GitHub #52-Nachfolgefund):**
 /// Zwei zuvor fehlende Sicherheitsnetze ergänzt, nachdem sich beim Testen
 /// zeigte, dass Bereich A (Events) sie nicht bot:
-/// 1. ``mergeEinkaufslistenEintraege(_:listeZuordnung:artikelZuordnung:context:)``
+/// 1. ``mergeEinkaufslistenEintraege(_:listeZuordnung:artikelZuordnung:produktZuordnung:peerGeraeteID:context:)``
 ///    überträgt den vollständigen Einkaufslisten-Inhalt additiv mit — ein Peer,
 ///    der ein `artikelHinzugefuegt`-Event verpasst hat (oder dessen Liste erst
 ///    nachträglich per Namensmatching aliasiert wurde), holt sich den
@@ -476,7 +476,7 @@ enum SyncSnapshotImportService {
         let listeZuordnung = mergeEinkaufslisten(stamm.einkaufslisten, peerGeraeteID: peerGeraeteID, aliase: aliase, context: context)
         mergeEinkaufslistenEintraege(
             listen.einkaufslistenEintraege, listeZuordnung: listeZuordnung, artikelZuordnung: artikelZuordnung,
-            produktZuordnung: produktZuordnung, context: context
+            produktZuordnung: produktZuordnung, peerGeraeteID: peerGeraeteID, context: context
         )
         let einkaufsvorgangZuordnung = mergeEinkaufsvorgaenge(
             vorgaenge.einkaufsvorgaenge, geschaeftZuordnung: geschaeftZuordnung, listeZuordnung: listeZuordnung, aliase: aliase, context: context
@@ -544,7 +544,7 @@ enum SyncSnapshotImportService {
         let listeZuordnung = mergeEinkaufslisten(snapshot.einkaufslisten, peerGeraeteID: peerGeraeteID, aliase: aliase, context: context)
         mergeEinkaufslistenEintraege(
             snapshot.einkaufslistenEintraege, listeZuordnung: listeZuordnung, artikelZuordnung: artikelZuordnung,
-            produktZuordnung: produktZuordnung, context: context
+            produktZuordnung: produktZuordnung, peerGeraeteID: peerGeraeteID, context: context
         )
         let einkaufsvorgangZuordnung = mergeEinkaufsvorgaenge(
             snapshot.einkaufsvorgaenge, geschaeftZuordnung: geschaeftZuordnung, listeZuordnung: listeZuordnung, aliase: aliase, context: context
@@ -1292,7 +1292,7 @@ enum SyncSnapshotImportService {
     @MainActor
     private static func mergeEinkaufslistenEintraege(
         _ remote: [EinkaufslistenEintragSnapshot], listeZuordnung: [UUID: Einkaufsliste], artikelZuordnung: [UUID: Artikel],
-        produktZuordnung: [UUID: Produkt], context: ModelContext
+        produktZuordnung: [UUID: Produkt], peerGeraeteID: String, context: ModelContext
     ) {
         guard !remote.isEmpty else { return }
         // Einmal vor der Schleife geladen statt pro Remote-Eintrag neu gefetcht
@@ -1354,6 +1354,19 @@ enum SyncSnapshotImportService {
                 }
                 continue
             }
+            if SyncDebugLogger.istAktiv {
+                // Live-Fund (2026-08-25, GitHub #175): bis hierhin komplett
+                // stumm — zeigt jetzt die vollständige Entscheidungsgrundlage
+                // für den Fall, dass das Sicherheitsnetz eine Resurrektion
+                // NICHT verhindert (Gegenstück zu obigem Skip-Log).
+                SyncDebugLogger.log(
+                    .einkaufslistenEintragSicherheitsnetzAngelegt,
+                    details: "artikel=\(artikel.name) liste=\(liste.name) peer=\(peerGeraeteID.prefix(8)) "
+                        + "peerErstelltAm=\(eintrag.erstelltAm.map { "\($0)" } ?? "-") "
+                        + "bekanntZuletztAbgehaktAm=\(bekannt[schluessel]?.zuletztAbgehaktAm.map { "\($0)" } ?? "-") "
+                        + "bekanntZuletztHinzugefuegtAm=\(bekannt[schluessel]?.zuletztHinzugefuegtAm.map { "\($0)" } ?? "-")"
+                )
+            }
             let neu = EinkaufslistenEintrag(
                 einkaufsliste: liste, artikel: artikel, produkt: produkt, menge: eintrag.menge, notiz: eintrag.notiz
             )
@@ -1386,7 +1399,7 @@ enum SyncSnapshotImportService {
 
     /// Ob `artikel` in einem ``Einkaufsvorgang`` von `liste` bereits abgehakt
     /// ist (siehe Warnung in
-    /// ``mergeEinkaufslistenEintraege(_:listeZuordnung:artikelZuordnung:context:)``).
+    /// ``mergeEinkaufslistenEintraege(_:listeZuordnung:artikelZuordnung:produktZuordnung:peerGeraeteID:context:)``).
     ///
     /// **Live-Test-Fund, dritter Nachtrag (Session 2026-08-03): dauerhafter
     /// Schutz im Regelfall statt „irgendein Vorgang noch offen".** Ein
@@ -1985,7 +1998,7 @@ enum SyncSnapshotImportService {
             // Vergleich gegen `listenEintrag.erstelltAm` half nur
             // teilweise: dieses Feld übernimmt beim erneuten Hinzufügen
             // über einen Peer bewusst dessen ORIGINAL-Zeitpunkt (siehe
-            // ``mergeEinkaufslistenEintraege(_:listeZuordnung:artikelZuordnung:produktZuordnung:context:)``)
+            // ``mergeEinkaufslistenEintraege(_:listeZuordnung:artikelZuordnung:produktZuordnung:peerGeraeteID:context:)``)
             // und kann seinerseits von einem DRITTEN Gerät geerbt,
             // beliebig oft weitergereicht sein — ohne jede monotone
             // Absicherung. Derselbe Nachhol-Merge-Fall schlug dadurch mit
@@ -2035,7 +2048,7 @@ enum SyncSnapshotImportService {
                 // einem danach erneut angelegten Eintrag.
                 SyncDebugLogger.log(
                     .kaufEintragMergeListenEintragEntfernt,
-                    details: "artikel=\(artikel.name) produkt=\(produkt?.name ?? "-") liste=\(einkaufsliste.name) "
+                    details: "artikel=\(artikel.name) produkt=\(produkt?.name ?? "-") liste=\(einkaufsliste.name) peer=\(peerGeraeteID.prefix(8)) "
                         + "listenEintragGefunden=\(listenEintrag != nil) "
                         + "entfernt=\(listenEintrag != nil && listenEintragPasstZeitlich) "
                         + "zuletztHinzugefuegtAm=\(zuletztHinzugefuegtAm.map { "\($0)" } ?? "-") kaufDatum=\(eintrag.datum)"
@@ -2226,7 +2239,7 @@ enum SyncSnapshotImportService {
     /// der Schleife (Muster wie ``mergeArtikel``) — verhindert Dubletten,
     /// falls derselbe Peer-Batch mehrere Einträge desselben Paares enthält.
     ///
-    /// **Bewusst nach ``mergeEinkaufslistenEintraege(_:listeZuordnung:artikelZuordnung:context:)``
+    /// **Bewusst nach ``mergeEinkaufslistenEintraege(_:listeZuordnung:artikelZuordnung:produktZuordnung:peerGeraeteID:context:)``
     /// in der Aufrufreihenfolge belassen** (nicht vorgezogen, obwohl dieser
     /// Merge dessen Sicherheitsnetz-Prüfung eigentlich zuarbeitet): ein in
     /// DEMSELBEN Zyklus frisch eintreffender Beleg für „schon gekauft" wird

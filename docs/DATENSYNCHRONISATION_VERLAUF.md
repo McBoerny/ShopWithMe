@@ -4420,3 +4420,67 @@ Kaufhistorie.
 
 **Verifikationsstand (2026-08-25):** `xcodegen generate` + `xcodebuild build`
 — siehe Checkpoint-Commit für den aktuellen Stand.
+
+## 67. Nachtrag zu GitHub #175: Fix aus Abschnitt 66 reicht nicht — oszillierendes Muster, Logging erweitert
+
+**Nutzerbericht (2026-08-25, Retest mit dem Fix aus Abschnitt 66):** Artikel
+tauchten weiterhin nach Geräte-Neuaufbau doppelt auf. Neue Logs
+(`Backup DB Debug 3.log`, `sync-debug 3.log`) zeigen aber ein verändertes
+Bild gegenüber dem Ausgangsbefund: `Einkaufsliste`-Stand oszilliert jetzt
+wiederholt zwischen 0 und 23 (`12:54:21`→0, `12:55:21`→23, `12:56:23`→0,
+`12:57:24`→23, danach stabil bei 23 bis Logende `13:03:12`) — der Fix aus
+Abschnitt 66 räumt eine Resurrektion also nachweislich auf (die Rückkehr zu 0
+wäre ohne ihn nicht möglich gewesen), aber irgendetwas legt dieselben 23
+Artikel danach IMMER WIEDER neu an.
+
+**Blinder Fleck identifiziert:** `mergeEinkaufslistenEintraege` (Bereich-B-
+Sicherheitsnetz) protokollierte bis dahin ausschließlich den Fall, dass eine
+Resurrektion VERHINDERT wurde (`sync_listeneintrag_sicherheitsnetz_uebersprungen`).
+Der tatsächliche Anlage-Fall (Sicherheitsnetz lässt die Resurrektion zu) war
+komplett stumm — in den Logs sichtbar nur als der rohe `Einkaufsliste`-
+Stand-Sprung, ohne jede Angabe, welcher Peer welchen Artikel mit welcher
+Begründung erneut angelegt hat. Von den 23 betroffenen Artikeln waren zudem
+nur 4 (Abdeckstift, Abflussfrei, Anzünder, Flohsamen) über IRGENDEIN
+bestehendes Diagnose-Ereignis sichtbar — für die übrigen ~19 gibt es bislang
+keinerlei Log-Spur, weder auf der Anlage- noch auf der Aufräum-Seite.
+
+**Arbeitshypothese (noch nicht bestätigt):** `istBereitsAbgehakt` lässt ein
+erneutes Hinzufügen zu, wenn der von einem Peer gemeldete
+`EinkaufslistenEintragSnapshot.erstelltAm` NACH dem lokal bekannten
+`ArtikelListenKauf.zuletztAbgehaktAm` liegt (Abschnitt 55, „legitimes
+erneutes Hinzufügen"). Ist der meldende Peer selbst schon einmal von
+derselben Resurrektion betroffen gewesen und hat dabei (auf seiner Seite,
+über einen bisher nicht lokalisierten Pfad) einen künstlich verjüngten statt
+den tatsächlichen historischen `erstelltAm`-Wert übernommen, würde jede
+Merge-Runde dem jeweils anderen Gerät einen „neueren" Zeitstempel vorspielen
+— ein sich selbst aufschaukelnder Resurrektions-Kreislauf zwischen zwei
+Geräten, der nie konvergiert. Nicht verifiziert, da dafür Sicht auf den
+sendenden Peer („Bernhard") nötig wäre, die die bisherigen Logs (nur vom
+Gerät „Backup") nicht liefern.
+
+**Logging erweitert, um die Hypothese beim nächsten Testlauf zu prüfen:**
+
+- Neues Ereignis `sync_listeneintrag_sicherheitsnetz_angelegt`
+  (Gegenstück zu `..._uebersprungen`) — protokolliert bei JEDER
+  tatsächlichen Neuanlage über dieses Sicherheitsnetz: Artikel, Liste,
+  meldender Peer, dessen `erstelltAm`-Angabe, sowie die zu diesem Zeitpunkt
+  bekannten `zuletztAbgehaktAm`/`zuletztHinzugefuegtAm`-Werte — macht für
+  alle ~23 Artikel (nicht nur die bisher zufällig sichtbaren 4) nachvollziehbar,
+  ob tatsächlich ein neuerer `erstelltAm`-Wert gemeldet wird und woher er kommt.
+- `sync_kaufeintrag_merge_listeneintrag_entfernt` trägt jetzt zusätzlich
+  `peer=…`, um beide Ereignisse über den meldenden Peer korrelieren zu
+  können.
+- `mergeEinkaufslistenEintraege` bekommt dafür `peerGeraeteID` als neuen
+  Parameter (bisher nicht durchgereicht).
+
+Details: `docs/LOGGING.md`. Erwartung für den nächsten Testlauf: das neue
+Ereignis sollte für die bisher unsichtbaren ~19 Artikel erstmals eine
+Log-Zeile liefern und zeigen, ob `peerErstelltAm` tatsächlich auffällig
+„frisch" ist (Hinweis auf die obige Hypothese) oder etwas anderes vorliegt
+(z.B. ein Alias-/Namensmatching-Problem, das denselben Artikel auf zwei
+lokale Objekte verteilt).
+
+**Verifikationsstand (2026-08-25):** `xcodegen generate` + `xcodebuild build`
+sauber, bestehende `SyncSnapshotImportServiceTests`-Suite (69 Tests) weiterhin
+grün, kein neuer Regressionstest (reines Logging, keine Verhaltensänderung).
+Noch nicht mit einem dritten Testlauf verifiziert.
