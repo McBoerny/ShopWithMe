@@ -400,7 +400,7 @@ enum SyncErsetzenService {
         // Härtungs-Rollback UND die SyncEvent-Wiederherstellung (GitHub #80,
         // siehe unten).
         let vorherBackup = vorherBackupURL.flatMap(ladeBackup(url:))
-        let ordnerZugriffErfolgreich = await SyncSnapshotImportService.importiereSnapshots(context: context)
+        await SyncSnapshotImportService.importiereSnapshots(context: context)
         if let vorherBackup {
             let vorherSnapshot = vorherBackup.snapshot
             let nachherSnapshot = SyncSnapshotExportService.erstelleSnapshot(context: context)
@@ -411,22 +411,40 @@ enum SyncErsetzenService {
             )
 
             // Härtung (Abteilung-3-Review): ein Neuaufbau, der eindeutig
-            // fehlgeschlagen ist — Ordnerzugriff gescheitert, oder ein
-            // vorher nicht leerer Bestand ist danach komplett leer (kein
-            // erreichbarer Peer hatte irgendetwas) — wird nicht mehr nur
-            // in der Vorher-/Nachher-Anzeige gemeldet und dem Nutzer
-            // überlassen, sondern automatisch auf den Vorher-Stand
-            // zurückgerollt. Ein bloßer TEILWEISER Rückgang (manche
-            // Bereiche kleiner, andere unverändert) bleibt bewusst NUR
-            // informativ — der kann legitim sein (z.B. echte, vom Peer
-            // bereits verarbeitete Löschungen), ein eindeutiger
-            // Totalverlust dagegen nie.
+            // fehlgeschlagen ist — ein vorher nicht leerer Bestand ist
+            // danach komplett leer (kein erreichbarer Peer hatte
+            // irgendetwas) — wird nicht mehr nur in der Vorher-/Nachher-
+            // Anzeige gemeldet und dem Nutzer überlassen, sondern
+            // automatisch auf den Vorher-Stand zurückgerollt. Ein bloßer
+            // TEILWEISER Rückgang (manche Bereiche kleiner, andere
+            // unverändert) bleibt bewusst NUR informativ — der kann legitim
+            // sein (z.B. echte, vom Peer bereits verarbeitete Löschungen),
+            // ein eindeutiger Totalverlust dagegen nie.
             // `nachherZaehler.gesamt == 0` bedeutet: der frische Context
             // ist tatsächlich noch komplett leer (Summe aller Bereiche
             // ist nur dann 0, wenn jeder einzelne Bereich 0 ist) — der
             // Neuaufbau hat buchstäblich nichts eingefügt. Kein
             // zusätzliches Löschen nötig, bevor das Backup importiert wird.
-            let eindeutigFehlgeschlagen = !ordnerZugriffErfolgreich || (vorherZaehler.gesamt > 0 && nachherZaehler.gesamt == 0)
+            //
+            // **Bewusst NICHT mehr zusätzlich `!ordnerZugriffErfolgreich`
+            // (Live-Vorfall 2026-08-25, „Batterie"-Datenverlust):** der
+            // Rückgabewert von ``SyncSnapshotImportService/importiereSnapshots(context:)``
+            // meldet nur, ob DIESER EINE Aufruf am Ordnerzugriff gescheitert
+            // ist — nicht, ob der Context zu diesem Zeitpunkt bereits echte
+            // Daten enthält. Im Vorfall lief zwischen Wipe und diesem Aufruf
+            // bereits ein anderer, erfolgreicher Import (Karin/Bernhard
+            // waren schon gemerged), sodass `nachherZaehler.gesamt` deutlich
+            // über 0 lag — der reine Flag-Fehlschlag löste den Rollback
+            // trotzdem aus. Der Rollback merged `vorherSnapshot.tombstones`
+            // (Backups EIGENE, u.U. veraltete Lösch-Historie) ungeprüft in
+            // den bereits korrekt befüllten Context — jeder dort passende
+            // Treffer (hier: „Batterie" samt Produkten) wurde dadurch
+            // gelöscht und per normalem Sync an alle Peers weitergereicht.
+            // Ein reiner Zugriffsfehler ohne echten Datenverlust braucht
+            // keinen destruktiven Rollback — er ist wie der Teilrückgang-
+            // Fall oben rein informativ über die Zusammenfassung sichtbar,
+            // der Nutzer kann den Neuaufbau bei Bedarf manuell wiederholen.
+            let eindeutigFehlgeschlagen = vorherZaehler.gesamt > 0 && nachherZaehler.gesamt == 0
             if eindeutigFehlgeschlagen {
                 SyncSnapshotImportService.importiereEinzelnenSnapshot(
                     vorherSnapshot, peerGeraeteID: "lokales-backup", context: context

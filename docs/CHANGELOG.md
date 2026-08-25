@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.17 (Build 372) — Sync: „Ersetzen durch Peer" löschte bei reinem Zugriffsfehler live gültige Artikel
+
+- **Live-Vorfall (2026-08-25):** Nach einem Neuaufbau über
+  `SyncErsetzenService.fuehreErsetzenDurchPeerAus` (Store-Wipe + Import aller
+  Peer-Snapshots) wurden „Batterie" samt allen daran hängenden Produkten sowie
+  13 weitere Artikel auf allen Geräten gelöscht — obwohl der Neuaufbau selbst
+  bereits korrekte, aktuelle Peer-Daten erfolgreich gemerged hatte.
+- **Ursache:** Die Härtungs-Bedingung `eindeutigFehlgeschlagen` löste den
+  automatischen Rollback auf den Vorher-Stand auch dann aus, wenn
+  `SyncSnapshotImportService.importiereSnapshots(context:)` lediglich einen
+  reinen Ordnerzugriffsfehler meldete (`!ordnerZugriffErfolgreich`) — unabhängig
+  davon, ob der Context zu diesem Zeitpunkt bereits nicht-leer war. Der Rollback
+  merged dabei ungeprüft `vorherSnapshot.tombstones` (die EIGENE, u.U. veraltete
+  Lösch-Historie des Geräts) in den bereits korrekt befüllten Context — jeder
+  dort passende Treffer wurde gelöscht und per normalem Sync an alle Peers
+  weitergereicht.
+- **Fix:** `eindeutigFehlgeschlagen` prüft jetzt ausschließlich
+  `vorherZaehler.gesamt > 0 && nachherZaehler.gesamt == 0` (echter
+  Totalverlust) — ein reiner Zugriffsfehler-Flag ohne tatsächlichen
+  Datenverlust bleibt wie ein teilweiser Rückgang rein informativ über die
+  Vorher-/Nachher-Zusammenfassung sichtbar, statt einen destruktiven Rollback
+  auszulösen. Details: `ShopWithMe/Services/SyncErsetzenService.swift`.
+
 ## v0.17 (Build 371) — MilkForUs-Import: legt per Wandlung konvertierte Artikel nicht mehr erneut an (#177)
 
 - **#177:** Ein per „Wandlung" (`ArtikelZusammenfuehrungsService.alsProduktKonvertieren`)
