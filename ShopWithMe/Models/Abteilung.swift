@@ -92,7 +92,7 @@ final class Abteilung {
     /// Farbänderung auch bereits synchronisierte Geräte erreicht
     /// (`SyncSnapshotImportService.mergeAbteilungen`), siehe
     /// ``GeschaeftTyp/lamportZaehler`` für die volle Begründung.
-    var lamportZaehler: UInt64 { lamportZaehlerRaw ?? 0 }
+    var lamportZaehler: UInt64 { LamportVersionierung.stand(lamportZaehlerRaw) }
 
     init(name: String, standardSymbol: String, standardFarbeHex: String, sortIndex: Int = 0) {
         self.id = UUID()
@@ -107,13 +107,13 @@ final class Abteilung {
     /// (siehe `AbteilungenVerwaltungView`) — nie bei bloßer Neuanlage, siehe
     /// ``GeschaeftTyp/markiereGeaendert()``.
     func markiereGeaendert() {
-        lamportZaehlerRaw = LamportClock.naechsterZaehler()
+        LamportVersionierung.markiereGeaendert(&lamportZaehlerRaw)
     }
 
     /// Übernimmt beim Sync-Merge einen tatsächlich neueren Zählerstand, siehe
     /// ``GeschaeftTyp/uebernehmeLamportZaehler(_:)``.
     func uebernehmeLamportZaehler(_ fremderZaehler: UInt64) {
-        lamportZaehlerRaw = fremderZaehler
+        LamportVersionierung.uebernehmeFremdenStand(&lamportZaehlerRaw, fremderZaehler: fremderZaehler)
     }
 }
 

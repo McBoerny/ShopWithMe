@@ -47,7 +47,7 @@ final class GeschaeftTyp {
     /// nicht domänenspezifisch — vergleichbar ist der Wert ohnehin nur
     /// innerhalb desselben Objekts (`lokal.lamportZaehler` vs.
     /// `eintrag.lamportZaehler`), nie geräte- oder typübergreifend.
-    var lamportZaehler: UInt64 { lamportZaehlerRaw ?? 0 }
+    var lamportZaehler: UInt64 { LamportVersionierung.stand(lamportZaehlerRaw) }
 
     init(name: String, symbolName: String, farbeHex: String? = nil, sortIndex: Int = 0) {
         self.id = UUID()
@@ -64,7 +64,7 @@ final class GeschaeftTyp {
     /// synchronisierter Typ soll keinen anderswo bereits bekannten,
     /// gleichnamigen Typ überschreiben können).
     func markiereGeaendert() {
-        lamportZaehlerRaw = LamportClock.naechsterZaehler()
+        LamportVersionierung.markiereGeaendert(&lamportZaehlerRaw)
     }
 
     /// Übernimmt beim Sync-Merge einen vom sendenden Peer mitgebrachten,
@@ -74,7 +74,7 @@ final class GeschaeftTyp {
     /// dieses Gerät bei einem künftigen Merge korrekt erkennt, dass es diesen
     /// Stand bereits kennt.
     func uebernehmeLamportZaehler(_ fremderZaehler: UInt64) {
-        lamportZaehlerRaw = fremderZaehler
+        LamportVersionierung.uebernehmeFremdenStand(&lamportZaehlerRaw, fremderZaehler: fremderZaehler)
     }
 }
 

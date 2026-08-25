@@ -44,6 +44,7 @@ enum SchemaV1: VersionedSchema {
             ArtikelListenKauf.self,
             Produkt.self,
             Produktname.self,
+            ArtikelAbteilungsTombstone.self,
         ]
     }
 }

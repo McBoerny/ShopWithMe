@@ -124,7 +124,7 @@ struct ArtikelEditView: View {
                 await abteilungAutomatischVorschlagen()
             }
             .sheet(isPresented: $zeigeAbteilungHinzufuegen) {
-                AbteilungZuArtikelHinzufuegenSheet(artikel: artikel)
+                AbteilungZuArtikelHinzufuegenSheet(artikel: artikel, istNeu: istNeu)
             }
             .sheet(item: $neuesProduktEntwurf) { entwurf in
                 ProduktEditView(produkt: entwurf, istNeu: true)
@@ -416,10 +416,26 @@ struct ArtikelEditView: View {
         }
     }
 
+    /// Entfernt eine Abteilungs-Zuordnung — bei einem bereits bestehenden
+    /// Artikel zusätzlich mit ``ArtikelAbteilungsTombstone`` vorgemerkt (GitHub
+    /// #173), damit der additive Sync-Merge sie nicht bei einem der nächsten
+    /// Zyklen von einem Peer mit veraltetem Stand erneut anfügt bzw. das
+    /// Entfernen auch zu Geräten propagiert, die dieselbe Abteilung
+    /// unabhängig noch zugeordnet haben. Bei Neuanlage (`istNeu == true`) kein
+    /// Tombstone nötig — der Artikel existiert noch nirgendwo sonst im
+    /// Sync-Verbund.
     private func abteilungEntfernen(at indexSet: IndexSet) {
         var aktuelle = artikel.abteilungen
         for index in indexSet.sorted(by: >) {
+            let entfernteAbteilung = aktuelle[index]
             aktuelle.remove(at: index)
+            if !istNeu {
+                artikel.markiereAbteilungenGeaendert()
+                ArtikelAbteilungsTombstoneService.markiereEntfernt(
+                    artikelID: artikel.id, abteilungID: entfernteAbteilung.id,
+                    lamportZaehler: artikel.abteilungenLamportZaehler, context: modelContext
+                )
+            }
         }
         artikel.abteilungen = aktuelle
     }
@@ -468,6 +484,9 @@ struct ArtikelEditView: View {
 /// ``AuswahlSheet`` (GitHub #130) analog ``AbteilungHinzufuegenSheet``.
 private struct AbteilungZuArtikelHinzufuegenSheet: View {
     @Bindable var artikel: Artikel
+    /// Wie ``ArtikelEditView/istNeu`` — bei Neuanlage kein
+    /// ``Artikel/markiereAbteilungenGeaendert()`` nötig (siehe dort), GitHub #173.
+    let istNeu: Bool
 
     @Query(sort: \Abteilung.sortIndex) private var alleAbteilungen: [Abteilung]
     /// Die eigentliche Zuordnung passiert verzögert über ``onChange(of:)``
@@ -492,6 +511,7 @@ private struct AbteilungZuArtikelHinzufuegenSheet: View {
             neuAnlegenInhalt: { _, gesichert in
                 NeueAbteilungSheet(naechsterSortIndex: (alleAbteilungen.map(\.sortIndex).max() ?? -1) + 1) { abteilung in
                     artikel.abteilungen.append(abteilung)
+                    if !istNeu { artikel.markiereAbteilungenGeaendert() }
                     gesichert(abteilung)
                 }
             }
@@ -501,6 +521,7 @@ private struct AbteilungZuArtikelHinzufuegenSheet: View {
             for id in neu {
                 if let abteilung = nichtZugeordneteAbteilungen.first(where: { $0.id == id }) {
                     artikel.abteilungen.append(abteilung)
+                    if !istNeu { artikel.markiereAbteilungenGeaendert() }
                 }
             }
             geradeAusgewaehlt = []

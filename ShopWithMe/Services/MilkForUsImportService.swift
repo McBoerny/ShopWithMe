@@ -42,7 +42,9 @@ enum AbteilungZuordnung: Equatable {
     case bestehend(Abteilung)
     /// Es wird beim Übernehmen eine neue Abteilung mit diesem Namen angelegt.
     case neuAnlegen(name: String)
-    /// Die Artikel dieser Gruppe werden ``Abteilung/sonstige(context:)`` zugeordnet.
+    /// Die Artikel dieser Gruppe bekommen keine Abteilung (fallen automatisch unter
+    /// die rein virtuelle ``Abteilung/sonstige(context:)``, siehe
+    /// ``Artikel/effektiveAbteilungen(context:)`` — bewusst KEINE reale Zuordnung, GitHub #173).
     case sonstige
 
     static func == (lhs: AbteilungZuordnung, rhs: AbteilungZuordnung) -> Bool {
@@ -297,7 +299,7 @@ enum MilkForUsImportService {
         // aufgelöste Abteilung — verhindert, dass eine `.neuAnlegen`-Gruppe, deren
         // Artikel sich über mehrere Chunks verteilen, dieselbe neue Abteilung
         // mehrfach anlegt.
-        var abteilungProGruppenID: [String: Abteilung] = [:]
+        var abteilungProGruppenID: [String: Abteilung?] = [:]
 
         let chunkGroesse = 25
         var erledigt = 0
@@ -309,7 +311,7 @@ enum MilkForUsImportService {
                 listeVorhanden = true
 
                 for schritt in chunk {
-                    let abteilung: Abteilung
+                    let abteilung: Abteilung?
                     if let bestehende = abteilungProGruppenID[schritt.gruppenID] {
                         abteilung = bestehende
                     } else {
@@ -317,7 +319,15 @@ enum MilkForUsImportService {
                         case .bestehend(let bestehende):
                             abteilung = bestehende
                         case .sonstige:
-                            abteilung = Abteilung.sonstige(context: context)
+                            // Bewusst KEINE reale Zuordnung zur "Sonstiges"-Abteilung (GitHub
+                            // #173) — sonst landet die eigentlich rein virtuelle Auffang-Abteilung
+                            // (``Abteilung/sonstige(context:)``) als echtes Mitglied in
+                            // ``Artikel/abteilungenRaw`` und wird über den additiven Sync-Merge
+                            // dauerhaft unentfernbar, sobald sie einmal auf einem Gerät im
+                            // Sync-Verbund gelandet ist. `abteilungen: []` lässt stattdessen den
+                            // normalen Fallback (``Artikel/effektiveAbteilungen(context:)``)
+                            // greifen — exakt dieselbe Optik, ohne die reale Zuordnung.
+                            abteilung = nil
                         case .neuAnlegen(let name):
                             let neue = Abteilung(
                                 name: name,
@@ -346,7 +356,7 @@ enum MilkForUsImportService {
                             name: schritt.artikelName,
                             symbolName: SymbolPalette.alle[0],
                             farbeHex: Color.artikelPalette[0],
-                            abteilungen: [abteilung]
+                            abteilungen: abteilung.map { [$0] } ?? []
                         )
                         context.insert(neuer)
                         artikelNachName[schluessel] = neuer

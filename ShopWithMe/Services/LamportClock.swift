@@ -39,3 +39,51 @@ enum LamportClock {
         UserDefaults.standard.set(String(naechster), forKey: schluessel)
     }
 }
+
+/// Wiederverwendbarer Baustein für den „Ersetzend mit Lamport-Zähler"-Trick
+/// aus `docs/DATENSYNCHRONISATION.md` §4.1a/§4.1b — bündelt die Logik (Stand
+/// lesen, neuen eigenen Tick ziehen, fremden Stand beim Merge übernehmen)
+/// genau einmal, statt dass jede Entität mit einem solchen Zähler
+/// (``GeschaeftTyp``, ``Abteilung``, ``Geschaeft``, ``Produkt``, ``Artikel`` —
+/// gleich zweimal, siehe ``Artikel/abteilungenLamportZaehler``) sie erneut
+/// abschreibt. Live-Fund GitHub #173: eine zweite, praktisch identische Kopie
+/// dieser drei Zeilen innerhalb derselben Entität (``Artikel``) war der
+/// Auslöser, das seit `GeschaeftTyp` fünffach kopierte Muster endlich zu
+/// extrahieren, statt es ein sechstes Mal abzuschreiben.
+///
+/// **Bewusst ein Namensraum aus statischen Funktionen über `inout UInt64?`,
+/// kein Property Wrapper und kein gespeicherter Custom-Struct-Typ:** der
+/// Rohwert jeder Entität bleibt ein gewöhnliches, natives
+/// `private var xyzRaw: UInt64?` — der einzige Property-Typ, den SwiftDatas
+/// Schema-Introspektion/`#Predicate`/Codable-Export für dieses Muster bereits
+/// nachgewiesen zuverlässig unterstützt (fünffach im Einsatz, seit
+/// `GeschaeftTyp`). Ein Property Wrapper oder ein gespeichertes Wert-Typ-Bündel
+/// wäre zusätzlich unüblich genug (siehe `ios-swift-engineering`-Skill, „Bei
+/// weniger gebräuchlichen APIs vorher aktuelle Dokumentation prüfen"), um das
+/// Risiko ohne dokumentierten Bedarf einzugehen — und löst nebenbei nicht
+/// einmal das eigentliche Problem: eine Entität mit MEHREREN unabhängigen
+/// Zählern (wie ``Artikel``, s.o.) kann nicht zweimal an dieselbe
+/// Protokoll-Property gebunden sein. Ein Namensraum aus Funktionen über
+/// `inout` hat diese Einschränkung nicht — beliebig viele unabhängige Zähler
+/// pro Entität, jeweils ein eigenes `Raw`-Feld, aber dieselbe geteilte Logik.
+enum LamportVersionierung {
+    /// Aktueller Stand, `0` falls noch nie gesetzt (Peer auf älterer
+    /// App-Version, oder Entität seit Neuanlage unverändert).
+    static func stand(_ roh: UInt64?) -> UInt64 { roh ?? 0 }
+
+    /// Zieht einen neuen eigenen Tick — aufgerufen, wenn der Anwender das
+    /// zugehörige Feld/die zugehörigen Felder eines bereits bestehenden
+    /// Datensatzes ändert (nie bei bloßer Neuanlage).
+    static func markiereGeaendert(_ roh: inout UInt64?) {
+        roh = LamportClock.naechsterZaehler()
+    }
+
+    /// Übernimmt beim Sync-Merge einen vom sendenden Peer mitgebrachten
+    /// Zählerstand direkt (kein neuer eigener Tick) — der Aufrufer entscheidet
+    /// vorher, ob `fremderZaehler` tatsächlich neuer als der aktuelle Stand
+    /// ist, bzw. seedet bedingungslos bei einer Neuanlage aus einem
+    /// Remote-Eintrag (siehe `docs/DATENSYNCHRONISATION.md` §4.1a Schritt 5).
+    static func uebernehmeFremdenStand(_ roh: inout UInt64?, fremderZaehler: UInt64) {
+        roh = fremderZaehler
+    }
+}

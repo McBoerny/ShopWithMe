@@ -79,6 +79,8 @@ private struct AbteilungBearbeitenView: View {
     @Bindable var abteilung: Abteilung
     @State private var zeigeArtikelHinzufuegen = false
 
+    @Environment(\.modelContext) private var modelContext
+
     /// Artikel, die dieser Abteilung zugeordnet sind, alphabetisch — Vereinigung aus
     /// ``Abteilung/zugeordneteArtikel`` (maßgebliche Quelle für
     /// Mehrfachzuordnung) und ``Abteilung/artikel`` (Migrations-Fallback für
@@ -133,12 +135,20 @@ private struct AbteilungBearbeitenView: View {
         }
     }
 
+    /// Entfernt die Zuordnung zu ``abteilung`` — mit ``ArtikelAbteilungsTombstone``
+    /// vorgemerkt (GitHub #173), analog ``ArtikelEditView/abteilungEntfernen(at:)``
+    /// (dort ausführliche Begründung), hier immer für einen bereits bestehenden
+    /// Artikel (kein Neuanlage-Fall in dieser Verwaltungsansicht).
     private func artikelEntfernen(at offsets: IndexSet) {
         for index in offsets {
             let artikel = zugeordneteArtikel[index]
             var aktuelle = artikel.abteilungen
             aktuelle.removeAll { $0 == abteilung }
             artikel.abteilungen = aktuelle
+            artikel.markiereAbteilungenGeaendert()
+            ArtikelAbteilungsTombstoneService.markiereEntfernt(
+                artikelID: artikel.id, abteilungID: abteilung.id, lamportZaehler: artikel.abteilungenLamportZaehler, context: modelContext
+            )
         }
     }
 }
@@ -191,6 +201,7 @@ private struct ArtikelZuAbteilungHinzufuegenSheet: View {
         guard !aktuelle.contains(abteilung) else { return }
         aktuelle.append(abteilung)
         artikel.abteilungen = aktuelle
+        artikel.markiereAbteilungenGeaendert()
     }
 }
 

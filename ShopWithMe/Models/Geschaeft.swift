@@ -227,7 +227,7 @@ final class Geschaeft {
     /// erreicht (`SyncSnapshotImportService.mergeGeschaefte`); alle übrigen
     /// Felder bleiben unverändert additiv/nil-füllend, siehe
     /// ``GeschaeftTyp/lamportZaehler`` für die volle Begründung.
-    var lamportZaehler: UInt64 { lamportZaehlerRaw ?? 0 }
+    var lamportZaehler: UInt64 { LamportVersionierung.stand(lamportZaehlerRaw) }
 
     init(name: String, typen: [GeschaeftTyp], adresse: String? = nil) {
         self.id = UUID()
@@ -240,13 +240,13 @@ final class Geschaeft {
     /// Geschäfts ändert (siehe `GeschaeftStammdatenEditView`) — nie bei
     /// bloßer Neuanlage, siehe ``GeschaeftTyp/markiereGeaendert()``.
     func markiereGeaendert() {
-        lamportZaehlerRaw = LamportClock.naechsterZaehler()
+        LamportVersionierung.markiereGeaendert(&lamportZaehlerRaw)
     }
 
     /// Übernimmt beim Sync-Merge einen tatsächlich neueren Zählerstand, siehe
     /// ``GeschaeftTyp/uebernehmeLamportZaehler(_:)``.
     func uebernehmeLamportZaehler(_ fremderZaehler: UInt64) {
-        lamportZaehlerRaw = fremderZaehler
+        LamportVersionierung.uebernehmeFremdenStand(&lamportZaehlerRaw, fremderZaehler: fremderZaehler)
     }
 
     /// Merkt sich `name` als zusätzlichen ``alternativeNamen``-Eintrag dieses

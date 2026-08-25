@@ -139,7 +139,7 @@ final class Artikel {
     /// haben aktuell keinen Bearbeitungs-Pfad für bestehende Artikel und
     /// bleiben deshalb bewusst außen vor. Siehe ``GeschaeftTyp/lamportZaehler``
     /// für die volle Begründung.
-    var lamportZaehler: UInt64 { lamportZaehlerRaw ?? 0 }
+    var lamportZaehler: UInt64 { LamportVersionierung.stand(lamportZaehlerRaw) }
 
     init(
         name: String,
@@ -166,13 +166,44 @@ final class Artikel {
     /// dieses bereits bestehenden Artikels ändert (siehe `ArtikelEditView`) —
     /// nie bei bloßer Neuanlage, siehe ``GeschaeftTyp/markiereGeaendert()``.
     func markiereGeaendert() {
-        lamportZaehlerRaw = LamportClock.naechsterZaehler()
+        LamportVersionierung.markiereGeaendert(&lamportZaehlerRaw)
     }
 
     /// Übernimmt beim Sync-Merge einen tatsächlich neueren Zählerstand, siehe
     /// ``GeschaeftTyp/uebernehmeLamportZaehler(_:)``.
     func uebernehmeLamportZaehler(_ fremderZaehler: UInt64) {
-        lamportZaehlerRaw = fremderZaehler
+        LamportVersionierung.uebernehmeFremdenStand(&lamportZaehlerRaw, fremderZaehler: fremderZaehler)
+    }
+
+    /// Rohspeicher für ``abteilungenLamportZaehler`` — additiv optional, siehe
+    /// ``lamportZaehlerRaw``.
+    private var abteilungenLamportZaehlerRaw: UInt64?
+    /// Logischer Zeitstempel der letzten Änderung an ``abteilungen`` — eigener
+    /// Zähler statt Mitbenutzung von ``lamportZaehler`` (GitHub #173, siehe
+    /// `docs/DATENSYNCHRONISATION.md` §4.1b): `abteilungen` ist eine additive
+    /// Mehrfachbeziehung mit Tombstone-basiertem Entfernen (grundverschiedenes
+    /// CRDT-Muster von den „ersetzenden" Skalarfeldern name/einheit/
+    /// mengenSchritt), keine weitere „ersetzende" Eigenschaft dieser Entität.
+    /// Ein gemeinsamer Zähler würde beide Mechanismen aneinanderkoppeln: eine
+    /// bloße Umbenennung ließe einen längst entfernten Zuordnungs-Tombstone
+    /// unbeabsichtigt verfallen, umgekehrt würde jede Abteilungs-Änderung
+    /// einen eigentlich unveränderten Namen/Einheit-Stand angreifbarer für
+    /// einen verspäteten Peer machen. Grundlage für
+    /// ``SyncSnapshotImportService/mergeArtikelAbteilungsTombstones(_:artikelZuordnung:abteilungZuordnung:context:)``.
+    var abteilungenLamportZaehler: UInt64 { LamportVersionierung.stand(abteilungenLamportZaehlerRaw) }
+
+    /// Aufgerufen, wenn der Anwender ``abteilungen`` dieses bereits
+    /// bestehenden Artikels ändert (siehe `ArtikelEditView`,
+    /// `AbteilungenVerwaltungView`) — nie bei bloßer Neuanlage, analog
+    /// ``markiereGeaendert()``.
+    func markiereAbteilungenGeaendert() {
+        LamportVersionierung.markiereGeaendert(&abteilungenLamportZaehlerRaw)
+    }
+
+    /// Übernimmt beim Sync-Merge einen tatsächlich neueren Zählerstand, analog
+    /// ``uebernehmeLamportZaehler(_:)``.
+    func uebernehmeAbteilungenLamportZaehler(_ fremderZaehler: UInt64) {
+        LamportVersionierung.uebernehmeFremdenStand(&abteilungenLamportZaehlerRaw, fremderZaehler: fremderZaehler)
     }
 }
 

@@ -64,7 +64,7 @@ final class Produkt {
     /// hat aktuell keinen Bearbeitungs-Pfad für bestehende Produkte und bleibt
     /// deshalb bewusst außen vor. Siehe ``GeschaeftTyp/lamportZaehler`` für
     /// die volle Begründung.
-    var lamportZaehler: UInt64 { lamportZaehlerRaw ?? 0 }
+    var lamportZaehler: UInt64 { LamportVersionierung.stand(lamportZaehlerRaw) }
 
     init(name: String, artikel: Artikel?, elternProdukt: Produkt? = nil, istStandard: Bool = false) {
         self.id = UUID()
@@ -78,13 +78,13 @@ final class Produkt {
     /// Produkts ändert (siehe `ProduktEditView`) — nie bei bloßer Neuanlage,
     /// siehe ``GeschaeftTyp/markiereGeaendert()``.
     func markiereGeaendert() {
-        lamportZaehlerRaw = LamportClock.naechsterZaehler()
+        LamportVersionierung.markiereGeaendert(&lamportZaehlerRaw)
     }
 
     /// Übernimmt beim Sync-Merge einen tatsächlich neueren Zählerstand, siehe
     /// ``GeschaeftTyp/uebernehmeLamportZaehler(_:)``.
     func uebernehmeLamportZaehler(_ fremderZaehler: UInt64) {
-        lamportZaehlerRaw = fremderZaehler
+        LamportVersionierung.uebernehmeFremdenStand(&lamportZaehlerRaw, fremderZaehler: fremderZaehler)
     }
 }
 

@@ -125,7 +125,8 @@ enum SyncSnapshotExportService {
                 mengenSchritt: artikel.mengenSchritt,
                 erstelltAm: artikel.erstelltAm,
                 alternativeNamen: artikel.alternativeNamen,
-                lamportZaehler: artikel.lamportZaehler
+                lamportZaehler: artikel.lamportZaehler,
+                abteilungenLamportZaehler: artikel.abteilungenLamportZaehler
             )
         }
 
@@ -263,6 +264,10 @@ enum SyncSnapshotExportService {
             SyncTombstoneSnapshot(entitaetsArt: $0.entitaetsArt, geloeschteID: $0.geloeschteID, geloeschtAm: $0.geloeschtAm)
         }
 
+        let abteilungsTombstones = ArtikelAbteilungsTombstoneService.alle(context: context).map {
+            ArtikelAbteilungsTombstoneSnapshot(artikelID: $0.artikelID, abteilungID: $0.abteilungID, lamportZaehler: $0.lamportZaehler)
+        }
+
         return SyncSnapshot(
             formatVersion: SyncSnapshot.aktuelleFormatVersion,
             erzeugtAm: Date(),
@@ -283,7 +288,8 @@ enum SyncSnapshotExportService {
             artikelListenKaeufe: artikelListenKaeufe,
             tombstones: tombstones,
             produkte: produkte,
-            produktnamen: produktnamen
+            produktnamen: produktnamen,
+            abteilungsTombstones: abteilungsTombstones
         )
     }
 
@@ -575,6 +581,7 @@ enum SyncSnapshotExportService {
         }
         stamm.produkte.sort { $0.id.uuidString < $1.id.uuidString }
         stamm.produktnamen.sort { $0.id.uuidString < $1.id.uuidString }
+        stamm.abteilungsTombstones.sort { "\($0.artikelID)_\($0.abteilungID)" < "\($1.artikelID)_\($1.abteilungID)" }
         return stamm
     }
 
@@ -692,7 +699,8 @@ enum SyncSnapshotExportService {
         let stamm = SyncStammSnapshot(
             geschaeftsTypen: snapshot.geschaeftsTypen, abteilungen: snapshot.abteilungen,
             geschaefte: snapshot.geschaefte, artikel: snapshot.artikel, einkaufslisten: snapshot.einkaufslisten,
-            produkte: snapshot.produkte, produktnamen: snapshot.produktnamen
+            produkte: snapshot.produkte, produktnamen: snapshot.produktnamen,
+            abteilungsTombstones: snapshot.abteilungsTombstones
         )
         let listen = SyncListenSnapshot(einkaufslistenEintraege: snapshot.einkaufslistenEintraege)
         let lernen = SyncLernenSnapshot(

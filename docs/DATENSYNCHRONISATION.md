@@ -187,6 +187,10 @@ Abwägung).
 - **Skalare mit echter Bearbeitungssemantik** (`GeschaeftTyp`/
   `Abteilung`/`Geschaeft`/`Artikel`/`Produkt`) — Lamport-Zähler statt
   additiv, siehe 4.1a.
+- **`Artikel.abteilungen`-Entfernung** (GitHub #173) — additiv bleibt die
+  einzige Regel fürs *Hinzufügen*, aber ein explizites *Entfernen* setzt sich
+  über ``ArtikelAbteilungsTombstone`` gegen die additive Vereinigung durch,
+  siehe 4.1b.
 
 ### 4.1a Ersetzend mit Lamport-Zähler — Ausnahme für Skalare mit echter Bearbeitungssemantik
 
@@ -213,13 +217,23 @@ tatsächlichem UI-Bearbeitungspfad für einen bereits bestehenden Datensatz.
 
 **Referenzimplementierung je Entität** (sechs Schritte, siehe z.B.
 `GeschaeftTyp.lamportZaehler`/`mergeGeschaeftsTypen` als vollständiges
-Beispiel):
+Beispiel). Schritte 1/2 nutzen seit GitHub #173 den gemeinsamen Baustein
+``LamportVersionierung`` (`LamportClock.swift`) statt die drei Zeilen pro
+Entität erneut abzuschreiben — Live-Fund: eine zweite, praktisch identische
+Kopie *innerhalb derselben Entität* (``Artikel/abteilungenLamportZaehler``,
+siehe 4.1b) war der Anlass, das seit `GeschaeftTyp` fünffach kopierte Muster
+endlich zu extrahieren. Weiterhin **ein eigenes `Raw`-Feld pro Entität** (bzw.
+pro unabhängigem Zähler, falls eine Entität mehrere braucht) — nur die Logik
+ist geteilt, nicht der Speicher (SwiftData-Kompatibilität, siehe Typ-Doku von
+``LamportVersionierung`` für die Abwägung gegen einen Property Wrapper):
 1. Modell: `private var lamportZaehlerRaw: UInt64?` +
-   `var lamportZaehler: UInt64 { lamportZaehlerRaw ?? 0 }`.
-2. `func markiereGeaendert()` (setzt `lamportZaehlerRaw =
-   LamportClock.naechsterZaehler()`, neuer eigener Tick) und
-   `func uebernehmeLamportZaehler(_ fremderZaehler: UInt64)` (direkte
-   Übernahme ohne neuen Tick, für den Merge-Fall) auf dem Modell.
+   `var lamportZaehler: UInt64 { LamportVersionierung.stand(lamportZaehlerRaw) }`.
+2. `func markiereGeaendert()` (ruft
+   `LamportVersionierung.markiereGeaendert(&lamportZaehlerRaw)`, neuer eigener
+   Tick) und `func uebernehmeLamportZaehler(_ fremderZaehler: UInt64)` (ruft
+   `LamportVersionierung.uebernehmeFremdenStand(&lamportZaehlerRaw,
+   fremderZaehler:)`, direkte Übernahme ohne neuen Tick, für den Merge-Fall)
+   auf dem Modell.
 3. Snapshot-Struct: `var lamportZaehler: UInt64 = 0`, additiv-optional statt
    Versionssprung (Default deckt Peers auf älterer App-Version ab, analog
    `ArtikelSnapshot.alternativeNamen`).
@@ -263,6 +277,79 @@ später nachgeholte Aufgabe. Außer rein lokal genutzten Daten (z.B. reine
 UI-/Geräte-Zustände ohne Bereich-B/C/D-Rolle) soll sich der Datenbestand über
 alle Geräte hinweg tatsächlich synchronisieren, nicht nur bei Erstanlage
 (Nutzervorgabe, Session 2026-08-22).
+
+### 4.1b Entfernbare Mehrfachbeziehung — Ausnahme für `Artikel.abteilungen`
+
+**Lücke, die diese Ausnahme schließt (GitHub #173):** `Artikel.abteilungen`
+blieb bewusst additiv (4.1) — anders als bei den „ersetzenden" Skalarfeldern
+oben soll ein Hinzufügen auf zwei Geräten offline NIE eine der beiden
+Ergänzungen kosten. Rein additiv bedeutet aber auch: ein lokal entferntes
+Element kommt beim nächsten Sync-Zyklus von jedem Peer zurück, der die alte
+Zuordnung noch führt — Entfernen war faktisch nie dauerhaft. Konkret
+beobachtet an der eigentlich rein virtuellen „Sonstiges"-Abteilung
+(``Abteilung/sonstige(context:)`` — ist keine Ausnahme im Datenmodell, sondern
+eine ganz normale ``Abteilung``-Zeile, siehe deren Typ-Doku), aber
+grundsätzlich jede echte Abteilungs-Entfernung betreffend.
+
+**Mechanismus:** ``ArtikelAbteilungsTombstone`` merkt pro (`Artikel`,
+`Abteilung`)-Paar den Stand von ``Artikel/abteilungenLamportZaehler`` zum
+Zeitpunkt des Entfernens vor. **Bewusst ein eigener, dedizierter Zähler statt
+Mitbenutzung von ``Artikel/lamportZaehler``** (4.1a) — der wiederverwendete
+Ticker (``LamportClock``) ist derselbe globale, aber der GESPEICHERTE
+Vergleichs-Zähler ist eine eigene, unabhängige Eigenschaft. `abteilungen` ist
+eine additive Mehrfachbeziehung mit Tombstone-Entfernen, ein grundverschiedenes
+CRDT-Muster von den in 4.1a gebündelten „ersetzenden" Skalarfeldern
+(`name`/`einheit`/`mengenSchritt`) — ein gemeinsamer Zähler hätte beide
+Mechanismen aneinandergekoppelt: eine bloße Umbenennung hätte einen längst
+entfernten Tombstone unbeabsichtigt entwertet, umgekehrt hätte jede
+Abteilungs-Änderung einen eigentlich unveränderten Namen/Einheit-Stand
+angreifbarer für einen verspäteten Peer gemacht (Live-Fund während der
+Umsetzung, direkt so vom Nutzer benannt — „vermischen wir Code, der
+ursprünglich spezifisch ausgelegt war?"). Ein tatsächlich späteres
+Wieder-Hinzufügen (erkennbar am gestiegenen
+``ArtikelSnapshot/abteilungenLamportZaehler`` des einliefernden Peers) sticht
+den Tombstone automatisch aus. Zwei Wirkungen beim Merge
+(`SyncSnapshotImportService`):
+
+1. **Blockiert künftiges Wieder-Hinzufügen:** `vervollstaendige` filtert
+   Kandidaten aus der sonst additiven Vereinigung heraus, für die ein lokaler
+   Tombstone mit `lamportZaehler >= eintrag.abteilungenLamportZaehler`
+   existiert, und übernimmt danach unabhängig vom Vereinigungsergebnis den
+   höheren der beiden `abteilungenLamportZaehler`-Stände (sonst könnte ein
+   künftiger, älterer Tombstone-Stand eines DRITTEN Peers fälschlich gegen
+   einen bereits bekannten, höheren Stand dieses Peers antreten).
+2. **Propagiert aktiv:** `mergeArtikelAbteilungsTombstones` (läuft NACH
+   `mergeArtikel`/`mergeAbteilungen`, braucht deren Zuordnungstabellen) entfernt
+   eine bereits lokal vorhandene Zuordnung aktiv, wenn ein empfangener
+   Tombstone `>= artikel.abteilungenLamportZaehler` ist — sonst würde ein
+   Entfernen nie zu einem Gerät propagieren, das dieselbe Abteilung unabhängig
+   noch zugeordnet hat (nicht nur künftiges erneutes Hinzufügen wäre dann
+   verhindert, das bereits Vorhandene bliebe aber stehen).
+
+**Präziser als 4.1a, kein neuer Kompromiss:** weil der Zähler ausschließlich
+durch tatsächliche `abteilungen`-Änderungen bewegt wird, ist der Vergleich
+hier — anders als beim bewusst grobkörnigen Whole-Object-Vergleich in 4.1a —
+sogar feldgenau, ohne zusätzlichen Aufwand gegenüber der Alternative
+(Mitbenutzung von `lamportZaehler` hätte die dortige Ungenauigkeit lediglich
+auf einen weiteren Mechanismus übertragen).
+
+**Referenzimplementierung:** jede UI-Stelle, die `artikel.abteilungen`
+verändert, ruft zusätzlich `artikel.markiereAbteilungenGeaendert()` (bei
+Neuanlage `istNeu`-guardiert wie 4.1a Schritt 6, aber ein eigener Zähler statt
+`markiereGeaendert()`); Entfernen zusätzlich
+``ArtikelAbteilungsTombstoneService/markiereEntfernt(artikelID:abteilungID:lamportZaehler:context:)``
+mit dem frisch gebumpten `abteilungenLamportZaehler`-Stand. Siehe
+`ArtikelEditView.abteilungEntfernen`/`AbteilungenVerwaltungView.artikelEntfernen`
+für Entfernen,
+`AbteilungZuArtikelHinzufuegenSheet`/`ArtikelZuAbteilungHinzufuegenSheet` für
+Hinzufügen.
+
+**Bekannte, aktuell folgenlose Lücke:** anders als ``SyncTombstone`` hat
+``ArtikelAbteilungsTombstone`` noch keine Aufräum-/Bereinigungsroutine — wächst
+unbegrenzt. Kein Live-Problem (Abteilungs-Entfernungen sind selten), aber ein
+naheliegender Folgeschritt nach demselben Muster wie
+``SyncTombstoneService/raeumeAlteTombstonesAufFallsFaellig(context:erzwungenerWasserstand:)``,
+falls relevant.
 
 ### 4.2 Entitäts-Matching und Alias-Auflösung
 
@@ -360,8 +447,9 @@ Einträge) bleibt bewusst unverändert gegen `alle`.
 
 **Abhängigkeitsreihenfolge beim Merge** (spätere Schritte brauchen die
 Zuordnungstabellen früherer): `GeschaeftTyp` → `Abteilung` →
-`Geschaeft` → `Artikel` → `Produkt` (GitHub #47, einzige Abhängigkeit:
-`Artikel`) → `Einkaufsliste` → `EinkaufslistenEintrag` →
+`Geschaeft` → `Artikel` → `ArtikelAbteilungsTombstone` (GitHub #173, siehe
+4.1b — braucht `Artikel`+`Abteilung`) → `Produkt` (GitHub #47, einzige
+Abhängigkeit: `Artikel`) → `Einkaufsliste` → `EinkaufslistenEintrag` →
 `Einkaufsvorgang` → `KaufEintrag` → `Preispunkt` → `Produktname` (GitHub #47,
 braucht `Produkt`+`Geschaeft`) →
 `WarengruppenDistanz` → `ArtikelGeschaeftVerfuegbarkeit`/`GeschaeftBesuch` →

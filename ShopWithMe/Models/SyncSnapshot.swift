@@ -142,6 +142,9 @@ struct SyncSnapshot: Codable {
     var produkte: [ProduktSnapshot] = []
     /// Seit Version 8, siehe ``Produktname``.
     var produktnamen: [ProduktnameSnapshot] = []
+    /// Additiv-optional statt Versionssprung — siehe
+    /// ``ArtikelAbteilungsTombstone`` (GitHub #173).
+    var abteilungsTombstones: [ArtikelAbteilungsTombstoneSnapshot] = []
 }
 
 struct GeschaeftTypSnapshot: Codable {
@@ -235,6 +238,10 @@ struct ArtikelSnapshot: Codable {
     var alternativeNamen: [String] = []
     /// Additiv-optional statt Versionssprung — siehe ``Artikel/lamportZaehler``.
     var lamportZaehler: UInt64 = 0
+    /// Additiv-optional statt Versionssprung — siehe
+    /// ``Artikel/abteilungenLamportZaehler`` (GitHub #173, eigener Zähler statt
+    /// Mitbenutzung von ``lamportZaehler`` oben).
+    var abteilungenLamportZaehler: UInt64 = 0
 }
 
 struct EinkaufslisteSnapshot: Codable {
@@ -268,6 +275,16 @@ struct SyncTombstoneSnapshot: Codable {
     var entitaetsArt: String
     var geloeschteID: UUID
     var geloeschtAm: Date
+}
+
+/// Siehe ``ArtikelAbteilungsTombstone`` für die vollständige Begründung (GitHub
+/// #173) — additiv-optional statt Versionssprung, analog anderen seit Version
+/// 9 ergänzten Feldern hier: ein Peer auf einer älteren App-Version schreibt
+/// dieses Feld noch nicht, fehlt beim Decodieren dadurch einfach.
+struct ArtikelAbteilungsTombstoneSnapshot: Codable {
+    var artikelID: UUID
+    var abteilungID: UUID
+    var lamportZaehler: UInt64
 }
 
 struct EinkaufsvorgangSnapshot: Codable {
@@ -485,6 +502,11 @@ struct SyncStammSnapshot: Codable {
     var produkte: [ProduktSnapshot] = []
     /// Seit GitHub #47, Schritt 2/5, siehe ``Produktname``.
     var produktnamen: [ProduktnameSnapshot] = []
+    /// Seit GitHub #173, siehe ``ArtikelAbteilungsTombstone``. Hier statt in
+    /// einer eigenen Datei, weil sich diese Tombstones mit derselben, seltenen
+    /// Frequenz wie `artikel`/`abteilungen` selbst ändern (echte
+    /// Stammdaten-Bearbeitung, kein Bereich-A-Tempo).
+    var abteilungsTombstones: [ArtikelAbteilungsTombstoneSnapshot] = []
 }
 
 /// Bereich A, Sicherheitsnetz-Kopie des vollständigen Einkaufslisten-Inhalts

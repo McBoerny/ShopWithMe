@@ -451,13 +451,27 @@ enum SyncSnapshotImportService {
 
         mergeTombstones(tombstones, aliase: aliase, context: context)
 
+        // Vor ``mergeArtikel`` geladen, damit dessen ``vervollstaendige``-Aufrufe
+        // bereits lokal bekannte Entfernungen aus der additiven Vereinigung
+        // herausfiltern können (GitHub #173, siehe ``ArtikelAbteilungsTombstone``).
+        let abteilungsTombstoneStand = ArtikelAbteilungsTombstoneService.alleNachArtikel(context: context)
+
         let typZuordnung = mergeGeschaeftsTypen(stamm.geschaeftsTypen, context: context)
         let abteilungZuordnung = mergeAbteilungen(stamm.abteilungen, typZuordnung: typZuordnung, aliase: aliase, context: context)
         let geschaeftZuordnung = mergeGeschaefte(
             stamm.geschaefte, typZuordnung: typZuordnung, abteilungZuordnung: abteilungZuordnung,
             peerGeraeteID: peerGeraeteID, aliase: aliase, context: context
         )
-        let artikelZuordnung = mergeArtikel(stamm.artikel, abteilungZuordnung: abteilungZuordnung, peerGeraeteID: peerGeraeteID, aliase: aliase, context: context)
+        let artikelZuordnung = mergeArtikel(
+            stamm.artikel, abteilungZuordnung: abteilungZuordnung, peerGeraeteID: peerGeraeteID, aliase: aliase,
+            abteilungsTombstones: abteilungsTombstoneStand, context: context
+        )
+        // Nach ``mergeArtikel``/``mergeAbteilungen`` (braucht deren
+        // Zuordnungstabellen) — propagiert ein Entfernen zusätzlich aktiv an
+        // Geräte, die dieselbe Abteilung unabhängig noch zugeordnet haben.
+        mergeArtikelAbteilungsTombstones(
+            stamm.abteilungsTombstones, artikelZuordnung: artikelZuordnung, abteilungZuordnung: abteilungZuordnung, context: context
+        )
         let produktZuordnung = mergeProdukte(stamm.produkte, artikelZuordnung: artikelZuordnung, aliase: aliase, context: context)
         let listeZuordnung = mergeEinkaufslisten(stamm.einkaufslisten, peerGeraeteID: peerGeraeteID, aliase: aliase, context: context)
         mergeEinkaufslistenEintraege(
@@ -511,13 +525,21 @@ enum SyncSnapshotImportService {
         let aliase = SyncEntitaetsAliasService.alleAliaseNachArt(context: context)
         mergeTombstones(snapshot.tombstones, aliase: aliase, context: context)
 
+        let abteilungsTombstoneStand = ArtikelAbteilungsTombstoneService.alleNachArtikel(context: context)
+
         let typZuordnung = mergeGeschaeftsTypen(snapshot.geschaeftsTypen, context: context)
         let abteilungZuordnung = mergeAbteilungen(snapshot.abteilungen, typZuordnung: typZuordnung, aliase: aliase, context: context)
         let geschaeftZuordnung = mergeGeschaefte(
             snapshot.geschaefte, typZuordnung: typZuordnung, abteilungZuordnung: abteilungZuordnung,
             peerGeraeteID: peerGeraeteID, aliase: aliase, context: context
         )
-        let artikelZuordnung = mergeArtikel(snapshot.artikel, abteilungZuordnung: abteilungZuordnung, peerGeraeteID: peerGeraeteID, aliase: aliase, context: context)
+        let artikelZuordnung = mergeArtikel(
+            snapshot.artikel, abteilungZuordnung: abteilungZuordnung, peerGeraeteID: peerGeraeteID, aliase: aliase,
+            abteilungsTombstones: abteilungsTombstoneStand, context: context
+        )
+        mergeArtikelAbteilungsTombstones(
+            snapshot.abteilungsTombstones, artikelZuordnung: artikelZuordnung, abteilungZuordnung: abteilungZuordnung, context: context
+        )
         let produktZuordnung = mergeProdukte(snapshot.produkte, artikelZuordnung: artikelZuordnung, aliase: aliase, context: context)
         let listeZuordnung = mergeEinkaufslisten(snapshot.einkaufslisten, peerGeraeteID: peerGeraeteID, aliase: aliase, context: context)
         mergeEinkaufslistenEintraege(
@@ -944,7 +966,7 @@ enum SyncSnapshotImportService {
     @MainActor
     private static func mergeArtikel(
         _ remote: [ArtikelSnapshot], abteilungZuordnung: [UUID: Abteilung], peerGeraeteID: String,
-        aliase: [String: [UUID: UUID]], context: ModelContext
+        aliase: [String: [UUID: UUID]], abteilungsTombstones: [UUID: [UUID: UInt64]], context: ModelContext
     ) -> [UUID: Artikel] {
         var zuordnung: [UUID: Artikel] = [:]
         var cache = LokalerBestandCache<Artikel>(context: context)
@@ -952,7 +974,7 @@ enum SyncSnapshotImportService {
         for eintrag in remote {
             let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(fuer: eintrag.id, art: SyncEntitaetsArt.artikel, in: aliase)
             if let bekannter = cache[aufgeloesteID] {
-                vervollstaendige(bekannter, mit: eintrag, abteilungZuordnung: abteilungZuordnung)
+                vervollstaendige(bekannter, mit: eintrag, abteilungZuordnung: abteilungZuordnung, abteilungsTombstones: abteilungsTombstones)
                 zuordnung[eintrag.id] = bekannter
                 continue
             }
@@ -960,7 +982,7 @@ enum SyncSnapshotImportService {
                 SyncEntitaetsAliasService.registriere(
                     entitaetsArt: SyncEntitaetsArt.artikel, fremdeID: eintrag.id, lokaleID: namensTreffer.id, context: context
                 )
-                vervollstaendige(namensTreffer, mit: eintrag, abteilungZuordnung: abteilungZuordnung)
+                vervollstaendige(namensTreffer, mit: eintrag, abteilungZuordnung: abteilungZuordnung, abteilungsTombstones: abteilungsTombstones)
                 zuordnung[eintrag.id] = namensTreffer
                 continue
             }
@@ -993,8 +1015,11 @@ enum SyncSnapshotImportService {
             neuer.id = eintrag.id
             neuer.alternativeNamen = eintrag.alternativeNamen
             // Zählerstand direkt übernehmen, siehe
-            // ``mergeGeschaeftsTypen(_:context:)`` für die Begründung.
+            // ``mergeGeschaeftsTypen(_:context:)`` für die Begründung. Beide
+            // Zähler (siehe ``Artikel/abteilungenLamportZaehler`` für die
+            // Trennung von ``Artikel/lamportZaehler``) unabhängig seeden.
             neuer.uebernehmeLamportZaehler(eintrag.lamportZaehler)
+            neuer.uebernehmeAbteilungenLamportZaehler(eintrag.abteilungenLamportZaehler)
             LamportClock.beiEmpfang(fremderZaehler: eintrag.lamportZaehler)
             context.insert(neuer)
             cache.nachfuehren(neuer)
@@ -1004,9 +1029,32 @@ enum SyncSnapshotImportService {
     }
 
     private static func vervollstaendige(
-        _ lokal: Artikel, mit eintrag: ArtikelSnapshot, abteilungZuordnung: [UUID: Abteilung]
+        _ lokal: Artikel, mit eintrag: ArtikelSnapshot, abteilungZuordnung: [UUID: Abteilung],
+        abteilungsTombstones: [UUID: [UUID: UInt64]]
     ) {
-        vereinigeGeordnetFallsNoetig(&lokal.abteilungen, mit: eintrag.abteilungIDs.compactMap { abteilungZuordnung[$0] })
+        // Kandidaten, die dieses Gerät für ``lokal`` bereits absichtlich entfernt
+        // hat (``ArtikelAbteilungsTombstone``, GitHub #173), werden aus der sonst
+        // rein additiven Vereinigung herausgefiltert — außer der einliefernde Peer
+        // hat nachweislich (höherer ``ArtikelSnapshot/abteilungenLamportZaehler``
+        // als der Tombstone-Stand) seither selbst wieder hinzugefügt. Bewusst der
+        // dedizierte Abteilungen-Zähler statt ``eintrag/lamportZaehler`` (siehe
+        // ``Artikel/abteilungenLamportZaehler`` für die Begründung der Trennung)
+        // — sonst würde jede unrelated Umbenennung einen Tombstone entwerten.
+        // Ohne diesen Filter würde ein Peer mit veraltetem Stand eine lokal
+        // entfernte Abteilung bei jedem weiteren Sync-Zyklus erneut anfügen.
+        let tombstonesFuerArtikel = abteilungsTombstones[lokal.id] ?? [:]
+        let erlaubteKandidaten = eintrag.abteilungIDs.compactMap { abteilungZuordnung[$0] }.filter { kandidat in
+            guard let tombstoneStand = tombstonesFuerArtikel[kandidat.id] else { return true }
+            return eintrag.abteilungenLamportZaehler > tombstoneStand
+        }
+        vereinigeGeordnetFallsNoetig(&lokal.abteilungen, mit: erlaubteKandidaten)
+        // Unabhängig vom additiven Vereinigungsergebnis übernommen (auch wenn
+        // diesmal nichts Neues hinzukam) — sonst könnte ein künftiger, älterer
+        // Tombstone-Stand eines DRITTEN Peers fälschlich gegen einen bereits
+        // bekannten, höheren Stand dieses Peers antreten.
+        if eintrag.abteilungenLamportZaehler > lokal.abteilungenLamportZaehler {
+            lokal.uebernehmeAbteilungenLamportZaehler(eintrag.abteilungenLamportZaehler)
+        }
         if lokal.notiz == nil { lokal.notiz = eintrag.notiz }
         for name in eintrag.alternativeNamen {
             lokal.alternativenNamenLernen(name)
@@ -1021,9 +1069,46 @@ enum SyncSnapshotImportService {
         LamportClock.beiEmpfang(fremderZaehler: eintrag.lamportZaehler)
     }
 
+    /// Übernimmt von einem Peer empfangene ``ArtikelAbteilungsTombstone``s
+    /// (GitHub #173) — sowohl um sie lokal zu vermerken (schützt künftige
+    /// Merge-Zyklen, siehe
+    /// ``vervollstaendige(_:mit:abteilungZuordnung:abteilungsTombstones:)``)
+    /// als auch um eine bereits lokal vorhandene, aber inzwischen woanders
+    /// entfernte Zuordnung aktiv zu entfernen — ohne diesen zweiten Schritt
+    /// würde ein Entfernen nie zu einem Gerät propagieren, das dieselbe
+    /// Abteilung unabhängig (vor der Löschung dort angelegt, oder weil es sie
+    /// selbst nie entfernt hatte) noch zugeordnet hat — nur künftiges
+    /// Wieder-Hinzufügen von einem veralteten Peer zu blockieren reicht dafür
+    /// nicht. Läuft bewusst NACH ``mergeArtikel``/``mergeAbteilungen`` (braucht
+    /// deren Zuordnungstabellen zur Auflösung).
+    @MainActor
+    private static func mergeArtikelAbteilungsTombstones(
+        _ remote: [ArtikelAbteilungsTombstoneSnapshot], artikelZuordnung: [UUID: Artikel], abteilungZuordnung: [UUID: Abteilung],
+        context: ModelContext
+    ) {
+        for eintrag in remote {
+            guard let artikel = artikelZuordnung[eintrag.artikelID], let abteilung = abteilungZuordnung[eintrag.abteilungID] else { continue }
+            ArtikelAbteilungsTombstoneService.uebernehmeFremdenTombstone(
+                artikelID: artikel.id, abteilungID: abteilung.id, lamportZaehler: eintrag.lamportZaehler, context: context
+            )
+            // Nur entfernen, wenn dieses Gerät seither nachweislich KEINE eigene,
+            // spätere Abteilungs-Bearbeitung an ``artikel`` hatte — dedizierter
+            // Zähler (``Artikel/abteilungenLamportZaehler``), nicht der
+            // allgemeine ``Artikel/lamportZaehler``, sonst würde z.B. eine
+            // bloße Umbenennung einen Tombstone unbeabsichtigt entwerten. Sonst
+            // ginge eine eigene, zeitlich spätere Wieder-Zuordnung verloren.
+            guard artikel.abteilungenLamportZaehler <= eintrag.lamportZaehler, let index = artikel.abteilungen.firstIndex(of: abteilung) else {
+                continue
+            }
+            var aktuelle = artikel.abteilungen
+            aktuelle.remove(at: index)
+            artikel.abteilungen = aktuelle
+        }
+    }
+
     // MARK: - Produkt (Bereich B, GitHub #47 Schritt 2/5)
 
-    /// Analog ``mergeArtikel(_:abteilungZuordnung:peerGeraeteID:aliase:context:)``
+    /// Analog ``mergeArtikel(_:abteilungZuordnung:peerGeraeteID:aliase:abteilungsTombstones:context:)``
     /// (ID/Alias → exakter Name → Neuanlage), aber der Namensabgleich läuft
     /// **innerhalb desselben, bereits aufgelösten Artikels** statt global —
     /// zwei Produkte mit gleichem Namen unter verschiedenen Artikeln sind
