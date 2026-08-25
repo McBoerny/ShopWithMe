@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.17 (Build 364) — Sync: Produkt jetzt auch über den Echtzeit-Kanal synchronisiert (#172-Nachtrag)
+
+- Nachtrag zu #172: der schnelle Echtzeit-Sync-Kanal (Bereich A) kannte bislang
+  keine Produktauswahl — ein mit konkretem Produkt hinzugefügter/abgehakter
+  Artikel kam auf anderen Geräten produktlos an. Produkt wird jetzt exakt wie
+  der Artikel selbst behandelt (gleiche Auflösungs-/Retry-/Aufgeben-Logik,
+  kein stiller Fallback), statt die Produktangabe stillschweigend zu verlieren.
+  Details: `docs/DATENSYNCHRONISATION_VERLAUF.md` §65.
+
 ## v0.17 (Build 363) — Sync: Artikel mit mehreren Produkten verschwinden nicht mehr (#172)
 
 - **#172:** Ein Artikel mit mehreren echten Produkt-Varianten (z.B. „Batterie" mit

@@ -196,7 +196,7 @@ extension Einkaufsliste {
     @discardableResult
     func artikelHinzufuegen(_ artikel: Artikel, produkt: Produkt? = nil, context: ModelContext) -> EinkaufslistenEintrag {
         let eintrag = artikelHinzufuegenOhneEventAufzeichnung(artikel, produkt: produkt, context: context)
-        SyncEventService.aufzeichnen(.artikelHinzugefuegt, bezugsID: id, artikelID: artikel.id, context: context)
+        SyncEventService.aufzeichnen(.artikelHinzugefuegt, bezugsID: id, artikelID: artikel.id, produktID: produkt?.id, context: context)
         return eintrag
     }
 
@@ -221,6 +221,6 @@ extension Einkaufsliste {
     /// während eines laufenden Einkaufs rückgängig, GitHub #45).
     func artikelEntfernen(_ artikel: Artikel, produkt: Produkt? = nil, context: ModelContext) {
         guard artikelEntfernenOhneEventAufzeichnung(artikel, produkt: produkt, context: context) else { return }
-        SyncEventService.aufzeichnen(.artikelEntfernt, bezugsID: id, artikelID: artikel.id, context: context)
+        SyncEventService.aufzeichnen(.artikelEntfernt, bezugsID: id, artikelID: artikel.id, produktID: produkt?.id, context: context)
     }
 }

@@ -4302,3 +4302,70 @@ nachgerüstet, additiv-optional (kein neues `SchemaVN` nötig, siehe
 (Test-Target inkl. UI-Tests) sauber, keine neuen Warnungen. Kein
 automatisierter Testlauf durch die KI (Nutzer-Vorgabe) — noch nicht auf
 einem Gerät im Mehrgeräte-Betrieb nachverifiziert.
+
+**Nachtrag:** die im letzten Punkt offen gelassene Bereich-A-Lücke wurde
+im selben Zyklus noch geschlossen, siehe Abschnitt 65.
+
+## 65. Nachtrag zu GitHub #172: Produkt jetzt auch über Bereich-A-Events (Echtzeit-Kanal)
+
+**Ausgangsfrage (Nutzer, 2026-08-25):** Abschnitt 64 ließ Bereich-A bewusst
+ohne Produkt-Feld — Begründung war, ein referenziertes Produkt sei „nur
+eine Verfeinerung" und ein stiller Fallback auf „kein Produkt" beim
+Materialisieren sei unkritisch. Der Nutzer widersprach: aus Anwendersicht
+macht es keinen Unterschied, ob ein Artikel oder ein konkretes Produkt auf
+die Liste gesetzt wird — beides ist gleichermaßen das, was der Nutzer
+tatsächlich wollte. Ein Produkt ist hauptsächlich für die dedizierte
+Preisbeobachtung besonders, nicht für die Frage „was steht auf der Liste".
+
+**Konsequenz:** Produkt wird jetzt exakt wie Artikel behandelt — dieselbe
+Auflösungs-/Retry-/Aufgeben-Pipeline, kein Sonderfall „bei Zeitüberschreitung
+trotzdem ohne Produkt anwenden". Das ist sogar einfacher als der ursprünglich
+diskutierte Zwischenweg (Produkt weich behandeln + Bereich-B repariert
+später nach), weil kein zweiter Materialisierungs-Pfad nötig ist — Produkt
+reiht sich einfach neben Artikel in dieselbe, bereits bestehende
+`fehlendeReferenz`/Retry/Tombstone-Kette ein
+(``SyncImportService``-Typ-Doku, „Bekannte Grenze dieser Phase").
+
+**Umsetzung:**
+
+- `SyncEventNutzlast.produktID: UUID?` (additiv-optional) — gesetzt für
+  `.artikelHinzugefuegt`/`.artikelEntfernt`/`.artikelAbgehakt`
+  (`Einkaufsliste.artikelHinzufuegen`/`artikelEntfernen`,
+  `Einkaufsvorgang.artikelAbhaken` reichen `produkt?.id` jetzt an
+  `SyncEventService.aufzeichnen(...)` durch).
+- Neuer `MaterialisierungsErgebnis.produktFehlt`-Fall, gleichrangig zu
+  `artikelFehlt` behandelt (derselbe Retry bei jungem, dasselbe Aufgeben bei
+  per Tombstone gelöschtem oder über `maximalesEventAlterFuerRetry` altem
+  Produkt).
+- Neuer `SyncImportService.produkt(mitID:aliase:context:)`-Resolver (Alias-
+  Auflösung analog `artikel(mitID:aliase:context:)`) sowie
+  `aufgeloestesProdukt(_:aliase:context:)`, der „kein Produkt referenziert"
+  (gültig, sofort weiter) von „referenziert, aber noch nicht bekannt"
+  (→ `.produktFehlt`) unterscheidet.
+- `referenzDauerhaftGeloescht` prüft jetzt zusätzlich einen Produkt-Tombstone,
+  wenn `produktID` gesetzt ist.
+- `materialisiereKern`s `artikelHinzufuegen`/`artikelAbhaken`-Closures
+  (beide Varianten: Einzelevent über `materialisiere`, Batch über
+  `materialisiereAlsBatch`) bekommen `Produkt?` als zusätzlichen Parameter
+  und reichen ihn an `artikelHinzufuegenOhneEventAufzeichnung`/
+  `artikelHinzufuegenAlsEventReplay`/`artikelAbhakenOhneEventAufzeichnung`/
+  `artikelAbhakenAlsEventReplay` durch.
+
+**Bewusst AUSGENOMMEN: `.artikelAbgewaehlt`/`.artikelDauerhaftEntfernt`.**
+Kein Widerspruch zur obigen Gleichrangigkeit — diese beiden lokalen
+Mutationen (`Einkaufsvorgang.artikelAbwaehlenOhneEventAufzeichnung(_:context:)`/
+`artikelDauerhaftEntfernenOhneEventAufzeichnung(_:context:)`) matchen den zu
+entfernenden `KaufEintrag` schon rein artikelweit, nie über ein konkretes
+Produkt — konsistent mit der „abgehakt"-Ansicht (`EinkaufenView.abgehakteArtikel`),
+die bereits bewusst nach Artikel-Identität dedupliziert (mehrere gekaufte
+Produkte desselben Artikels erscheinen dort als EINE Zeile, siehe
+GitHub #52-Nachfolgefund). Ein Produkt-Feld in der Nutzlast hätte hier
+nichts aufzulösen, was die lokale Mutation überhaupt verwendet — eine
+produktscharfe „abwählen"/„dauerhaft entfernen"-Funktion wäre eine eigene,
+separate Design-Entscheidung (müsste zuerst die Anzeige selbst auf
+produktscharfe Zeilen umstellen), nicht Teil dieses Fixes.
+
+**Verifikationsstand (2026-08-25):** `xcodegen generate` + `xcodebuild build`
+(App-Target) sauber, `xcodebuild build-for-testing` (Test-Target inkl.
+UI-Tests) sauber, keine neuen Warnungen. Kein automatisierter Testlauf durch
+die KI (Nutzer-Vorgabe) — noch nicht im Mehrgeräte-Betrieb nachverifiziert.

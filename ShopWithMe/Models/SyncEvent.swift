@@ -47,6 +47,19 @@ struct SyncEventNutzlast: Codable {
     /// Da dieses Feld direkt mit dem Event reist, bleibt die Zuordnung auch
     /// dann korrekt.
     var geschaeftID: UUID?
+    /// Gesetzt für `.artikelHinzugefuegt`/`.artikelEntfernt`/`.artikelAbgehakt`,
+    /// falls dabei ein konkretes ``Produkt`` gewählt war (additiv-optional,
+    /// GitHub #172) — `nil` sowohl bei genereller Auswahl ohne Produktwahl als
+    /// auch bei einem Peer auf einer älteren App-Version ohne dieses Feld.
+    /// Bewusst NICHT bloß eine Verfeinerung: aus Nutzersicht ist ein gewähltes
+    /// Produkt Teil dessen, was auf die Liste gesetzt wurde, genau wie der
+    /// Artikel selbst — deshalb löst ``SyncImportService`` eine (noch) nicht
+    /// auflösbare Produkt-Referenz mit derselben Retry-/Aufgeben-Semantik wie
+    /// einen unbekannten Artikel auf, statt still auf „kein Produkt"
+    /// zurückzufallen. Für `.artikelAbgewaehlt`/`.artikelDauerhaftEntfernt`
+    /// bewusst ungenutzt, siehe ``SyncImportService``s Materialisierung dieser
+    /// beiden Fälle.
+    var produktID: UUID?
 }
 
 /// Ein einzelnes, unveränderliches Ereignis für die geplante

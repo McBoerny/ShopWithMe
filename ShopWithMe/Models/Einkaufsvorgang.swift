@@ -268,7 +268,9 @@ final class Einkaufsvorgang {
     func artikelAbhaken(_ artikel: Artikel, produkt: Produkt? = nil, context: ModelContext, abteilung: Abteilung? = nil) -> AbhakErgebnis {
         let ergebnis = artikelAbhakenOhneEventAufzeichnung(artikel, produkt: produkt, context: context, abteilung: abteilung)
         if ergebnis == .abgehakt {
-            SyncEventService.aufzeichnen(.artikelAbgehakt, bezugsID: id, artikelID: artikel.id, geschaeftID: geschaeft?.id, context: context)
+            SyncEventService.aufzeichnen(
+                .artikelAbgehakt, bezugsID: id, artikelID: artikel.id, geschaeftID: geschaeft?.id, produktID: produkt?.id, context: context
+            )
         }
         return ergebnis
     }

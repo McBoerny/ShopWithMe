@@ -443,7 +443,10 @@ enum SyncImportService {
 
         let materialisierungsErgebnis = materialisierer(art, nutzlast, empfangen.autorGeraeteID, empfangen.wallClock)
         guard materialisierungsErgebnis == .erfolgreich else {
-            guard !referenzDauerhaftGeloescht(art: art, bezugsID: nutzlast.bezugsID, artikelID: nutzlast.artikelID, aliase: aliase, context: context) else {
+            guard !referenzDauerhaftGeloescht(
+                art: art, bezugsID: nutzlast.bezugsID, artikelID: nutzlast.artikelID, produktID: nutzlast.produktID,
+                aliase: aliase, context: context
+            ) else {
                 // Liste/Einkauf/Artikel wurde absichtlich gelöscht (Tombstone) und
                 // wird deshalb NIE mehr lokal entstehen — anders als bei einer
                 // bloß noch nicht eingetroffenen Referenz ist ein Retry hier
@@ -521,6 +524,14 @@ enum SyncImportService {
         case artikelFehlt = "artikel"
         /// Beide Referenzen noch nicht lokal auflösbar.
         case bezugUndArtikelFehlen = "beide"
+        /// Referenziertes Produkt (`produktID`, GitHub #172) noch nicht lokal
+        /// auflösbar — Liste/Einkaufsvorgang UND Artikel waren bereits
+        /// auflösbar, sonst hätte einer der Fälle oben bereits gegriffen.
+        /// Bewusst gleichrangig mit `artikelFehlt` behandelt (dieselbe Retry-/
+        /// Aufgeben-Semantik): aus Nutzersicht ist die Wahl eines konkreten
+        /// Produkts genauso Teil dessen, was auf die Liste gesetzt wurde, wie
+        /// der Artikel selbst — kein stiller Fallback auf „ohne Produkt".
+        case produktFehlt = "produkt"
     }
 
     /// Bildet aus zwei aufgelösten (oder fehlgeschlagenen) Referenzen das
@@ -577,12 +588,13 @@ enum SyncImportService {
             art, nutzlast: nutzlast, autorGeraeteID: autorGeraeteID, wallClock: wallClock,
             aliase: aliase, context: context,
             zuletztAbgehaktAm: { abgehaktZeitstempel[$0] ?? nil },
-            artikelHinzufuegen: { liste, artikel, zeitpunkt in
-                liste.artikelHinzufuegenOhneEventAufzeichnung(artikel, am: zeitpunkt, context: context)
+            artikelHinzufuegen: { liste, artikel, produkt, zeitpunkt in
+                liste.artikelHinzufuegenOhneEventAufzeichnung(artikel, produkt: produkt, am: zeitpunkt, context: context)
             },
-            artikelAbhaken: { vorgang, artikel, zeitpunkt, ursprungsGeraeteID, geschaeftUeberschreibung in
+            artikelAbhaken: { vorgang, artikel, produkt, zeitpunkt, ursprungsGeraeteID, geschaeftUeberschreibung in
                 vorgang.artikelAbhakenOhneEventAufzeichnung(
-                    artikel, am: zeitpunkt, context: context, ursprungsGeraeteID: ursprungsGeraeteID, geschaeft: geschaeftUeberschreibung
+                    artikel, produkt: produkt, am: zeitpunkt, context: context, ursprungsGeraeteID: ursprungsGeraeteID,
+                    geschaeft: geschaeftUeberschreibung
                 )
             }
         )
@@ -625,12 +637,14 @@ enum SyncImportService {
             art, nutzlast: nutzlast, autorGeraeteID: autorGeraeteID, wallClock: wallClock,
             aliase: aliase, context: context,
             zuletztAbgehaktAm: { artikelListenKaufBekannt[$0]?.zuletztAbgehaktAm },
-            artikelHinzufuegen: { liste, artikel, zeitpunkt in
-                liste.artikelHinzufuegenAlsEventReplay(artikel, am: zeitpunkt, bekannt: &artikelListenKaufBekannt, context: context)
+            artikelHinzufuegen: { liste, artikel, produkt, zeitpunkt in
+                liste.artikelHinzufuegenAlsEventReplay(
+                    artikel, produkt: produkt, am: zeitpunkt, bekannt: &artikelListenKaufBekannt, context: context
+                )
             },
-            artikelAbhaken: { vorgang, artikel, zeitpunkt, ursprungsGeraeteID, geschaeftUeberschreibung in
+            artikelAbhaken: { vorgang, artikel, produkt, zeitpunkt, ursprungsGeraeteID, geschaeftUeberschreibung in
                 vorgang.artikelAbhakenAlsEventReplay(
-                    artikel, am: zeitpunkt, context: context, ursprungsGeraeteID: ursprungsGeraeteID,
+                    artikel, produkt: produkt, am: zeitpunkt, context: context, ursprungsGeraeteID: ursprungsGeraeteID,
                     geschaeft: geschaeftUeberschreibung, bekannt: &artikelListenKaufBekannt
                 )
             }
@@ -649,17 +663,19 @@ enum SyncImportService {
         _ art: SyncEventArt, nutzlast: SyncEventNutzlast, autorGeraeteID: String, wallClock: Date,
         aliase: [String: [UUID: UUID]], context: ModelContext,
         zuletztAbgehaktAm: (ArtikelListenKaufService.Schluessel) -> Date?,
-        artikelHinzufuegen: (Einkaufsliste, Artikel, Date) -> Void,
-        artikelAbhaken: (Einkaufsvorgang, Artikel, Date, String?, Geschaeft??) -> Void
+        artikelHinzufuegen: (Einkaufsliste, Artikel, Produkt?, Date) -> Void,
+        artikelAbhaken: (Einkaufsvorgang, Artikel, Produkt?, Date, String?, Geschaeft??) -> Void
     ) -> MaterialisierungsErgebnis {
         switch art {
         case .artikelHinzugefuegt:
             let liste = einkaufsliste(mitID: nutzlast.bezugsID, aliase: aliase, context: context)
             let artikel = artikel(mitID: nutzlast.artikelID, aliase: aliase, context: context)
             guard let liste, let artikel else { return fehlendeReferenz(bezug: liste, artikel: artikel) }
-            // produktID: nil — Bereich-A-Events (``SyncEventNutzlast``) kennen
-            // (noch) keine Produktauswahl, siehe deren Typ-Doku.
-            let schluessel = ArtikelListenKaufService.Schluessel(artikelID: artikel.id, produktID: nil, einkaufslisteID: liste.id)
+            // GitHub #172: Produkt wird gleichrangig zu Artikel aufgelöst —
+            // siehe ``MaterialisierungsErgebnis/produktFehlt``-Doku.
+            let (produktAufgeloest, produkt) = aufgeloestesProdukt(nutzlast.produktID, aliase: aliase, context: context)
+            guard produktAufgeloest else { return .produktFehlt }
+            let schluessel = ArtikelListenKaufService.Schluessel(artikelID: artikel.id, produktID: produkt?.id, einkaufslisteID: liste.id)
             // NICHT ``ArtikelListenKaufService/istOffen(hinzugefuegtAm:abgehaktAm:)``
             // direkt mit dem rohen `zuletztAbgehaktAm(schluessel)`-Ergebnis
             // verwendet: dessen Vertrag behandelt ein fehlendes `abgehaktAm`
@@ -688,18 +704,22 @@ enum SyncImportService {
                 )
                 return .erfolgreich
             }
-            artikelHinzufuegen(liste, artikel, wallClock)
+            artikelHinzufuegen(liste, artikel, produkt, wallClock)
             return .erfolgreich
         case .artikelEntfernt:
             let liste = einkaufsliste(mitID: nutzlast.bezugsID, aliase: aliase, context: context)
             let artikel = artikel(mitID: nutzlast.artikelID, aliase: aliase, context: context)
             guard let liste, let artikel else { return fehlendeReferenz(bezug: liste, artikel: artikel) }
-            liste.artikelEntfernenOhneEventAufzeichnung(artikel, context: context)
+            let (produktAufgeloest, produkt) = aufgeloestesProdukt(nutzlast.produktID, aliase: aliase, context: context)
+            guard produktAufgeloest else { return .produktFehlt }
+            liste.artikelEntfernenOhneEventAufzeichnung(artikel, produkt: produkt, context: context)
             return .erfolgreich
         case .artikelAbgehakt:
             let vorgang = einkaufsvorgang(mitID: nutzlast.bezugsID, aliase: aliase, context: context)
             let artikel = artikel(mitID: nutzlast.artikelID, aliase: aliase, context: context)
             guard let vorgang, let artikel else { return fehlendeReferenz(bezug: vorgang, artikel: artikel) }
+            let (produktAufgeloest, produkt) = aufgeloestesProdukt(nutzlast.produktID, aliase: aliase, context: context)
+            guard produktAufgeloest else { return .produktFehlt }
             // ursprungsGeraeteID: autorGeraeteID (nie nil) — dieses Abhaken
             // beschreibt die Laufreihenfolge des SENDENDEN Geräts durchs
             // Geschäft, nicht die dieses Geräts (siehe Einkaufsvorgang-Typ-Doku).
@@ -721,15 +741,26 @@ enum SyncImportService {
             // ohne diese Weitergabe bekäme jeder per Event-Replay materialisierte
             // ``KaufEintrag`` fälschlich den aktuellen Import-Zeitpunkt statt des
             // tatsächlichen historischen Kaufdatums.
-            artikelAbhaken(vorgang, artikel, wallClock, autorGeraeteID, geschaeftUeberschreibung)
+            artikelAbhaken(vorgang, artikel, produkt, wallClock, autorGeraeteID, geschaeftUeberschreibung)
             return .erfolgreich
         case .artikelAbgewaehlt:
+            // Bewusst OHNE Produkt-Auflösung (anders als die drei Fälle oben):
+            // ``Einkaufsvorgang/artikelAbwaehlenOhneEventAufzeichnung(_:context:)``
+            // selbst matcht schon lokal nur über den Artikel, nie über ein
+            // konkretes Produkt — die „abgehakt"-Ansicht (``EinkaufenView/abgehakteArtikel``)
+            // dedupliziert bewusst ebenfalls rein nach Artikel-Identität (ein
+            // Artikel mit mehreren gekauften Produkten erscheint dort als EINE
+            // Zeile). Ein Produkt-Feld in der Nutzlast hier würde also nichts
+            // auflösen können, was die lokale Mutation überhaupt nutzt.
             let vorgang = einkaufsvorgang(mitID: nutzlast.bezugsID, aliase: aliase, context: context)
             let artikel = artikel(mitID: nutzlast.artikelID, aliase: aliase, context: context)
             guard let vorgang, let artikel else { return fehlendeReferenz(bezug: vorgang, artikel: artikel) }
             vorgang.artikelAbwaehlenOhneEventAufzeichnung(artikel, context: context)
             return .erfolgreich
         case .artikelDauerhaftEntfernt:
+            // Bewusst ohne Produkt-Auflösung — dieselbe Begründung wie bei
+            // `.artikelAbgewaehlt` oben (``Einkaufsvorgang/artikelDauerhaftEntfernenOhneEventAufzeichnung(_:context:)``
+            // matcht ebenfalls nur über den Artikel).
             let vorgang = einkaufsvorgang(mitID: nutzlast.bezugsID, aliase: aliase, context: context)
             let artikel = artikel(mitID: nutzlast.artikelID, aliase: aliase, context: context)
             guard let vorgang, let artikel else { return fehlendeReferenz(bezug: vorgang, artikel: artikel) }
@@ -748,11 +779,21 @@ enum SyncImportService {
     /// jeweils über denselben Alias-Pfad wie die zugehörige Lookup-Funktion
     /// aufgelöst).
     private static func referenzDauerhaftGeloescht(
-        art: SyncEventArt, bezugsID: UUID, artikelID: UUID, aliase: [String: [UUID: UUID]], context: ModelContext
+        art: SyncEventArt, bezugsID: UUID, artikelID: UUID, produktID: UUID?, aliase: [String: [UUID: UUID]], context: ModelContext
     ) -> Bool {
         let aufgeloesteArtikelID = SyncEntitaetsAliasService.aufgeloesteID(fuer: artikelID, art: SyncEntitaetsArt.artikel, in: aliase)
         if SyncTombstoneService.istGeloescht(art: SyncEntitaetsArt.artikel, id: aufgeloesteArtikelID, context: context) {
             return true
+        }
+        // GitHub #172: ein referenziertes, aber inzwischen gelöschtes Produkt
+        // macht das Event genauso dauerhaft unauflösbar wie ein gelöschter
+        // Artikel — kein Retry ohne Ende, dieselbe Gleichrangigkeit wie in
+        // ``MaterialisierungsErgebnis/produktFehlt``.
+        if let produktID {
+            let aufgeloesteProduktID = SyncEntitaetsAliasService.aufgeloesteID(fuer: produktID, art: SyncEntitaetsArt.produkt, in: aliase)
+            if SyncTombstoneService.istGeloescht(art: SyncEntitaetsArt.produkt, id: aufgeloesteProduktID, context: context) {
+                return true
+            }
         }
 
         let bezugsArt: String
@@ -800,6 +841,35 @@ enum SyncImportService {
         var deskriptor = FetchDescriptor<Artikel>(predicate: #Predicate { $0.id == aufgeloesteID })
         deskriptor.fetchLimit = 1
         return try? context.fetch(deskriptor).first
+    }
+
+    /// Löst zuerst einen bekannten Alias auf (siehe ``SyncEntitaetsAlias`` —
+    /// Bereich-B-Namensmatching kann ein fremdes Produkt mit einem anderen
+    /// lokalen zusammengeführt haben, analog ``artikel(mitID:aliase:context:)``),
+    /// bevor direkt per `id` gesucht wird. GitHub #172: Produkt reist jetzt
+    /// auch über Bereich-A-Events (``SyncEventNutzlast/produktID``), mit
+    /// derselben Auflösungs-/Retry-Semantik wie Artikel — siehe
+    /// ``aufgeloestesProdukt(_:aliase:context:)``.
+    private static func produkt(mitID id: UUID, aliase: [String: [UUID: UUID]], context: ModelContext) -> Produkt? {
+        let aufgeloesteID = SyncEntitaetsAliasService.aufgeloesteID(fuer: id, art: SyncEntitaetsArt.produkt, in: aliase)
+        var deskriptor = FetchDescriptor<Produkt>(predicate: #Predicate { $0.id == aufgeloesteID })
+        deskriptor.fetchLimit = 1
+        return try? context.fetch(deskriptor).first
+    }
+
+    /// Löst `produktID` auf, falls in der Nutzlast überhaupt gesetzt (kein
+    /// Produkt gewählt bleibt ein gültiger, sofort „aufgelöster" Zustand).
+    /// `istAufgeloest == false` unterscheidet „referenziert, aber noch nicht
+    /// lokal bekannt" (→ ``MaterialisierungsErgebnis/produktFehlt``, Retry)
+    /// klar von „gar nicht referenziert" (→ einfach mit `produkt == nil`
+    /// weitermachen) — dieselbe Unterscheidung, die ``fehlendeReferenz(bezug:artikel:)``
+    /// für Liste/Artikel bereits trifft.
+    private static func aufgeloestesProdukt(
+        _ produktID: UUID?, aliase: [String: [UUID: UUID]], context: ModelContext
+    ) -> (istAufgeloest: Bool, produkt: Produkt?) {
+        guard let produktID else { return (true, nil) }
+        guard let produkt = produkt(mitID: produktID, aliase: aliase, context: context) else { return (false, nil) }
+        return (true, produkt)
     }
 
     /// Löst zuerst einen bekannten Alias auf (siehe ``SyncEntitaetsAlias`` —
