@@ -13,6 +13,7 @@ struct MilkForUsImportServiceTests {
             Einkaufsvorgang.self, KaufEintrag.self,
             Einkaufsliste.self, EinkaufslistenEintrag.self, SyncEvent.self,
             Produkt.self, Produktname.self,
+            SyncEntitaetsAlias.self, SyncTombstone.self,
         ])
         let konfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [konfiguration])
@@ -169,6 +170,46 @@ struct MilkForUsImportServiceTests {
         #expect(artikel[0] === bestehenderArtikel)
         #expect(liste.eintraege.count == 1)
         #expect(liste.eintraege.first?.produkt === produkt)
+    }
+
+    /// Live-Fund (2026-08-25, GitHub #175-Nachtrag): ein per „Wandlung"
+    /// (``ArtikelZusammenfuehrungsService/alsProduktKonvertieren(_:unter:context:)``)
+    /// zu einem ``Produkt`` konvertierter Artikel wurde bislang bei einem
+    /// erneuten MilkForUs-Import klaglos als neuer, doppelter ``Artikel``
+    /// wiederangelegt — weder ``Artikel``-Namen noch ``Produktname`` kannten
+    /// den alten Namen, nur ``Produkt/alternativeKlarnamen`` (bzw. `Produkt/name`
+    /// bei einer Neuanlage ohne bestehendes Standard-Produkt), was der Import
+    /// bisher nie prüfte. Nutzt bewusst die echte Konvertierungsfunktion statt
+    /// den Zielzustand von Hand nachzubauen, um exakt den Live-Fall
+    /// abzudecken.
+    @Test
+    func wandlungKonvertierterArtikelWirdBeiErneutemImportNichtNeuAngelegt() async throws {
+        let (container, context) = try machtLeerenContainer()
+        _ = container
+        let elektro = Abteilung(name: "Elektro & Batterien", standardSymbol: "bolt.fill", standardFarbeHex: "#FFCC00")
+        context.insert(elektro)
+        let batterie = Artikel(name: "Batterie", symbolName: "cart.fill", farbeHex: "#FF3B30", abteilungen: [elektro])
+        context.insert(batterie)
+        let batterieCR2025 = Artikel(name: "Batterie CR2025", symbolName: "cart.fill", farbeHex: "#FF3B30", abteilungen: [elektro])
+        context.insert(batterieCR2025)
+        let liste = Einkaufsliste(name: "Test")
+        context.insert(liste)
+
+        ArtikelZusammenfuehrungsService.alsProduktKonvertieren(batterieCR2025, unter: batterie, context: context)
+        #expect(try context.fetch(FetchDescriptor<Artikel>()).count == 1)
+
+        let gruppe = MilkForUsKategorieGruppe(
+            kategorieName: "Elektro & Batterien",
+            zuordnung: .bestehend(elektro),
+            artikelNamen: ["Batterie CR2025"]
+        )
+        await MilkForUsImportService.uebernehmen(gruppen: [gruppe], in: liste, context: context)
+
+        let artikel = try context.fetch(FetchDescriptor<Artikel>())
+        #expect(artikel.count == 1)
+        #expect(artikel[0] === batterie)
+        #expect(liste.eintraege.count == 1)
+        #expect(liste.eintraege.first?.produkt?.name == "Batterie CR2025")
     }
 
     @Test

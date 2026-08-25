@@ -295,6 +295,33 @@ enum MilkForUsImportService {
             ((try? context.fetch(FetchDescriptor<Produktname>())) ?? []).map { ($0.name.lowercased(), $0) },
             uniquingKeysWith: { erster, _ in erster }
         )
+        // Live-Fund (2026-08-25, GitHub #175-Nachtrag): ``ArtikelZusammenfuehrungsService/alsProduktKonvertieren(_:unter:context:)``
+        // ("Wandlung") löscht den ursprünglichen ``Artikel`` unwiderruflich und
+        // merkt sich dessen Namen NUR über ``Produkt/alternativeKlarnamen``
+        // (bzw. als neuer ``Produkt/name``, wenn kein bestehendes
+        // Standard-Produkt wiederverwendet wurde) — NICHT über einen
+        // ``Produktname``-Eintrag (der ist geschäftsabhängig, siehe dortige
+        // Typ-Doku, und für diesen Fall nie das richtige Werkzeug). Ohne
+        // diesen dritten Abgleich sah ein erneuter Import denselben Namen
+        // weder als bekannten Artikel noch als bekannten Produktname und legte
+        // klaglos einen frischen, doppelten ``Artikel`` an — live bestätigt:
+        // ein per Wandlung zu „Batterie" konvertiertes „Batterie CR2025"
+        // tauchte nach einem erneuten MilkForUs-Import wieder als eigener
+        // Artikel auf. `produkt.name` zusätzlich zu den Klarnamen indiziert,
+        // da eine Neuanlage in ``alsProduktKonvertieren`` den alten Artikelnamen
+        // direkt als `Produkt.name` übernimmt (nicht nur als Klarname), sobald
+        // kein bereits bestehendes Standard-Produkt wiederverwendet wurde.
+        let produktNachKlarname: [String: Produkt] = {
+            var ergebnis: [String: Produkt] = [:]
+            for produkt in (try? context.fetch(FetchDescriptor<Produkt>())) ?? [] {
+                guard produkt.artikel != nil else { continue }
+                for name in [produkt.name] + produkt.alternativeKlarnamen {
+                    let schluessel = name.lowercased()
+                    if ergebnis[schluessel] == nil { ergebnis[schluessel] = produkt }
+                }
+            }
+            return ergebnis
+        }()
         // Pro Gruppe (Schlüssel ``MilkForUsKategorieGruppe/id``) einmalig
         // aufgelöste Abteilung — verhindert, dass eine `.neuAnlegen`-Gruppe, deren
         // Artikel sich über mehrere Chunks verteilen, dieselbe neue Abteilung
@@ -348,9 +375,12 @@ enum MilkForUsImportService {
                     if let bestehenderArtikel = artikelNachName[schluessel] {
                         artikel = bestehenderArtikel
                         produkt = nil
-                    } else if let produktTreffer = produktnameNachName[schluessel], let zugehoerigerArtikel = produktTreffer.produkt?.artikel {
+                    } else if let produktTreffer = produktNachKlarname[schluessel], let zugehoerigerArtikel = produktTreffer.artikel {
                         artikel = zugehoerigerArtikel
-                        produkt = produktTreffer.produkt
+                        produkt = produktTreffer
+                    } else if let produktnameTreffer = produktnameNachName[schluessel], let zugehoerigerArtikel = produktnameTreffer.produkt?.artikel {
+                        artikel = zugehoerigerArtikel
+                        produkt = produktnameTreffer.produkt
                     } else {
                         let neuer = Artikel(
                             name: schritt.artikelName,

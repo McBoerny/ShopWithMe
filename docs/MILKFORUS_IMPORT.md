@@ -72,8 +72,9 @@ den leeren Abteilungsnamen `""`.
 4. **Vorschau/Korrektur** (`MilkForUsImportView`, `VorschauListe`): eine Section pro
    Abteilung-Gruppe, Header mit Menü zum Umstellen der Zuordnung (bestehende
    Abteilung / neu anlegen / Sonstiges), Artikel-Zeilen mit „vorhanden“/„neu“-Badge
-   (Abgleich gegen `Artikel.name` UND `Produktname.name`, case-insensitive — seit
-   GitHub #139, siehe Schritt 5), Swipe-to-delete zum Ausschließen einzelner Artikel.
+   (Abgleich gegen `Artikel.name`, `Produktname.name` UND `Produkt.name`/
+   `Produkt.alternativeKlarnamen`, case-insensitive — seit GitHub #139 bzw.
+   #175-Nachtrag, siehe Schritt 5), Swipe-to-delete zum Ausschließen einzelner Artikel.
    Picker zur Ziel-`Einkaufsliste` (Default: `Einkaufsliste.standard(context:)`, außer
    `vorbelegteZielliste` ist gesetzt). Der Übernehmen-Button sitzt in der
    Navigationsleiste oben rechts (`.confirmationAction`) als reines Haken-Icon (GitHub
@@ -81,13 +82,21 @@ den leeren Abteilungsnamen `""`.
    Bildschirmrand.
 5. **Übernahme** (`MilkForUsImportService.uebernehmen(gruppen:in:context:fortschritt:)`):
    legt neue Abteilungen an (Default-Symbol/-Farbe wie `NeueAbteilungSheet`), gleicht
-   je Artikelname zuerst exakt (case-insensitive) gegen bestehende `Artikel.name`,
-   dann gegen bestehende `Produktname.name` ab (GitHub #139 — ein importierter,
-   konkreter Produktname wie „Alete Kindermilch 3“ dockt so an das bestehende
-   `Produkt` und dessen generischen `Artikel` an, statt einen doppelten, neuen
-   generischen `Artikel` zu erzeugen), erstellt nur wenn beides erfolglos bleibt
-   einen neuen `Artikel` (bestehende Artikel/Produkte bleiben inkl. ihrer Abteilung
-   unangetastet), ruft `Einkaufsliste.artikelHinzufuegen(_:produkt:context:)` auf.
+   je Artikelname in drei Stufen ab, bevor ein neuer `Artikel` entsteht:
+   1. exakt (case-insensitive) gegen bestehende `Artikel.name`;
+   2. gegen `Produkt.name`/`Produkt.alternativeKlarnamen` (GitHub #175-Nachtrag —
+      deckt einen per „Wandlung“, `ArtikelZusammenfuehrungsService.alsProduktKonvertieren(_:unter:context:)`,
+      bereits zu einem `Produkt` konvertierten Artikelnamen ab; ohne diesen Abgleich
+      legte ein erneuter Import denselben Namen klaglos als frischen, doppelten
+      `Artikel` neu an, weil dessen ursprünglicher `Artikel` bereits gelöscht war
+      und weder `Artikel.name` noch `Produktname.name` ihn kannten);
+   3. gegen bestehende `Produktname.name` (GitHub #139 — ein importierter,
+      konkreter Produktname wie „Alete Kindermilch 3“ dockt so an das bestehende
+      `Produkt` und dessen generischen `Artikel` an, statt einen doppelten, neuen
+      generischen `Artikel` zu erzeugen).
+   Erst wenn alle drei erfolglos bleiben, entsteht ein neuer `Artikel` (bestehende
+   Artikel/Produkte bleiben inkl. ihrer Abteilung unangetastet), ruft
+   `Einkaufsliste.artikelHinzufuegen(_:produkt:context:)` auf.
    Gruppen ohne verbliebene Artikel (z.B. alle in der Vorschau entfernt) werden
    übersprungen, damit keine ungenutzten neuen Abteilungen entstehen. Läuft in Chunks
    à 25 Artikeln, je einem eigenen kurzen `DatabaseLeaseService.performMicroLease`

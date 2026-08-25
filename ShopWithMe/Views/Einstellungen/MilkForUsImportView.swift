@@ -24,6 +24,7 @@ struct MilkForUsImportView: View {
     @Query(sort: \Abteilung.sortIndex) private var alleAbteilungen: [Abteilung]
     @Query(sort: \Artikel.name) private var alleArtikel: [Artikel]
     @Query private var alleProduktnamen: [Produktname]
+    @Query private var alleProdukte: [Produkt]
     @Query(sort: \Einkaufsliste.erstelltAm) private var alleListen: [Einkaufsliste]
 
     @State private var zeigeDateiPicker = false
@@ -36,10 +37,15 @@ struct MilkForUsImportView: View {
     @State private var fehlermeldung: String?
     @State private var gruppen: [MilkForUsKategorieGruppe]?
     @State private var zielListe: Einkaufsliste?
-    /// Existenz-Set aus ``alleArtikel``/``alleProduktnamen`` für den Duplikat-
-    /// Hinweis in ``VorschauListe`` — einmalig berechnet, wenn ``gruppen``
-    /// gesetzt wird (``verarbeite(text:)``), statt bei jedem Render neu aus
-    /// den vollen `@Query`-Ergebnissen gebaut (Performance-Fund #163).
+    /// Existenz-Set aus ``alleArtikel``/``alleProduktnamen``/``alleProdukte``
+    /// für den Duplikat-Hinweis in ``VorschauListe`` — einmalig berechnet, wenn
+    /// ``gruppen`` gesetzt wird (``verarbeite(text:)``), statt bei jedem
+    /// Render neu aus den vollen `@Query`-Ergebnissen gebaut
+    /// (Performance-Fund #163). `alleProdukte` (GitHub #175-Nachtrag) deckt
+    /// per Wandlung (``ArtikelZusammenfuehrungsService/alsProduktKonvertieren(_:unter:context:)``)
+    /// konvertierte Artikelnamen ab — siehe Begründung in
+    /// ``MilkForUsImportService/uebernehmen(gruppen:in:context:fortschritt:)``,
+    /// dieselbe Lücke hier für die reine Vorschau-Anzeige.
     @State private var bestehendeArtikelNamen: Set<String> = []
 
     private var kannUebernehmen: Bool {
@@ -139,7 +145,10 @@ struct MilkForUsImportView: View {
             ) { erledigt, gesamt in
                 fortschritt = (erledigt, gesamt)
             }
-            bestehendeArtikelNamen = Set(alleArtikel.map { $0.name.lowercased() } + alleProduktnamen.map { $0.name.lowercased() })
+            bestehendeArtikelNamen = Set(
+                alleArtikel.map { $0.name.lowercased() } + alleProduktnamen.map { $0.name.lowercased() }
+                    + alleProdukte.flatMap { [$0.name.lowercased()] + $0.alternativeKlarnamen.map { $0.lowercased() } }
+            )
         }
     }
 

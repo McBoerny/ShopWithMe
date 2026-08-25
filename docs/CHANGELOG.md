@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.17 (Build 371) — MilkForUs-Import: legt per Wandlung konvertierte Artikel nicht mehr erneut an (#177)
+
+- **#177:** Ein per „Wandlung" (`ArtikelZusammenfuehrungsService.alsProduktKonvertieren`)
+  zu einem `Produkt` konvertierter Artikel (z.B. „Batterie CR2025" unter „Batterie")
+  wurde bei einem erneuten MilkForUs-Import als neuer, doppelter Artikel wieder
+  angelegt. Ursache: der Import glich importierte Namen nur gegen bestehende
+  `Artikel.name` und `Produktname.name` ab — „Wandlung" merkt sich den alten Namen
+  aber nur über `Produkt.name`/`Produkt.alternativeKlarnamen`, ein Feld, das der
+  Import nie prüfte. Dieselbe Lücke bestand auch in der Vorschau-Anzeige
+  („vorhanden"/„neu"-Badge). Dritte Abgleichsstufe ergänzt, in Übernahme-Logik und
+  Vorschau. Details: `docs/MILKFORUS_IMPORT.md`.
+
 ## v0.17 (Build 370) — Einkaufsliste: Sortierreihenfolge innerhalb von Abteilungen (#176)
 
 - Artikel innerhalb einer Abteilungsgruppe sind jetzt sortiert statt in
