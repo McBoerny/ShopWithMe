@@ -201,6 +201,12 @@ Standortfreigabe. Ein kleiner Hinweis oben zeigt, ob die Reihenfolge schon
 optimiert ist oder noch lernt; bei einem erkannten Ladenumbau erscheint nach
 dem Abschließen ein kurzer Hinweis, dass sich die App automatisch anpasst.
 
+Innerhalb eines Abschnitts stehen Artikel alphabetisch sortiert, offene immer
+vor bereits abgehakten. Blendest du abgehakte Artikel ein (siehe
+Schnellauswahl unten), rutscht ein Abschnitt, den du komplett fertig
+abgehakt hast, automatisch ans Ende der gesamten Liste — so bleiben oben immer
+die Abschnitte sichtbar, in denen noch etwas zu erledigen ist.
+
 - **Wischen nach rechts** verringert die Menge, **Wischen nach links** erhöht sie
   (nie unter die Schrittweite) — ein vollständiger Wisch löst die Aktion direkt aus,
   ganz ohne zusätzlichen Bestätigungs-Tap. Das gilt auch bei bereits abgehakten

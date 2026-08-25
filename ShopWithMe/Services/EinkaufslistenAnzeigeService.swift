@@ -80,6 +80,15 @@ enum EinkaufslistenAnzeigeService {
     /// für dieses Geschäft noch keine eindeutig gelernte Abteilung liefert
     /// (siehe dort): eine Duplizierung ist bis dahin gewollt (der Nutzer tappt
     /// ihn dort ab, wo er im jeweiligen Geschäft tatsächlich steht).
+    ///
+    /// Innerhalb jeder Gruppe (GitHub #176): offene Artikel vor bereits
+    /// abgehakten, innerhalb beider Blöcke alphabetisch
+    /// (``vergleicheElemente(_:_:)``). Zusätzlich wandert eine Gruppe, in der
+    /// kein offener Artikel mehr übrig ist (``AbteilungGruppe/istVollstaendigAbgehakt``),
+    /// ans Ende der Gesamtliste — als stabiler Zusatzschritt NACH der
+    /// eigentlichen Bereichs-Sortierung (alphabetisch oder
+    /// ``AbteilungsDistanzService``-Distanzmatrix), damit deren Reihenfolge
+    /// unter den jeweils verbleibenden Gruppen unangetastet bleibt.
     static func abteilungGruppen(
         offeneEintraege: [EinkaufslistenEintrag],
         abgehakteArtikel: [Artikel],
@@ -106,20 +115,37 @@ enum EinkaufslistenAnzeigeService {
                 }
             }
         }
+        for schluessel in nachAbteilung.keys {
+            nachAbteilung[schluessel]?.elemente.sort(by: vergleicheElemente)
+        }
         let alphabetisch = nachAbteilung.values.map(\.abteilung)
             .sorted { $0.name.vergleicheAlphabetisch(mit: $1.name) == .orderedAscending }
-        guard let geschaeft else {
-            return nachAbteilung.values.sorted { $0.abteilung.name.vergleicheAlphabetisch(mit: $1.abteilung.name) == .orderedAscending }
+        let basisSortiert: [AbteilungGruppe]
+        if let geschaeft {
+            let sortiert = AbteilungsDistanzService.sortierteReihenfolge(
+                offeneAbteilungen: alphabetisch,
+                startpunkt: zuletztAbgehakteAbteilung,
+                in: geschaeft,
+                context: context
+            )
+            let position = Dictionary(uniqueKeysWithValues: sortiert.enumerated().map { ($1.persistentModelID, $0) })
+            basisSortiert = nachAbteilung.values.sorted {
+                (position[$0.abteilung.persistentModelID] ?? .max) < (position[$1.abteilung.persistentModelID] ?? .max)
+            }
+        } else {
+            basisSortiert = nachAbteilung.values.sorted { $0.abteilung.name.vergleicheAlphabetisch(mit: $1.abteilung.name) == .orderedAscending }
         }
-        let sortiert = AbteilungsDistanzService.sortierteReihenfolge(
-            offeneAbteilungen: alphabetisch,
-            startpunkt: zuletztAbgehakteAbteilung,
-            in: geschaeft,
-            context: context
-        )
-        let position = Dictionary(uniqueKeysWithValues: sortiert.enumerated().map { ($1.persistentModelID, $0) })
-        return nachAbteilung.values.sorted {
-            (position[$0.abteilung.persistentModelID] ?? .max) < (position[$1.abteilung.persistentModelID] ?? .max)
-        }
+        return basisSortiert.sorted { !$0.istVollstaendigAbgehakt && $1.istVollstaendigAbgehakt }
+    }
+
+    /// Reihenfolge zweier Artikel innerhalb derselben Abteilungsgruppe (GitHub
+    /// #176): offene Artikel (`eintrag != nil`) immer vor bereits abgehakten
+    /// (`eintrag == nil`), innerhalb beider Blöcke alphabetisch über den
+    /// locale-bewussten ``String/vergleicheAlphabetisch(mit:)``.
+    private static func vergleicheElemente(_ erstes: AbteilungGruppe.Element, _ zweites: AbteilungGruppe.Element) -> Bool {
+        let ersteAbgehakt = erstes.eintrag == nil
+        let zweiteAbgehakt = zweites.eintrag == nil
+        if ersteAbgehakt != zweiteAbgehakt { return zweiteAbgehakt }
+        return erstes.artikel.name.vergleicheAlphabetisch(mit: zweites.artikel.name) == .orderedAscending
     }
 }

@@ -944,6 +944,9 @@ struct AbteilungGruppe: Identifiable {
     let abteilung: Abteilung
     var elemente: [Element]
     var id: PersistentIdentifier { abteilung.persistentModelID }
+    /// Ob in dieser Gruppe kein offener Artikel mehr übrig ist (GitHub #176) —
+    /// steuert, ob die gesamte Bereichs-Gruppe ans Ende der Liste wandert.
+    var istVollstaendigAbgehakt: Bool { !elemente.isEmpty && elemente.allSatisfy { $0.eintrag == nil } }
 }
 
 /// Die Einkaufsliste einer ``Einkaufsliste`` für einen laufenden Einkaufsvorgang —

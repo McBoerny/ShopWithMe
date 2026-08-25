@@ -88,9 +88,15 @@ Row-Inhalt (`zeilenInhalt`) erhält dann `padding(.leading, 12)` als Ausgleich.
 
 ```swift
 struct AbteilungGruppe: Identifiable {
+    struct Element: Identifiable {
+        var id: PersistentIdentifier
+        var artikel: Artikel
+        var eintrag: EinkaufslistenEintrag?  // nil = bereits abgehakt
+    }
     let abteilung: Abteilung
-    let artikel: [Artikel]
+    var elemente: [Element]
     var id: PersistentIdentifier { abteilung.persistentModelID }
+    var istVollstaendigAbgehakt: Bool { ... }  // siehe unten, GitHub #176
 }
 ```
 
@@ -98,3 +104,17 @@ Definiert in `EinkaufenView.swift` (nicht `private`) und von
 `EinkaufslisteDarstellungsView.swift` als Eingabe-Typ verwendet.
 `ArtikelAbhakZeile` und `EinkaufslistenSektionHeader` sind ebenfalls auf
 `internal`-Access-Level gehoben, damit der neue Renderer sie direkt nutzen kann.
+
+## Artikel-Sortierung innerhalb einer Gruppe (GitHub #176)
+
+`EinkaufslistenAnzeigeService.abteilungGruppen(...)` sortiert `elemente` je
+Gruppe: offene Artikel vor bereits abgehakten, innerhalb beider Blöcke
+alphabetisch (`String.vergleicheAlphabetisch(mit:)`). Zusätzlich wandert eine
+Gruppe ohne verbleibenden offenen Artikel (`AbteilungGruppe.istVollstaendigAbgehakt`)
+ans Ende der Gesamtliste — als stabiler Zusatzschritt NACH der eigentlichen
+Bereichs-Sortierung (alphabetisch bzw. `AbteilungsDistanzService`-Distanzmatrix,
+siehe `docs/ARCHITEKTURVORSCHLAG_ADAPTIVE_SORTIERUNG.md`), sodass deren
+Reihenfolge unter den jeweils verbleibenden Gruppen unangetastet bleibt. Da
+`EinkaufslisteDarstellungsView` `gruppe.elemente` nur unverändert rendert,
+wirkt sich das automatisch auf alle Darstellungsmodi (Klassisch/Chips/Kacheln)
+aus, ohne dass die Renderer selbst etwas davon wissen müssen.

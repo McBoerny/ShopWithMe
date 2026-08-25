@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.17 (Build 370) — Einkaufsliste: Sortierreihenfolge innerhalb von Abteilungen (#176)
+
+- Artikel innerhalb einer Abteilungsgruppe sind jetzt sortiert statt in
+  zufälliger (ungeordneter SwiftData-Relationship-)Reihenfolge: offene Artikel
+  vor bereits abgehakten, innerhalb beider Blöcke alphabetisch
+  (`String.vergleicheAlphabetisch(mit:)`).
+- Eine Abteilungsgruppe, in der kein offener Artikel mehr übrig ist
+  (`AbteilungGruppe.istVollstaendigAbgehakt`), wandert vollständig ans Ende der
+  Gesamtliste — als stabiler Zusatzschritt nach der bestehenden
+  Bereichs-Sortierung (alphabetisch bzw. `AbteilungsDistanzService`-Distanzmatrix),
+  wirkt sich automatisch auf alle Darstellungsmodi aus (Klassisch/Chips/Kacheln).
+- Reine Anzeige-/Sortierlogik in `EinkaufslistenAnzeigeService.abteilungGruppen(...)`,
+  kein neues persistentes Feld, kein Sync-/Migrationsaufwand. Details:
+  `docs/EINKAUFSLISTE_INTERAKTION.md`, `docs/ARCHITEKTURVORSCHLAG_ADAPTIVE_SORTIERUNG.md`
+  §15.
+
 ## v0.17 (Build 369) — Sync: Artikel-Dubletten bei Mehrfach-Peer-Konflikten behoben (#175, Root Cause)
 
 - **#175 (Root Cause):** Mit dem erweiterten Logging aus Build 368 direkt

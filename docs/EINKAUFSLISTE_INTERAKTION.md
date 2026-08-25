@@ -57,6 +57,23 @@ verbleibende Ausnahme im Projekt; andere Listenelemente (z.B. `kachelLabel`/
 `chipFlow` in `EinkaufslisteDarstellungsView.swift`) sind bereits vollständig
 tappbar.
 
+## Nachtrag (GitHub #176, 2026-08-25): Sortierreihenfolge innerhalb der Liste
+
+Bislang hatte die Reihenfolge der Artikel *innerhalb* einer Abteilungsgruppe
+keine explizite Sortierung — sie ergab sich zufällig aus der
+Iterationsreihenfolge der ungeordneten SwiftData-Relationship. Neu:
+
+- Offene Artikel stehen immer vor bereits abgehakten, jeweils alphabetisch
+  sortiert (`String.vergleicheAlphabetisch(mit:)`, locale-bewusst).
+- Eine Abteilungsgruppe, in der kein offener Artikel mehr übrig ist, wandert
+  vollständig ans Ende der Liste — unabhängig davon, ob die Bereichs-Reihenfolge
+  gerade alphabetisch oder über die gelernte `AbteilungsDistanzService`-Matrix
+  bestimmt wird (siehe `docs/ARCHITEKTURVORSCHLAG_ADAPTIVE_SORTIERUNG.md`).
+
+Implementiert in `EinkaufslistenAnzeigeService.abteilungGruppen(...)` als
+Sortier-/Anzeigelogik, kein neues persistentes Feld nötig — der Abgehakt-Status
+ergibt sich weiterhin strukturell aus `Element.eintrag == nil`.
+
 ## Bekannte Grenzen
 
 - Für Geschäfte ohne aktiven Sektions-Fortschritt gibt es aktuell keine

@@ -396,3 +396,27 @@ Bewusst nicht rein prozentual ab dem ersten Kauf: ein einzelner Kauf wäre immer
 2. `Artikel.fuehrendeAbteilung(inGeschaeft:context:)`: gelernte Abteilung als Top-Priorität vor der bisherigen, rein statischen `sortIndex`-Sortierung — wirkt sich auf Belegscan-/Preisschild-Scan-/Sync-Import-Zuordnung aus, die ohne konkret getappten Abschnitt auskommen müssen. Kein Lernmodus-Bypass hier, da diese Aufrufer keinen Bezug zu diesem UI-Zustand haben.
 
 Rein anzeigeseitig/lesend: `Artikel.abteilungen` (die globalen Tags) bleiben unverändert, nichts wird automatisch umgeschrieben oder gelöscht — bei fehlender/nicht mehr ausreichender Datenlage oder aktivem Lernmodus blendet sich die Mehrfachanzeige einfach wieder ein.
+
+---
+
+## 15. Vollständig abgehakte Abteilung ans Ende der Liste (GitHub #176)
+
+**Separates GitHub-Issue: [#176](https://github.com/McBoerny/ShopWithMe/issues/176).**
+
+Die Bereichs-Sortierung aus Abschnitt 4.2/4.3 (alphabetisch bzw.
+Distanzmatrix-basiert per Greedy-NN + 2-opt) bestimmt weiterhin die
+Grundreihenfolge der offenen Abteilungen. Zusätzlich dazu wandert eine
+Abteilungsgruppe, in der kein offener Artikel mehr übrig ist
+(`AbteilungGruppe.istVollstaendigAbgehakt`), als **stabiler Nachbearbeitungsschritt**
+ans Ende der Gesamtliste — unabhängig davon, welcher der beiden Sortiermodi
+gerade die Grundreihenfolge geliefert hat. Der Schritt sortiert nur nach dem
+Boolean "vollständig abgehakt ja/nein"; da Swifts `sorted(by:)` stabil ist,
+bleibt die vom jeweiligen Modus bestimmte relative Reihenfolge innerhalb beider
+Gruppen (offen/vollständig abgehakt) unangetastet — die Distanzmatrix-Logik
+selbst musste dafür nicht angepasst werden.
+
+Zusätzlich führt derselbe Fix eine bislang fehlende Sortierung *innerhalb*
+einer Abteilungsgruppe ein (offene Artikel vor abgehakten, jeweils
+alphabetisch) — siehe `docs/EINKAUFSLISTE_INTERAKTION.md` für Details.
+Implementiert in `EinkaufslistenAnzeigeService.abteilungGruppen(...)`, keine
+Datenmodell-/Sync-Änderung nötig.
