@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.17 (Build 365) — Abteilung hinzufügen: bereits aktive Abteilungen bleiben sichtbar (#174)
+
+- **#174:** „Abteilung hinzufügen" (Geschäft-Detailansicht) zeigte bisher nur
+  noch nicht verfügbare Abteilungen an — eine bereits zugeordnete (direkt oder
+  automatisch über den Geschäftstyp) verschwand sofort aus der Liste, was
+  verwirrend war, weil unklar blieb, ob sie überhaupt zugeordnet ist. Die Liste
+  zeigt jetzt immer alle Abteilungen; bereits aktive sind angehakt und lassen
+  sich per Tap direkt wieder entfernen (bei automatisch über den Geschäftstyp
+  verfügbaren als individueller Ausschluss, analog der bestehenden
+  „Ausschließen"-Wischgeste in der Detailansicht).
+
 ## v0.17 (Build 364) — Sync: Produkt jetzt auch über den Echtzeit-Kanal synchronisiert (#172-Nachtrag)
 
 - Nachtrag zu #172: der schnelle Echtzeit-Sync-Kanal (Bereich A) kannte bislang

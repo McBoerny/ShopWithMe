@@ -122,9 +122,11 @@ In der Detailansicht eines Geschäfts siehst du alle verfügbaren Abteilungen
 gemeinsam, alphabetisch — automatisch über den Geschäftstyp verfügbare sind mit
 „Automatisch über Geschäftstyp" gekennzeichnet. Per Wischgeste lässt sich eine
 solche automatische Abteilung für dieses eine Geschäft ausschließen, ohne sie
-generell vom Geschäftstyp zu entfernen — sie taucht danach wieder unter
-„Abteilung hinzufügen" auf, falls du sie doch wieder brauchst. Manuell
-zugeordnete Abteilungen entfernst du wie gewohnt per Wischgeste.
+generell vom Geschäftstyp zu entfernen. Manuell zugeordnete Abteilungen
+entfernst du wie gewohnt per Wischgeste. Über „Abteilung hinzufügen" öffnet
+sich eine Liste **aller** Abteilungen — bereits aktive sind angehakt und
+verschwinden nicht aus der Liste; ein Tap schaltet eine Abteilung direkt an
+oder aus, gleichbedeutend mit der jeweiligen Wischgeste in der Detailansicht.
 
 **Standort beim Anlegen/Bearbeiten:** Sobald ein Geschäft Koordinaten hat, zeigt
 das Bearbeiten-Formular eine kleine Karte mit einem Pin — durch Antippen der
